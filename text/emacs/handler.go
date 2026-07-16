@@ -25,6 +25,7 @@ package emacs
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -69,6 +70,23 @@ type emacsHandler struct {
 	setLocations     bool
 	lastPaste        bool
 	historyIdx       int
+	// lastKill tracks whether the previous handled event was a kill
+	// command; killedNow records kills within the current event so
+	// consecutive kills accumulate into one kill-ring entry, GNU-style.
+	lastKill  bool
+	killedNow bool
+	// undoRun/undoRunLen track the open GNU amalgamation run: consecutive
+	// self-inserts (or same-direction deletes) share one undo group of at
+	// most undoRunMax characters.
+	undoRun      undoRunKind
+	undoRunLen   int
+	minibuffer   minibuffer
+	pendingGoto  bool
+	pendingZap   bool
+	zapCount     int
+	prefix       prefixState
+	isearch      isearchState
+	queryReplace queryReplaceState
 }
 
 // NewHandler returns a emacs, simple-to-use text.Handler. indentTabspaces
@@ -201,29 +219,6 @@ func (h *emacsHandler) clearMarkLocation() bool {
 	return true
 }
 
-func (h *emacsHandler) selectToMark(delete bool) bool {
-	loc, ok := h.markLocation()
-	if !ok {
-		return false
-	}
-	from := loc.From
-	to := h.cursor.CursorAtScroll()
-	if delete {
-		from, to = to, from
-	}
-	if !h.cursor.SelectRange(from, to) {
-		return false
-	}
-	if !delete {
-		return true
-	}
-	if !h.cursor.DeleteSelection() {
-		return false
-	}
-	h.popMarkLocation()
-	return true
-}
-
 func (h *emacsHandler) popMarkLocation() bool {
 	locs := h.markLocations()
 	if len(locs) == 0 {
@@ -246,11 +241,6 @@ func (h *emacsHandler) playMacro() bool {
 		h.log(log.ErrorLevel, "macro playback: %v", err)
 	}
 	return true
-}
-
-// killRegion deletes the text between the mark and point (C-w).
-func (h *emacsHandler) killRegion() bool {
-	return h.selectToMark(true)
 }
 
 // copyRegion copies the text between the mark and point to the clipboard,
@@ -322,21 +312,138 @@ func (h *emacsHandler) moveBackwardSexp() bool {
 	return false
 }
 
-// selectWordForward selects from point to the end of the current or next
-// word, matching how the Emacs word-case commands operate on the word at or
-// after point.
-func (h *emacsHandler) selectWordForward() bool {
-	if _, ok := h.cursor.SelectionMode(); ok {
-		return true
+// bracketPairs lists the delimiter pairs the structural motions understand,
+// mirroring sexpOpeners/sexpClosers.
+var bracketPairs = [][2]rune{{'(', ')'}, {'{', '}'}, {'[', ']'}}
+
+// enclosingBlock returns the tightest bracket pair enclosing point across the
+// supported delimiter kinds. It probes each pair with SelectABlock and keeps
+// the innermost match (largest start, smallest end). The selection is cleared
+// before returning; ok is false when point is not inside any bracket pair.
+func (h *emacsHandler) enclosingBlock() (start, end term.Coordinates, ok bool) {
+	origin := h.cursor.CursorAtScroll()
+	for _, pair := range bracketPairs {
+		if !h.cursor.SelectABlock(pair[0], pair[1]) {
+			continue
+		}
+		s, e, sok := h.cursor.SelectionBounds()
+		h.cursor.Unselect()
+		h.cursor.MoveToScroll(origin)
+		if !sok {
+			continue
+		}
+		if coordLess(e, s) {
+			s, e = e, s
+		}
+		if !ok || coordLess(start, s) {
+			start, end, ok = s, e, true
+		}
 	}
-	if !h.cursor.Select() {
+	return
+}
+
+// coordLess reports whether a precedes b in document order.
+func coordLess(a, b term.Coordinates) bool {
+	if a.Y != b.Y {
+		return a.Y < b.Y
+	}
+	return a.X < b.X
+}
+
+// killForwardSexp deletes the balanced bracket expression following point
+// (C-M-k). It scans forward for the next opening bracket, selects through its
+// balanced close and kills the selection to the kill ring. Point and the
+// buffer are left untouched when no bracket expression follows.
+func (h *emacsHandler) killForwardSexp() bool {
+	origin := h.cursor.CursorAtScroll()
+	start := origin
+	for {
+		cell, ok := h.cursor.Cell()
+		if ok {
+			if _, isOpen := sexpOpeners[cell.Ch]; isOpen {
+				break
+			}
+		}
+		if !h.cursor.MoveRight() {
+			h.cursor.MoveToScroll(origin)
+			return false
+		}
+		start = h.cursor.CursorAtScroll()
+	}
+	if !h.cursor.MoveToMatchingRune() {
+		h.cursor.MoveToScroll(origin)
 		return false
 	}
-	if !h.cursor.MoveRightEndWord() {
-		h.cursor.Unselect()
+	end := h.cursor.CursorAtScroll()
+	// Include the closing bracket in the deleted range.
+	end.X++
+	if !h.cursor.SelectRange(start, end) {
+		h.cursor.MoveToScroll(origin)
+		return false
+	}
+	if !h.killSelection(false) {
+		h.cursor.MoveToScroll(origin)
 		return false
 	}
 	return true
+}
+
+// moveToDefunStart moves point to the beginning of the enclosing bracketed
+// block (C-M-a). There is no true defun-boundary API, so this is a
+// bracket-based approximation: it uses the innermost enclosing bracket pair.
+func (h *emacsHandler) moveToDefunStart(context.Context) bool {
+	start, _, ok := h.enclosingBlock()
+	if !ok {
+		return false
+	}
+	_, ok = h.cursor.MoveToScroll(start)
+	return ok
+}
+
+// moveToDefunEnd moves point to the end of the enclosing bracketed block
+// (C-M-e), landing on the closing delimiter. See moveToDefunStart for the
+// bracket-based approximation caveat.
+func (h *emacsHandler) moveToDefunEnd(context.Context) bool {
+	_, end, ok := h.enclosingBlock()
+	if !ok {
+		return false
+	}
+	_, ok = h.cursor.MoveToScroll(end)
+	return ok
+}
+
+// moveUpList moves point to the opening delimiter of the bracket pair
+// enclosing it (C-M-u, backward-up-list).
+func (h *emacsHandler) moveUpList() bool {
+	start, _, ok := h.enclosingBlock()
+	if !ok {
+		return false
+	}
+	_, ok = h.cursor.MoveToScroll(start)
+	return ok
+}
+
+// moveDownList moves point just inside the next opening delimiter after it
+// (C-M-d, down-list). It scans forward to the next opener and steps one cell
+// past it. Point is restored when no opener follows on reachable lines.
+func (h *emacsHandler) moveDownList() bool {
+	origin := h.cursor.CursorAtScroll()
+	for {
+		cell, ok := h.cursor.Cell()
+		if ok {
+			if _, isOpen := sexpOpeners[cell.Ch]; isOpen {
+				if h.cursor.MoveRight() {
+					return true
+				}
+				break
+			}
+		}
+		if !h.cursor.MoveRight() {
+			break
+		}
+	}
+	h.cursor.MoveToScroll(origin)
+	return false
 }
 
 func (h *emacsHandler) upcaseWord() bool {
@@ -375,17 +482,82 @@ func (h *emacsHandler) capitalizeWord() bool {
 	return true
 }
 
-// capitalize upper-cases the first letter of s and lower-cases the rest,
-// matching Emacs capitalize-word.
+// capitalize upper-cases the first word-constituent letter of s and
+// lower-cases the rest, matching Emacs capitalize-word on a region that may
+// start with whitespace or punctuation.
 func capitalize(s string) string {
 	upped := false
 	return strings.Map(func(r rune) rune {
 		if !upped {
+			if !wordRune(r) {
+				return r
+			}
 			upped = true
 			return unicode.ToUpper(r)
 		}
 		return unicode.ToLower(r)
 	}, s)
+}
+
+// capitalizeWords capitalizes every word in s, for the case commands that
+// operate on several words at once.
+func capitalizeWords(s string) string {
+	inWord := false
+	return strings.Map(func(r rune) rune {
+		if !wordRune(r) {
+			inWord = false
+			return r
+		}
+		if inWord {
+			return unicode.ToLower(r)
+		}
+		inWord = true
+		return unicode.ToUpper(r)
+	}, s)
+}
+
+// yank pastes the newest kill at point and primes the yank-pop cycle so a
+// following M-y replaces it with an older kill-ring entry.
+func (h *emacsHandler) yank() bool {
+	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		h.log(log.ErrorLevel, "clipboard paste: %v", err)
+		return false
+	}
+	mode, _ := paste.Metadata.(text.SelectMode)
+	h.cursor.Paste(paste.Text, mode, false)
+	h.lastPaste = true
+	h.historyIdx = 0
+	return true
+}
+
+// renderPrompt mirrors the active minibuffer prompt into the echo area. It is
+// called after every keystroke the minibuffer consumes.
+func (h *emacsHandler) renderPrompt() {
+	h.less.SetMessage("%s", h.minibuffer.prompt())
+}
+
+// startGotoLine opens the go-to-line prompt (M-g g). On submit it moves point
+// to the given one-based line, clamped to the buffer; a blank or malformed
+// entry is ignored. The echo area is cleared when the prompt closes.
+func (h *emacsHandler) startGotoLine() {
+	h.minibuffer.start("Goto line: ", func(text string) {
+		defer h.less.SetMessage("")
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return
+		}
+		line, err := strconv.Atoi(text)
+		if err != nil || line < 1 {
+			return
+		}
+		// SetCursorAtScroll clamps the target to the buffer bounds, so an
+		// out-of-range line lands on the last line rather than off the end.
+		h.SetCursorAtScroll(term.Coordinates{Y: line - 1, X: 0})
+	}, func() {
+		h.less.SetMessage("")
+	})
+	h.renderPrompt()
 }
 
 func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -394,11 +566,15 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 	// Track whether the current event is a paste-related action.
 	// Reset lastPaste at the end unless the handler explicitly sets it.
 	pastedThisTurn := false
+	h.killedNow = false
 	defer func() {
 		if !pastedThisTurn {
 			h.lastPaste = false
 			h.historyIdx = 0
 		}
+		// Any event that is not itself a kill breaks the kill-accumulation
+		// chain, mirroring GNU last-command tracking.
+		h.lastKill = h.killedNow
 	}()
 
 	// only a user event clears a pending set cursor
@@ -406,6 +582,9 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Type {
 	case term.EventMouse:
+		// Any mouse action breaks an amalgamation run, like any other
+		// intervening command in GNU Emacs.
+		h.closeUndoRun()
 		return h.mouse.Handle(ev)
 	case term.EventPasteStart:
 		h.pasteBuf.Reset()
@@ -414,13 +593,16 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	case term.EventPasteEnd:
 		str := h.pasteBuf.String()
+		h.closeUndoRun()
+		h.buf.MarkStartUndo()
 		if _, ok := h.cursor.SelectionMode(); ok {
-			handled = h.cursor.DeleteSelection()
+			// Pasting over a selection replaces it with the pasted text.
+			h.cursor.DeleteSelection()
 			h.cursor.Unselect()
-		} else {
-			h.cursor.InsertString(str)
-			handled = true
 		}
+		h.cursor.InsertString(str)
+		h.buf.GroupUndo()
+		handled = true
 		h.pasteStarted = false
 		return
 	case term.EventKey:
@@ -434,6 +616,88 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = true
 		}
 		return
+	}
+
+	// An active echo-area prompt (go-to-line, query-replace) owns every
+	// keystroke until it is submitted or cancelled.
+	if h.minibuffer.active {
+		h.minibuffer.handle(ev)
+		// A submit callback may chain another prompt or start the
+		// query-replace loop, each of which sets its own message; only
+		// refresh the prompt when this minibuffer is still the active one.
+		if h.minibuffer.active {
+			h.renderPrompt()
+		}
+		return false, true
+	}
+
+	// An active incremental search owns keystrokes until it exits. A key that
+	// both ends the search and carries its own meaning is reprocessed by the
+	// normal keymap below.
+	if h.isearch.active {
+		if !h.handleIsearchKey(ev) {
+			return false, true
+		}
+	}
+
+	// The query-replace decision loop owns every keystroke until it ends.
+	if h.queryReplace.active {
+		h.handleQueryReplaceKey(ev)
+		return false, true
+	}
+
+	// M-g is a prefix (goto-map). The following key selects the goto
+	// command; today only go-to-line is bound, reachable as both M-g g
+	// and M-g M-g like in GNU Emacs.
+	if h.pendingGoto {
+		h.pendingGoto = false
+		if ev.Type == term.EventKey && ev.Ch == 'g' &&
+			(ev.Mod == 0 || ev.Mod == term.ModAlt) {
+			h.startGotoLine()
+			return false, true
+		}
+		// Any other key aborts the prefix; C-g is the explicit abort.
+		return false, true
+	}
+
+	// M-z reads the next character as the zap target.
+	if h.pendingZap {
+		h.handleZapKey(ev)
+		return false, true
+	}
+
+	// A pending numeric argument owns digit and sign keys; any other key
+	// consumes it. Prefix keystrokes are not commands in GNU terms, so
+	// they preserve the kill-accumulation and yank-pop chains.
+	if h.prefix.active {
+		if h.collectPrefixKey(ev) {
+			if h.prefix.active {
+				h.killedNow = h.lastKill
+				pastedThisTurn = h.lastPaste
+			}
+			return false, true
+		}
+		count, raw := h.prefix.value(), h.prefix.rawOnly()
+		h.prefix = prefixState{}
+		h.less.SetMessage("")
+		// The whole counted command is one undo group.
+		h.closeUndoRun()
+		h.buf.MarkStartUndo()
+		handled = h.dispatchCounted(ctx, ev, count, raw, &pastedThisTurn)
+		h.buf.GroupUndo()
+		return false, handled
+	}
+	if h.startPrefixArg(ev) {
+		h.killedNow = h.lastKill
+		pastedThisTurn = h.lastPaste
+		return false, true
+	}
+
+	// One command, one undo: everything a dispatched key edits merges into
+	// a single undo group, except amalgamating runs which keep their group
+	// open across events.
+	if h.beginEventUndo(ev) {
+		defer h.buf.GroupUndo()
 	}
 
 	if ev.Mod == term.ModShift {
@@ -459,6 +723,19 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		shift = true
 	}
 
+	handled = h.dispatchKey(ctx, ev, shift, &pastedThisTurn)
+	return
+}
+
+// dispatchKey executes one normal-keymap dispatch for ev. It is the unit a
+// numeric argument repeats: motions and edits land here after the modal
+// states (minibuffer, isearch, query-replace, pending prefixes) have had
+// their turn. shift reports that a shift-extended selection is in progress
+// so the move-clears-selection tail leaves it alone; pasted is set when the
+// dispatched command was a yank so Handle keeps the yank-pop cycle alive.
+func (h *emacsHandler) dispatchKey(
+	ctx context.Context, ev term.Event, shift bool, pasted *bool,
+) (handled bool) {
 	cursorAt := h.cursor.CursorAtScroll()
 	switch ev.Mod {
 	case term.ModAltShift:
@@ -477,47 +754,63 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowUp:
 			handled = h.moveLine(true /* up */)
 		case term.KeyArrowLeft:
-			handled = h.cursor.MoveLeftStartWord()
+			handled = h.moveBackwardWord()
 		case term.KeyArrowRight:
-			handled = h.cursor.MoveRightEndWord()
+			handled = h.moveForwardWord()
 		case term.KeyBackspace:
 			// M-DEL: backward-kill-word.
-			h.cursor.Select()
-			h.cursor.MoveLeftStartWord()
-			handled = h.cursor.DeleteSelection()
+			handled = h.killBackwardWord()
 		case term.KeyDelete:
 			// M-Delete: kill-word (forward).
-			h.cursor.Select()
-			h.cursor.MoveRightEndWord()
-			handled = h.cursor.DeleteSelection()
+			handled = h.killForwardWord()
+		case term.KeySpace:
+			// M-SPC: just-one-space.
+			handled = h.justOneSpace()
 		case 0:
 			switch ev.Ch {
 			case 'f':
-				handled = h.cursor.MoveRightEndWord()
+				handled = h.moveForwardWord()
 			case 'b':
-				handled = h.cursor.MoveLeftStartWord()
+				handled = h.moveBackwardWord()
 			case 'd':
 				// M-d: kill-word (forward).
-				h.cursor.Select()
-				h.cursor.MoveRightEndWord()
-				handled = h.cursor.DeleteSelection()
+				handled = h.killForwardWord()
 			case 'w':
 				// M-w: kill-ring-save (copy the region).
 				handled = h.copyRegion()
-			case ',':
-				// M-<: beginning-of-buffer.
+			case '<':
+				// M-<: beginning-of-buffer. Alt+Shift+comma reaches the
+				// handler as ModAlt with the shifted glyph '<' on both the
+				// GUI and terminal paths, so the shift bit never survives as
+				// ModAltShift here.
 				handled = h.cursor.MoveFirstLine()
-			case '.':
+			case '>':
 				// M->: end-of-buffer.
 				handled = h.cursor.MoveLastLine()
+			case 'v':
+				// M-v: scroll-up (page up), symmetric with C-v.
+				handled = h.less.Scroll().SeekUpPage()
+			case 't':
+				// M-t: transpose-words.
+				handled = h.transposeWords()
 			case 'm':
 				// M-m: back-to-indentation.
-				handled = h.cursor.MoveStartLineNonBlank()
+				handled = h.backToIndentation()
+			case 'a':
+				// M-a: backward-sentence.
+				handled = h.backwardSentence()
+			case 'e':
+				// M-e: forward-sentence.
+				handled = h.forwardSentence()
+			case 'k':
+				// M-k: kill-sentence.
+				handled = h.killSentence()
+			case 'z':
+				// M-z: zap-to-char; the next key picks the target.
+				handled = h.startZap(1)
 			case '^':
-				// M-^: delete-indentation. Conflate joins the following line
-				// onto the current one (bracket-free line join); it does not
-				// implement GNU Emacs join-with-previous semantics.
-				handled = h.cursor.Conflate()
+				// M-^: delete-indentation (join onto the previous line).
+				handled = h.deleteIndentation()
 			case '\\':
 				// M-\: delete-horizontal-space.
 				handled = h.cursor.DeleteHorizontalSpace()
@@ -536,15 +829,26 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			case 'y':
 				// M-y: yank-pop (replace the last yank with an older kill).
 				if handled = h.pasteFromHistory(); handled {
-					pastedThisTurn = true
+					*pasted = true
 				}
 			case 'q':
 				// M-q: fill-paragraph.
 				handled = h.cursor.WrapParagraph(h.cfg.ruler)
+			case 'g':
+				// M-g: prefix for the goto-map. Await the next key
+				// (currently only M-g g / go-to-line).
+				h.pendingGoto = true
+				handled = true
+			case '%':
+				// M-%: query-replace.
+				handled = h.startQueryReplace()
+				return
 			case '{':
-				handled = h.cursor.CollapseFold(context.Background())
+				// M-{: backward-paragraph.
+				handled = h.cursor.MovePrevParagraph()
 			case '}':
-				handled = h.cursor.ExpandFold(context.Background())
+				// M-}: forward-paragraph.
+				handled = h.cursor.MoveNextParagraph()
 			}
 		}
 	// no modifier
@@ -623,9 +927,12 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		default:
 			if ev.Ch != 0 {
 				if _, ok := h.cursor.SelectionMode(); ok {
-					handled = h.cursor.DeleteSelection()
+					// Like RET, SPC and paste, a typed character replaces
+					// the selection rather than just deleting it.
+					h.cursor.DeleteSelection()
 					h.cursor.Unselect()
-				} else if h.cfg.autoPair {
+				}
+				if h.cfg.autoPair {
 					handled = h.cursor.InsertWithAutoPair(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
 				} else {
 					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
@@ -653,18 +960,8 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = true
 		case 'y':
 			// C-y: yank (paste from the clipboard).
-			paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-			if err != nil {
-				h.log(log.ErrorLevel, "clipboard paste: %v", err)
-			} else {
-				mode, _ := paste.Metadata.(text.SelectMode)
-				h.cursor.Paste(paste.Text, mode, false)
-				handled = true
-				// Prime the yank-pop cycle so a following M-y replaces
-				// this yank with an older kill-ring entry.
-				h.lastPaste = true
-				h.historyIdx = 0
-				pastedThisTurn = true
+			if handled = h.yank(); handled {
+				*pasted = true
 			}
 		case 'l':
 			handled = h.cursor.Center()
@@ -689,9 +986,11 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		case 'm':
 			handled = h.cursor.MoveToMatchingRune()
 		case 'M':
+			// Block selection must survive the move-clears-selection tail.
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||
 				h.cursor.SelectABlockClose('[', ']')
+			return
 		case 'd':
 			handled = h.cursor.Delete()
 		case 'h':
@@ -726,38 +1025,37 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		case 'b':
 			handled = h.cursor.MoveLeft()
 		case 'k':
-			h.cursor.Select()
-			h.cursor.MoveEndLine()
-			handled = h.cursor.DeleteSelection()
-		case '-':
-			handled = h.cursor.MoveToNextMatch()
-		case '_':
-			handled = h.cursor.MoveToPrevMatch()
+			// C-k: kill-line.
+			handled = h.killLine()
+		case '/', '_':
+			// C-/ and C-_: undo. A terminal folds C-/, C-_ and C-7 into
+			// one control code that arrives as C-/; the GUI path delivers
+			// the distinct glyphs.
+			handled = h.cursor.Undo()
+		case '?':
+			// C-?: undo-redo (GUI path only; a terminal C-? is DEL).
+			handled = h.cursor.Redo()
+		case 's':
+			// C-s: isearch-forward.
+			handled = h.startIsearch(true)
+			return
+		case 'r':
+			// C-r: isearch-backward.
+			handled = h.startIsearch(false)
+			return
 		case 't':
-			if h.cursor.Select() {
-				handled, _ = h.cursor.CopySelectionNoUnselect(
-					clipboard.DefaultRegisterID, h.clipboard)
-				if handled {
-					h.cursor.DeleteSelection()
-					paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-					if err != nil {
-						h.log(log.ErrorLevel, "clipboard paste: %v", err)
-					} else {
-						str := paste.Text
-						h.cursor.Paste(str, text.StandardSelection, false)
-					}
-				}
-			}
+			// C-t: transpose-chars.
+			handled = h.transposeChars()
 		case 'K':
-			if h.cursor.SelectLine() {
-				handled = h.cursor.DeleteSelection()
-			}
+			// C-S-k: kill the whole line, newline included.
+			handled = h.killWholeLine()
 		case 'w':
 			// C-w: kill-region (mark to point).
 			handled = h.killRegion()
 		case '=':
 			// C-= : expand-region (grow the syntactic selection).
 			handled = h.cursor.ExpandSelection(ctx)
+			return
 		}
 	case term.ModCtrlShift:
 		switch ev.Key {
@@ -773,8 +1071,10 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||
 				h.cursor.SelectABlockClose('[', ']')
+			return
 		case 'W':
 			handled = h.cursor.ShrinkSelection()
+			return
 		}
 	case term.ModCtrlAlt:
 		switch ev.Key {
@@ -808,6 +1108,28 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			case 'b':
 				// C-M-b: backward-sexp (bracket-based).
 				handled = h.moveBackwardSexp()
+			case 'k':
+				// C-M-k: kill-sexp (bracket-based, forward).
+				handled = h.killForwardSexp()
+			case 'a':
+				// C-M-a: beginning-of-defun. Approximated with the innermost
+				// enclosing fold; there is no true defun boundary API.
+				handled = h.moveToDefunStart(ctx)
+			case 'e':
+				// C-M-e: end-of-defun. Fold-based, see moveToDefunStart.
+				handled = h.moveToDefunEnd(ctx)
+			case 'u':
+				// C-M-u: backward-up-list. Move to the opener of the
+				// bracket pair enclosing point.
+				handled = h.moveUpList()
+			case 'd':
+				// C-M-d: down-list. Move just inside the next opening
+				// bracket after point.
+				handled = h.moveDownList()
+			case '/', '_':
+				// C-M-/ and C-M-_: undo-redo (Emacs 28). The terminal
+				// folds both onto the same control code, like C-/.
+				handled = h.cursor.Redo()
 			}
 		}
 	}
@@ -858,7 +1180,11 @@ func (h *emacsHandler) SetWrap(wrap bool) {
 }
 
 func (h *emacsHandler) IsSearchMode() bool {
-	return h.less.Mode() == handler.LessSearchMode
+	// An active echo-area prompt (isearch, query-replace, go-to-line) also
+	// consumes Enter and other keys, so outer wrappers must delegate to the
+	// editor while one is open.
+	return h.less.Mode() == handler.LessSearchMode ||
+		h.minibuffer.active || h.isearch.active || h.queryReplace.active
 }
 
 func (t *emacsHandler) ShowCommandBar(show bool) {
@@ -949,6 +1275,19 @@ func (h *emacsHandler) LocationLists() []text.LocationSet {
 }
 
 func (h *emacsHandler) moveLine(up bool) (handled bool) {
+	// Moving past the buffer edge would scramble line order rather than
+	// swap; the boundary is a no-op.
+	lo := h.cursor.CursorAtScroll()
+	hi := lo
+	if from, to, ok := h.cursor.SelectionBounds(); ok {
+		lo, hi = sortBounds(from, to)
+	}
+	if up && lo.Y == 0 {
+		return false
+	}
+	if !up && hi.Y >= h.cursor.View().Rows()-1 {
+		return false
+	}
 	if _, ok := h.cursor.SelectionMode(); !ok {
 		if !h.cursor.SelectLine() {
 			return
@@ -1008,28 +1347,30 @@ func (h *emacsHandler) duplicateLine(up bool) (handled bool) {
 	return
 }
 
-// pasteFromHistory pastes from clipboard history. If the last action was a
-// paste, it replaces that paste with the next older history entry.
+// pasteFromHistory implements yank-pop (M-y): it replaces the text of the
+// yank that immediately preceded it with the next older kill-ring entry,
+// wrapping around to the newest once the oldest has been shown. Like GNU
+// yank-pop it refuses to run when the previous command was not a yank.
 func (h *emacsHandler) pasteFromHistory() (handled bool) {
+	if !h.lastPaste {
+		return false
+	}
 	history, ok := registerhistory.AsHistory(h.clipboard)
 	if !ok {
-		return h.lastPaste
+		// Without history there is no older kill to rotate in; the yank
+		// simply stays, matching a one-entry kill ring.
+		return true
 	}
-	next := 0
-	if h.lastPaste {
-		next = h.historyIdx + 1
+	if history.HistoryLen() == 0 {
+		return true
 	}
-	if next >= history.HistoryLen() {
-		return h.lastPaste
-	}
+	next := (h.historyIdx + 1) % history.HistoryLen()
 	data, ok := history.HistoryAt(next)
 	if !ok {
-		return h.lastPaste
+		return true
 	}
-	if h.lastPaste {
-		// Undo the previous paste before replacing it with an older entry.
-		h.cursor.Undo()
-	}
+	// Undo the previous paste before replacing it with an older entry.
+	h.cursor.Undo()
 	mode, _ := data.Metadata.(text.SelectMode)
 	h.cursor.Paste(data.Text, mode, false)
 	h.historyIdx = next

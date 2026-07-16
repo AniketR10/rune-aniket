@@ -525,6 +525,7 @@ func TestKeyBindingsEditorModeIntro(t *testing.T) {
 	}{
 		{"modal", "https://docs.rune.build/learn/modal-editor"},
 		{"standard", "https://docs.rune.build/learn/standard-editor"},
+		{"emacs", "https://docs.rune.build/learn/emacs-editor"},
 		{"exo", "consult its documentation for in-buffer key bindings"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {

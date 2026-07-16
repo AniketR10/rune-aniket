@@ -25,6 +25,7 @@ package emacs
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -499,7 +500,6 @@ func TestEmacsKeyBindingsMacOS(t *testing.T) {
 		{"Set mark at cursor position", "<ctrl-space>", nil, term.Coordinates{}, nil},
 		{"Copy region from mark to point (M-w)", "<ctrl-space><down><down><alt-w>", nil, term.Coordinates{Y: 2, X: 0}, new("a\nb\n")},
 		{"Kill region from mark to point (C-w)", "<ctrl-space><down><down><ctrl-w>", new("c\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Transpose (swap adjacent characters)", "<down><right><ctrl-t>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
 
 		// Comments - depends on language/syntax (assuming C-style). M-; is
 		// comment-dwim.
@@ -519,14 +519,14 @@ func TestEmacsKeyBindingsMacOS(t *testing.T) {
 		{"Move right one character", "<ctrl-f>", nil, term.Coordinates{Y: 0, X: 1}, nil},
 		{"Move left one character", "<right><ctrl-b>", nil, term.Coordinates{Y: 0, X: 0}, nil},
 		{"Jump to matching bracket", "{}<left><left><ctrl-m>", nil, term.Coordinates{X: 1}, nil},
-		{"Move to start of buffer (M-<)", "<down><down><alt-,>", nil, term.Coordinates{Y: 0, X: 0}, nil},
-		{"Move to end of buffer (M->)", "<alt-.>", nil, term.Coordinates{Y: 10, X: 0}, nil},
+		{"Move to start of buffer (M-<)", "<down><down><alt-shift-,>", nil, term.Coordinates{Y: 0, X: 0}, nil},
+		{"Move to end of buffer (M->)", "<alt-shift-.>", nil, term.Coordinates{Y: 10, X: 0}, nil},
 
 		// Scrolling
-		{"Center current line in view", "<alt-.>z<enter>z<enter>z<enter>z<enter>z<enter>z<enter><up><up><up><up><ctrl-l>",
+		{"Center current line in view", "<alt-shift-.>z<enter>z<enter>z<enter>z<enter>z<enter>z<enter><up><up><up><up><ctrl-l>",
 			nil, term.Coordinates{Y: 12}, nil},
 		{"Scroll down one page", "<ctrl-v>", nil, term.Coordinates{Y: 3, X: 0}, nil},
-		{"Scroll view up one line", "<alt-.><up><ctrl-alt-up>", nil, term.Coordinates{Y: 9}, nil},
+		{"Scroll view up one line", "<alt-shift-.><up><ctrl-alt-up>", nil, term.Coordinates{Y: 9}, nil},
 		{"Scroll view down one line", "<ctrl-alt-down>", nil, term.Coordinates{Y: 1}, nil},
 
 		// Search and replace
@@ -819,10 +819,11 @@ func TestEmacsKeymapAdditions(t *testing.T) {
 			at:      term.Coordinates{X: 2},
 		},
 		{
-			name:    "M-^ delete-indentation joins next line",
+			name:    "M-^ delete-indentation joins onto previous line",
 			content: "a\nb",
+			start:   term.Coordinates{Y: 1},
 			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: '^'}},
-			want:    new("ab"),
+			want:    new("a b"),
 			at:      term.Coordinates{X: 1},
 		},
 		{
@@ -868,6 +869,101 @@ func TestEmacsKeymapAdditions(t *testing.T) {
 			events:  []term.Event{{Type: term.EventKey, Mod: term.ModCtrlAlt, Ch: 'b'}},
 			at:      term.Coordinates{X: 0},
 		},
+		{
+			name:    "C-t transpose-chars",
+			content: "abc",
+			start:   term.Coordinates{X: 1},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 't'}},
+			want:    new("bac"),
+			at:      term.Coordinates{X: 2},
+		},
+		{
+			name:    "C-t transpose-chars at end of line",
+			content: "ab",
+			start:   term.Coordinates{X: 2},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 't'}},
+			want:    new("ba"),
+			at:      term.Coordinates{X: 2},
+		},
+		{
+			name:    "M-t transpose-words",
+			content: "alpha beta",
+			start:   term.Coordinates{X: 5},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 't'}},
+			want:    new("beta alpha"),
+			at:      term.Coordinates{X: 10},
+		},
+		{
+			name:    "M-t transpose-words from inside second word",
+			content: "alpha beta",
+			start:   term.Coordinates{X: 8},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 't'}},
+			want:    new("beta alpha"),
+			at:      term.Coordinates{X: 10},
+		},
+		{
+			name:    "M-< beginning-of-buffer",
+			content: "a\nb\nc",
+			start:   term.Coordinates{Y: 2, X: 1},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: '<'}},
+			at:      term.Coordinates{Y: 0, X: 1},
+		},
+		{
+			name:    "M-> end-of-buffer",
+			content: "a\nb\nc",
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: '>'}},
+			at:      term.Coordinates{Y: 2, X: 0},
+		},
+		{
+			name:    "M-e forward-sentence",
+			content: "One.  Two.",
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'e'}},
+			at:      term.Coordinates{X: 4},
+		},
+		{
+			name:    "M-a backward-sentence",
+			content: "One.  Two.",
+			start:   term.Coordinates{X: 8},
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a'}},
+			at:      term.Coordinates{X: 6},
+		},
+		{
+			name:    "M-k kill-sentence",
+			content: "One.  Two.",
+			events:  []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'k'}},
+			want:    new("  Two."),
+			at:      term.Coordinates{},
+		},
+		{
+			name:    "M-z zap-to-char reads the target",
+			content: "hello world",
+			events: []term.Event{
+				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'z'},
+				{Type: term.EventKey, Ch: 'o'},
+			},
+			want: new(" world"),
+			at:   term.Coordinates{},
+		},
+		{
+			name:    "C-u C-f universal argument",
+			content: "abcdefgh",
+			events: []term.Event{
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'u'},
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'f'},
+			},
+			at: term.Coordinates{X: 4},
+		},
+		{
+			name:    "C-/ undo",
+			content: "ab",
+			start:   term.Coordinates{X: 2},
+			events: []term.Event{
+				{Type: term.EventKey, Ch: 'X'},
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: '/'},
+			},
+			want: new("ab"),
+			at:   term.Coordinates{X: 2},
+		},
 	}
 
 	for _, tc := range cases {
@@ -891,6 +987,267 @@ func TestEmacsKeymapAdditions(t *testing.T) {
 			assert.Equal(t, tc.at, h.CursorAtScroll())
 		})
 	}
+}
+
+// TestEmacsMetaPunctuationSemantics pins the Emacs-correct meaning of the
+// meta punctuation chords after RUNE-274: M-< / M-> are begin/end-of-buffer
+// (Alt+Shift+comma/period), while the unshifted M-, / M-. are left unbound in
+// the editor so the command layer owns xref-style navigation.
+func TestEmacsMetaPunctuationSemantics(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///meta.go")
+	require.NoError(t, err)
+
+	t.Run("M-comma is unbound", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader("a\nb\nc"))
+		h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+		h.Resize(80, 10)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 2, X: 1}))
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: ','})
+		assert.False(t, handled, "M-, must not be handled by the editor")
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("M-period is unbound", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader("a\nb\nc"))
+		h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+		h.Resize(80, 10)
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: '.'})
+		assert.False(t, handled, "M-. must not be handled by the editor")
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsGotoLine covers M-g g (go-to-line): the two-key Meta prefix opens an
+// echo-area prompt that reads a one-based line number and moves point there.
+func TestEmacsGotoLine(t *testing.T) {
+	content := "l1\nl2\nl3\nl4\nl5"
+
+	feed := func(t *testing.T, h text.Handler, keys string) {
+		t.Helper()
+		seq, err := term.ParseKeys(keys)
+		require.NoError(t, err)
+		for _, k := range seq {
+			h.Handle(term.Event{Type: term.EventKey, Key: k.Key, Mod: k.Mod, Ch: k.Ch})
+		}
+	}
+
+	t.Run("jumps to the requested line", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		feed(t, h, "<alt-g>g3<enter>")
+		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, h.CursorAtScroll())
+		assert.False(t, h.IsSearchMode(), "prompt must close on submit")
+	})
+
+	t.Run("clamps a too-large line to the last line", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		feed(t, h, "<alt-g>g99<enter>")
+		assert.Equal(t, 4, h.CursorAtScroll().Y)
+	})
+
+	t.Run("is search mode while the prompt is open", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		feed(t, h, "<alt-g>g2")
+		assert.True(t, h.IsSearchMode(), "editor owns keys while prompting")
+		// Enter commits and closes the prompt.
+		feed(t, h, "<enter>")
+		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, h.CursorAtScroll())
+	})
+
+	t.Run("C-g aborts the prompt without moving", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		feed(t, h, "<alt-g>g4<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("M-g then a non-g key does not open the prompt", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		feed(t, h, "<alt-g>x")
+		assert.False(t, h.IsSearchMode())
+	})
+
+	t.Run("blank entry is ignored", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 3, X: 0}))
+		feed(t, h, "<alt-g>g<enter>")
+		assert.Equal(t, term.Coordinates{Y: 3, X: 0}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsIncrementalSearch covers C-s / C-r incremental search: typing
+// refines the match live, C-s / C-r cycle through matches, Enter accepts at the
+// current match, and C-g aborts back to the origin.
+func TestEmacsIncrementalSearch(t *testing.T) {
+	feed := func(t *testing.T, h text.Handler, keys string) {
+		t.Helper()
+		seq, err := term.ParseKeys(keys)
+		require.NoError(t, err)
+		for _, k := range seq {
+			h.Handle(term.Event{Type: term.EventKey, Key: k.Key, Mod: k.Mod, Ch: k.Ch})
+		}
+	}
+
+	t.Run("C-s lands at the end of the first forward match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar foo")
+		feed(t, h, "<ctrl-s>bar")
+		assert.True(t, h.IsSearchMode())
+		// GNU isearch-forward leaves point after the matched text.
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("second C-s advances to the next match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo x foo x foo")
+		feed(t, h, "<ctrl-s>foo")
+		// First match starts at the origin (X:0); point lands at its end.
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feed(t, h, "<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 9}, h.CursorAtScroll())
+		feed(t, h, "<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 15}, h.CursorAtScroll())
+	})
+
+	t.Run("Enter accepts and leaves point at the match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		feed(t, h, "<ctrl-s>bar<enter>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("C-g aborts and restores the origin", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar foo")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feed(t, h, "<ctrl-s>bar")
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+		feed(t, h, "<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("Backspace widens the query again", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "aXb aY")
+		feed(t, h, "<ctrl-s>aX")
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+		// Deleting the X leaves "a", whose first match still starts at the
+		// origin; point sits after it.
+		feed(t, h, "<backspace>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-r searches backward", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar foo")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 10}))
+		feed(t, h, "<ctrl-r>foo")
+		assert.Equal(t, term.Coordinates{X: 8}, h.CursorAtScroll())
+	})
+
+	t.Run("a motion key ends the search and still moves", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar baz")
+		feed(t, h, "<ctrl-s>bar")
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+		feed(t, h, "<right>")
+		assert.False(t, h.IsSearchMode(), "arrow ends isearch")
+		assert.Equal(t, term.Coordinates{X: 8}, h.CursorAtScroll())
+	})
+
+	t.Run("no match leaves point at origin", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		feed(t, h, "<ctrl-s>zzz")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsQueryReplace covers M-% query-replace: the two-stage prompt reads
+// the search and replacement strings, then the interactive loop applies y / n /
+// ! / . / q decisions per match.
+func TestEmacsQueryReplace(t *testing.T) {
+	feed := func(t *testing.T, h text.Handler, keys string) {
+		t.Helper()
+		seq, err := term.ParseKeys(keys)
+		require.NoError(t, err)
+		for _, k := range seq {
+			h.Handle(term.Event{Type: term.EventKey, Key: k.Key, Mod: k.Mod, Ch: k.Ch})
+		}
+	}
+	// M-% is Alt+Shift+5, which reaches the handler as ModAlt with '%'.
+	startReplace := "<alt-shift-5>"
+
+	t.Run("replace all with bang", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo foo foo")
+		feed(t, h, startReplace+"foo<enter>bar<enter>")
+		assert.True(t, h.IsSearchMode(), "loop is active after the two prompts")
+		feed(t, h, "!")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "bar bar bar", buf.String())
+	})
+
+	t.Run("y replaces and n skips per match", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "x x x")
+		feed(t, h, startReplace+"x<enter>Y<enter>")
+		// Replace first, skip second, replace third.
+		feed(t, h, "y")
+		feed(t, h, "n")
+		feed(t, h, "y")
+		assert.Equal(t, "Y x Y", buf.String())
+	})
+
+	t.Run("dot replaces current then quits", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a a")
+		feed(t, h, startReplace+"a<enter>b<enter>")
+		feed(t, h, ".")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "b a a", buf.String())
+	})
+
+	t.Run("q quits without replacing the current match", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feed(t, h, startReplace+"a<enter>b<enter>")
+		feed(t, h, "q")
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("C-g quits the loop", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feed(t, h, startReplace+"a<enter>b<enter>")
+		feed(t, h, "<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("replacement containing the search is not rematched", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feed(t, h, startReplace+"a<enter>aa<enter>")
+		feed(t, h, "!")
+		assert.Equal(t, "aa aa", buf.String())
+	})
+
+	t.Run("empty search cancels", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		feed(t, h, startReplace+"<enter>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "abc", buf.String())
+	})
+
+	t.Run("C-g during the search prompt cancels", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		feed(t, h, startReplace+"ab<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "abc", buf.String())
+	})
+
+	t.Run("replace only from point forward", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a a")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feed(t, h, startReplace+"a<enter>b<enter>")
+		feed(t, h, "!")
+		// The first "a" (before point) is left untouched.
+		assert.Equal(t, "a b b", buf.String())
+	})
 }
 
 // TestEmacsKeyboardQuit verifies C-g (keyboard-quit) clears the active
@@ -978,7 +1335,9 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "<alt-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				// The kill ring is a ring: after the oldest entry M-y wraps
+				// back to the newest, as in GNU yank-pop.
+				{input: "<alt-y>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
 			},
 		},
 		{
@@ -994,27 +1353,27 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			},
 		},
 		{
-			name:        "typing after paste starts a new history paste",
+			name:        "typing after paste blocks yank-pop",
 			content:     "z",
 			history:     []string{"a", "b"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
 				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "x", wantHandled: true, wantContent: "zbx", wantCursor: coords(term.Coordinates{X: 3})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "zbxb", wantCursor: coords(term.Coordinates{X: 4})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "zbxa", wantCursor: coords(term.Coordinates{X: 4})},
+				// GNU yank-pop refuses when the previous command was not a
+				// yank; nothing may be inserted.
+				{input: "<alt-y>", wantHandled: false, wantContent: "zbx", wantCursor: coords(term.Coordinates{X: 3})},
 			},
 		},
 		{
-			name:        "cursor movement after paste starts a new history paste",
+			name:        "cursor movement after paste blocks yank-pop",
 			content:     "z",
 			history:     []string{"a", "b"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
 				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "<left>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 1})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "zbb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "zab", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: false, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 1})},
 			},
 		},
 		{
@@ -1028,14 +1387,12 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			},
 		},
 		{
-			name:        "M-y before paste initiates history paste",
+			name:        "M-y without a prior yank is refused",
 			content:     "z",
 			history:     []string{"a", "b", "c"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><alt-y>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: false, wantContent: "z", wantCursor: coords(term.Coordinates{})},
 			},
 		},
 		{
@@ -1054,7 +1411,8 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			steps: []pasteHistoryStep{
 				{input: "<shift-right><ctrl-c><right><shift-right><ctrl-c><end><ctrl-y>", wantHandled: true, wantContent: "abb\ncd"},
 				{input: "<alt-y>", wantHandled: true, wantContent: "aba\ncd"},
-				{input: "<alt-y>", wantHandled: true, wantContent: "aba\ncd"},
+				// Wraps back to the newest copy.
+				{input: "<alt-y>", wantHandled: true, wantContent: "abb\ncd"},
 			},
 		},
 	}
@@ -1212,6 +1570,11 @@ func ctrl(ch rune) term.Event {
 	return term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: ch}
 }
 
+// char builds a plain self-inserting character event.
+func char(ch rune) term.Event {
+	return term.Event{Type: term.EventKey, Ch: ch}
+}
+
 // alt builds a Meta-modified character event (e.g. M-f).
 func alt(ch rune) term.Event {
 	return term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: ch}
@@ -1273,9 +1636,9 @@ func TestEmacsMotionEdgeCases(t *testing.T) {
 		{"End at end", "abc", term.Coordinates{X: 3}, key(term.KeyEnd), term.Coordinates{X: 3}},
 
 		// Buffer ends (M-< / M->).
-		{"M-< at buffer start", "a\nb\nc", term.Coordinates{}, alt(','), term.Coordinates{}},
-		{"M-> from top reaches last line", "a\nb\nc", term.Coordinates{}, alt('.'), term.Coordinates{Y: 2}},
-		{"M-< from bottom reaches first line", "a\nb\nc", term.Coordinates{Y: 2}, alt(','), term.Coordinates{}},
+		{"M-< at buffer start", "a\nb\nc", term.Coordinates{}, alt('<'), term.Coordinates{}},
+		{"M-> from top reaches last line", "a\nb\nc", term.Coordinates{}, alt('>'), term.Coordinates{Y: 2}},
+		{"M-< from bottom reaches first line", "a\nb\nc", term.Coordinates{Y: 2}, alt('<'), term.Coordinates{}},
 
 		// Word motion (M-f / M-b) at the ends.
 		{"M-f at buffer end", "ab", term.Coordinates{X: 2}, alt('f'), term.Coordinates{X: 2}},
@@ -1287,6 +1650,9 @@ func TestEmacsMotionEdgeCases(t *testing.T) {
 		{"M-m from end of indented line", "\t\tab", term.Coordinates{X: 4}, alt('m'), term.Coordinates{X: 2}},
 		{"M-m already at indentation is no-op", "\t\tab", term.Coordinates{X: 2}, alt('m'), term.Coordinates{X: 2}},
 		{"M-m on unindented line", "abc", term.Coordinates{X: 2}, alt('m'), term.Coordinates{}},
+		// On an entirely blank line GNU back-to-indentation lands at the
+		// end of the line.
+		{"M-m on blank line moves to line end", "   ", term.Coordinates{X: 1}, alt('m'), term.Coordinates{X: 3}},
 
 		// Empty buffer: no motion can move.
 		{"left on empty buffer", "", term.Coordinates{}, key(term.KeyArrowLeft), term.Coordinates{}},
@@ -1295,7 +1661,7 @@ func TestEmacsMotionEdgeCases(t *testing.T) {
 		{"down on empty buffer", "", term.Coordinates{}, key(term.KeyArrowDown), term.Coordinates{}},
 		{"C-e on empty buffer", "", term.Coordinates{}, ctrl('e'), term.Coordinates{}},
 		{"M-f on empty buffer", "", term.Coordinates{}, alt('f'), term.Coordinates{}},
-		{"M-> on empty buffer", "", term.Coordinates{}, alt('.'), term.Coordinates{}},
+		{"M-> on empty buffer", "", term.Coordinates{}, alt('>'), term.Coordinates{}},
 
 		// Single character buffer.
 		{"right past only char", "a", term.Coordinates{X: 1}, key(term.KeyArrowRight), term.Coordinates{X: 1}},
@@ -1352,9 +1718,12 @@ func TestEmacsEditingEdgeCases(t *testing.T) {
 		// Kill to end of line (C-k).
 		{"C-k from start of line", "abc", term.Coordinates{}, ctrl('k'), "", term.Coordinates{}},
 		{"C-k from mid line", "abc", term.Coordinates{X: 1}, ctrl('k'), "a", term.Coordinates{X: 1}},
-		{"C-k at end of line is no-op", "abc", term.Coordinates{X: 3}, ctrl('k'), "abc", term.Coordinates{X: 3}},
+		// GNU kill-line at the very end of the buffer has nothing to kill.
+		{"C-k at buffer end is no-op", "abc", term.Coordinates{X: 3}, ctrl('k'), "abc", term.Coordinates{X: 3}},
+		// At the end of a non-final line C-k kills the line break instead.
+		{"C-k at end of line kills the newline", "ab\ncd", term.Coordinates{X: 2}, ctrl('k'), "abcd", term.Coordinates{X: 2}},
 		{"C-k on empty buffer is no-op", "", term.Coordinates{}, ctrl('k'), "", term.Coordinates{}},
-		{"C-k on empty first line", "\nb", term.Coordinates{}, ctrl('k'), "\nb", term.Coordinates{}},
+		{"C-k on empty line kills the line", "\nb", term.Coordinates{}, ctrl('k'), "b", term.Coordinates{}},
 
 		// Word kill forward (M-d).
 		{"M-d kill first word", "alpha beta", term.Coordinates{}, alt('d'), " beta", term.Coordinates{}},
@@ -1369,8 +1738,8 @@ func TestEmacsEditingEdgeCases(t *testing.T) {
 		{"M-Delete kill next word", "alpha beta", term.Coordinates{}, key2(term.KeyDelete, term.ModAlt), " beta", term.Coordinates{}},
 
 		// delete-indentation / join (M-^).
-		{"M-^ joins with next line", "a\nb", term.Coordinates{}, alt('^'), "ab", term.Coordinates{X: 1}},
-		{"M-^ on last line is no-op", "a\nb", term.Coordinates{Y: 1}, alt('^'), "a\nb", term.Coordinates{Y: 1, X: 0}},
+		{"M-^ joins onto the previous line", "a\nb", term.Coordinates{Y: 1}, alt('^'), "a b", term.Coordinates{X: 1}},
+		{"M-^ on first line is no-op", "a\nb", term.Coordinates{}, alt('^'), "a\nb", term.Coordinates{}},
 		{"M-^ on single line is no-op", "abc", term.Coordinates{}, alt('^'), "abc", term.Coordinates{}},
 
 		// delete-horizontal-space (M-\).
@@ -1526,10 +1895,14 @@ func TestEmacsNullCellHandling(t *testing.T) {
 		assert.Equal(t, "a\nc", buf.String())
 	})
 
-	t.Run("join line preserves interior null cell", func(t *testing.T) {
+	t.Run("join onto previous line collapses null cells at the join", func(t *testing.T) {
+		// The NUL filler is treated as horizontal space by the M-^ whitespace
+		// fixup, so the join is normalized to a single real space.
 		h, buf := newEmacsHandler(t, "a\x00\nb")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
 		require.True(t, runEvent(h, alt('^')))
-		assert.Equal(t, "a\x00b", buf.String())
+		assert.Equal(t, "a b", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
 	})
 
 	t.Run("delete-horizontal-space removes null cells around point", func(t *testing.T) {
@@ -1723,13 +2096,14 @@ func allEmacsBindings() []term.Event {
 	evs = append(evs, term.Event{Type: term.EventKey, Ch: 'a'}) // plain insert
 
 	// Meta (M-) layer.
-	for _, ch := range []rune{'f', 'b', 'd', 'w', ',', '.', 'm', '^', '\\', 'u', 'l', 'c', ';', 'y', 'q', '{', '}'} {
+	for _, ch := range []rune{'f', 'b', 'd', 'w', '<', '>', 'v', 't', 'm', '^', '\\', 'u', 'l', 'c', ';', 'y', 'q', 'g', '%', '{', '}'} {
 		evs = append(evs, alt(ch))
 	}
 	evs = append(evs,
 		key2(term.KeyArrowDown, term.ModAlt), key2(term.KeyArrowUp, term.ModAlt),
 		key2(term.KeyArrowLeft, term.ModAlt), key2(term.KeyArrowRight, term.ModAlt),
 		key2(term.KeyBackspace, term.ModAlt), key2(term.KeyDelete, term.ModAlt),
+		key2(term.KeySpace, term.ModAlt),
 	)
 
 	// Meta-Shift line duplication.
@@ -1741,6 +2115,7 @@ func allEmacsBindings() []term.Event {
 	for _, ch := range []rune{
 		'c', 'y', 'l', 'v', 'g', 'o', 'j', 'm', 'M', 'd', 'h', 'a', 'p', 'n',
 		'q', 'Q', 'e', 'z', 'Z', 'A', 'f', 'b', 'k', '-', '_', 't', 'K', 'w', '=',
+		's', 'r',
 	} {
 		evs = append(evs, ctrl(ch))
 	}
@@ -1755,7 +2130,7 @@ func allEmacsBindings() []term.Event {
 	)
 
 	// Control-Meta layer.
-	for _, ch := range []rune{'h', 'v', 'f', 'b'} {
+	for _, ch := range []rune{'h', 'v', 'f', 'b', 'k', 'a', 'e', 'u', 'd'} {
 		evs = append(evs, ctrlAlt(ch))
 	}
 	evs = append(evs,
@@ -2054,23 +2429,121 @@ func TestEmacsSexpMotionEdgeCases(t *testing.T) {
 	}
 }
 
+// TestEmacsStructuralMotion covers the bracket-based structural motion chords
+// added for RUNE-274: C-M-a / C-M-e (enclosing block bounds), C-M-u
+// (backward-up-list) and C-M-d (down-list). These are bracket approximations,
+// not true defun/list navigation.
+func TestEmacsStructuralMotion(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		handled bool
+		at      term.Coordinates
+	}{
+		{"C-M-a to enclosing block start", "{ab}", term.Coordinates{X: 2}, ctrlAlt('a'), true, term.Coordinates{}},
+		{"C-M-a innermost of nested", "{[a]}", term.Coordinates{X: 2}, ctrlAlt('a'), true, term.Coordinates{X: 1}},
+		{"C-M-a outside any block is a no-op", "abc", term.Coordinates{X: 1}, ctrlAlt('a'), false, term.Coordinates{X: 1}},
+		{"C-M-e to enclosing block end", "{ab}", term.Coordinates{X: 2}, ctrlAlt('e'), true, term.Coordinates{X: 4}},
+		{"C-M-e innermost of nested", "{[a]}", term.Coordinates{X: 2}, ctrlAlt('e'), true, term.Coordinates{X: 4}},
+		{"C-M-u to enclosing opener", "(ab)", term.Coordinates{X: 2}, ctrlAlt('u'), true, term.Coordinates{}},
+		{"C-M-u outside any block is a no-op", "ab", term.Coordinates{X: 1}, ctrlAlt('u'), false, term.Coordinates{X: 1}},
+		{"C-M-d into the next opener", "a(b)", term.Coordinates{}, ctrlAlt('d'), true, term.Coordinates{X: 2}},
+		{"C-M-d already before opener", "(b)", term.Coordinates{}, ctrlAlt('d'), true, term.Coordinates{X: 1}},
+		{"C-M-d with no opener is a no-op", "abc", term.Coordinates{}, ctrlAlt('d'), false, term.Coordinates{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.event) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+}
+
+// TestEmacsKillSexp covers C-M-k (kill-sexp): it deletes the balanced bracket
+// expression following point and is a safe no-op when none follows.
+func TestEmacsKillSexp(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+	}{
+		{"kill from opener", "(ab)c", term.Coordinates{}, true, "c", term.Coordinates{}},
+		{"kill scans forward to opener", "x(ab)c", term.Coordinates{}, true, "xc", term.Coordinates{X: 1}},
+		{"kill nested", "([a])b", term.Coordinates{}, true, "b", term.Coordinates{}},
+		{"no bracket is a no-op", "abc", term.Coordinates{}, false, "abc", term.Coordinates{}},
+		{"unclosed bracket is a no-op", "(ab", term.Coordinates{}, false, "(ab", term.Coordinates{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(ctrlAlt('k')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+}
+
 // TestEmacsLineManipulationEdgeCases covers move-line, duplicate-line and
 // jump-to-matching-bracket at buffer boundaries and on degenerate input.
 // Move-line depends on the configured clipboard, so its cases use a
 // history-aware clipboard (as the editor does in practice) and multi-line
 // content with a trailing newline where a swap is expected.
 func TestEmacsLineManipulationEdgeCases(t *testing.T) {
-	t.Run("move line up at the top keeps the top line first", func(t *testing.T) {
+	t.Run("move line up at the top is a no-op", func(t *testing.T) {
 		h, buf, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
-		require.NotPanics(t, func() { h.Handle(key2(term.KeyArrowUp, term.ModAlt)) })
-		// The first line cannot move above itself; "a" stays on top.
-		assert.True(t, strings.HasPrefix(buf.String(), "a\n"), "got %q", buf.String())
+		assert.False(t, runEvent(h, key2(term.KeyArrowUp, term.ModAlt)))
+		assert.Equal(t, "a\nb\nc", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
 	})
 
-	t.Run("move line down at the bottom is panic-free", func(t *testing.T) {
-		h, _, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
+	t.Run("move line down at the bottom is a no-op", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
 		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 2}))
-		require.NotPanics(t, func() { h.Handle(key2(term.KeyArrowDown, term.ModAlt)) })
+		assert.False(t, runEvent(h, key2(term.KeyArrowDown, term.ModAlt)))
+		assert.Equal(t, "a\nb\nc", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("move middle line up lands with the line", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
+		require.True(t, runEvent(h, key2(term.KeyArrowUp, term.ModAlt)))
+		assert.Equal(t, "b\na\nc", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("duplicate line down leaves point on the copy", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModAltShift)))
+		assert.Equal(t, "a\nb\nb\nc", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("duplicate line up leaves point on the original row", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "a\nb\nc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
+		require.True(t, runEvent(h, key2(term.KeyArrowUp, term.ModAltShift)))
+		assert.Equal(t, "a\nb\nb\nc", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
 	})
 
 	t.Run("move first line down swaps with the next", func(t *testing.T) {
@@ -2116,5 +2589,2670 @@ func TestEmacsLineManipulationEdgeCases(t *testing.T) {
 		require.False(t, runEvent(h, ctrl('m')))
 		assert.Equal(t, "abc", buf.String())
 		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+}
+
+// newEmacsHandlerWithClipboard builds a handler over an inspectable
+// clipboard so tests can assert the exact kill-ring contents.
+func newEmacsHandlerWithClipboard(t *testing.T, content string) (text.Handler, *cell.Buffer, clipboard.Register) {
+	t.Helper()
+	clip := clipboard.NewInMemory()
+	buf := cell.NewBuffer()
+	_, err := buf.ReadFrom(strings.NewReader(content))
+	require.NoError(t, err)
+	h := NewHandler(buf, emacsTestURI(t), text.IndentRuneTab, 0, WithClipboard(clip))
+	h.Resize(80, 20)
+	return h, buf, clip
+}
+
+// killRingText returns the current head of the kill ring, or "" when the
+// clipboard is empty.
+func killRingText(clip clipboard.Register) string {
+	data, err := clip.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		return ""
+	}
+	return data.Text
+}
+
+// TestEmacsWordMotion pins the GNU forward-word/backward-word semantics of
+// M-f, M-b and the Meta arrow aliases: words are letter/digit runs,
+// punctuation and underscores separate words, motion crosses line breaks,
+// and when no word remains point moves to the buffer end (or start).
+func TestEmacsWordMotion(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		handled bool
+		at      term.Coordinates
+	}{
+		// forward-word (M-f).
+		{"M-f from word start", "alpha beta", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 5}},
+		{"M-f from inside word", "alpha beta", term.Coordinates{X: 2}, alt('f'), true, term.Coordinates{X: 5}},
+		{"M-f from gap between words", "alpha beta", term.Coordinates{X: 5}, alt('f'), true, term.Coordinates{X: 10}},
+		{"M-f skips punctuation runs", "foo.bar", term.Coordinates{X: 3}, alt('f'), true, term.Coordinates{X: 7}},
+		{"M-f stops before punctuation", "foo.bar", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 3}},
+		{"M-f treats underscore as separator", "foo_bar", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 3}},
+		{"M-f crosses the line break", "alpha\nbeta x", term.Coordinates{X: 5}, alt('f'), true, term.Coordinates{Y: 1, X: 4}},
+		{"M-f from blank line reaches next word end", "a\n\nbeta", term.Coordinates{Y: 1}, alt('f'), true, term.Coordinates{Y: 2, X: 4}},
+		{"M-f with only spaces ahead moves to buffer end", "ab   ", term.Coordinates{X: 2}, alt('f'), true, term.Coordinates{X: 5}},
+		{"M-f at buffer end is a no-op", "ab", term.Coordinates{X: 2}, alt('f'), false, term.Coordinates{X: 2}},
+		{"M-f on empty buffer is a no-op", "", term.Coordinates{}, alt('f'), false, term.Coordinates{}},
+		{"M-f over digits", "123 abc", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 3}},
+		{"M-f over wide runes", "世界 foo", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 2}},
+		{"M-f stops at null cell", "a\x00b", term.Coordinates{}, alt('f'), true, term.Coordinates{X: 1}},
+		{"M-right matches M-f", "alpha beta", term.Coordinates{}, key2(term.KeyArrowRight, term.ModAlt), true, term.Coordinates{X: 5}},
+
+		// backward-word (M-b).
+		{"M-b from word end", "alpha beta", term.Coordinates{X: 10}, alt('b'), true, term.Coordinates{X: 6}},
+		{"M-b from inside word", "alpha beta", term.Coordinates{X: 8}, alt('b'), true, term.Coordinates{X: 6}},
+		{"M-b from gap between words", "alpha beta", term.Coordinates{X: 5}, alt('b'), true, term.Coordinates{}},
+		{"M-b skips punctuation runs", "foo.bar", term.Coordinates{X: 4}, alt('b'), true, term.Coordinates{}},
+		{"M-b crosses the line break", "alpha\nbeta", term.Coordinates{Y: 1}, alt('b'), true, term.Coordinates{}},
+		{"M-b with only spaces behind moves to buffer start", "  ab", term.Coordinates{X: 2}, alt('b'), true, term.Coordinates{}},
+		{"M-b at buffer start is a no-op", "ab", term.Coordinates{}, alt('b'), false, term.Coordinates{}},
+		{"M-b on empty buffer is a no-op", "", term.Coordinates{}, alt('b'), false, term.Coordinates{}},
+		{"M-left matches M-b", "alpha beta", term.Coordinates{X: 10}, key2(term.KeyArrowLeft, term.ModAlt), true, term.Coordinates{X: 6}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.event) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+}
+
+// TestEmacsTransposeWords pins GNU transpose-words (M-t) via the
+// transpose-subr boundary rules: the word at or after point is interchanged
+// with the word before it, the separator is preserved verbatim, point lands
+// after the moved pair, and the command is a no-op when there is no word
+// before point.
+func TestEmacsTransposeWords(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+	}{
+		{"between two words", "alpha beta", term.Coordinates{X: 5}, true, "beta alpha", term.Coordinates{X: 10}},
+		{"inside the second word", "alpha beta", term.Coordinates{X: 8}, true, "beta alpha", term.Coordinates{X: 10}},
+		{"at start of the second word", "alpha beta", term.Coordinates{X: 6}, true, "beta alpha", term.Coordinates{X: 10}},
+		{"at end of buffer swaps the last two words", "alpha beta", term.Coordinates{X: 10}, true, "beta alpha", term.Coordinates{X: 10}},
+		{"inside the first word is a no-op", "alpha beta", term.Coordinates{X: 2}, false, "alpha beta", term.Coordinates{X: 2}},
+		{"before the first word is a no-op", "  alpha beta", term.Coordinates{}, false, "  alpha beta", term.Coordinates{}},
+		{"single word is a no-op", "word", term.Coordinates{X: 4}, false, "word", term.Coordinates{X: 4}},
+		{"empty buffer is a no-op", "", term.Coordinates{}, false, "", term.Coordinates{}},
+		{"punctuation separator is preserved", "foo, bar", term.Coordinates{X: 4}, true, "bar, foo", term.Coordinates{X: 8}},
+		{"underscore separator is preserved", "foo_bar", term.Coordinates{X: 4}, true, "bar_foo", term.Coordinates{X: 7}},
+		{"multiple spaces are preserved", "a   b", term.Coordinates{X: 2}, true, "b   a", term.Coordinates{X: 5}},
+		{"across a line break from below", "alpha\nbeta", term.Coordinates{Y: 1}, true, "beta\nalpha", term.Coordinates{Y: 1, X: 5}},
+		{"across a line break from the first line end", "alpha\nbeta", term.Coordinates{Y: 0, X: 5}, true, "beta\nalpha", term.Coordinates{Y: 1, X: 5}},
+		{"digit words", "1 2", term.Coordinates{X: 1}, true, "2 1", term.Coordinates{X: 3}},
+		{"wide-rune words", "世界 foo", term.Coordinates{X: 2}, true, "foo 世界", term.Coordinates{X: 6}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(alt('t')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("repeated M-t drags a word forward", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a b c")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, alt('t')))
+		assert.Equal(t, "b a c", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		require.True(t, runEvent(h, alt('t')))
+		assert.Equal(t, "b c a", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsWordKills pins kill-word (M-d / M-Delete) and backward-kill-word
+// (M-DEL): the killed range is the exact word-motion span, the removed text
+// lands on the kill ring, and boundary cases are safe no-ops that leave the
+// kill ring untouched.
+func TestEmacsWordKills(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		handled bool
+		want    string
+		at      term.Coordinates
+		killed  string
+	}{
+		{"M-d kills the first word", "alpha beta", term.Coordinates{}, alt('d'), true, " beta", term.Coordinates{}, "alpha"},
+		{"M-d from inside a word kills its tail", "alpha beta", term.Coordinates{X: 2}, alt('d'), true, "al beta", term.Coordinates{X: 2}, "pha"},
+		{"M-d from the gap kills separator and next word", "alpha beta", term.Coordinates{X: 5}, alt('d'), true, "alpha", term.Coordinates{X: 5}, " beta"},
+		{"M-d at end of line kills across the break", "alpha\nbeta x", term.Coordinates{X: 5}, alt('d'), true, "alpha x", term.Coordinates{X: 5}, "\nbeta"},
+		{"M-d before punctuation kills only the word", "foo.bar", term.Coordinates{}, alt('d'), true, ".bar", term.Coordinates{}, "foo"},
+		{"M-d on punctuation kills through the next word", "foo.bar", term.Coordinates{X: 3}, alt('d'), true, "foo", term.Coordinates{X: 3}, ".bar"},
+		{"M-d with only spaces ahead kills them", "ab  ", term.Coordinates{X: 2}, alt('d'), true, "ab", term.Coordinates{X: 2}, "  "},
+		{"M-d at buffer end is a no-op", "ab", term.Coordinates{X: 2}, alt('d'), false, "ab", term.Coordinates{X: 2}, ""},
+		{"M-d on empty buffer is a no-op", "", term.Coordinates{}, alt('d'), false, "", term.Coordinates{}, ""},
+		{"M-Delete matches M-d", "alpha beta", term.Coordinates{}, key2(term.KeyDelete, term.ModAlt), true, " beta", term.Coordinates{}, "alpha"},
+
+		{"M-DEL kills the previous word", "alpha beta", term.Coordinates{X: 10}, key2(term.KeyBackspace, term.ModAlt), true, "alpha ", term.Coordinates{X: 6}, "beta"},
+		{"M-DEL from inside a word kills its head", "alpha beta", term.Coordinates{X: 8}, key2(term.KeyBackspace, term.ModAlt), true, "alpha ta", term.Coordinates{X: 6}, "be"},
+		{"M-DEL from the word start kills the previous word and gap", "alpha beta", term.Coordinates{X: 6}, key2(term.KeyBackspace, term.ModAlt), true, "beta", term.Coordinates{}, "alpha "},
+		{"M-DEL at start of line kills across the break", "alpha x\nbeta", term.Coordinates{Y: 1}, key2(term.KeyBackspace, term.ModAlt), true, "alpha beta", term.Coordinates{X: 6}, "x\n"},
+		{"M-DEL with only spaces behind kills to buffer start", "ab  ", term.Coordinates{X: 4}, key2(term.KeyBackspace, term.ModAlt), true, "", term.Coordinates{}, "ab  "},
+		{"M-DEL at buffer start is a no-op", "alpha", term.Coordinates{}, key2(term.KeyBackspace, term.ModAlt), false, "alpha", term.Coordinates{}, ""},
+		{"M-DEL on empty buffer is a no-op", "", term.Coordinates{}, key2(term.KeyBackspace, term.ModAlt), false, "", term.Coordinates{}, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, clip := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.event) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+			assert.Equal(t, tc.killed, killRingText(clip), "kill ring")
+		})
+	}
+}
+
+// TestEmacsCaseCommands pins upcase-word (M-u), downcase-word (M-l) and
+// capitalize-word (M-c): they operate from point to the end of the current
+// or next word (partial words when point is inside one), leave point there,
+// and capitalization upcases the first word constituent even when the
+// region starts with whitespace.
+func TestEmacsCaseCommands(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		handled bool
+		want    string
+		at      term.Coordinates
+	}{
+		{"M-u upcases the word at point", "alpha beta", term.Coordinates{}, alt('u'), true, "ALPHA beta", term.Coordinates{X: 5}},
+		{"M-u from inside a word upcases the tail", "alpha beta", term.Coordinates{X: 2}, alt('u'), true, "alPHA beta", term.Coordinates{X: 5}},
+		{"M-u from the gap upcases the next word", "alpha beta", term.Coordinates{X: 5}, alt('u'), true, "alpha BETA", term.Coordinates{X: 10}},
+		{"M-u across a line break", "alpha\nbeta", term.Coordinates{X: 5}, alt('u'), true, "alpha\nBETA", term.Coordinates{Y: 1, X: 4}},
+		{"M-u at buffer end is a no-op", "alpha", term.Coordinates{X: 5}, alt('u'), false, "alpha", term.Coordinates{X: 5}},
+		{"M-u on empty buffer is a no-op", "", term.Coordinates{}, alt('u'), false, "", term.Coordinates{}},
+		{"M-u on unicode word", "ñoño x", term.Coordinates{}, alt('u'), true, "ÑOÑO x", term.Coordinates{X: 4}},
+
+		{"M-l downcases the word at point", "ALPHA BETA", term.Coordinates{}, alt('l'), true, "alpha BETA", term.Coordinates{X: 5}},
+		{"M-l from inside a word downcases the tail", "ALPHA BETA", term.Coordinates{X: 2}, alt('l'), true, "ALpha BETA", term.Coordinates{X: 5}},
+		{"M-l from the gap downcases the next word", "ALPHA BETA", term.Coordinates{X: 5}, alt('l'), true, "ALPHA beta", term.Coordinates{X: 10}},
+
+		{"M-c capitalizes the word at point", "alpha beta", term.Coordinates{}, alt('c'), true, "Alpha beta", term.Coordinates{X: 5}},
+		{"M-c lowercases the tail", "aLPHA beta", term.Coordinates{}, alt('c'), true, "Alpha beta", term.Coordinates{X: 5}},
+		{"M-c from inside a word capitalizes at point", "alpha beta", term.Coordinates{X: 2}, alt('c'), true, "alPha beta", term.Coordinates{X: 5}},
+		{"M-c from the gap capitalizes the next word", "alpha BETA", term.Coordinates{X: 5}, alt('c'), true, "alpha Beta", term.Coordinates{X: 10}},
+		{"M-c on a digit-led word only lowercases the tail", "123ABC x", term.Coordinates{}, alt('c'), true, "123abc x", term.Coordinates{X: 6}},
+		{"M-c at buffer end is a no-op", "alpha", term.Coordinates{X: 5}, alt('c'), false, "alpha", term.Coordinates{X: 5}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.event) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("repeated M-u upcases successive words", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab cd")
+		require.True(t, runEvent(h, alt('u')))
+		assert.Equal(t, "AB cd", buf.String())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+		require.True(t, runEvent(h, alt('u')))
+		assert.Equal(t, "AB CD", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsKillLine pins GNU kill-line (C-k): from point to end of line,
+// the line break itself when point is at end of line, the whole line when
+// it is empty, and nothing at the very end of the buffer. Killed text —
+// including the bare newline — lands on the kill ring.
+func TestEmacsKillLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+		killed  string
+	}{
+		{"kill from line start", "abc\ndef", term.Coordinates{}, true, "\ndef", term.Coordinates{}, "abc"},
+		{"kill from mid line", "hello world", term.Coordinates{X: 5}, true, "hello", term.Coordinates{X: 5}, " world"},
+		{"kill at end of line takes the newline", "ab\ncd", term.Coordinates{X: 2}, true, "abcd", term.Coordinates{X: 2}, "\n"},
+		{"kill on empty line removes it", "\nb", term.Coordinates{}, true, "b", term.Coordinates{}, "\n"},
+		{"kill on empty interior line", "a\n\nb", term.Coordinates{Y: 1}, true, "a\nb", term.Coordinates{Y: 1}, "\n"},
+		{"kill whitespace-only tail", "ab  \ncd", term.Coordinates{X: 2}, true, "ab\ncd", term.Coordinates{X: 2}, "  "},
+		{"kill at buffer end is a no-op", "abc", term.Coordinates{X: 3}, false, "abc", term.Coordinates{X: 3}, ""},
+		{"kill on last empty line is a no-op", "a\n", term.Coordinates{Y: 1}, false, "a\n", term.Coordinates{Y: 1}, ""},
+		{"kill on empty buffer is a no-op", "", term.Coordinates{}, false, "", term.Coordinates{}, ""},
+		{"kill over wide runes", "世界世\nx", term.Coordinates{X: 1}, true, "世\nx", term.Coordinates{X: 1}, "界世"},
+		{"kill over null cells", "a\x00b\nc", term.Coordinates{X: 1}, true, "a\nc", term.Coordinates{X: 1}, "\x00b"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, clip := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(ctrl('k')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+			assert.Equal(t, tc.killed, killRingText(clip), "kill ring")
+		})
+	}
+}
+
+// TestEmacsKillRingAccumulation pins the GNU kill-accumulation contract:
+// consecutive kills merge into one kill-ring entry (forward kills append,
+// backward kills prepend), any intervening command breaks the chain, and
+// C-y re-inserts the accumulated text literally with point after it.
+func TestEmacsKillRingAccumulation(t *testing.T) {
+	t.Run("C-k C-k kills text then newline", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc\ndef")
+		require.True(t, runEvent(h, ctrl('k')))
+		require.True(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "def", buf.String())
+		assert.Equal(t, "abc\n", killRingText(clip))
+
+		// C-y restores the killed line whole, leaving point after it.
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "abc\ndef", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-k across three lines accumulates them all", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "a\nb\nc")
+		for range 4 {
+			require.True(t, runEvent(h, ctrl('k')))
+		}
+		assert.Equal(t, "c", buf.String())
+		assert.Equal(t, "a\nb\n", killRingText(clip))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "a\nb\nc", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("M-d M-d appends the second word", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two three")
+		require.True(t, runEvent(h, alt('d')))
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, " three", buf.String())
+		assert.Equal(t, "one two", killRingText(clip))
+	})
+
+	t.Run("M-DEL M-DEL prepends the earlier word", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 7}))
+		require.True(t, runEvent(h, key2(term.KeyBackspace, term.ModAlt)))
+		require.True(t, runEvent(h, key2(term.KeyBackspace, term.ModAlt)))
+		assert.Equal(t, "", buf.String())
+		assert.Equal(t, "one two", killRingText(clip))
+	})
+
+	t.Run("forward kill then backward kill prepends", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "xy ab cd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 3}))
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, "xy  cd", buf.String())
+		require.True(t, runEvent(h, key2(term.KeyBackspace, term.ModAlt)))
+		assert.Equal(t, " cd", buf.String())
+		assert.Equal(t, "xy ab", killRingText(clip))
+	})
+
+	t.Run("a motion between kills breaks the chain", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab cd\nef")
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, "ab", killRingText(clip))
+		require.True(t, runEvent(h, key(term.KeyArrowRight)))
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, "cd", killRingText(clip), "chain must restart after motion")
+		assert.Equal(t, " \nef", buf.String())
+	})
+
+	t.Run("an insertion between kills breaks the chain", func(t *testing.T) {
+		h, _, clip := newEmacsHandlerWithClipboard(t, "ab cd ef")
+		require.True(t, runEvent(h, alt('d')))
+		require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'z'}))
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, " cd", killRingText(clip))
+	})
+
+	t.Run("C-w region kill chains with C-k", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab cd\nef")
+		// Mark at start, move past "ab", kill region, then kill the rest.
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		require.True(t, runEvent(h, alt('f')))
+		require.True(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, " cd\nef", buf.String())
+		require.True(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "ab cd", killRingText(clip))
+		assert.Equal(t, "\nef", buf.String())
+	})
+
+	t.Run("C-M-k kill-sexp lands on the kill ring", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "x(a b)y")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrlAlt('k')))
+		assert.Equal(t, "xy", buf.String())
+		assert.Equal(t, "(a b)", killRingText(clip))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "x(a b)y", buf.String())
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+	})
+
+	t.Run("C-S-k kills the whole line to the ring", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab\ncd\nef")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		require.True(t, runEvent(h, ctrl('K')))
+		assert.Equal(t, "ab\nef", buf.String())
+		assert.Equal(t, "cd\n", killRingText(clip))
+		// The kill leaves point at the start of the following line; yank
+		// re-inserts the line text literally there.
+		require.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "ab\ncd\nef", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("kill ring works without a mark or prior copy", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "hello")
+		require.True(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "", buf.String())
+		assert.Equal(t, "hello", killRingText(clip))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "hello", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsTransposeChars pins GNU transpose-chars (C-t): the characters
+// around point are swapped and point advances; at end of line the two
+// trailing characters are swapped instead; at a line boundary the swap
+// crosses the line break, dragging a character between lines. At the very
+// start of the buffer there is nothing to transpose.
+func TestEmacsTransposeChars(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+	}{
+		{"swap around point", "abc", term.Coordinates{X: 1}, true, "bac", term.Coordinates{X: 2}},
+		{"at end of line swaps the trailing pair", "ab", term.Coordinates{X: 2}, true, "ba", term.Coordinates{X: 2}},
+		{"at buffer start is a no-op", "ab", term.Coordinates{}, false, "ab", term.Coordinates{}},
+		{"at start of first line with more lines is a no-op", "ab\ncd", term.Coordinates{}, false, "ab\ncd", term.Coordinates{}},
+		{"at start of a later line drags the first char up", "ab\ncd", term.Coordinates{Y: 1}, true, "abc\nd", term.Coordinates{Y: 1}},
+		{"on an empty line pulls the previous char down", "ab\n\ncd", term.Coordinates{Y: 1}, true, "a\nb\ncd", term.Coordinates{Y: 1, X: 1}},
+		{"on an empty line below an empty line is a no-op", "\n\nx", term.Coordinates{Y: 1}, false, "\n\nx", term.Coordinates{Y: 1}},
+		{"after a lone character pushes it up", "ab\nc", term.Coordinates{Y: 1, X: 1}, true, "abc\n", term.Coordinates{Y: 1}},
+		{"single character buffer is a no-op", "a", term.Coordinates{X: 1}, false, "a", term.Coordinates{X: 1}},
+		{"empty buffer is a no-op", "", term.Coordinates{}, false, "", term.Coordinates{}},
+		{"wide runes swap as single cells", "世界", term.Coordinates{X: 1}, true, "界世", term.Coordinates{X: 2}},
+		{"null cell participates in the swap", "a\x00b", term.Coordinates{X: 1}, true, "\x00ab", term.Coordinates{X: 2}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(ctrl('t')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("repeated C-t drags a character forward", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrl('t')))
+		assert.Equal(t, "bac", buf.String())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+		require.True(t, runEvent(h, ctrl('t')))
+		assert.Equal(t, "bca", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsDeleteIndentation pins GNU delete-indentation (M-^): the current
+// line is joined onto the previous one, whitespace at the join collapses to
+// exactly one space — none at the start or end of the joined line or
+// against a bracket — and point is left at the join.
+func TestEmacsDeleteIndentation(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+	}{
+		{"joins onto the previous line with one space", "foo\nbar", term.Coordinates{Y: 1}, true, "foo bar", term.Coordinates{X: 3}},
+		{"column does not matter", "foo\nbar", term.Coordinates{Y: 1, X: 2}, true, "foo bar", term.Coordinates{X: 3}},
+		{"deletes the indentation of the joined line", "foo\n    bar", term.Coordinates{Y: 1, X: 4}, true, "foo bar", term.Coordinates{X: 3}},
+		{"deletes tab indentation", "foo\n\tbar", term.Coordinates{Y: 1}, true, "foo bar", term.Coordinates{X: 3}},
+		{"collapses trailing spaces of the previous line", "foo  \nbar", term.Coordinates{Y: 1}, true, "foo bar", term.Coordinates{X: 3}},
+		{"collapses whitespace on both sides", "foo  \n  bar", term.Coordinates{Y: 1}, true, "foo bar", term.Coordinates{X: 3}},
+		{"no space when the previous line is empty", "x\n\nbar", term.Coordinates{Y: 2}, true, "x\nbar", term.Coordinates{Y: 1}},
+		{"no space when the joined line is empty", "foo\n", term.Coordinates{Y: 1}, true, "foo", term.Coordinates{X: 3}},
+		{"no space when the joined line is blank", "foo\n   ", term.Coordinates{Y: 1}, true, "foo", term.Coordinates{X: 3}},
+		{"no space before a closing bracket", "f(x\n) y", term.Coordinates{Y: 1}, true, "f(x) y", term.Coordinates{X: 3}},
+		{"no space after an opening bracket", "f(\nx)", term.Coordinates{Y: 1}, true, "f(x)", term.Coordinates{X: 2}},
+		{"on the first line is a no-op", "a\nb", term.Coordinates{}, false, "a\nb", term.Coordinates{}},
+		{"on a single line is a no-op", "abc", term.Coordinates{X: 1}, false, "abc", term.Coordinates{X: 1}},
+		{"on an empty buffer is a no-op", "", term.Coordinates{}, false, "", term.Coordinates{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(alt('^')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("repeated M-^ folds a paragraph upward", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a\nb\nc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 2}))
+		require.True(t, runEvent(h, alt('^')))
+		assert.Equal(t, "a\nb c", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, h.CursorAtScroll())
+		require.True(t, runEvent(h, alt('^')))
+		assert.Equal(t, "a b c", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsJustOneSpace pins just-one-space (M-SPC): the whitespace run
+// around point collapses to a single space with point after it; when there
+// is no whitespace a space is still inserted.
+func TestEmacsJustOneSpace(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		want    string
+		at      term.Coordinates
+	}{
+		{"collapses interior spaces", "a   b", term.Coordinates{X: 2}, "a b", term.Coordinates{X: 2}},
+		{"collapses tabs", "a\t\tb", term.Coordinates{X: 1}, "a b", term.Coordinates{X: 2}},
+		{"collapses null cells", "a\x00\x00b", term.Coordinates{X: 1}, "a b", term.Coordinates{X: 2}},
+		{"inserts a space when there is none", "ab", term.Coordinates{X: 1}, "a b", term.Coordinates{X: 2}},
+		{"collapses leading spaces at line start", "  ab", term.Coordinates{X: 1}, " ab", term.Coordinates{X: 1}},
+		{"collapses trailing spaces at line end", "ab  ", term.Coordinates{X: 3}, "ab ", term.Coordinates{X: 3}},
+		{"inserts into an empty buffer", "", term.Coordinates{}, " ", term.Coordinates{X: 1}},
+		{"only affects the current line", "a  \n  b", term.Coordinates{X: 2}, "a \n  b", term.Coordinates{X: 2}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, key2(term.KeySpace, term.ModAlt)))
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+}
+
+// TestEmacsParagraphMotion pins M-{ / M-} (backward/forward-paragraph):
+// forward motion lands on the blank line after the current paragraph (or
+// the last line), backward motion on the blank line before it (or the
+// first line), always at column zero.
+func TestEmacsParagraphMotion(t *testing.T) {
+	const content = "p1a\np1b\n\np2a\np2b\n\np3"
+
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		at      term.Coordinates
+	}{
+		{"M-} lands on the blank line after the paragraph", content, term.Coordinates{}, alt('}'), term.Coordinates{Y: 2}},
+		{"M-} from mid paragraph", content, term.Coordinates{Y: 1, X: 2}, alt('}'), term.Coordinates{Y: 2}},
+		{"M-} from a blank line skips to the next boundary", content, term.Coordinates{Y: 2}, alt('}'), term.Coordinates{Y: 5}},
+		{"M-} at the last paragraph stops on the last line", content, term.Coordinates{Y: 5}, alt('}'), term.Coordinates{Y: 6}},
+		{"M-} resets the column", content, term.Coordinates{Y: 0, X: 2}, alt('}'), term.Coordinates{Y: 2}},
+		{"M-{ lands on the blank line before the paragraph", content, term.Coordinates{Y: 6}, alt('{'), term.Coordinates{Y: 5}},
+		{"M-{ from mid paragraph", content, term.Coordinates{Y: 4, X: 1}, alt('{'), term.Coordinates{Y: 2}},
+		{"M-{ from the first paragraph stops on the first line", content, term.Coordinates{Y: 1}, alt('{'), term.Coordinates{}},
+		{"M-} without blank lines reaches the last line", "a\nb\nc", term.Coordinates{}, alt('}'), term.Coordinates{Y: 2}},
+		{"M-{ without blank lines reaches the first line", "a\nb\nc", term.Coordinates{Y: 2}, alt('{'), term.Coordinates{}},
+		{"M-} collapses a blank run", "a\n\n\n\nb", term.Coordinates{}, alt('}'), term.Coordinates{Y: 1}},
+		{"M-} from inside a blank run", "a\n\n\n\nb", term.Coordinates{Y: 2}, alt('}'), term.Coordinates{Y: 4}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.NotPanics(t, func() { h.Handle(tc.event) })
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("empty buffer is a safe no-op", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "")
+		require.NotPanics(t, func() { h.Handle(alt('}')) })
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		require.NotPanics(t, func() { h.Handle(alt('{')) })
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+}
+
+// pageTestContent returns numbered lines ("l0".."l39") so page-motion
+// assertions can pin exact rows.
+func pageTestContent(lines int) string {
+	var sb strings.Builder
+	for i := range lines {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString("l")
+		sb.WriteString(strconv.Itoa(i))
+	}
+	return sb.String()
+}
+
+// TestEmacsPageMotion pins the paging and recentering commands: C-v / M-v
+// scroll a full window and pull point along so it stays visible (the GNU
+// scroll contract), PgDn / PgUp move point a window's worth of lines, C-l
+// recenters the view around point, and C-M-Up / C-M-Down scroll one line
+// keeping point in place while it remains visible.
+func TestEmacsPageMotion(t *testing.T) {
+	const height = 10
+	newPaged := func(t *testing.T) text.Handler {
+		t.Helper()
+		buf := cell.NewBuffer()
+		_, err := buf.ReadFrom(strings.NewReader(pageTestContent(40)))
+		require.NoError(t, err)
+		h := NewHandler(buf, emacsTestURI(t), text.IndentRuneTab, 0)
+		h.Resize(80, height)
+		return h
+	}
+
+	t.Run("C-v pages point forward a full window", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, term.Coordinates{Y: height}, h.CursorAtScroll())
+		assert.Equal(t, height, h.SeekOffset())
+		require.True(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, term.Coordinates{Y: 2 * height}, h.CursorAtScroll())
+	})
+
+	t.Run("C-v keeps point on the same window row", func(t *testing.T) {
+		// GNU C-v scrolls the window a full page and point keeps its
+		// position within the window, so a point on window row 5 lands a
+		// page further down, column preserved.
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 5, X: 1}))
+		require.True(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, term.Coordinates{Y: 5 + height, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-v at the bottom of the buffer is a no-op", func(t *testing.T) {
+		h := newPaged(t)
+		// Placing point on the last line scrolls the view to the bottom,
+		// so there is no further page to scroll into.
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 39}))
+		require.False(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, term.Coordinates{Y: 39}, h.CursorAtScroll())
+	})
+
+	t.Run("M-v pages the view back up", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, runEvent(h, ctrl('v')))
+		require.Equal(t, height, h.SeekOffset())
+		require.True(t, runEvent(h, alt('v')))
+		assert.Equal(t, 0, h.SeekOffset())
+	})
+
+	t.Run("M-v at the top of the buffer is a no-op", func(t *testing.T) {
+		h := newPaged(t)
+		require.False(t, runEvent(h, alt('v')))
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, 0, h.SeekOffset())
+	})
+
+	t.Run("PgDn moves point a window of lines and repositions", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, runEvent(h, key(term.KeyPgdn)))
+		assert.Equal(t, term.Coordinates{Y: height}, h.CursorAtScroll())
+	})
+
+	t.Run("PgUp moves point back a window of lines", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 2 * height}))
+		require.True(t, runEvent(h, key(term.KeyPgup)))
+		assert.Equal(t, term.Coordinates{Y: height}, h.CursorAtScroll())
+	})
+
+	t.Run("PgDn clamps at the last line", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 35}))
+		require.True(t, runEvent(h, key(term.KeyPgdn)))
+		assert.Equal(t, term.Coordinates{Y: 39}, h.CursorAtScroll())
+	})
+
+	t.Run("C-l recenters the view around point", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 20}))
+		before := h.SeekOffset()
+		require.True(t, runEvent(h, ctrl('l')))
+		assert.Equal(t, term.Coordinates{Y: 20}, h.CursorAtScroll(), "point must not move")
+		assert.NotEqual(t, before, h.SeekOffset())
+		// Point sits on the center row of the window.
+		center := h.SeekOffset() + height/2
+		assert.InDelta(t, 20, center, 1)
+	})
+
+	t.Run("C-M-Down scrolls one line keeping a visible point", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 5, X: 1}))
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModCtrlAlt)))
+		assert.Equal(t, 1, h.SeekOffset())
+		assert.Equal(t, term.Coordinates{Y: 5, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-M-Up scrolls back keeping a visible point", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 5, X: 1}))
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModCtrlAlt)))
+		require.True(t, runEvent(h, key2(term.KeyArrowUp, term.ModCtrlAlt)))
+		assert.Equal(t, 0, h.SeekOffset())
+		assert.Equal(t, term.Coordinates{Y: 5, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-M-Down drags point when it would leave the view", func(t *testing.T) {
+		h := newPaged(t)
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModCtrlAlt)))
+		assert.Equal(t, 1, h.SeekOffset())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("paging on an empty buffer is a safe no-op", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "")
+		for _, ev := range []term.Event{ctrl('v'), alt('v'), key(term.KeyPgdn), key(term.KeyPgup), ctrl('l')} {
+			require.NotPanics(t, func() { h.Handle(ev) })
+			assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		}
+	})
+}
+
+// feedKeys parses a key-sequence string and drives it through the handler.
+func feedKeys(t *testing.T, h text.Handler, keys string) {
+	t.Helper()
+	seq, err := term.ParseKeys(keys)
+	require.NoError(t, err)
+	for _, k := range seq {
+		h.Handle(term.Event{Type: term.EventKey, Key: k.Key, Mod: k.Mod, Ch: k.Ch})
+	}
+}
+
+// TestEmacsIsearchEdgeCases extends the incremental-search coverage with the
+// GNU behaviors around wrapping, direction changes, query editing and exit
+// keys. Forward search always leaves point at the match end, backward
+// search at the match start.
+func TestEmacsIsearchEdgeCases(t *testing.T) {
+	t.Run("repeat C-s wraps past the last match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo x foo")
+		feedKeys(t, h, "<ctrl-s>foo")
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 9}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll(), "search wraps to the first match")
+	})
+
+	t.Run("repeat C-r wraps past the first match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo x foo")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 9}))
+		feedKeys(t, h, "<ctrl-r>foo")
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-r>")
+		assert.Equal(t, term.Coordinates{X: 0}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-r>")
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll(), "search wraps to the last match")
+	})
+
+	t.Run("C-r during a forward search steps back a match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "aa bb aa")
+		feedKeys(t, h, "<ctrl-s>aa<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 8}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-r>")
+		// The direction flips, so point lands at the previous match start.
+		assert.Equal(t, term.Coordinates{X: 0}, h.CursorAtScroll())
+		assert.True(t, h.IsSearchMode())
+	})
+
+	t.Run("backspacing the whole query returns to the origin", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		feedKeys(t, h, "<ctrl-s>bar")
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+		feedKeys(t, h, "<backspace><backspace><backspace>")
+		assert.True(t, h.IsSearchMode(), "empty query keeps the search active")
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+		// A further backspace on the empty query is a safe no-op.
+		feedKeys(t, h, "<backspace>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-s with an empty query keeps point at the origin", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feedKeys(t, h, "<ctrl-s><ctrl-s>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("the search is case sensitive", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "Foo foo")
+		feedKeys(t, h, "<ctrl-s>foo")
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll(), "only the lowercase occurrence matches")
+	})
+
+	t.Run("a query may contain spaces", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "ab a b")
+		feedKeys(t, h, "<ctrl-s>a<space>b")
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+	})
+
+	t.Run("Esc accepts the search at the current match", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		feedKeys(t, h, "<ctrl-s>bar<esc>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("a Meta chord ends the search and is re-handled", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar baz")
+		feedKeys(t, h, "<ctrl-s>foo")
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feedKeys(t, h, "<alt-f>")
+		assert.False(t, h.IsSearchMode())
+		// M-f runs after the search exits: point crosses to the next word end.
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("typing while failing keeps point at the origin", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		feedKeys(t, h, "<ctrl-s>zz")
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+		feedKeys(t, h, "z")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-s C-s resumes the last accepted search", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo x foo y foo")
+		feedKeys(t, h, "<ctrl-s>foo<enter>")
+		require.False(t, h.IsSearchMode())
+		require.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-s><ctrl-s>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{X: 9}, h.CursorAtScroll())
+		// A further C-s keeps stepping through the matches.
+		feedKeys(t, h, "<ctrl-s>")
+		assert.Equal(t, term.Coordinates{X: 15}, h.CursorAtScroll())
+	})
+
+	t.Run("C-r C-r resumes the last search backward", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo x foo")
+		feedKeys(t, h, "<ctrl-s>foo<enter>")
+		require.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-r><ctrl-r>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("resume with no history keeps the empty prompt", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abc")
+		feedKeys(t, h, "<ctrl-s><ctrl-s>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("an aborted search does not enter the resume history", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "foo bar")
+		feedKeys(t, h, "<ctrl-s>foo<ctrl-g>")
+		require.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-s><ctrl-s>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll(),
+			"nothing to resume after C-g")
+	})
+
+	t.Run("resuming a query with no matches left fails in place", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo")
+		feedKeys(t, h, "<ctrl-s>foo<enter>")
+		require.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		for range 3 {
+			require.True(t, runEvent(h, key(term.KeyBackspace)))
+		}
+		require.Equal(t, "", buf.String())
+		feedKeys(t, h, "<ctrl-s><ctrl-s>")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("isearch on an empty buffer stays put", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "")
+		feedKeys(t, h, "<ctrl-s>x")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+	})
+}
+
+// TestEmacsQueryReplaceEdgeCases extends the M-% coverage: every decision
+// key, prompt editing, replacements that grow, shrink or vanish, adjacent
+// and multiline matches, and the exact point position after the loop.
+func TestEmacsQueryReplaceEdgeCases(t *testing.T) {
+	// M-% is Alt+Shift+5, which reaches the handler as ModAlt with '%'.
+	const start = "<alt-shift-5>"
+
+	t.Run("no match anywhere ends the loop immediately", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		feedKeys(t, h, start+"zz<enter>y<enter>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("Space replaces like y", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "<space>")
+		assert.Equal(t, "b a", buf.String())
+		feedKeys(t, h, "<space>")
+		assert.Equal(t, "b b", buf.String())
+		assert.False(t, h.IsSearchMode())
+	})
+
+	t.Run("Backspace skips like n", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "<backspace>")
+		assert.Equal(t, "a a", buf.String())
+		assert.True(t, h.IsSearchMode())
+		feedKeys(t, h, "y")
+		assert.Equal(t, "a b", buf.String())
+	})
+
+	t.Run("n on the last match ends the loop", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "n")
+		require.True(t, h.IsSearchMode())
+		feedKeys(t, h, "n")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("Enter ends the loop without replacing", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "<enter>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("Esc ends the loop without replacing", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "<esc>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("empty replacement deletes matches", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a b a")
+		feedKeys(t, h, start+"a<enter><enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, " b ", buf.String())
+	})
+
+	t.Run("longer replacement shifts later matches correctly", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "x x x")
+		feedKeys(t, h, start+"x<enter>long<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "long long long", buf.String())
+	})
+
+	t.Run("adjacent matches are all replaced", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "aaaa")
+		feedKeys(t, h, start+"aa<enter>b<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "bb", buf.String())
+	})
+
+	t.Run("matches across lines are replaced", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "x\ny x")
+		feedKeys(t, h, start+"x<enter>z<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "z\ny z", buf.String())
+	})
+
+	t.Run("point rests after the last replacement", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo foo")
+		feedKeys(t, h, start+"foo<enter>bar<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "bar bar", buf.String())
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("dot replaces the current match and stops there", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		feedKeys(t, h, "y")
+		require.Equal(t, "b a a", buf.String())
+		feedKeys(t, h, ".")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "b b a", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+	})
+
+	t.Run("the search prompt supports backspace editing", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ac ab")
+		feedKeys(t, h, start+"ab<backspace>c<enter>x<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "x ab", buf.String())
+	})
+
+	t.Run("the search string may contain spaces", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a b c")
+		feedKeys(t, h, start+"a<space>b<enter>z<enter>")
+		feedKeys(t, h, "!")
+		assert.Equal(t, "z c", buf.String())
+	})
+
+	t.Run("C-g at the replacement prompt cancels", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<ctrl-g>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("keys during the loop do not leak into the buffer", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "a a")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		// An unbound decision key is swallowed by the loop.
+		feedKeys(t, h, "zq")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "a a", buf.String())
+	})
+
+	t.Run("query-replace on an empty buffer ends cleanly", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, start+"a<enter>b<enter>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, "", buf.String())
+	})
+}
+
+// TestEmacsGotoLineEdgeCases extends the M-g coverage: the GNU M-g M-g
+// chord, malformed input, whitespace trimming and prompt editing.
+func TestEmacsGotoLineEdgeCases(t *testing.T) {
+	const content = "l1\nl2\nl3\nl4\nl5"
+
+	cases := []struct {
+		name string
+		keys string
+		at   term.Coordinates
+	}{
+		{"M-g M-g jumps like M-g g", "<alt-g><alt-g>4<enter>", term.Coordinates{Y: 3}},
+		{"line zero is ignored", "<alt-g>g0<enter>", term.Coordinates{Y: 1, X: 1}},
+		{"negative line is ignored", "<alt-g>g-2<enter>", term.Coordinates{Y: 1, X: 1}},
+		{"garbage input is ignored", "<alt-g>gxyz<enter>", term.Coordinates{Y: 1, X: 1}},
+		{"mixed digits and letters are ignored", "<alt-g>g2x<enter>", term.Coordinates{Y: 1, X: 1}},
+		{"surrounding spaces are trimmed", "<alt-g>g<space>3<space><enter>", term.Coordinates{Y: 2}},
+		{"backspace edits the line number", "<alt-g>g25<backspace><enter>", term.Coordinates{Y: 1}},
+		{"backspace on empty input is safe", "<alt-g>g<backspace><backspace>4<enter>", term.Coordinates{Y: 3}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, content)
+			require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+			feedKeys(t, h, tc.keys)
+			assert.False(t, h.IsSearchMode(), "prompt must be closed")
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+			assert.Equal(t, content, buf.String(), "goto-line must not edit the buffer")
+		})
+	}
+}
+
+// TestEmacsMinibufferKeys pins the echo-area prompt input handling: typed
+// keys go to the prompt (never the buffer), modified chords are ignored,
+// and Esc cancels like C-g.
+func TestEmacsMinibufferKeys(t *testing.T) {
+	const content = "l1\nl2\nl3"
+
+	t.Run("typed keys do not reach the buffer", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, content)
+		feedKeys(t, h, "<alt-g>g123")
+		assert.True(t, h.IsSearchMode())
+		assert.Equal(t, content, buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("control chords are ignored while prompting", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, content)
+		feedKeys(t, h, "<alt-g>g2<ctrl-a><ctrl-e><ctrl-k><enter>")
+		// C-a / C-e / C-k neither edit the buffer nor abort the prompt;
+		// the pending "2" still commits.
+		assert.Equal(t, content, buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("Esc cancels the prompt like C-g", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, content)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 2, X: 1}))
+		feedKeys(t, h, "<alt-g>g3<esc>")
+		assert.False(t, h.IsSearchMode())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsPrefixAbort pins the M-g prefix contract: a key that does not
+// complete the prefix is swallowed without side effects, and C-g aborts.
+func TestEmacsPrefixAbort(t *testing.T) {
+	cases := []struct {
+		name string
+		keys string
+	}{
+		{"unbound letter aborts", "<alt-g>x"},
+		{"C-g aborts", "<alt-g><ctrl-g>"},
+		{"motion key is swallowed", "<alt-g><right>"},
+		{"another prefix key is swallowed", "<alt-g><alt-g>x<esc>"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, "abc")
+			require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+			feedKeys(t, h, tc.keys)
+			assert.False(t, h.IsSearchMode())
+			assert.Equal(t, "abc", buf.String(), "aborted prefix must not edit")
+			assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll(), "aborted prefix must not move point")
+		})
+	}
+}
+
+// TestEmacsRegionCommands pins the C-SPC / C-w / M-w mark-and-region
+// workflow: kill-region kills mark-to-point onto the kill ring and pops the
+// mark, kill-ring-save copies without editing or moving point, and both are
+// no-ops without a mark.
+func TestEmacsRegionCommands(t *testing.T) {
+	setMark := key2(term.KeySpace, term.ModCtrl)
+
+	t.Run("C-w without a mark is a no-op", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.False(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("C-w kills mark-to-point onto the kill ring", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "alpha beta")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, runEvent(h, alt('f')))
+		require.True(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, " beta", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "alpha", killRingText(clip))
+	})
+
+	t.Run("C-w with point before the mark kills backward", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "alpha beta")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 5}))
+		require.True(t, runEvent(h, setMark))
+		require.True(t, runEvent(h, ctrl('a')))
+		require.True(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, " beta", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "alpha", killRingText(clip))
+	})
+
+	t.Run("C-w kills a multiline region exactly", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab\ncd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		require.True(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, "ad", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+		assert.Equal(t, "b\nc", killRingText(clip))
+	})
+
+	t.Run("C-w with point at the mark is a no-op", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, runEvent(h, setMark))
+		require.False(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, "abc", buf.String())
+	})
+
+	t.Run("C-w pops the mark it used", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "abcdef")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		require.True(t, runEvent(h, ctrl('w')))
+		require.Equal(t, "cdef", buf.String())
+		require.Empty(t, emacsMarks(h))
+		// Without a fresh mark a second C-w has nothing to kill.
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		assert.False(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, "cdef", buf.String())
+	})
+
+	t.Run("C-g clears the mark so C-w cannot kill", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		// C-g reports unhandled when there is no selection to clear, but
+		// it still discards the pending mark.
+		require.NotPanics(t, func() { h.Handle(ctrl('g')) })
+		require.Empty(t, emacsMarks(h))
+		assert.False(t, runEvent(h, ctrl('w')))
+		assert.Equal(t, "abc", buf.String())
+	})
+
+	t.Run("M-w copies without editing or moving point", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "alpha beta")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, runEvent(h, alt('f')))
+		require.True(t, runEvent(h, alt('w')))
+		assert.Equal(t, "alpha beta", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+		assert.Equal(t, "alpha", killRingText(clip))
+	})
+
+	t.Run("M-w without a mark is a no-op", func(t *testing.T) {
+		h, _, clip := newEmacsHandlerWithClipboard(t, "abc")
+		assert.False(t, runEvent(h, alt('w')))
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("M-w then C-y duplicates the region", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "ab\ncd")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
+		require.True(t, runEvent(h, alt('w')))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 2}))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "ab\ncdab\n", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 2}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsYankCommands pins C-y (yank) and its interaction with C-c and
+// M-y: yank inserts the clipboard text literally at point and leaves point
+// after it, replaces an active selection, and yank-pop only follows a yank.
+func TestEmacsYankCommands(t *testing.T) {
+	copyData := func(clip clipboard.Register, text_ string, meta any) {
+		_ = clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: text_, Metadata: meta})
+	}
+
+	t.Run("C-y inserts at point with point after the text", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "xy")
+		copyData(clip, "AB", text.StandardSelection)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "xABy", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+	})
+
+	t.Run("C-y inserts multiline text literally", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "xy")
+		copyData(clip, "a\nb", text.StandardSelection)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "xa\nby", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-y of a killed line inserts before the current line", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "xy")
+		copyData(clip, "abc\n", text.StandardSelection)
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "abc\nxy", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-y replaces an active selection", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abcde")
+		copyData(clip, "Z", text.StandardSelection)
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "Zcde", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-y with an empty clipboard is a no-op", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "abc")
+		require.NotPanics(t, func() { h.Handle(ctrl('y')) })
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("C-c copies the selection for a later yank", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, ctrl('c')))
+		assert.Equal(t, "ab", killRingText(clip))
+		require.True(t, runEvent(h, key(term.KeyEnd)))
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "abcab", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+	})
+
+	t.Run("C-c without a selection leaves the clipboard alone", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.NotPanics(t, func() { h.Handle(ctrl('c')) })
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("M-y after a motion is not handled", func(t *testing.T) {
+		h, buf, reg := newEmacsHandlerWithHistory(t, "z")
+		for _, entry := range []string{"a", "b"} {
+			require.NoError(t, reg.Copy(clipboard.DefaultRegisterID,
+				clipboard.Data{Text: entry, Metadata: text.StandardSelection}))
+		}
+		require.True(t, runEvent(h, key(term.KeyEnd)))
+		require.True(t, runEvent(h, ctrl('y')))
+		require.Equal(t, "zb", buf.String())
+		// The motion breaks the yank chain, so M-y must refuse.
+		require.True(t, runEvent(h, key(term.KeyArrowLeft)))
+		assert.False(t, runEvent(h, alt('y')))
+		assert.Equal(t, "zb", buf.String())
+	})
+}
+
+// TestEmacsLineInsertCommands pins the newline family: C-o (open-line keeps
+// point), C-j / RET (plain newline), C-Enter / C-S-Enter (insert a fresh
+// line below/above), and RET over a selection.
+func TestEmacsLineInsertCommands(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		want    string
+		at      term.Coordinates
+	}{
+		{"C-o splits the line keeping point", "ab", term.Coordinates{X: 1}, ctrl('o'), "a\nb", term.Coordinates{X: 1}},
+		{"C-o keeps indentation with point", "  ab", term.Coordinates{X: 2}, ctrl('o'), "  \nab", term.Coordinates{X: 2}},
+		{"C-o at end of line opens below", "ab", term.Coordinates{X: 2}, ctrl('o'), "ab\n", term.Coordinates{X: 2}},
+		{"C-o on an empty buffer", "", term.Coordinates{}, ctrl('o'), "\n", term.Coordinates{}},
+		{"C-j inserts a plain newline", "ab", term.Coordinates{X: 1}, ctrl('j'), "a\nb", term.Coordinates{Y: 1}},
+		{"C-j does not inherit indentation", "\tab", term.Coordinates{X: 3}, ctrl('j'), "\tab\n", term.Coordinates{Y: 1}},
+		{"RET inserts a plain newline", "ab", term.Coordinates{X: 1}, key(term.KeyEnter), "a\nb", term.Coordinates{Y: 1}},
+		{"RET at buffer end", "ab", term.Coordinates{X: 2}, key(term.KeyEnter), "ab\n", term.Coordinates{Y: 1}},
+		{"RET on empty buffer", "", term.Coordinates{}, key(term.KeyEnter), "\n", term.Coordinates{Y: 1}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, tc.event))
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("RET replaces an active selection", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcde")
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, key(term.KeyEnter)))
+		assert.Equal(t, "\ncde", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-Enter opens a line below from mid line", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab\ncd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, key2(term.KeyEnter, term.ModCtrl)))
+		assert.Equal(t, "ab\n\ncd", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-S-Enter opens a line above from mid line", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab\ncd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		require.True(t, runEvent(h, key2(term.KeyEnter, term.ModCtrlShift)))
+		assert.Equal(t, "ab\n\ncd", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsCommentToggle pins M-; (comment-dwim) with a configured line
+// comment: commenting, uncommenting, indentation preservation, and the
+// no-comment-config no-op.
+func TestEmacsCommentToggle(t *testing.T) {
+	// Uncommenting requires the comment-coverage view on top of the
+	// configured comment spec, mirroring how the editor wires syntax
+	// services in production.
+	newCommentHandler := func(t *testing.T, content string) (text.Handler, *cell.Buffer) {
+		t.Helper()
+		buf := cell.NewBuffer()
+		_, err := buf.ReadFrom(strings.NewReader(content))
+		require.NoError(t, err)
+		buf.WithView(testCommentService{
+			view: buf.View(),
+			line: []string{"//"},
+		})
+		h := NewHandler(buf, emacsTestURI(t), text.IndentRuneTab, 0,
+			WithComments(text.CommentConfig{
+				"go": {Line: []string{"//"}, Block: []text.CommentBlock{{Start: "/*", End: "*/"}}},
+			}))
+		h.Resize(80, 20)
+		return h, buf
+	}
+
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		want    string
+	}{
+		{"comments the current line", "x := 1\ny := 2", term.Coordinates{}, "// x := 1\ny := 2"},
+		{"uncomments a commented line", "// x := 1\ny := 2", term.Coordinates{}, "x := 1\ny := 2"},
+		{"keeps indentation", "\tx := 1", term.Coordinates{X: 1}, "\t// x := 1"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newCommentHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, alt(';')))
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+
+	t.Run("round trip preserves the original line", func(t *testing.T) {
+		h, buf := newCommentHandler(t, "x := 1")
+		require.True(t, runEvent(h, alt(';')))
+		require.Equal(t, "// x := 1", buf.String())
+		require.True(t, runEvent(h, alt(';')))
+		assert.Equal(t, "x := 1", buf.String())
+	})
+
+	t.Run("without comment configuration M-; is a no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "x := 1")
+		assert.False(t, runEvent(h, alt(';')))
+		assert.Equal(t, "x := 1", buf.String())
+	})
+}
+
+// TestEmacsFillParagraph pins M-q (fill-paragraph) against the configured
+// ruler: long lines wrap at word boundaries, short lines of the same
+// paragraph are rejoined, and other paragraphs are untouched.
+func TestEmacsFillParagraph(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+	}{
+		{"wraps a long line at the ruler", "aaa bbb ccc ddd", term.Coordinates{}, true, "aaa bbb\nccc ddd"},
+		{"rejoins short lines", "aaa\nbbb", term.Coordinates{}, true, "aaa bbb"},
+		{"only fills the paragraph around point", "aaa bbb ccc\n\nzz", term.Coordinates{}, true, "aaa bbb\nccc\n\nzz"},
+		{"second paragraph is filled independently", "zz\n\naaa bbb ccc", term.Coordinates{Y: 2}, true, "zz\n\naaa bbb\nccc"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content, WithRuler(10))
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(alt('q')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+
+	t.Run("empty buffer is a safe no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "", WithRuler(10))
+		require.NotPanics(t, func() { h.Handle(alt('q')) })
+		assert.Equal(t, "", buf.String())
+	})
+}
+
+// TestEmacsUndoKeys pins C-z (undo) restoring the buffer after each
+// single-edit command.
+func TestEmacsUndoKeys(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		after   string
+	}{
+		{"undo insertion", "ab", term.Coordinates{X: 2}, term.Event{Type: term.EventKey, Ch: 'X'}, "abX"},
+		{"undo forward delete", "abc", term.Coordinates{X: 1}, key(term.KeyDelete), "ac"},
+		{"undo backspace", "abc", term.Coordinates{X: 2}, key(term.KeyBackspace), "ac"},
+		{"undo kill-line", "abc\nd", term.Coordinates{}, ctrl('k'), "\nd"},
+		{"undo transpose-chars", "abc", term.Coordinates{X: 1}, ctrl('t'), "bac"},
+		{"undo kill-word", "alpha beta", term.Coordinates{}, alt('d'), " beta"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, _ := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, tc.event))
+			require.Equal(t, tc.after, buf.String())
+			require.True(t, runEvent(h, ctrl('z')))
+			assert.Equal(t, tc.content, buf.String())
+		})
+	}
+
+	t.Run("undo with no history is a no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		assert.False(t, runEvent(h, ctrl('z')))
+		assert.Equal(t, "abc", buf.String())
+	})
+
+	t.Run("C-slash, C-underscore and C-z all undo", func(t *testing.T) {
+		for _, undo := range []term.Event{ctrl('/'), ctrl('_'), ctrl('z')} {
+			h, buf := newEmacsHandler(t, "ab")
+			require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+			require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'X'}))
+			require.Equal(t, "abX", buf.String())
+			require.True(t, runEvent(h, undo))
+			assert.Equal(t, "ab", buf.String())
+		}
+	})
+
+	t.Run("C-question, C-M-slash and C-M-underscore redo", func(t *testing.T) {
+		for _, redo := range []term.Event{ctrl('?'), ctrlAlt('/'), ctrlAlt('_')} {
+			h, buf := newEmacsHandler(t, "ab")
+			require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+			require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'X'}))
+			require.True(t, runEvent(h, ctrl('/')))
+			require.Equal(t, "ab", buf.String())
+			require.True(t, runEvent(h, redo))
+			assert.Equal(t, "abX", buf.String())
+		}
+	})
+
+	t.Run("redo with nothing to redo is a no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab")
+		assert.False(t, runEvent(h, ctrl('?')))
+		assert.Equal(t, "ab", buf.String())
+	})
+
+	t.Run("a new edit clears the redo timeline", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		require.True(t, runEvent(h, char('a')))
+		require.True(t, runEvent(h, ctrl('/')))
+		require.True(t, runEvent(h, char('b')))
+		assert.False(t, runEvent(h, ctrl('?')))
+		assert.Equal(t, "b", buf.String())
+	})
+}
+
+// TestEmacsUndoGrouping pins GNU one-undo-per-command semantics: a command
+// that performs several internal edits (M-^, M-t, cross-line C-t, M-SPC,
+// paste over a selection, a whole query-replace session) reverts with a
+// single undo.
+func TestEmacsUndoGrouping(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		after   string
+	}{
+		{"M-^ delete-indentation", "a\n    b", term.Coordinates{Y: 1, X: 4}, alt('^'), "a b"},
+		{"M-t transpose-words", "alpha beta", term.Coordinates{X: 5}, alt('t'), "beta alpha"},
+		{"C-t across lines", "ab\n\ncd", term.Coordinates{Y: 1}, ctrl('t'), "a\nb\ncd"},
+		{"M-SPC just-one-space", "a   b", term.Coordinates{X: 2}, key2(term.KeySpace, term.ModAlt), "a b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, tc.event))
+			require.Equal(t, tc.after, buf.String())
+			require.True(t, runEvent(h, ctrl('/')), "undo")
+			assert.Equal(t, tc.content, buf.String(), "one undo must restore the original")
+		})
+	}
+
+	t.Run("paste over a selection is one undo", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "hello world")
+		for range 5 {
+			require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		}
+		runEvent(h, term.Event{Type: term.EventPasteStart})
+		for _, ch := range "XY" {
+			runEvent(h, term.Event{Type: term.EventKey, Ch: ch})
+		}
+		runEvent(h, term.Event{Type: term.EventPasteEnd})
+		require.Equal(t, "XY world", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "hello world", buf.String())
+	})
+
+	t.Run("interactive query-replace session is one undo", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo a foo b foo")
+		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>yyy")
+		require.Equal(t, "zap a zap b zap", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "foo a foo b foo", buf.String())
+	})
+
+	t.Run("replace-all is one undo", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo a foo b foo")
+		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>!")
+		require.Equal(t, "zap a zap b zap", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "foo a foo b foo", buf.String())
+	})
+
+	t.Run("quitting query-replace still groups the done replacements", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo a foo b foo")
+		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>yq")
+		require.Equal(t, "zap a foo b foo", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "foo a foo b foo", buf.String())
+	})
+
+	t.Run("consecutive kill commands stay separate undo groups", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "ab\ncd")
+		require.True(t, runEvent(h, ctrl('k')))
+		require.True(t, runEvent(h, ctrl('k')))
+		require.Equal(t, "cd", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "\ncd", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab\ncd", buf.String())
+	})
+
+	t.Run("typing over a selection undoes as one group", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "hello world")
+		for range 5 {
+			require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		}
+		require.True(t, runEvent(h, char('X')))
+		require.True(t, runEvent(h, char('Y')))
+		require.Equal(t, "XY world", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "hello world", buf.String())
+	})
+
+	t.Run("quitting query-replace with C-g still groups", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo a foo")
+		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>y<ctrl-g>")
+		require.Equal(t, "zap a foo", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "foo a foo", buf.String())
+	})
+
+	t.Run("query-replace without matches leaves nothing to undo", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		feedKeys(t, h, "<alt-shift-5>zz<enter>y<enter>")
+		require.Equal(t, "abc", buf.String())
+		assert.False(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abc", buf.String())
+	})
+}
+
+// TestEmacsSentenceMotion pins M-a (backward-sentence) and M-e
+// (forward-sentence) with the stock GNU rules: a sentence ends at [.?!]
+// plus closing characters followed by end-of-line, a tab or two spaces
+// (sentence-end-double-space is on by default), and sentence motion never
+// crosses a paragraph except when there is nothing left in the current one.
+func TestEmacsSentenceMotion(t *testing.T) {
+	const three = "One.  Two three.  Four."
+	const abbrev = "Mr. Smith stayed.  He left."
+	const wrapped = "One two\nthree.  Four\nfive."
+	const pars = "One end\n\nTwo."
+
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		event   term.Event
+		handled bool
+		at      term.Coordinates
+	}{
+		{"M-e to the first sentence end", three, term.Coordinates{}, alt('e'), true, term.Coordinates{X: 4}},
+		{"M-e from a sentence end to the next", three, term.Coordinates{X: 4}, alt('e'), true, term.Coordinates{X: 16}},
+		{"M-e from inside the second sentence", three, term.Coordinates{X: 6}, alt('e'), true, term.Coordinates{X: 16}},
+		{"M-e to the buffer end", three, term.Coordinates{X: 16}, alt('e'), true, term.Coordinates{X: 23}},
+		{"M-e at the buffer end is a no-op", three, term.Coordinates{X: 23}, alt('e'), false, term.Coordinates{X: 23}},
+		{"a single space does not end a sentence", abbrev, term.Coordinates{}, alt('e'), true, term.Coordinates{X: 17}},
+		{"a tab ends the sentence", "One.\tTwo", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 4}},
+		{"closing characters at the buffer end", `He said "Go."`, term.Coordinates{}, alt('e'), true, term.Coordinates{X: 13}},
+		{"wide-rune sentences", "宇宙.  次", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 3}},
+		{"null cells inside a sentence", "a\x00b.  c", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 4}},
+		{"M-e from inter-sentence whitespace", three, term.Coordinates{X: 5}, alt('e'), true, term.Coordinates{X: 16}},
+		{"M-e crosses line breaks inside a sentence", wrapped, term.Coordinates{}, alt('e'), true, term.Coordinates{Y: 1, X: 6}},
+		{"M-e stops at a paragraph end without punctuation", pars, term.Coordinates{}, alt('e'), true, term.Coordinates{X: 7}},
+		{"M-e from a paragraph end enters the next paragraph", pars, term.Coordinates{X: 7}, alt('e'), true, term.Coordinates{Y: 2, X: 4}},
+		{"a closing quote belongs to the sentence", `He said "Stop."  Go.`, term.Coordinates{}, alt('e'), true, term.Coordinates{X: 15}},
+		{"?! ends after the exclamation", "Really?!  Yes.", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 8}},
+		{"a space before end-of-line ends the sentence", "One. \nTwo.", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 4}},
+		{"no punctuation moves to the end of the paragraph", "abc def", term.Coordinates{}, alt('e'), true, term.Coordinates{X: 7}},
+		{"M-e on an empty buffer is a no-op", "", term.Coordinates{}, alt('e'), false, term.Coordinates{}},
+
+		{"M-a to the sentence start", three, term.Coordinates{X: 23}, alt('a'), true, term.Coordinates{X: 18}},
+		{"M-a from inside a sentence", three, term.Coordinates{X: 8}, alt('a'), true, term.Coordinates{X: 6}},
+		{"M-a at a sentence start goes to the previous start", three, term.Coordinates{X: 6}, alt('a'), true, term.Coordinates{}},
+		{"M-a at the buffer start is a no-op", three, term.Coordinates{}, alt('a'), false, term.Coordinates{}},
+		{"M-a from inter-sentence whitespace", three, term.Coordinates{X: 5}, alt('a'), true, term.Coordinates{}},
+		{"M-a does not stop after an abbreviation", abbrev, term.Coordinates{X: 21}, alt('a'), true, term.Coordinates{X: 19}},
+		{"M-a lands after a tab separator", "One.\tTwo", term.Coordinates{X: 8}, alt('a'), true, term.Coordinates{X: 5}},
+		{"M-a from a wide-rune sentence start", "宇宙.  次", term.Coordinates{X: 5}, alt('a'), true, term.Coordinates{}},
+		{"M-a crosses a blank line to the previous paragraph", pars, term.Coordinates{Y: 2}, alt('a'), true, term.Coordinates{}},
+		{"M-a inside the second paragraph stops at its start", pars, term.Coordinates{Y: 2, X: 4}, alt('a'), true, term.Coordinates{Y: 2}},
+		{"M-a lands after indentation", "  Indented one.  Two.", term.Coordinates{X: 17}, alt('a'), true, term.Coordinates{X: 2}},
+		{"M-a to a sentence starting mid-paragraph line", wrapped, term.Coordinates{Y: 2, X: 5}, alt('a'), true, term.Coordinates{Y: 1, X: 8}},
+		{"M-a to a sentence start after a line break", "One.\nTwo.", term.Coordinates{Y: 1, X: 2}, alt('a'), true, term.Coordinates{Y: 1}},
+		{"M-a on an empty buffer is a no-op", "", term.Coordinates{}, alt('a'), false, term.Coordinates{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.event) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.content, buf.String(), "sentence motion must not edit")
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+}
+
+// TestEmacsKillSentence pins M-k (kill-sentence): kill from point to the
+// end of the sentence, saving to the kill ring like every other kill.
+func TestEmacsKillSentence(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		want    string
+		at      term.Coordinates
+		killed  string
+	}{
+		{"kill to the sentence end", "One.  Two.", term.Coordinates{}, true, "  Two.", term.Coordinates{}, "One."},
+		{"kill from mid-sentence", "One two.  X", term.Coordinates{X: 4}, true, "One   X", term.Coordinates{X: 4}, "two."},
+		{"kill without punctuation takes the paragraph tail", "abc def\n\nx", term.Coordinates{}, true, "\n\nx", term.Coordinates{}, "abc def"},
+		{"kill from a paragraph end crosses into the next", "ab\n\nx", term.Coordinates{X: 2}, true, "ab", term.Coordinates{X: 2}, "\n\nx"},
+		{"kill at the buffer end is a no-op", "abc.", term.Coordinates{X: 4}, false, "abc.", term.Coordinates{X: 4}, ""},
+		{"kill on an empty buffer is a no-op", "", term.Coordinates{}, false, "", term.Coordinates{}, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, clip := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(alt('k')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+			assert.Equal(t, tc.killed, killRingText(clip), "kill ring")
+		})
+	}
+
+	t.Run("consecutive M-k accumulate in the kill ring", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "One.  Two.")
+		require.True(t, runEvent(h, alt('k')))
+		require.True(t, runEvent(h, alt('k')))
+		assert.Equal(t, "", buf.String())
+		assert.Equal(t, "One.  Two.", killRingText(clip))
+	})
+
+	t.Run("C-u 2 M-k kills two sentences as one entry", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "One.  Two.  X")
+		feedKeys(t, h, "<ctrl-u>2")
+		require.True(t, runEvent(h, alt('k')))
+		assert.Equal(t, "  X", buf.String())
+		assert.Equal(t, "One.  Two.", killRingText(clip))
+	})
+
+	t.Run("C-- M-k kills back to the sentence start", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "One.  Two.")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 10}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, alt('k')))
+		assert.Equal(t, "One.  ", buf.String())
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+		assert.Equal(t, "Two.", killRingText(clip))
+	})
+
+	t.Run("C-u -2 M-k kills two sentences backward", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "One.  Two.  Three.")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 18}))
+		feedKeys(t, h, "<ctrl-u>-2")
+		require.True(t, runEvent(h, alt('k')))
+		assert.Equal(t, "One.  ", buf.String())
+		assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+		assert.Equal(t, "Two.  Three.", killRingText(clip))
+	})
+
+	t.Run("C-- M-k at the buffer start is refused", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "One.")
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, alt('k')))
+		assert.Equal(t, "One.", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+}
+
+// TestEmacsZapToChar pins M-z: read one character and kill from point
+// through and including its next occurrence, saving to the kill ring;
+// a failed search leaves the buffer untouched.
+func TestEmacsZapToChar(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		zap     term.Event
+		handled bool
+		want    string
+		at      term.Coordinates
+		killed  string
+	}{
+		{"zap through the next occurrence", "hello world", term.Coordinates{}, char('o'), true, " world", term.Coordinates{}, "hello"},
+		{"zap when point is on the char kills just it", "xyz", term.Coordinates{}, char('x'), true, "yz", term.Coordinates{}, "x"},
+		{"zap crosses lines", "ab\ncd", term.Coordinates{}, char('c'), true, "d", term.Coordinates{}, "ab\nc"},
+		{"zap to RET kills through the newline", "ab\ncd", term.Coordinates{}, key(term.KeyEnter), true, "cd", term.Coordinates{}, "ab\n"},
+		{"zap to SPC kills through the space", "ab cd", term.Coordinates{}, key(term.KeySpace), true, "cd", term.Coordinates{}, "ab "},
+		{"zap not found leaves the buffer intact", "abc", term.Coordinates{}, char('q'), true, "abc", term.Coordinates{}, ""},
+		{"zap behind point is not found", "ab", term.Coordinates{X: 2}, char('a'), true, "ab", term.Coordinates{X: 2}, ""},
+		{"zap to a wide rune", "a界b界c", term.Coordinates{}, char('界'), true, "b界c", term.Coordinates{}, "a界"},
+		{"zap across null cells", "a\x00x b", term.Coordinates{}, char('x'), true, " b", term.Coordinates{}, "a\x00x"},
+		{"zap on an empty buffer reports failure", "", term.Coordinates{}, char('q'), true, "", term.Coordinates{}, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, clip := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			require.True(t, runEvent(h, alt('z')), "M-z must be handled")
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(tc.zap) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+			assert.Equal(t, tc.killed, killRingText(clip), "kill ring")
+		})
+	}
+
+	t.Run("C-g aborts the pending zap", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, ctrl('g')))
+		// The next plain character self-inserts instead of zapping.
+		require.True(t, runEvent(h, char('b')))
+		assert.Equal(t, "babc", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("a named key aborts the pending zap", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, key(term.KeyArrowUp)))
+		require.True(t, runEvent(h, char('b')))
+		assert.Equal(t, "babc", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("a count beyond the last occurrence fails without editing", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "axb")
+		feedKeys(t, h, "<ctrl-u>5<alt-z>x")
+		assert.Equal(t, "axb", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("a backward zap without a match fails without editing", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 3}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, char('q')))
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("consecutive zaps accumulate in the kill ring", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "axbxc")
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, char('x')))
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, char('x')))
+		assert.Equal(t, "c", buf.String())
+		assert.Equal(t, "axbx", killRingText(clip))
+	})
+
+	t.Run("zap kill undoes in one step", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab\ncd")
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, char('c')))
+		require.Equal(t, "d", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab\ncd", buf.String())
+	})
+}
+
+// TestEmacsUniversalArgument pins the GNU prefix-argument machinery: C-u
+// multiplies by four, digits build a number (plain, M- or C- flavored),
+// C-- / M-- / C-u - negate, C-u after digits terminates collection, and
+// the following command runs with that count.
+func TestEmacsUniversalArgument(t *testing.T) {
+	const abc20 = "abcdefghijklmnopqrst"
+	a70 := strings.Repeat("a", 70)
+
+	motion := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		keys    []term.Event
+		at      term.Coordinates
+	}{
+		{"C-u C-f moves four", abc20, term.Coordinates{},
+			[]term.Event{ctrl('u'), ctrl('f')}, term.Coordinates{X: 4}},
+		{"C-u C-u C-f moves sixteen", abc20, term.Coordinates{},
+			[]term.Event{ctrl('u'), ctrl('u'), ctrl('f')}, term.Coordinates{X: 16}},
+		{"C-u C-u C-u C-f moves sixty-four", a70, term.Coordinates{},
+			[]term.Event{ctrl('u'), ctrl('u'), ctrl('u'), ctrl('f')}, term.Coordinates{X: 64}},
+		{"C-u 3 C-f moves three", abc20, term.Coordinates{},
+			[]term.Event{ctrl('u'), char('3'), ctrl('f')}, term.Coordinates{X: 3}},
+		{"C-u 1 2 C-b moves twelve back", abc20, term.Coordinates{X: 15},
+			[]term.Event{ctrl('u'), char('1'), char('2'), ctrl('b')}, term.Coordinates{X: 3}},
+		{"M-5 C-f moves five", abc20, term.Coordinates{},
+			[]term.Event{alt('5'), ctrl('f')}, term.Coordinates{X: 5}},
+		{"M-1 M-0 C-f chains meta digits", abc20, term.Coordinates{},
+			[]term.Event{alt('1'), alt('0'), ctrl('f')}, term.Coordinates{X: 10}},
+		{"C-5 digit argument", abc20, term.Coordinates{},
+			[]term.Event{ctrl('5'), ctrl('f')}, term.Coordinates{X: 5}},
+		{"C-M-3 digit argument", abc20, term.Coordinates{},
+			[]term.Event{ctrlAlt('3'), ctrl('f')}, term.Coordinates{X: 3}},
+		{"C-u C-n moves four lines down", "a\nb\nc\nd\ne\nf", term.Coordinates{},
+			[]term.Event{ctrl('u'), ctrl('n')}, term.Coordinates{Y: 4}},
+		{"C-u 3 right-arrow moves three", abc20, term.Coordinates{},
+			[]term.Event{ctrl('u'), char('3'), key(term.KeyArrowRight)}, term.Coordinates{X: 3}},
+		{"C-- C-f moves one back", abc20, term.Coordinates{X: 2},
+			[]term.Event{ctrl('-'), ctrl('f')}, term.Coordinates{X: 1}},
+		{"bare M-- C-f moves one back", abc20, term.Coordinates{X: 2},
+			[]term.Event{alt('-'), ctrl('f')}, term.Coordinates{X: 1}},
+		{"bare C-u - C-f moves one back", abc20, term.Coordinates{X: 2},
+			[]term.Event{ctrl('u'), char('-'), ctrl('f')}, term.Coordinates{X: 1}},
+		{"C-M-- negative argument", abc20, term.Coordinates{X: 2},
+			[]term.Event{ctrlAlt('-'), ctrl('f')}, term.Coordinates{X: 1}},
+		{"M-- 3 C-f moves three back", abc20, term.Coordinates{X: 5},
+			[]term.Event{alt('-'), char('3'), ctrl('f')}, term.Coordinates{X: 2}},
+		{"C-u - 5 C-f moves five back", abc20, term.Coordinates{X: 6},
+			[]term.Event{ctrl('u'), char('-'), char('5'), ctrl('f')}, term.Coordinates{X: 1}},
+		{"C-- 2 down-arrow moves two up", "a\nb\nc\nd", term.Coordinates{Y: 3},
+			[]term.Event{ctrl('-'), char('2'), key(term.KeyArrowDown)}, term.Coordinates{Y: 1}},
+		{"C-u 2 M-f crosses two words", "one two three", term.Coordinates{},
+			[]term.Event{ctrl('u'), char('2'), alt('f')}, term.Coordinates{X: 7}},
+		{"C-- M-e moves back a sentence", "One.  Two.", term.Coordinates{X: 6},
+			[]term.Event{ctrl('-'), alt('e')}, term.Coordinates{}},
+		{"C-u 2 M-e crosses two sentence ends", "One.  Two three.  Four.", term.Coordinates{},
+			[]term.Event{ctrl('u'), char('2'), alt('e')}, term.Coordinates{X: 16}},
+		{"C-u 100 C-f clamps at the buffer end", "abc", term.Coordinates{},
+			[]term.Event{ctrl('u'), char('1'), char('0'), char('0'), ctrl('f')}, term.Coordinates{X: 3}},
+	}
+	for _, tc := range motion {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			for _, ev := range tc.keys {
+				require.True(t, runEvent(h, ev), "key %+v", ev)
+			}
+			assert.Equal(t, tc.content, buf.String(), "motion must not edit")
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("C-u 8 x inserts eight characters as one undo", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "<ctrl-u>8x")
+		assert.Equal(t, "xxxxxxxx", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("C-u 5 C-u 7 self-inserts the digit", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "<ctrl-u>5<ctrl-u>7")
+		assert.Equal(t, "77777", buf.String())
+	})
+
+	t.Run("a negative argument refuses self-insert", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, char('x')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("C-g aborts the pending argument", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "<ctrl-u>5<ctrl-g>x")
+		assert.Equal(t, "x", buf.String())
+	})
+
+	t.Run("C-u 2 RET inserts two newlines", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "<ctrl-u>2<enter>")
+		assert.Equal(t, "\n\n", buf.String())
+	})
+
+	t.Run("C-u 0 C-f is a handled no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		feedKeys(t, h, "<ctrl-u>0")
+		assert.True(t, runEvent(h, ctrl('f')))
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("digit accumulation saturates instead of overflowing", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab")
+		feedKeys(t, h, "<ctrl-u>9999999999999999999")
+		assert.True(t, runEvent(h, ctrl('f')), "the count must stay positive")
+		assert.Equal(t, "ab", buf.String())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u 2 C-t drags the character forward twice", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		feedKeys(t, h, "<ctrl-u>2")
+		require.True(t, runEvent(h, ctrl('t')))
+		assert.Equal(t, "bca", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+	})
+
+	t.Run("C-- C-t is refused", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, ctrl('t')))
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("C-- M-t is refused", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "alpha beta")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 5}))
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, alt('t')))
+		assert.Equal(t, "alpha beta", buf.String())
+	})
+}
+
+// TestEmacsUniversalArgumentKills pins the GNU argument semantics of the
+// kill commands: counted kills form a single kill-ring entry and a single
+// undo group, and C-k's argument counts whole lines.
+func TestEmacsUniversalArgumentKills(t *testing.T) {
+	t.Run("C-u 2 M-d kills two words as one entry", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two three")
+		feedKeys(t, h, "<ctrl-u>2<alt-d>")
+		assert.Equal(t, " three", buf.String())
+		assert.Equal(t, "one two", killRingText(clip))
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "one two three", buf.String(), "counted kill is one undo")
+	})
+
+	t.Run("C-- M-d kills the previous word", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two three")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 7}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, "one  three", buf.String())
+		assert.Equal(t, "two", killRingText(clip))
+	})
+
+	t.Run("C-u 2 M-DEL kills two words backward", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two three")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 13}))
+		require.True(t, runEvent(h, ctrl('u')))
+		require.True(t, runEvent(h, char('2')))
+		require.True(t, runEvent(h, key2(term.KeyBackspace, term.ModAlt)))
+		assert.Equal(t, "one ", buf.String())
+		assert.Equal(t, "two three", killRingText(clip))
+	})
+
+	t.Run("the prefix keystrokes preserve the kill chain", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "one two three")
+		require.True(t, runEvent(h, alt('d')))
+		feedKeys(t, h, "<ctrl-u>1")
+		require.True(t, runEvent(h, alt('d')))
+		assert.Equal(t, " three", buf.String())
+		assert.Equal(t, "one two", killRingText(clip), "chain must survive the prefix")
+	})
+
+	t.Run("C-u 2 C-k kills two whole lines", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab\ncd\nef")
+		feedKeys(t, h, "<ctrl-u>2<ctrl-k>")
+		assert.Equal(t, "ef", buf.String())
+		assert.Equal(t, "ab\ncd\n", killRingText(clip))
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab\ncd\nef", buf.String())
+	})
+
+	t.Run("C-u 2 C-k from mid-line", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abcd\nef\ngh")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feedKeys(t, h, "<ctrl-u>2<ctrl-k>")
+		assert.Equal(t, "abgh", buf.String())
+		assert.Equal(t, "cd\nef\n", killRingText(clip))
+	})
+
+	t.Run("C-u 0 C-k kills to the beginning of the line", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "abcd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feedKeys(t, h, "<ctrl-u>0<ctrl-k>")
+		assert.Equal(t, "cd", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "ab", killRingText(clip))
+	})
+
+	t.Run("C-- C-k kills back to the end of the previous line", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab\ncd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "abd", buf.String())
+		assert.Equal(t, "\nc", killRingText(clip))
+	})
+
+	t.Run("C-u 10 C-k clamps at the buffer end", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab\ncd")
+		feedKeys(t, h, "<ctrl-u>10<ctrl-k>")
+		assert.Equal(t, "", buf.String())
+		assert.Equal(t, "ab\ncd", killRingText(clip))
+	})
+
+	t.Run("C-- C-k at the buffer start is refused", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab")
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "ab", buf.String())
+		assert.Equal(t, "", killRingText(clip))
+	})
+
+	t.Run("C-- C-k clamps at the buffer start", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "ab")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, ctrl('k')))
+		assert.Equal(t, "b", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Equal(t, "a", killRingText(clip))
+	})
+
+	t.Run("C-u 2 M-z zaps through the second occurrence", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "axbxc")
+		feedKeys(t, h, "<ctrl-u>2<alt-z>x")
+		assert.Equal(t, "c", buf.String())
+		assert.Equal(t, "axbx", killRingText(clip))
+	})
+
+	t.Run("C-- M-z zaps backward through the char", func(t *testing.T) {
+		h, buf, clip := newEmacsHandlerWithClipboard(t, "axbc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 4}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, alt('z')))
+		require.True(t, runEvent(h, char('x')))
+		assert.Equal(t, "a", buf.String())
+		assert.Equal(t, "xbc", killRingText(clip))
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsUniversalArgumentSpecials pins the commands whose GNU argument
+// semantics are not plain repetition: C-SPC pops the mark ring, C-y takes
+// a kill-ring index, the case commands work backward, and the scroll
+// commands take lines.
+func TestEmacsUniversalArgumentSpecials(t *testing.T) {
+	t.Run("C-u C-SPC pops the mark and jumps", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abcdefgh")
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 5}))
+		feedKeys(t, h, "<ctrl-u>")
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Empty(t, emacsMarks(h))
+	})
+
+	t.Run("repeated C-u C-SPC pops marks newest first", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abcdefgh")
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 3}))
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
+		feedKeys(t, h, "<ctrl-u>")
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+		feedKeys(t, h, "<ctrl-u>")
+		require.True(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+		assert.Empty(t, emacsMarks(h))
+	})
+
+	t.Run("C-u C-y yanks leaving point before the text", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "ab")
+		require.True(t, runEvent(h, ctrl('k')))
+		require.Equal(t, "", buf.String())
+		feedKeys(t, h, "<ctrl-u>")
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "ab", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u 2 C-y yanks the second most recent kill", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "one two")
+		require.True(t, runEvent(h, alt('d'))) // kills "one"
+		require.True(t, runEvent(h, key(term.KeyArrowRight)))
+		require.True(t, runEvent(h, alt('d'))) // kills "two"
+		require.Equal(t, " ", buf.String())
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{}))
+		feedKeys(t, h, "<ctrl-u>2")
+		require.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "one ", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, h.CursorAtScroll())
+	})
+
+	t.Run("C-- M-u upcases the previous word in place", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo bar")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 7}))
+		require.True(t, runEvent(h, ctrl('-')))
+		require.True(t, runEvent(h, alt('u')))
+		assert.Equal(t, "foo BAR", buf.String())
+		assert.Equal(t, term.Coordinates{X: 7}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u - 2 M-c capitalizes the previous two words in place", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "foo bar baz")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 11}))
+		feedKeys(t, h, "<ctrl-u>-2")
+		require.True(t, runEvent(h, alt('c')))
+		assert.Equal(t, "foo Bar Baz", buf.String())
+		assert.Equal(t, term.Coordinates{X: 11}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u 3 C-v scrolls three lines", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, pageTestContent(60))
+		feedKeys(t, h, "<ctrl-u>3")
+		require.True(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, 3, h.SeekOffset())
+		feedKeys(t, h, "<ctrl-u>2")
+		require.True(t, runEvent(h, alt('v')))
+		assert.Equal(t, 1, h.SeekOffset())
+	})
+
+	t.Run("a counted scroll clamps at the buffer edges", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, pageTestContent(60))
+		feedKeys(t, h, "<ctrl-u>999")
+		require.True(t, runEvent(h, ctrl('v')))
+		assert.Equal(t, h.MaxSeekOffset(), h.SeekOffset())
+		feedKeys(t, h, "<ctrl-u>999")
+		require.True(t, runEvent(h, alt('v')))
+		assert.Equal(t, 0, h.SeekOffset())
+		feedKeys(t, h, "<ctrl-u>2")
+		assert.False(t, runEvent(h, alt('v')), "scrolling up at the top is refused")
+	})
+
+	t.Run("C-u C-SPC with an empty mark ring is refused", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abc")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		feedKeys(t, h, "<ctrl-u>")
+		assert.False(t, runEvent(h, key2(term.KeySpace, term.ModCtrl)))
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u N C-y beyond the kill ring is refused", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "one two")
+		require.True(t, runEvent(h, alt('d')))
+		require.Equal(t, " two", buf.String())
+		// The kill leaves point at the line start already.
+		feedKeys(t, h, "<ctrl-u>5")
+		assert.False(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, " two", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u C-y with an empty clipboard stays put", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithClipboard(t, "abc")
+		feedKeys(t, h, "<ctrl-u>")
+		assert.True(t, runEvent(h, ctrl('y')))
+		assert.Equal(t, "abc", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("C-u -5 M-u clamps at the buffer start", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab cd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 5}))
+		feedKeys(t, h, "<ctrl-u>-5")
+		require.True(t, runEvent(h, alt('u')))
+		assert.Equal(t, "AB CD", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+	})
+
+	t.Run("C-- M-u with no previous word is refused", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab")
+		require.True(t, runEvent(h, ctrl('-')))
+		assert.False(t, runEvent(h, alt('u')))
+		assert.Equal(t, "ab", buf.String())
+	})
+
+	t.Run("C-u 2 M-y rotates the kill ring twice", func(t *testing.T) {
+		h, buf, _ := newEmacsHandlerWithHistory(t, "one two three")
+		// Build three kill-ring entries: "one", "two", "three".
+		require.True(t, runEvent(h, alt('d')))
+		require.True(t, runEvent(h, key(term.KeyArrowRight)))
+		require.True(t, runEvent(h, alt('d')))
+		require.True(t, runEvent(h, key(term.KeyArrowRight)))
+		require.True(t, runEvent(h, alt('d')))
+		require.Equal(t, "  ", buf.String())
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{}))
+		require.True(t, runEvent(h, ctrl('y')))
+		require.Equal(t, "three  ", buf.String())
+		feedKeys(t, h, "<ctrl-u>2")
+		require.True(t, runEvent(h, alt('y')))
+		assert.Equal(t, "one  ", buf.String())
+	})
+}
+
+// TestEmacsUndoAmalgamation pins GNU amalgamating undo: consecutive
+// self-inserted characters (and consecutive same-direction deletes) merge
+// into one undo group of at most 20, and any other command closes the run.
+func TestEmacsUndoAmalgamation(t *testing.T) {
+	t.Run("typed characters undo as one group", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "hello")
+		require.Equal(t, "hello", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("space joins the typing run", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "ab<space>cd")
+		require.Equal(t, "ab cd", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("the run caps at 20 characters", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "abcdefghijklmnopqrstuvwxy") // 25 chars
+		require.Equal(t, "abcdefghijklmnopqrstuvwxy", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abcdefghijklmnopqrst", buf.String(),
+			"first undo drops the 5-char tail run")
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String(), "second undo drops the 20-char run")
+	})
+
+	t.Run("a motion breaks the typing run", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "ab")
+		require.True(t, runEvent(h, ctrl('b')))
+		feedKeys(t, h, "cd")
+		require.Equal(t, "acdb", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("RET breaks the typing run", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "ab<enter>cd")
+		require.Equal(t, "ab\ncd", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab\n", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab", buf.String())
+	})
+
+	t.Run("backspaces undo as one group", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcdef")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
+		for range 3 {
+			require.True(t, runEvent(h, key(term.KeyBackspace)))
+		}
+		require.Equal(t, "abc", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abcdef", buf.String())
+	})
+
+	t.Run("forward deletes undo as one group", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcdef")
+		for range 3 {
+			require.True(t, runEvent(h, ctrl('d')))
+		}
+		require.Equal(t, "def", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abcdef", buf.String())
+	})
+
+	t.Run("switching delete direction breaks the run", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcdef")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 3}))
+		require.True(t, runEvent(h, key(term.KeyBackspace)))
+		require.True(t, runEvent(h, ctrl('d')))
+		require.Equal(t, "abef", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abdef", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abcdef", buf.String())
+	})
+
+	t.Run("typing then deleting are separate undo groups", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		feedKeys(t, h, "ab")
+		require.True(t, runEvent(h, key(term.KeyBackspace)))
+		require.Equal(t, "a", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "ab", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("C-h joins the backward-delete run", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcdef")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
+		require.True(t, runEvent(h, ctrl('h')))
+		require.True(t, runEvent(h, key(term.KeyBackspace)))
+		require.True(t, runEvent(h, ctrl('h')))
+		require.Equal(t, "abc", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "abcdef", buf.String())
+	})
+}
+
+// TestEmacsMacroKeys pins the macro chords: C-q toggles recording through
+// the injected recorder, C-Q / C-S-Q play back, and all of them are safe
+// no-ops when no recorder or player is wired.
+func TestEmacsMacroKeys(t *testing.T) {
+	t.Run("C-q without a recorder is a no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab")
+		assert.False(t, runEvent(h, ctrl('q')))
+		assert.Equal(t, "ab", buf.String())
+	})
+
+	t.Run("C-Q without a player is a no-op", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "ab")
+		assert.False(t, runEvent(h, ctrl('Q')))
+	})
+
+	t.Run("C-q toggles recording and C-S-Q plays", func(t *testing.T) {
+		recorder := new(testMacroRecorder)
+		player := new(testMacroPlayer)
+		h, _ := newEmacsHandler(t, "ab",
+			WithMacroRecorder(recorder), WithMacroPlayer(player))
+
+		require.True(t, runEvent(h, ctrl('q')))
+		assert.True(t, recorder.recording)
+		assert.Equal(t, []string{registerset.UnnamedRegisterID}, recorder.started)
+
+		require.True(t, runEvent(h, ctrl('q')))
+		assert.False(t, recorder.recording)
+		assert.Equal(t, 1, recorder.stopped)
+
+		require.True(t, runEvent(h, ctrl('Q')))
+		assert.Equal(t, []testMacroPlay{{registerID: registerset.UnnamedRegisterID, count: 1}}, player.plays)
+	})
+}
+
+// TestEmacsPasteEvents pins the bracketed-paste path: buffered characters
+// insert atomically on paste end, a paste replaces an active selection, and
+// stray paste events are safe.
+func TestEmacsPasteEvents(t *testing.T) {
+	paste := func(h text.Handler, s string) {
+		h.Handle(term.Event{Type: term.EventPasteStart})
+		for _, r := range s {
+			h.Handle(term.Event{Type: term.EventKey, Ch: r})
+		}
+		h.Handle(term.Event{Type: term.EventPasteEnd})
+	}
+
+	t.Run("paste inserts the buffered text at point", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "xy")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		paste(h, "abc")
+		assert.Equal(t, "xabcy", buf.String())
+		assert.Equal(t, term.Coordinates{X: 4}, h.CursorAtScroll())
+	})
+
+	t.Run("paste with newlines inserts them literally", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "xy")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		paste(h, "a\nb")
+		assert.Equal(t, "xa\nby", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("no text is inserted before paste end", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "xy")
+		h.Handle(term.Event{Type: term.EventPasteStart})
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
+		assert.Equal(t, "xy", buf.String(), "characters must buffer until paste end")
+		h.Handle(term.Event{Type: term.EventPasteEnd})
+		assert.Equal(t, "axy", buf.String())
+	})
+
+	t.Run("paste replaces an active selection", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "abcde")
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		paste(h, "Z")
+		assert.Equal(t, "Zcde", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("stray paste end is safe", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab")
+		require.NotPanics(t, func() { h.Handle(term.Event{Type: term.EventPasteEnd}) })
+		assert.Equal(t, "ab", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("paste into an empty buffer", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		paste(h, "hi")
+		assert.Equal(t, "hi", buf.String())
+		assert.Equal(t, term.Coordinates{X: 2}, h.CursorAtScroll())
+	})
+}
+
+// TestEmacsBracketCommands pins C-m (jump to matching bracket) and the
+// C-M / C-S-M block selection: the selection wraps the enclosing bracket
+// pair, survives the keystroke and leaves point on the closing delimiter.
+func TestEmacsBracketCommands(t *testing.T) {
+	jump := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		at      term.Coordinates
+	}{
+		{"C-m from opener jumps to closer", "(ab)", term.Coordinates{}, true, term.Coordinates{X: 3}},
+		{"C-m from closer jumps to opener", "(ab)", term.Coordinates{X: 3}, true, term.Coordinates{}},
+		{"C-m matches the outermost pair", "((x))", term.Coordinates{}, true, term.Coordinates{X: 4}},
+		{"C-m off brackets is a no-op", "abc", term.Coordinates{}, false, term.Coordinates{}},
+		{"C-m on empty buffer is a no-op", "", term.Coordinates{}, false, term.Coordinates{}},
+		{"C-m across lines", "(a\nb)", term.Coordinates{}, true, term.Coordinates{Y: 1, X: 1}},
+	}
+
+	for _, tc := range jump {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(ctrl('m')) })
+			assert.Equal(t, tc.handled, handled)
+			assert.Equal(t, tc.content, buf.String(), "C-m must not edit")
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	blocks := []struct {
+		name    string
+		content string
+		start   term.Coordinates
+		handled bool
+		sel     string
+		at      term.Coordinates
+	}{
+		{"C-M selects the enclosing parens", "(ab)", term.Coordinates{X: 2}, true, "(ab)", term.Coordinates{X: 3}},
+		{"C-M selects braces around point", "x{y}z", term.Coordinates{X: 2}, true, "{y}", term.Coordinates{X: 3}},
+		{"C-M selects brackets around point", "a[b]c", term.Coordinates{X: 2}, true, "[b]", term.Coordinates{X: 3}},
+		{"C-M prefers the brace pair over inner brackets", "{[ab]}", term.Coordinates{X: 2}, true, "{[ab]}", term.Coordinates{X: 5}},
+		{"C-M outside any block is a no-op", "abc", term.Coordinates{X: 1}, false, "", term.Coordinates{X: 1}},
+	}
+
+	for _, tc := range blocks {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newEmacsHandler(t, tc.content)
+			if tc.start != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.start))
+			}
+			var handled bool
+			require.NotPanics(t, func() { _, handled = h.Handle(ctrl('M')) })
+			assert.Equal(t, tc.handled, handled)
+			sel, ok := h.Selection()
+			assert.Equal(t, tc.sel != "", ok)
+			assert.Equal(t, tc.sel, sel)
+			assert.Equal(t, tc.at, h.CursorAtScroll())
+		})
+	}
+
+	t.Run("C-S-M matches the C-M block selection", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "(ab)")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		require.True(t, runEvent(h, term.Event{Type: term.EventKey, Mod: term.ModCtrlShift, Ch: 'M'}))
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "(ab)", sel)
+	})
+}
+
+// TestEmacsTabSelection pins Tab / Shift-Tab over a multi-line selection:
+// every selected line shifts by one indent unit and the selection is
+// consumed.
+func TestEmacsTabSelection(t *testing.T) {
+	t.Run("Tab indents every selected line", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab\ncd")
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModShift)))
+		require.True(t, runEvent(h, key(term.KeyTab)))
+		assert.Equal(t, "\tab\n\tcd", buf.String())
+		_, ok := h.Selection()
+		assert.False(t, ok, "selection is consumed by the shift")
+	})
+
+	t.Run("Shift-Tab dedents every selected line", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "\tab\n\tcd")
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModShift)))
+		require.True(t, runEvent(h, key2(term.KeyTab, term.ModShift)))
+		assert.Equal(t, "ab\ncd", buf.String())
+	})
+
+	t.Run("Shift-Tab on unindented selection is a no-op", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "ab\ncd")
+		require.True(t, runEvent(h, key2(term.KeyArrowDown, term.ModShift)))
+		require.NotPanics(t, func() { h.Handle(key2(term.KeyTab, term.ModShift)) })
+		assert.Equal(t, "ab\ncd", buf.String())
 	})
 }

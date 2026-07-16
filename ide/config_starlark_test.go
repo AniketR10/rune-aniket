@@ -847,23 +847,23 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	mappings := c.commandKeyMappings()
 
 	wantBound := map[string]string{
-		"<c-x><c-s>":     "write",
-		"<c-x>s":         "writeall",
-		"<c-x><c-c>":     "quit",
-		"<c-x><c-f>":     "searchfile",
-		"<c-x>[":         "cursorhistory prev",
-		"<c-x>]":         "cursorhistory next",
-		"<c-x><c-x>":     "exchangepointandmark",
-		"<c-x>g":         "searchtext",
-		"<c-x>n":         "jumptolocation next search",
-		"<c-x>p":         "jumptolocation prev search",
-		"<c-x>d":         "lsp definition",
-		"<c-x>r":         "lsp references",
-		"<c-x>i":         "lsp implementation",
-		"<c-x>t":         "lsp hover",
-		"<c-x>b":         "lsp format",
-		"<c-x>/":         "lsp complete",
-		"<f2>":           "jumptolocation next bookmark",
+		"<c-x><c-s>": "write",
+		"<c-x>s":     "writeall",
+		"<c-x><c-c>": "quit",
+		"<c-x><c-f>": "searchfile",
+		"<c-x>[":     "cursorhistory prev",
+		"<c-x>]":     "cursorhistory next",
+		"<c-x><c-x>": "exchangepointandmark",
+		"<c-x>g":     "searchtext",
+		"<c-x>n":     "jumptolocation next search",
+		"<c-x>p":     "jumptolocation prev search",
+		"<c-x>d":     "lsp definition",
+		"<c-x>r":     "lsp references",
+		"<c-x>i":     "lsp implementation",
+		"<c-x>t":     "lsp hover",
+		"<c-x>b":     "lsp format",
+		"<c-x>/":     "lsp complete",
+		"<f2>":       "jumptolocation next bookmark",
 	}
 	for key, wantCmd := range wantBound {
 		seq := mustParseBindingKey(t, key)
@@ -916,6 +916,10 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<a-s>", "<a-`>", "<a-s-l>", "<a-s-h>",
 		"<a-1>", "<a-2>", "<a-9>", "<a-s-1>", "<a-s-9>",
 		"<alt-enter>", "<c-space>",
+		// Sentence motion, zap, digit arguments, negative argument and the
+		// GNU undo chords also belong to the editor.
+		"<a-a>", "<a-e>", "<a-z>", "<a-0>", "<a-->",
+		"<c-u>", "<c-/>", "<c-_>", "<c-->",
 	}
 	for _, key := range reserved {
 		seq := mustParseBindingKey(t, key)
