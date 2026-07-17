@@ -43,6 +43,23 @@ import (
 // fuzzy WorkspaceSymbol fallback returns many candidates.
 const maxSymbolMatches = 8
 
+// symbolNameFormsDoc documents the dot-qualified name forms accepted
+// by the symbol-taking tools, per language family. Kept in one place
+// so every tool (and the grep-guard message) teaches the model the
+// same lookup grammar.
+const symbolNameFormsDoc = `Qualify the name with its container path, dot-separated. Any trailing
+part of the path works:
+  go:      <package>.<Symbol> (e.g. "mypackage.MyFunc")
+  python:  <module>.<symbol> or <package>.<module>.<symbol>
+           (e.g. "_impl.Widget", "mypkg._impl.Widget"; names
+           re-exported by a package also resolve as <package>.<name>)
+  rust:    <module>.<Symbol> (e.g. "geometry.Shape")
+  methods: <Type>.<method> or <container-path>.<Type>.<method>
+           (e.g. "MyType.Method", "orders.Order.total")
+Pass as much of the path as you know — the full path is never
+required. A bare name with no dots falls back to a fuzzy workspace
+search, which can be slower and ambiguous.`
+
 // LSPTools returns all LSP-backed agent tools. The tracker should be
 // the same instance returned by DefaultTools so that stale reads are
 // shared across all file-aware tools.
@@ -327,9 +344,8 @@ search_content for navigating to definitions.`,
 				"properties": map[string]any{
 					"symbol": map[string]any{
 						"type": "string",
-						"description": `The symbol name to find the definition of. Use the package-qualified
-name for functions and types (e.g. "mypackage.MyFunc") or the
-receiver-qualified name for methods (e.g. "MyType.Method").`,
+						"description": "The symbol name to find the definition of.\n" +
+							symbolNameFormsDoc,
 					},
 				},
 				"required":             []string{"symbol"},
@@ -408,10 +424,9 @@ interfaces.`,
 				"properties": map[string]any{
 					"symbol": map[string]any{
 						"type": "string",
-						"description": `The interface name (to find implementing types) or the
-concrete type name (to find satisfied interfaces). Use the
-package-qualified name (e.g. "io.Reader") when the symbol is not
-unique across the workspace.`,
+						"description": "The interface name (to find implementing types) or the\n" +
+							"concrete type name (to find satisfied interfaces).\n" +
+							symbolNameFormsDoc,
 					},
 				},
 				"required":             []string{"symbol"},
@@ -486,9 +501,8 @@ matches. Prefer over search_content for finding usages of a symbol.`,
 				"properties": map[string]any{
 					"symbol": map[string]any{
 						"type": "string",
-						"description": `The symbol name to find references of. Use the package-qualified
-name for functions and types (e.g. "mypackage.MyFunc") or the
-receiver-qualified name for methods (e.g. "MyType.Method").`,
+						"description": "The symbol name to find references of.\n" +
+							symbolNameFormsDoc,
 					},
 				},
 				"required":             []string{"symbol"},
@@ -768,14 +782,18 @@ func (t *searchSymbolsTool) Definition() llmapi.Tool {
 symbol names with their kind and location (e.g. "handler.go:42:function:HandleRequest"),
 capped at 200 results.
 
-Use to locate a function or type when you know its name but not its file.
-Supports partial name matching.`,
+Use to locate a function or type when you know its name but not its
+file. Matches against the symbol's own name in any language, so query
+a bare name ("Widget", "HandleRequest"), not a dotted path. Supports
+partial name matching. Once the symbol is known, navigate with
+find_definition / find_references using the qualified dotted form.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"query": map[string]any{
-						"type":        "string",
-						"description": "Symbol name or partial name to search for.",
+						"type": "string",
+						"description": "Symbol name or partial name to search for " +
+							"(bare, without package/module qualifiers).",
 					},
 				},
 				"required":             []string{"query"},
@@ -866,9 +884,8 @@ documentation — without reading its source file.`,
 				"properties": map[string]any{
 					"symbol": map[string]any{
 						"type": "string",
-						"description": `The symbol name to describe. Use the package-qualified name for
-functions and types (e.g. "mypackage.MyFunc") or the receiver-qualified
-name for methods (e.g. "MyType.Method").`,
+						"description": "The symbol name to describe.\n" +
+							symbolNameFormsDoc,
 					},
 				},
 				"required":             []string{"symbol"},

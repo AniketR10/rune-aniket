@@ -411,6 +411,15 @@ func builtinToolsErrorMessage(provider string) string {
 		"  • `" + outlineTool + "` (takes a file path) — inspect a file's " +
 		"top-level structure instead of reading the whole file with " +
 		"`read_file`.\n" +
+		"Name symbols with as much dotted qualification as you know — " +
+		"the full import path is never required:\n" +
+		"  1. Container known: go: <package>.<Symbol>; python: " +
+		"<module>.<symbol> or any longer trailing part of the module " +
+		"path; methods: <Type>.<method> or <module>.<Class>.<method>.\n" +
+		"  2. Container unknown: pass the bare symbol name; lookups " +
+		"fall back to a fuzzy workspace-wide search.\n" +
+		"  3. Name unknown: start with `" + symbolSearchTool + "` and a " +
+		"partial name, then navigate with a name from its results.\n" +
 		"Only when you are searching for a non-symbol string (a comment, " +
 		"error message, or literal value) use the `" + searchTool +
 		"` tool."
