@@ -33,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vteparser"
@@ -482,6 +483,84 @@ func (e *testExecutor) NewPty(context.Context) (workspaceapi.Pty, error) {
 
 func (e *testExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return nil
+}
+
+// stalledTerminal simulates a remote workspace whose transport has
+// wedged: NewPty never returns until the RPC context is cancelled.
+type stalledTerminal struct {
+	testExecutor
+}
+
+func (s *stalledTerminal) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
+	<-ctx.Done()
+	return workspaceapi.Pty{}, ctx.Err()
+}
+
+// stalledExecutor simulates a wedged spawn stream: the pty is created
+// fine but StartCommand never returns until cancelled.
+type stalledExecutor struct {
+	testExecutor
+}
+
+func (s *stalledExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+
+// TestComponentSpawnTimeout pins the regression where a stalled
+// remote workspace transport blocked NewPty/StartCommand forever
+// during Component.Init, wedging the caller (the vtereservoir
+// warm-up and, transitively, the host event loop blocked in
+// Facility.Get). With SpawnTimeout set, Init must fail after the
+// bound instead of blocking indefinitely.
+func TestComponentSpawnTimeout(t *testing.T) {
+	t.Parallel()
+
+	suite := []struct {
+		desc     string
+		terminal schemeapi.Terminal
+		executor schemeapi.Executor
+	}{
+		{
+			desc:     "stalled NewPty",
+			terminal: &stalledTerminal{},
+			executor: &testExecutor{},
+		},
+		{
+			desc:     "stalled StartCommand",
+			terminal: &testExecutor{},
+			executor: &stalledExecutor{},
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+			cfg := DefaultConfig()
+			cfg.SpawnTimeout = 25 * time.Millisecond
+
+			errCh := make(chan error, 1)
+			go func() {
+				_, err := NewComponent(tc.terminal, tc.executor,
+					&mockTabManager{}, cfg)
+				errCh <- err
+			}()
+
+			select {
+			case err := <-errCh:
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "spawn timed out after",
+					"the error must point at the spawn watchdog, "+
+						"not read like an ordinary shutdown "+
+						"cancellation")
+			case <-time.After(5 * time.Second):
+				t.Fatal("NewComponent wedged on a stalled spawn RPC; " +
+					"SpawnTimeout must bound it")
+			}
+		})
+	}
 }
 
 // recordingExecutor captures the workspaceapi.Cmd passed to StartCommand

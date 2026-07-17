@@ -100,6 +100,9 @@ type Task struct {
 	// (setError/setSuccess and any restart/pause follow-up) has been
 	// applied. Tests use WaitInflight to observe the settled handler.
 	inflightWG *sync.WaitGroup
+	// spawnDone (on mu) is broadcast when an in-flight plugin spawn
+	// goroutine has installed its result and cleared spawning.
+	spawnDone *sync.Cond
 
 	bar              tui.Component
 	barColor         term.Color
@@ -111,6 +114,7 @@ type Task struct {
 	minHeight        int
 	height           int
 	running          bool
+	spawning         bool
 	paused           bool
 	restartPending   bool
 	loopHalted       bool
@@ -306,6 +310,7 @@ func (t *Task) init(
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
 	t.mu = new(sync.Mutex)
 	t.inflightWG = new(sync.WaitGroup)
+	t.spawnDone = sync.NewCond(t.mu)
 	t.scheduleNextTick = scheduleNextTick
 	t.newPlugin = newPlugin
 	t.pluginOpts = pluginOpts
@@ -397,9 +402,10 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 
 	t.log(log.TraceLevel, "attempt to run task, reason: %s", reason)
 
-	if t.running {
+	if t.running || t.spawning {
 		return false
 	}
+	t.spawning = true
 
 	var title strings.Builder
 	if reason != "" {
@@ -413,9 +419,49 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 	}
 	opts := append([]plugin.Option{}, t.pluginOpts...)
 	opts = append(opts, plugin.WithTitle(title.String()))
-	pluginHandler, err := t.newPlugin(b, b, scheme, scheme, b,
-		t.cmdAndArgs, t.maxWidth, opts...)
+	// The run counts from spawn initiation (as it did when the spawn
+	// was synchronous): a run that gets loop-halted or closed while
+	// the plugin is still being built must still be observable via
+	// Info().Runs.
+	t.runs++
+	t.lastStart = time.Now()
+	// Immediate feedback: paint the bar as running while the spawn is
+	// in flight, matching the previously synchronous behavior.
+	t.barColor = colorRunning
+	t.setBarColor(t.barColor)
+	// The plugin build blocks on transport RPCs (NewPty/StartCommand)
+	// which can stall on a slow or wedged remote workspace, and
+	// tryRunning runs on the host event loop for session restores and
+	// user commands. Build the handler off the caller's goroutine and
+	// install it when it settles.
+	cmdAndArgs := t.cmdAndArgs
+	maxWidth := t.maxWidth
+	go debug.CapturePanicReport(func() {
+		h, err := t.newPlugin(b, b, scheme, scheme, b,
+			cmdAndArgs, maxWidth, opts...)
+		t.installSpawned(h, err)
+	})
+	return true
+}
+
+// installSpawned installs the plugin handler built by the tryRunning
+// spawn goroutine, or the spawn error when the build failed. A task
+// that was closed or loop-halted while the spawn was in flight
+// abandons the handler.
+func (t *Task) installSpawned(h browser.ScrollableFloating, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.spawning = false
+	t.spawnDone.Broadcast()
+	if t.closed.Load() || t.loopHalted {
+		if h != nil {
+			_ = h.Close()
+		}
+		return
+	}
 	if err != nil {
+		_ = t.handler.Close()
 		t.handler = browser.NopScrollableFloatingHandler(
 			handler.NopScrollableFloatingFromComponent(
 				component.NewResponsiveString(
@@ -429,18 +475,14 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 				),
 			))
 		t.doSetError(err)
-		return false
+		return
 	}
-	pluginHandler.Resize(t.width, t.height)
-
-	t.setRunning(pluginHandler)
-	return true
+	h.Resize(t.width, t.height)
+	t.setRunning(h)
 }
 
 func (t *Task) setRunning(h browser.ScrollableFloating) {
 	_ = t.handler.Close()
-	t.runs++
-	t.lastStart = time.Now()
 	t.running = true
 	t.paused = false
 	t.restartPending = false
@@ -528,12 +570,16 @@ func (t *Task) setSuccess() {
 	t.setBarColor(t.barColor)
 }
 
-// WaitInflight blocks until the currently-active plugin.Handler's
-// async vte spawn goroutine and the watcher hand-off have completed.
-// Used by tests to settle task state before asserting rendered
-// output.
+// WaitInflight blocks until the task's in-flight plugin spawn
+// goroutine has installed its result, then until the installed
+// handler's own async vte spawn goroutine and watcher hand-off have
+// completed. Used by tests to settle task state before asserting
+// rendered output.
 func (t *Task) WaitInflight() {
 	t.mu.Lock()
+	for t.spawning {
+		t.spawnDone.Wait()
+	}
 	h := t.handler
 	t.mu.Unlock()
 	if w, ok := h.(interface{ WaitInflight() }); ok {

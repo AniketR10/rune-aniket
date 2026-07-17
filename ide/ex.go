@@ -34,6 +34,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -136,6 +137,7 @@ type ex struct {
 	emulatorConfig           vte.Config
 	newEmulatorHandler       func([]string) (vtereservoir.VTE, error)
 	tm                       browser.TabManager
+	tabAliases               *tabNameAliaser
 	newPluginHandler         func(...string) (pluginHandler, error)
 	workspace                workspace.Workspace
 	tasks                    *idetask.Manager
@@ -198,6 +200,7 @@ type ex struct {
 	extReady            map[string]chan extReadyJob
 	extReadyCtx         context.Context
 	extReadyCancel      context.CancelFunc
+	asyncVTELoads       sync.WaitGroup // test only
 	// defAttr holds the live theme default attributes so the grayscale
 	// command-prompt dim writer resolves a ColorDefault foreground.
 	defAttr term.Attributes
@@ -313,14 +316,15 @@ func (e *ex) init(
 	if tm == nil {
 		tm = e.Browser()
 	}
-	e.tm = tm
+	e.tabAliases = newTabNameAliaser(tm)
+	e.tm = e.tabAliases
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
 	if initialVTECapacity != 0 {
 		e.initialReservoirCapacity = initialVTECapacity
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
 			e.workspace, e.executor, e.tm, e.emulatorConfig, initialVTECapacity)
 	}
-	e.newEmulatorHandler = func(cmdAndArgs []string) (
+	newEmulator := func(cmdAndArgs []string) (
 		vtereservoir.VTE, error,
 	) {
 		if e.reservoir != nil && argsMatchEmulatorShell(cmdAndArgs, e.emulatorConfig.CommandAndArgs) {
@@ -337,6 +341,17 @@ func (e *ex) init(
 			return nil, err
 		}
 		return vteAdapter{v}, nil
+	}
+	e.newEmulatorHandler = func(cmdAndArgs []string) (
+		vtereservoir.VTE, error,
+	) {
+		// Spawns can block on transport RPCs (reservoir warm-up
+		// waits, NewPty/StartCommand); run them off the event loop
+		// behind a placeholder so the UI stays responsive even when
+		// the workspace transport is slow or wedged.
+		return newAsyncVTE(e, func() (vtereservoir.VTE, error) {
+			return newEmulator(cmdAndArgs)
+		}), nil
 	}
 	pluginOpts := []plugin.Option{
 		plugin.WithVTEConfig(e.emulatorConfig),
@@ -948,11 +963,19 @@ func (e *ex) quit(_ context.Context, args ...string) error {
 }
 
 func (e *ex) waitInflight() {
+	e.waitAsyncVTELoads()
 	e.comp.WaitStreamingLoads()
 	e.flusher.wait()
 	if e.tasks != nil {
 		e.tasks.WaitInflight()
 	}
+}
+
+// waitAsyncVTELoads blocks until every in-flight asyncVTE factory
+// goroutine has delivered its result to the scheduler. Test-only
+// synchronization point, mirroring text.Component.WaitStreamingLoads.
+func (e *ex) waitAsyncVTELoads() {
+	e.asyncVTELoads.Wait()
 }
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {

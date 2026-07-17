@@ -302,6 +302,10 @@ func (r remoteWorkspace) OnDisconnect() <-chan struct{} {
 	return r.disconnectCh
 }
 
+func (r remoteWorkspace) WaitConnected(context.Context) error {
+	return nil
+}
+
 func newRefcountManager(t *testing.T) *workspace.Manager {
 	t.Helper()
 	m := workspace.NewManager(config.NopConfig(), inlineSchedule)

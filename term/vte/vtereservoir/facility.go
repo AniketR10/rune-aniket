@@ -25,7 +25,9 @@ package vtereservoir
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
@@ -89,6 +91,14 @@ type Facility struct {
 	cancelCtx context.CancelFunc
 }
 
+// defaultSpawnTimeout bounds the NewPty/StartCommand RPCs issued
+// while building a pooled VTE. Remote spawns run off the host event
+// loop (behind the asyncVTE placeholder), so the bound only keeps
+// background attempts finite: a spawn against a wedged transport
+// fails after the timeout so the placeholder shows an error instead
+// of spinning forever, and WaitForPendingInit teardown stays finite.
+const defaultSpawnTimeout = 30 * time.Second
+
 // New allocates storage for a new Facility and initializes it.
 func New(
 	publisher browser.EventPublisher, n browser.Notifications,
@@ -101,7 +111,23 @@ func New(
 	if config.HeightHint == 0 {
 		config.HeightHint = config.WidthHint / 2
 	}
+	if config.SpawnTimeout == 0 {
+		config.SpawnTimeout = defaultSpawnTimeout
+	}
+	rs, _ := terminal.(workspace.RemoteScheme)
 	newVTE := func(ret *Facility, initialAlloc bool) (VTE, error) {
+		if rs != nil {
+			// SpawnTimeout must measure the spawn RPCs, not
+			// transport establishment: first-connect provisioning
+			// is unbounded (it may install packages on the remote
+			// host), and remote scheme calls block until the first
+			// connection attempt settles. Racing the budget against
+			// that wait would spuriously fail the warm-up right as
+			// the workspace becomes usable.
+			if err := rs.WaitConnected(ret.ctx); err != nil {
+				return nil, fmt.Errorf("wait for remote transport: %w", err)
+			}
+		}
 		ret.log(log.TraceLevel, "called pool.New, width hint: %d, height hint: %d",
 			config.WidthHint, config.HeightHint)
 		i, err := vte.NewHandler(publisher, n, terminal, executor, tm, config)
@@ -231,13 +257,16 @@ func (f *Facility) Get() (VTE, error) {
 	if len(f.pool) != 0 {
 		head := f.pool[0]
 		f.pool = f.pool[1:]
-		// ensure there's always at least one available
+		// ensure there's always at least one available. The refill
+		// is opportunistic: a failure must not cost the caller the
+		// warm VTE it already holds.
 		if len(f.pool) == 0 {
 			newvte, err := f.new(true)
 			if err != nil {
-				return nil, err
+				f.log(log.WarnLevel, "refill vte pool: %v", err)
+			} else {
+				f.pool = append(f.pool, newvte)
 			}
-			f.pool = append(f.pool, newvte)
 		}
 		return head, nil
 	}

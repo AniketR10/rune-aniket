@@ -24,6 +24,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -49,6 +50,15 @@ type schemeWorkspace struct {
 func (w *schemeWorkspace) OnDisconnect() <-chan struct{} {
 	if rs, ok := w.Scheme.(RemoteScheme); ok {
 		return rs.OnDisconnect()
+	}
+	return nil
+}
+
+// WaitConnected forwards [RemoteScheme.WaitConnected] when the
+// embedded scheme is remote. Local schemes are always "connected".
+func (w *schemeWorkspace) WaitConnected(ctx context.Context) error {
+	if rs, ok := w.Scheme.(RemoteScheme); ok {
+		return rs.WaitConnected(ctx)
 	}
 	return nil
 }

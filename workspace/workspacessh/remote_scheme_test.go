@@ -135,6 +135,44 @@ func TestRemoteScheme(t *testing.T) {
 		expectSchemeClose(t, mock, scheme)
 	})
 
+	t.Run("WaitConnected blocks until the first attempt settles", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mock := schemetest.NewMockScheme(ctrl)
+		release := make(chan struct{})
+		scheme := newRemoteScheme(context.Background(), func(
+			_ context.Context, _ workspaceapi.URI, _ func(error),
+		) (schemeapi.Scheme, error) {
+			// Simulate unbounded first-connect provisioning.
+			<-release
+			return mock, nil
+		}, uri)
+		rs := scheme.(*remoteScheme)
+
+		// A caller-scoped context must be able to abandon the wait
+		// while the first attempt is still in flight.
+		ctx, cancel := context.WithTimeout(
+			context.Background(), 10*time.Millisecond)
+		defer cancel()
+		require.ErrorIs(t, rs.WaitConnected(ctx),
+			context.DeadlineExceeded)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- rs.WaitConnected(context.Background())
+		}()
+		close(release)
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("WaitConnected did not return after the first " +
+				"attempt settled")
+		}
+		expectSchemeClose(t, mock, scheme)
+	})
+
 	t.Run("NewFile on un-opened file returns nil", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()

@@ -1,0 +1,493 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ide
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/term/vte/vtereservoir"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/exoeditor"
+	"unstable.build/go-tui/text/texttest"
+	"unstable.build/go-tui/workspace"
+)
+
+// replayVTE records the calls asyncVTE replays after the swap so the
+// tests can assert both delivery and ordering.
+type replayVTE struct {
+	*testVte
+	ops           []string
+	events        []term.Event
+	width, height int
+}
+
+func (r *replayVTE) Resize(width, height int) {
+	r.ops = append(r.ops, "resize")
+	r.width, r.height = width, height
+}
+
+func (r *replayVTE) RestoreFromSnapshot(s vte.Snapshot) error {
+	r.ops = append(r.ops, "restore")
+	return r.testVte.RestoreFromSnapshot(s)
+}
+
+func (r *replayVTE) SetDefaultAttributes(attr term.Attributes) {
+	r.ops = append(r.ops, "attrs")
+	r.testVte.SetDefaultAttributes(attr)
+}
+
+func (r *replayVTE) OnFocusChange(inFocus bool) {
+	r.ops = append(r.ops, "focus")
+	r.testVte.OnFocusChange(inFocus)
+}
+
+func (r *replayVTE) Handle(ev term.Event) (bool, bool) {
+	r.ops = append(r.ops, "key")
+	r.events = append(r.events, ev)
+	return false, true
+}
+
+// testRemoteWorkspace decorates testLoader with the RemoteScheme
+// surface so ex.doInit detects a remote workspace (non-nil
+// disconnect channel).
+type testRemoteWorkspace struct {
+	*testLoader
+	ch chan struct{}
+}
+
+func (w testRemoteWorkspace) OnDisconnect() <-chan struct{} {
+	return w.ch
+}
+
+func (w testRemoteWorkspace) WaitConnected(context.Context) error {
+	return nil
+}
+
+// newAsyncVTETestEx builds an ex without overriding newEmulatorHandler
+// so the production remote-workspace gating installed by init stays
+// in place.
+func newAsyncVTETestEx(t *testing.T, ws workspace.Workspace) testEx {
+	t.Helper()
+	e := new(ex)
+	e.syncCommandPrompt = true
+	opts := defCommandKeyBindings()
+	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	opts = append(opts, text.WithFloatingNoMaxSize(false))
+
+	svc := storagestub.NewInMemoryService()
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		&workspaceManagerMock{workspace: e})
+
+	uri, err := ws.URI(".")
+	require.NoError(t, err)
+
+	emulatorCfg := vte.DefaultConfig()
+	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
+	require.NoError(t, e.init(
+		func(exoeditor.Reloader) (text.Editor, error) {
+			return texttest.NopEditor(), nil
+		}, ws, svc,
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
+		nopPublishEvent, 0, clipboard.NewInMemory(),
+		nil, nil, nil, nil, testPromptEditor(), opts...))
+	return testEx{ex: e, mu: mu, scheduler: scheduler}
+}
+
+func drawToString(t *testing.T, av *asyncVTE, width, height int) string {
+	t.Helper()
+	w := term.NewStringWriter(width, height)
+	av.Draw(w)
+	require.NoError(t, w.Flush())
+	return w.String()
+}
+
+func TestAsyncVTE(t *testing.T) {
+	t.Run("returns immediately and draws the loading animation while the factory blocks", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		tv := newTestVte()
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return tv, nil
+		})
+
+		assert.False(t, av.IsComplete())
+		assert.Equal(t, asyncVTELoadingTitle, av.Title())
+		assert.True(t, strings.HasPrefix(av.URI().String(), "terminal://loading/"),
+			"placeholder URI must be stable and unique, got %q", av.URI())
+
+		av.Resize(10, 3)
+		out := drawToString(t, av, 10, 3)
+		assert.NotEmpty(t, strings.TrimSpace(out),
+			"pre-ready Draw must render an animation frame")
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		require.NotNil(t, av.real)
+		assert.Equal(t, tv.Title(), av.Title())
+		require.NoError(t, av.Close())
+	})
+
+	t.Run("replays queued operations on the real VTE after completion", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		rv := &replayVTE{testVte: newTestVte()}
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return rv, nil
+		})
+
+		av.Resize(42, 17)
+		snap := vte.Snapshot{
+			Schema: 1,
+			Title:  "saved session",
+			Primary: vte.ScreenSnapshot{
+				Cells: term.StringToCells("echo hi"),
+			},
+		}
+		require.NoError(t, av.RestoreFromSnapshot(snap))
+		av.SetDefaultAttributes(term.Attributes{Fg: term.ColorRed})
+		av.OnFocusChange(true)
+		exit, handled := av.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		assert.False(t, exit)
+		assert.True(t, handled, "typed-ahead keys must be claimed")
+		_, handled = av.Handle(term.Event{Type: term.EventKey, Ch: 's'})
+		assert.True(t, handled)
+		_, handled = av.Handle(term.Event{Type: term.EventMouse})
+		assert.False(t, handled, "mouse events are dropped pre-ready")
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		require.NotNil(t, av.real)
+		assert.Equal(t, []string{
+			"resize", "restore", "attrs", "focus", "key", "key",
+		}, rv.ops)
+		assert.Equal(t, 42, rv.width)
+		assert.Equal(t, 17, rv.height)
+		assert.True(t, rv.restoredSnapshot)
+		assert.Equal(t, term.Attributes{Fg: term.ColorRed}, rv.defAttr)
+		assert.Equal(t, []bool{true}, rv.onFocusChange)
+		require.Len(t, rv.events, 2)
+		assert.Equal(t, 'l', rv.events[0].Ch)
+		assert.Equal(t, 's', rv.events[1].Ch)
+		require.NoError(t, av.Close())
+	})
+
+	t.Run("close before ready closes the real VTE on completion", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		tv := newTestVte()
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return tv, nil
+		})
+
+		require.NoError(t, av.Close())
+		require.NoError(t, av.Close(), "Close must be idempotent")
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		assert.True(t, tv.calledClose,
+			"abandoned VTE must be released on completion")
+		assert.Nil(t, av.real, "nothing may be installed after Close")
+	})
+
+	t.Run("factory error renders and notifies", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+		rec := &recordingNotifications{inner: b.ex.notifications}
+		b.ex.notifications = rec
+
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			return nil, errors.New("stalled transport")
+		})
+		av.Resize(40, 3)
+
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		assert.True(t, av.IsComplete(),
+			"failed placeholder must report complete so it can be replaced")
+		notes := rec.snapshot()
+		require.NotEmpty(t, notes)
+		assert.Equal(t, browserapi.LevelError, notes[0].level)
+		assert.Contains(t, notes[0].msg, "stalled transport")
+		out := drawToString(t, av, 40, 3)
+		assert.Contains(t, out, "terminal unavailable")
+		assert.Contains(t, out, "stalled transport")
+		require.NoError(t, av.Close())
+	})
+
+	t.Run("pre-ready Snapshot returns the queued restore snapshot", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return newTestVte(), nil
+		})
+		defer func() {
+			close(release)
+			b.waitAsyncVTELoads()
+			b.flushScheduled()
+			require.NoError(t, av.Close())
+		}()
+
+		got, err := av.Snapshot()
+		require.NoError(t, err)
+		assert.Equal(t, vte.Snapshot{}, got,
+			"no queued snapshot yields a zero snapshot")
+
+		snap := vte.Snapshot{Schema: 1, Title: "saved session"}
+		require.NoError(t, av.RestoreFromSnapshot(snap))
+		got, err = av.Snapshot()
+		require.NoError(t, err)
+		assert.Equal(t, snap, got,
+			"a save during load must keep the session")
+	})
+}
+
+func TestNewEmulatorHandlerAlwaysAsync(t *testing.T) {
+	t.Run("remote workspace wraps terminals in asyncVTE", func(t *testing.T) {
+		ws := testRemoteWorkspace{
+			testLoader: &testLoader{},
+			ch:         make(chan struct{}),
+		}
+		b := newAsyncVTETestEx(t, ws)
+		defer b.Close()
+
+		h, err := b.newEmulatorHandler(nil)
+		require.NoError(t, err,
+			"remote spawn must not fail synchronously")
+		av, ok := h.(*asyncVTE)
+		require.True(t, ok,
+			"remote workspace terminals must go through asyncVTE")
+
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+		require.NoError(t, av.Close())
+	})
+
+	t.Run("local workspace terminals also go through asyncVTE", func(t *testing.T) {
+		b := newAsyncVTETestEx(t, &testLoader{})
+		defer b.Close()
+
+		h, err := b.newEmulatorHandler(nil)
+		require.NoError(t, err)
+		av, ok := h.(*asyncVTE)
+		require.True(t, ok,
+			"every terminal spawn must go through asyncVTE")
+
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+		require.NotNil(t, av.real,
+			"local spawn must complete once the scheduler drains")
+		require.NoError(t, h.Close())
+	})
+}
+
+// recordingTabManager records SetTabName calls keyed by the URI they
+// finally resolved to.
+type recordingTabManager struct {
+	names map[string]string
+}
+
+func (r *recordingTabManager) Tab(
+	_ workspaceapi.URI, _ rune, _ string, h browserapi.Handler,
+) (browserapi.Handler, error) {
+	return h, nil
+}
+
+func (r *recordingTabManager) SetTabName(
+	uri workspaceapi.URI, name string, _ term.Attributes,
+) error {
+	r.names[uri.String()] = name
+	return nil
+}
+
+func TestTabNameAliaser(t *testing.T) {
+	mustURI := func(s string) workspaceapi.URI {
+		uri, err := workspaceapi.ParseURI(s)
+		require.NoError(t, err)
+		return uri
+	}
+	ptyURI := mustURI("file:///dev/ttys042")
+	wrapperURI := mustURI("terminal://loading/9000")
+	sessionURI := mustURI("terminal-session://x/build")
+
+	newAliaser := func() (*tabNameAliaser, *recordingTabManager) {
+		rec := &recordingTabManager{names: map[string]string{}}
+		return newTabNameAliaser(rec), rec
+	}
+
+	t.Run("no alias passes the URI through", func(t *testing.T) {
+		a, rec := newAliaser()
+		require.NoError(t, a.SetTabName(ptyURI, "vim", term.Attributes{}))
+		assert.Equal(t, map[string]string{ptyURI.String(): "vim"}, rec.names)
+	})
+
+	t.Run("aliases follow chains to the tab key", func(t *testing.T) {
+		a, rec := newAliaser()
+		a.addAlias(ptyURI, wrapperURI)
+		a.addAlias(wrapperURI, sessionURI)
+		require.NoError(t, a.SetTabName(ptyURI, "vim", term.Attributes{}))
+		require.NoError(t, a.SetTabName(wrapperURI, "make", term.Attributes{}))
+		assert.Equal(t, map[string]string{
+			sessionURI.String(): "make",
+		}, rec.names, "both chain entry points must resolve to the tab key")
+	})
+
+	t.Run("self aliases are ignored", func(t *testing.T) {
+		a, _ := newAliaser()
+		a.addAlias(ptyURI, ptyURI)
+		assert.Empty(t, a.alias)
+	})
+
+	t.Run("removeAliasesTo drops direct links only", func(t *testing.T) {
+		a, rec := newAliaser()
+		a.addAlias(ptyURI, wrapperURI)
+		a.addAlias(wrapperURI, sessionURI)
+		a.removeAliasesTo(wrapperURI)
+		require.NoError(t, a.SetTabName(ptyURI, "vim", term.Attributes{}))
+		assert.Equal(t, "vim", rec.names[ptyURI.String()],
+			"removed alias must pass through again")
+		require.NoError(t, a.SetTabName(wrapperURI, "make", term.Attributes{}))
+		assert.Equal(t, "make", rec.names[sessionURI.String()],
+			"unrelated aliases must survive")
+	})
+}
+
+func TestAsyncVTETabNameAliasing(t *testing.T) {
+	mustURI := func(s string) workspaceapi.URI {
+		uri, err := workspaceapi.ParseURI(s)
+		require.NoError(t, err)
+		return uri
+	}
+
+	t.Run("real vte title updates reach the wrapper-keyed tab", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		tv := newTestVte()
+		tv.uri = mustURI("file:///dev/ttys042")
+		tv.title = "vim"
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return tv, nil
+		})
+		tab, err := b.comp.Tab(av.URI(), 'x', av.Title(), av)
+		require.NoError(t, err)
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		name, _, ok := b.comp.Browser().TabName(av.URI())
+		require.True(t, ok)
+		assert.Equal(t, "vim", name,
+			"completion must replace the placeholder title")
+
+		require.NoError(t, b.ex.tm.SetTabName(
+			tv.uri, "make test", term.Attributes{}))
+		name, _, ok = b.comp.Browser().TabName(av.URI())
+		require.True(t, ok)
+		assert.Equal(t, "make test", name,
+			"dynamic pty-URI updates must reach the wrapper-keyed tab")
+
+		require.NoError(t, tab.Close())
+		assert.Empty(t, b.ex.tabAliases.alias,
+			"closing the tab must clear its aliases")
+	})
+
+	t.Run("restored session tabs receive title updates from the real vte", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		tv := newTestVte()
+		tv.uri = mustURI("file:///dev/ttys043")
+		tv.title = "vim"
+		b.ex.newEmulatorHandler = func([]string) (vtereservoir.VTE, error) {
+			return newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+				<-release
+				return tv, nil
+			}), nil
+		}
+
+		doc := terminalSessionDocument{
+			Name:     "build",
+			Snapshot: vte.Snapshot{Schema: 1, Title: "saved"},
+		}
+		tab, err := b.ex.restoreTerminalSessionTab(doc, nil)
+		require.NoError(t, err)
+		sessionURI, err := terminalSessionURI(doc.Name)
+		require.NoError(t, err)
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		name, _, ok := b.comp.Browser().TabName(sessionURI)
+		require.True(t, ok)
+		assert.Equal(t, "vim", name,
+			"completion must chain the real title to the session tab")
+
+		require.NoError(t, b.ex.tm.SetTabName(
+			tv.uri, "make build", term.Attributes{}))
+		name, _, ok = b.comp.Browser().TabName(sessionURI)
+		require.True(t, ok)
+		assert.Equal(t, "make build", name,
+			"pty-URI updates must chain through the wrapper to the session tab")
+
+		require.NoError(t, tab.Close())
+		assert.Empty(t, b.ex.tabAliases.alias,
+			"closing the session tab must clear its aliases")
+	})
+}

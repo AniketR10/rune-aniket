@@ -224,6 +224,9 @@ func (e *ex) restoreTerminalSessionTab(
 		_ = h.Close()
 		return nil, fmt.Errorf("wm.Tab: %w", err)
 	}
+	// Route dynamic title updates issued under the handler's own URI
+	// to this session-keyed tab.
+	e.tabAliases.addAlias(h.URI(), uri)
 	tab := t.(*browser.Tab)
 	tab.Subscribe((*tabSubscriber)(e))
 	if win != nil {

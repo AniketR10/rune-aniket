@@ -51,6 +51,8 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func TestManager(t *testing.T) {
@@ -88,6 +90,7 @@ func TestManager(t *testing.T) {
 		}
 		err := m.RunTask(task)
 		require.NoError(t, err, "RunTask should succeed")
+		m.WaitInflight()
 
 		cmds := exec.StartedCmds()
 		require.Len(t, cmds, 1)
@@ -253,6 +256,7 @@ func TestManager(t *testing.T) {
 
 		err := m.RunTask(Task{Name: "X", Cmd: "noop"})
 		require.NoError(t, err)
+		m.WaitInflight()
 		assert.Len(t, wm.Created(), 1)
 
 		tasks := m.ListTasks()
@@ -281,13 +285,14 @@ func TestManager(t *testing.T) {
 		m := newTestManager(wm, exec)
 
 		require.NoError(t, m.RunTask(Task{Name: "svc", Cmd: "run"}))
+		m.WaitInflight()
 		require.NoError(t, m.StopTask("svc"))
 		ws := wm.Created()
 		require.Len(t, ws, 1)
 		assert.True(t, ws[0].closed, "window must be closed on StopTask")
 
 		// handler.Close is what actually kills the process
-		require.Len(t, wm.createdHandlers, 1)
+		require.Len(t, wm.CreatedHandlers(), 1)
 		assert.True(t, ws[0].closed, "handler must be closed on StopTask")
 	})
 
@@ -321,6 +326,7 @@ func TestManager(t *testing.T) {
 		require.NoErrorf(t, err, "start A")
 		err = m.RunTask(Task{Name: "B", Cmd: "run", Args: []string{"B"}})
 		require.NoErrorf(t, err, "start B")
+		m.WaitInflight()
 
 		require.Len(t, exec.StartedCmds(), 2)
 		require.Len(t, wm.Created(), 2)
@@ -601,6 +607,7 @@ func TestManager(t *testing.T) {
 		m := newTestManager(wm, exec)
 
 		require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "run", Args: []string{"serve"}}))
+		m.WaitInflight()
 
 		taskIfc, ok := m.tasks.Load("job")
 		require.True(t, ok)
@@ -961,6 +968,9 @@ func triggerRerun(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename
 		func(info TaskInfo) bool { return info.Runs > before })
 	taskIfc, ok := m.tasks.Load(taskname)
 	require.True(t, ok)
+	// Runs counts from spawn initiation; wait for the async plugin
+	// install to settle before simulating the process exit.
+	taskIfc.(*Task).WaitInflight()
 	taskIfc.(*Task).donech <- nil
 	assertTaskWithin(t, m, 1*time.Second, taskname,
 		func(info TaskInfo) bool { return !info.Running })
@@ -1033,7 +1043,9 @@ func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
 				closed = true
 				return nil
 			})
+		b.mu.Lock()
 		b.createdHandlers = append(b.createdHandlers, handler)
+		b.mu.Unlock()
 		return handler, nil
 	}
 	return m
@@ -1047,6 +1059,10 @@ func assertTaskRunsWithin(
 	taskIfc, ok := m.tasks.Load(name)
 	require.True(t, ok)
 	task := taskIfc.(*Task)
+	// The plugin spawn is asynchronous; wait for the handler install
+	// before simulating the process exit, or the donech completion
+	// would be processed against the placeholder handler.
+	task.WaitInflight()
 	task.donech <- doneErr
 
 	assertTaskWithin(t, m, within, name, fn)
@@ -1089,6 +1105,7 @@ type fakeScheme struct {
 	watchErr  error                      // if set, Watch will return this error
 	startHook func(cmd workspaceapi.Cmd) // optional test hook
 	watchGate chan struct{}              // if set, Watch blocks until it is closed/received
+	ptyGate   chan struct{}              // if set, NewPty blocks until it is closed/received
 	tasks     map[int]chan<- schemeapi.EventInfo
 	next      int
 }
@@ -1226,6 +1243,27 @@ func (f *fakeScheme) Wait(pid workspaceapi.Pid, timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+func (f *fakeScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
+	f.mu.Lock()
+	gate := f.ptyGate
+	f.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return workspaceapi.Pty{}, ctx.Err()
+		}
+	}
+	return workspaceapi.Pty{
+		Master: &workspacetest.File{},
+		Slave:  &workspacetest.File{},
+	}, nil
+}
+
+func (f *fakeScheme) SetPtySize(workspaceapi.Pty, int, int) error {
+	return nil
 }
 
 type fakeWindow struct {
@@ -1387,6 +1425,10 @@ func (m *fakeBrowser) PublishEvent(ev term.Event) error {
 	return nil
 }
 
+func (m *fakeBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error {
+	return nil
+}
+
 func (m *fakeBrowser) RemoveTab(h browserapi.Handler) error {
 	return nil
 }
@@ -1412,6 +1454,14 @@ func (m *fakeBrowser) Created() []*fakeWindow {
 	defer m.mu.Unlock()
 	cp := make([]*fakeWindow, len(m.created))
 	copy(cp, m.created)
+	return cp
+}
+
+func (m *fakeBrowser) CreatedHandlers() []browser.ScrollableFloating {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]browser.ScrollableFloating, len(m.createdHandlers))
+	copy(cp, m.createdHandlers)
 	return cp
 }
 
@@ -1701,6 +1751,45 @@ func TestReplaceTaskDoesNotBlockOnSlowWatch(t *testing.T) {
 	triggerRerun(t, m, exec, "task", "main.go")
 	assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
 		"task must retrigger once the replaced watch arms")
+}
+
+// TestRunTaskDoesNotBlockOnSlowSpawn reproduces the remote-workspace
+// freeze where RunTask — called on the host event loop when restoring
+// a workspace session — blocked on the plugin's synchronous terminal
+// spawn: plugin.New → vte.NewHandler → scheme.NewPty is a transport
+// RPC that stalls for as long as the transport is slow or wedged.
+// Unlike the other Manager tests this uses the real default plugin
+// builder, so the full spawn path is exercised end to end. RunTask
+// must return promptly and install the live handler once the spawn
+// settles in the background.
+func TestRunTaskDoesNotBlockOnSlowSpawn(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	gate := make(chan struct{})
+	exec.ptyGate = gate
+	m := NewManager(wm, wm, exec, func(fn func()) bool {
+		fn()
+		return true
+	}, plugin.WithVTEConfig(vte.DefaultConfig()))
+
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		done <- m.RunTask(Task{Name: "task", Cmd: "build"})
+	})
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("RunTask blocked on a slow terminal spawn")
+	}
+
+	// Releasing the gate lets the spawn settle and the task install
+	// its live plugin handler.
+	close(gate)
+	assertTaskWithin(t, m, 5*time.Second, "task",
+		func(info TaskInfo) bool { return info.Running && info.Runs == 1 })
+	require.NoError(t, m.StopTask("task"))
 }
 
 // TestManagerLoopDetection probes the build -> file-change -> rebuild

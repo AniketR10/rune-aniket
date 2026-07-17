@@ -117,6 +117,16 @@ func (w *trackingWorkspace) OnDisconnect() <-chan struct{} {
 	return nil
 }
 
+// WaitConnected forwards [workspace.RemoteScheme.WaitConnected] when
+// the embedded Workspace is remote. Local workspaces are always
+// "connected".
+func (w *trackingWorkspace) WaitConnected(ctx context.Context) error {
+	if rs, ok := w.Workspace.(workspace.RemoteScheme); ok {
+		return rs.WaitConnected(ctx)
+	}
+	return nil
+}
+
 func (w *trackingWorkspace) Command(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {

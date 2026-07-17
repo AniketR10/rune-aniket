@@ -25,6 +25,7 @@ package vte
 
 import (
 	"context"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -102,6 +103,14 @@ type Config struct {
 	// the pty slave so it surfaces in the floating window like any
 	// other failure, and the Watcher fires with that error.
 	CommandExpander CommandExpander
+
+	// SpawnTimeout bounds the synchronous spawn RPCs issued during
+	// initialization (Terminal.NewPty and Executor.StartCommand).
+	// On a remote workspace whose transport has stalled, those RPCs
+	// can otherwise block forever and wedge whoever is constructing
+	// the vte (e.g. the host event loop). Zero disables the bound.
+	// It does not limit the lifetime of the spawned command.
+	SpawnTimeout time.Duration
 }
 
 // CommandExpander resolves a vte command line before the foreign

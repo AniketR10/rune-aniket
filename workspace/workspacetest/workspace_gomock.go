@@ -471,6 +471,20 @@ func (mr *MockRemoteSchemeMockRecorder) OnDisconnect() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnDisconnect", reflect.TypeOf((*MockRemoteScheme)(nil).OnDisconnect))
 }
 
+// WaitConnected mocks base method.
+func (m *MockRemoteScheme) WaitConnected(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitConnected", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitConnected indicates an expected call of WaitConnected.
+func (mr *MockRemoteSchemeMockRecorder) WaitConnected(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitConnected", reflect.TypeOf((*MockRemoteScheme)(nil).WaitConnected), ctx)
+}
+
 // MockLoader is a mock of Loader interface.
 type MockLoader struct {
 	ctrl     *gomock.Controller

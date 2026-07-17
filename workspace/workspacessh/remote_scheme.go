@@ -591,6 +591,23 @@ func (s *remoteScheme) OnDisconnect() <-chan struct{} {
 	return s.disconnectCh
 }
 
+// WaitConnected satisfies [workspace.RemoteScheme]: it blocks until
+// the first connection attempt has settled (mirroring the gate in
+// state), the scheme is closed, or ctx is done.
+func (s *remoteScheme) WaitConnected(ctx context.Context) error {
+	select {
+	case <-s.firstAttempt:
+		return nil
+	case <-s.ctx.Done():
+		if s.closed.Load() {
+			return ErrRemoteClosed
+		}
+		return s.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // broadcastDisconnect closes the disconnect channel exactly once,
 // waking every observer currently blocked on OnDisconnect. Safe to
 // call repeatedly (e.g. by closeHook firing on each transport

@@ -270,3 +270,13 @@ func (w managerWorkspace) OnDisconnect() <-chan struct{} {
 	}
 	return nil
 }
+
+// WaitConnected forwards [RemoteScheme.WaitConnected] when the
+// wrapped workspace is remote. Local workspaces are always
+// "connected".
+func (w managerWorkspace) WaitConnected(ctx context.Context) error {
+	if rs, ok := w.Workspace.(RemoteScheme); ok {
+		return rs.WaitConnected(ctx)
+	}
+	return nil
+}

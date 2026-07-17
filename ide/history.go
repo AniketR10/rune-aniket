@@ -347,6 +347,9 @@ func newTerminalSessionTabFromState(
 		_ = h.Close()
 		return nil, fmt.Errorf("wm.Tab: %w", err)
 	}
+	// Route dynamic title updates issued under the handler's own URI
+	// to this session-keyed tab.
+	e.tabAliases.addAlias(h.URI(), uri)
 	tab := t.(*browser.Tab)
 	tab.Subscribe((*tabSubscriber)(e))
 	return tab, nil
@@ -409,7 +412,6 @@ func taskWindow(e *ex, name string) browser.Window {
 	})
 	return ret
 }
-
 
 // minimizeWindow snaps win to the configured alignment.
 //

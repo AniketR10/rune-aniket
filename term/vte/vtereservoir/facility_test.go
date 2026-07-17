@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -75,32 +76,27 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 2, int(called.Load()))
 	})
 
-	t.Run("errors are handled and pool capacity reduced accordingly", func(t *testing.T) {
+	t.Run("refill failure does not cost the caller the warm VTE", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int64
-		f := newTestFacility(4, func(f *Facility) (VTE, error) {
-			if called.Add(1)%2 == 0 {
-				return nil, errors.New("errors, lots of them")
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
+			// Warm-up (calls 1-2) succeeds; the opportunistic
+			// refill triggered by draining the pool (call 3) fails.
+			if called.Add(1) > 2 {
+				return nil, errors.New("stalled transport")
 			}
 			return newTestVte(f), nil
 		})
-		f.Resize(10, 10)
 
 		_, err := f.Get()
 		require.NoError(t, err)
 
-		_, err = f.Get()
+		// Drains the pool: the refill fails, but the caller must
+		// still receive the warm VTE it already had.
+		v, err := f.Get()
 		require.NoError(t, err)
-
-		_, err = f.Get()
-		require.Error(t, err)
-
-		_, err = f.Get()
-		require.NoError(t, err)
-
-		assert.Equal(t, 7, int(called.Load()))
-
-		f.Resize(10, 10)
+		require.NotNil(t, v)
+		assert.Equal(t, 3, int(called.Load()))
 	})
 
 	t.Run("facility.Close closes all free vtes", func(t *testing.T) {
@@ -465,6 +461,101 @@ func TestFacility(t *testing.T) {
 		// it after Close.
 		assert.Equal(t, 0, f.Capacity())
 	})
+
+	// Pins the regression where a stalled remote workspace transport
+	// blocked the warm-up's NewPty forever: pendingInit never drained,
+	// so Get (called on the host event loop during session restore)
+	// waited on the cond indefinitely and froze the UI. With the
+	// SpawnTimeout plumbed through New's factory, both the warm-up
+	// and Get's fallback allocation fail after the bound.
+	t.Run("stalled spawn does not wedge Get indefinitely", func(t *testing.T) {
+		t.Parallel()
+		b := nopBrowser{}
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+		scheme, err := workspacetest.NewNopScheme("file:///tmp")(
+			context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		nop := scheme.(*workspacetest.NopScheme)
+		nop.NewPtyFunc = func(ctx context.Context) (workspaceapi.Pty, error) {
+			// Simulate a wedged transport: the RPC never returns
+			// until its context is cancelled.
+			<-ctx.Done()
+			return workspaceapi.Pty{}, ctx.Err()
+		}
+		cfg := vte.DefaultConfig()
+		cfg.SpawnTimeout = 20 * time.Millisecond
+		f := New(b, b, scheme, scheme, b, cfg, 2)
+		t.Cleanup(func() { _ = f.Close() })
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := f.Get()
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.Error(t, err,
+				"Get must surface the spawn failure, not hand out a VTE")
+		case <-time.After(10 * time.Second):
+			t.Fatal("Get wedged behind a stalled spawn; SpawnTimeout " +
+				"must bound the warm-up and the fallback allocation")
+		}
+	})
+
+	// First-connect provisioning is unbounded (it may install
+	// packages on the remote host) and remote scheme calls block
+	// until the first connection attempt settles. The spawn budget
+	// must not race that wait: a spurious warm-up failure would
+	// fail session restore on freshly provisioned workspaces right
+	// as they become usable.
+	t.Run("spawn budget starts only after the remote transport resolves", func(t *testing.T) {
+		t.Parallel()
+		b := nopBrowser{}
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+		scheme, err := workspacetest.NewNopScheme("file:///tmp")(
+			context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		nop := scheme.(*workspacetest.NopScheme)
+		var ptyCalls atomic.Int64
+		nop.NewPtyFunc = func(ctx context.Context) (workspaceapi.Pty, error) {
+			ptyCalls.Add(1)
+			return workspaceapi.Pty{
+				Master: scheme.NewFile(0, ""),
+				Slave:  scheme.NewFile(1, ""),
+			}, nil
+		}
+		nop.StartCommandFunc = func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+			return 0, nil
+		}
+		gated := &connectGatedTerminal{
+			Terminal:     nop,
+			connected:    make(chan struct{}),
+			disconnectCh: make(chan struct{}),
+		}
+		cfg := vte.DefaultConfig()
+		cfg.SpawnTimeout = 20 * time.Millisecond
+		f := New(b, b, gated, scheme, b, cfg, 1)
+		t.Cleanup(func() { _ = f.Close() })
+
+		// Let several spawn-timeout windows elapse while the
+		// transport is still "provisioning".
+		time.Sleep(5 * cfg.SpawnTimeout)
+		assert.EqualValues(t, 0, ptyCalls.Load(),
+			"no spawn RPC may be issued (and no budget consumed) "+
+				"while the transport is unresolved")
+
+		close(gated.connected)
+		f.WaitForInitialFill()
+
+		v, err := f.Get()
+		require.NoError(t, err,
+			"Get must succeed once the transport resolves; the "+
+				"connect wait must not have failed the warm-up")
+		require.NotNil(t, v)
+	})
 }
 
 type nopBrowser struct {
@@ -648,6 +739,33 @@ func (r *fakeRemoteScheme) OnDisconnect() <-chan struct{} {
 		return nil
 	}
 	return r.ch
+}
+
+func (r *fakeRemoteScheme) WaitConnected(context.Context) error {
+	return nil
+}
+
+// connectGatedTerminal simulates a remote scheme whose transport is
+// still being established (e.g. first-connect provisioning):
+// WaitConnected blocks until the test closes connected. The embedded
+// Terminal (a NopScheme) serves the pty RPCs once resolved.
+type connectGatedTerminal struct {
+	schemeapi.Terminal
+	connected    chan struct{}
+	disconnectCh chan struct{}
+}
+
+func (g *connectGatedTerminal) OnDisconnect() <-chan struct{} {
+	return g.disconnectCh
+}
+
+func (g *connectGatedTerminal) WaitConnected(ctx context.Context) error {
+	select {
+	case <-g.connected:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (r *fakeRemoteScheme) broadcastDisconnect() {

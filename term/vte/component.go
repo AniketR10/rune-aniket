@@ -883,9 +883,21 @@ func (t *Component) log(level log.Level, line string, params ...any) {
 }
 
 func (t *Component) createPty(cmdAndArgs []string) error {
-	pty, err := t.terminal.NewPty(t.ctx)
+	spawnCtx := t.ctx
+	if t.cfg.SpawnTimeout > 0 {
+		// Bound only the spawn RPCs. Deriving WithTimeout directly
+		// would cancel the command's stream SpawnTimeout after a
+		// successful start, so arm a watchdog that is disarmed once
+		// the spawn has completed.
+		var cancelSpawn context.CancelFunc
+		spawnCtx, cancelSpawn = context.WithCancel(t.ctx)
+		watchdog := time.AfterFunc(t.cfg.SpawnTimeout, cancelSpawn)
+		defer watchdog.Stop()
+	}
+
+	pty, err := t.terminal.NewPty(spawnCtx)
 	if err != nil {
-		return fmt.Errorf("new pty: %v", err)
+		return fmt.Errorf("new pty: %w", t.spawnError(spawnCtx, err))
 	}
 
 	t.uri, err = workspaceapi.CurrentUserHostURI(pty.Slave.Name())
@@ -903,7 +915,8 @@ func (t *Component) createPty(cmdAndArgs []string) error {
 		return nil
 	}
 	cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
-	if err := t.startCommand(cmdAndArgsStr); err != nil {
+	if err := t.startCommand(spawnCtx, cmdAndArgsStr); err != nil {
+		err = t.spawnError(spawnCtx, err)
 		if closeErr := pty.Master.Close(); closeErr != nil {
 			closeErr = fmt.Errorf("close pty: %w", closeErr)
 			err = multierr.Append(err, closeErr)
@@ -911,6 +924,17 @@ func (t *Component) createPty(cmdAndArgs []string) error {
 		return err
 	}
 	return nil
+}
+
+// spawnError distinguishes a spawn-watchdog timeout from an ordinary
+// RPC failure or component shutdown, so the surfaced error points at
+// the stalled workspace transport rather than a bare "context
+// canceled".
+func (t *Component) spawnError(spawnCtx context.Context, err error) error {
+	if spawnCtx.Err() != nil && t.ctx.Err() == nil {
+		return fmt.Errorf("%w: spawn timed out after %v", err, t.cfg.SpawnTimeout)
+	}
+	return err
 }
 
 // expandAndStart runs the configured CommandExpander and then
@@ -924,7 +948,7 @@ func (t *Component) expandAndStart(cmdAndArgs []string) {
 		t.reportSpawnError(err)
 		return
 	}
-	if err := t.startCommand(resolved); err != nil {
+	if err := t.startCommand(t.ctx, resolved); err != nil {
 		t.reportSpawnError(err)
 	}
 }
@@ -949,7 +973,7 @@ func (t *Component) reportSpawnError(err error) {
 // startCommand performs the shell field-splitting on t.cmdAndArgs
 // and dispatches the resolved command via the executor. It assumes
 // t.pty has already been populated by createPty.
-func (t *Component) startCommand(cmdAndArgsStr string) error {
+func (t *Component) startCommand(ctx context.Context, cmdAndArgsStr string) error {
 	// NOTE: this uses os.Getenv, but it should use the workspace's
 	// Getenv mechanism, which should be implemented at some point.
 	cmdAndArgs, err := shell.Fields(cmdAndArgsStr, os.Getenv)
@@ -984,7 +1008,7 @@ func (t *Component) startCommand(cmdAndArgsStr string) error {
 		t.mu.Unlock()
 		return nil
 	}
-	pid, err := t.executor.StartCommand(t.ctx, cmd)
+	pid, err := t.executor.StartCommand(ctx, cmd)
 	if err == nil {
 		t.pid.Store(int64(pid))
 	}

@@ -68,6 +68,17 @@ type Workspace interface {
 // assert and degrade silently when the assertion fails.
 type RemoteScheme interface {
 	OnDisconnect() <-chan struct{}
+
+	// WaitConnected blocks until the transport state is resolved:
+	// the first connection attempt has settled (successfully or
+	// not), the scheme is closed, or ctx is done. It does NOT
+	// guarantee the transport is healthy — only that scheme calls
+	// issued afterwards will not block on connection establishment
+	// (which is unbounded: first-connect provisioning may install
+	// packages on the remote host). Callers that apply their own
+	// deadline to scheme RPCs should wait here first so the
+	// deadline measures the RPC, not the connect.
+	WaitConnected(ctx context.Context) error
 }
 
 // Loader abstracts the ability to load resource data into a working buffer

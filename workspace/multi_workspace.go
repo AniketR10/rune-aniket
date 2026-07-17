@@ -165,3 +165,13 @@ func (m multi) OnDisconnect() <-chan struct{} {
 	}
 	return nil
 }
+
+// WaitConnected forwards [RemoteScheme.WaitConnected] when the
+// wrapped workspace is remote. Local workspaces are always
+// "connected".
+func (m multi) WaitConnected(ctx context.Context) error {
+	if rs, ok := m.Workspace.(RemoteScheme); ok {
+		return rs.WaitConnected(ctx)
+	}
+	return nil
+}
