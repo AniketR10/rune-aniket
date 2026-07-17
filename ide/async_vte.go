@@ -177,7 +177,7 @@ func newAsyncVTE(e *ex, factory func() (vtereservoir.VTE, error)) *asyncVTE {
 		if !e.sched(func() { av.complete(v, ferr) }) {
 			// The event loop is gone: nothing will ever install the
 			// result, so release the freshly-built VTE.
-			if v != nil {
+			if ferr == nil && v != nil {
 				_ = v.Close()
 			}
 			av.stopAnimation()
@@ -190,7 +190,9 @@ func newAsyncVTE(e *ex, factory func() (vtereservoir.VTE, error)) *asyncVTE {
 // loop.
 func (av *asyncVTE) complete(v vtereservoir.VTE, err error) {
 	if av.closed {
-		if v != nil {
+		// Only a successful build hands over an owned, fully
+		// initialized VTE; closing anything else is unsafe.
+		if err == nil && v != nil {
 			_ = v.Close()
 		}
 		return
@@ -283,7 +285,7 @@ func (av *asyncVTE) Handle(ev term.Event) (exit, handled bool) {
 	if len(av.queuedEvents) < maxQueuedAsyncVTEEvents {
 		av.queuedEvents = append(av.queuedEvents, ev)
 	}
-	return false, true
+	return false, false
 }
 
 func (av *asyncVTE) Cursor() (

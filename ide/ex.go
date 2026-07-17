@@ -138,7 +138,7 @@ type ex struct {
 	newEmulatorHandler       func([]string) (vtereservoir.VTE, error)
 	tm                       browser.TabManager
 	tabAliases               *tabNameAliaser
-	newPluginHandler         func(...string) (pluginHandler, error)
+	newPluginHandler         func(int, ...string) (pluginHandler, error)
 	workspace                workspace.Workspace
 	tasks                    *idetask.Manager
 	dispatchOnPreview        map[string]previewFunc
@@ -200,7 +200,9 @@ type ex struct {
 	extReady            map[string]chan extReadyJob
 	extReadyCtx         context.Context
 	extReadyCancel      context.CancelFunc
-	asyncVTELoads       sync.WaitGroup // test only
+	// asyncVTELoads tracks in-flight asyncVTE and asyncPlugin factory
+	// goroutines. Test-only synchronization point.
+	asyncVTELoads sync.WaitGroup
 	// defAttr holds the live theme default attributes so the grayscale
 	// command-prompt dim writer resolves a ColorDefault foreground.
 	defAttr term.Attributes
@@ -371,9 +373,15 @@ func (e *ex) init(
 		floatPluginOpts = append(slices.Clip(pluginOpts),
 			plugin.WithoutBarCommand())
 	}
-	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
-		return plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
-			e.tm, args, e.width, floatPluginOpts...)
+	e.newPluginHandler = func(width int, args ...string) (pluginHandler, error) {
+		h, err := plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
+			e.tm, args, width, floatPluginOpts...)
+		if err != nil {
+			// An explicit nil keeps the interface nil-comparable for
+			// the caller (a typed nil *plugin.Handler would not be).
+			return nil, err
+		}
+		return h, nil
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.macro = macro
@@ -1636,10 +1644,15 @@ func (e *ex) executePlugin(_ context.Context, args ...string) error {
 		return e.toggleCompanionTerminal()
 	}
 	pluginArgs := cmdenv.BuildPluginArgv(args)
-	h, err := e.newPluginHandler(pluginArgs...)
-	if err != nil {
-		return err
-	}
+	// The plugin build blocks on transport RPCs (NewPty/StartCommand),
+	// so run it behind an async placeholder and open the floating
+	// window immediately. Snapshot the width here: the factory runs
+	// off the event loop and must not read loop-owned state.
+	width := e.width
+	h := newAsyncPlugin(e, strings.Join(pluginArgs, " "), width,
+		func() (pluginHandler, error) {
+			return e.newPluginHandler(width, pluginArgs...)
+		})
 	cfg := browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
 		Title:     h.Title(),

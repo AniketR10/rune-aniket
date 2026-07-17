@@ -189,9 +189,10 @@ func TestAsyncVTE(t *testing.T) {
 		av.OnFocusChange(true)
 		exit, handled := av.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
 		assert.False(t, exit)
-		assert.True(t, handled, "typed-ahead keys must be claimed")
+		assert.False(t, handled,
+			"pre-ready keys stay unhandled so global bindings keep working")
 		_, handled = av.Handle(term.Event{Type: term.EventKey, Ch: 's'})
-		assert.True(t, handled)
+		assert.False(t, handled)
 		_, handled = av.Handle(term.Event{Type: term.EventMouse})
 		assert.False(t, handled, "mouse events are dropped pre-ready")
 
@@ -202,7 +203,7 @@ func TestAsyncVTE(t *testing.T) {
 		require.NotNil(t, av.real)
 		assert.Equal(t, []string{
 			"resize", "restore", "attrs", "focus", "key", "key",
-		}, rv.ops)
+		}, rv.ops, "unclaimed pre-ready keys must still replay")
 		assert.Equal(t, 42, rv.width)
 		assert.Equal(t, 17, rv.height)
 		assert.True(t, rv.restoredSnapshot)

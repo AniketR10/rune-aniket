@@ -455,7 +455,9 @@ func (t *Task) installSpawned(h browser.ScrollableFloating, err error) {
 	t.spawning = false
 	t.spawnDone.Broadcast()
 	if t.closed.Load() || t.loopHalted {
-		if h != nil {
+		// Only a successful build hands over an owned, fully
+		// initialized handler; closing anything else is unsafe.
+		if err == nil && h != nil {
 			_ = h.Close()
 		}
 		return

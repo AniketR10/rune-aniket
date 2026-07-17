@@ -224,6 +224,19 @@ func TestPluginHandler(t *testing.T) {
 	}
 }
 
+// TestNewReturnsNilHandlerOnError pins the contract that a failed
+// build hands back no handler: callers close successful builds they
+// abandon, and closing a partially-initialized handler would
+// dereference its nil vte.
+func TestNewReturnsNilHandlerOnError(t *testing.T) {
+	t.Parallel()
+
+	h, err := New(nopBrowser{}, nopBrowser{}, &pluginTestExecutor{},
+		&pluginTestExecutor{}, nopBrowser{}, nil, 80)
+	require.Error(t, err)
+	assert.Nil(t, h)
+}
+
 func TestPluginDoneHandlerKeepsLiveVTEPrimaryBufferInPerformanceMode(t *testing.T) {
 	t.Parallel()
 

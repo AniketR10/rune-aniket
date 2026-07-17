@@ -1106,6 +1106,7 @@ type fakeScheme struct {
 	startHook func(cmd workspaceapi.Cmd) // optional test hook
 	watchGate chan struct{}              // if set, Watch blocks until it is closed/received
 	ptyGate   chan struct{}              // if set, NewPty blocks until it is closed/received
+	ptyErr    error                      // if set, NewPty returns this error
 	tasks     map[int]chan<- schemeapi.EventInfo
 	next      int
 }
@@ -1255,6 +1256,12 @@ func (f *fakeScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 		case <-ctx.Done():
 			return workspaceapi.Pty{}, ctx.Err()
 		}
+	}
+	f.mu.Lock()
+	ptyErr := f.ptyErr
+	f.mu.Unlock()
+	if ptyErr != nil {
+		return workspaceapi.Pty{}, ptyErr
 	}
 	return workspaceapi.Pty{
 		Master: &workspacetest.File{},
@@ -1790,6 +1797,33 @@ func TestRunTaskDoesNotBlockOnSlowSpawn(t *testing.T) {
 	assertTaskWithin(t, m, 5*time.Second, "task",
 		func(info TaskInfo) bool { return info.Running && info.Runs == 1 })
 	require.NoError(t, m.StopTask("task"))
+}
+
+// TestStopTaskDuringFailingSpawnDoesNotPanic reproduces the crash
+// where a task stopped while its plugin build was still in flight
+// closed the partially-initialized handler that plugin.New used to
+// return alongside its error, dereferencing the handler's nil vte.
+func TestStopTaskDuringFailingSpawnDoesNotPanic(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	gate := make(chan struct{})
+	exec.ptyGate = gate
+	exec.ptyErr = errors.New("transport wedged")
+	m := NewManager(wm, wm, exec, func(fn func()) bool {
+		fn()
+		return true
+	}, plugin.WithVTEConfig(vte.DefaultConfig()))
+
+	require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+	taskIfc, ok := m.tasks.Load("task")
+	require.True(t, ok)
+	task := taskIfc.(*Task)
+
+	// Stop the task while the spawn is still blocked, then let the
+	// spawn settle with an error.
+	require.NoError(t, m.StopTask("task"))
+	close(gate)
+	task.WaitInflight()
 }
 
 // TestManagerLoopDetection probes the build -> file-change -> rebuild

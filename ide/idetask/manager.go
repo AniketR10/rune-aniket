@@ -122,7 +122,14 @@ func (m *Manager) Init(
 	) (browser.ScrollableFloating, error) {
 		// use TabManager passed to this constructor, so we don't need to worry
 		// about synchronizing
-		return plugin.New(publisher, notifications, e, t, tm, cmdAndArgs, maxWidth, opts...)
+		h, err := plugin.New(publisher, notifications, e, t, tm,
+			cmdAndArgs, maxWidth, opts...)
+		if err != nil {
+			// An explicit nil keeps the interface nil-comparable for
+			// the caller (a typed nil *plugin.Handler would not be).
+			return nil, err
+		}
+		return h, nil
 	}
 }
 

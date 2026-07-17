@@ -87,14 +87,20 @@ var _ component.Scrollable = (*Handler)(nil)
 const exitKeyRepeatTimeout = 400 * time.Millisecond
 
 // New allocates storage for a new plugin.Handler and initializes it.
+// On error the returned handler is nil: a partially-initialized
+// handler is not safe to use or Close.
 func New(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	cmdAndArgs []string, maxWidth int, opts ...Option,
 ) (*Handler, error) {
 	ret := new(Handler)
-	return ret, ret.Init(publisher, notifications, e, t, tm,
+	err := ret.Init(publisher, notifications, e, t, tm,
 		cmdAndArgs, maxWidth, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // Init initializes this Handler.

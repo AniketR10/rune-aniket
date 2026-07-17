@@ -2842,7 +2842,7 @@ func newExForTestingWithWorkspace(
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
 	}
-	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+	ex.newPluginHandler = func(_ int, args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
 	ex.pluginWaitTimeout = 1 * time.Second
@@ -2881,7 +2881,7 @@ func newExForTestingCommandsPreview(
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
 	}
-	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+	ex.newPluginHandler = func(_ int, args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
 	return testEx{ex: ex, mu: mu, scheduler: scheduler}
@@ -2931,7 +2931,7 @@ func newExForTestingWithStorage(
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
 	}
-	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+	ex.newPluginHandler = func(_ int, args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
 	ex.pluginWaitTimeout = 1 * time.Second
@@ -4992,7 +4992,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+		ex.newPluginHandler = func(_ int, args ...string) (pluginHandler, error) {
 			// `echo bla` has no shell metacharacters or
 			// operators, so cmdenv.BuildPluginArgv passes it
 			// through as plain argv. Multi-arg invocations
@@ -5006,6 +5006,10 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex.editFiles(bgctx, "a", "b") // have tabs available for later
 
 		ex.executePlugin(bgctx, "echo", "bla")
+		// The plugin build runs on a background goroutine now; settle
+		// it so the queued focus transitions replay onto tvte.
+		ex.waitAsyncVTELoads()
+		ex.flushScheduled()
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
@@ -5116,7 +5120,7 @@ func TestExecutePluginShellInterpretsOperators(t *testing.T) {
 				nopPublishEvent, clipboard.NewInMemory())
 			tvte := newTestVte()
 			var got []string
-			ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+			ex.newPluginHandler = func(_ int, args ...string) (pluginHandler, error) {
 				got = append([]string(nil), args...)
 				return tvte, nil
 			}
@@ -5124,6 +5128,10 @@ func TestExecutePluginShellInterpretsOperators(t *testing.T) {
 			ex.Resize(100, 100)
 
 			require.NoError(t, ex.executePlugin(bgctx, tc.args...))
+			// The plugin build runs on a background goroutine now;
+			// settle it before asserting the argv it received.
+			ex.waitAsyncVTELoads()
+			ex.flushScheduled()
 			assert.Equal(t, tc.wantArgv, got)
 		})
 	}

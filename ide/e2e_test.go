@@ -282,6 +282,7 @@ command:
 		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
+			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
