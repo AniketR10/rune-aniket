@@ -2695,6 +2695,12 @@ func setupTestWorkspace(t *testing.T, testdataDir string) string {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	// macOS temp dirs live behind /var -> /private/var symlinks. ty
+	// canonicalizes workspace paths and silently reports no diagnostics
+	// for documents whose URI does not match the canonical root, so
+	// resolve the symlinks before building any file:// URI from it.
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
 
 	if testdataDir == "" {
 		return tmpDir

@@ -164,7 +164,8 @@ func initializeProjectRoot(
 	}
 	command, alternates = applyPyConfig(cfg, notify, command, alternates)
 
-	params, err := pyInitializeParams(root.URI, command, alternates)
+	diagnosticMode := pyDiagnosticMode(cfg, notify)
+	params, err := pyInitializeParams(root.URI, command, alternates, diagnosticMode)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -244,5 +245,37 @@ func pyWatchEvents(cfg config.Config, notify browserapi.Notifications) []textapi
 		return openOnly
 	default:
 		return onChange
+	}
+}
+
+// pyDiagnosticMode reads the optional `diagnostic_mode` config key that
+// controls ty's diagnostic scope. It is opt-in: when unset, ty keeps
+// its default "openFilesOnly" scope. Only ty's documented values are
+// accepted ("off", "openFilesOnly", "workspace"); an unknown value
+// warns and is ignored. "workspace" makes ty type-check the whole
+// project and answer workspace/diagnostic pulls for unopened files, at
+// the cost of a full-project scan per pull, so it is left to the user
+// to enable per project.
+func pyDiagnosticMode(cfg config.Config, notify browserapi.Notifications) string {
+	if cfg == nil {
+		return ""
+	}
+	mode, err := cfg.GetString("diagnostic_mode")
+	switch {
+	case errors.Is(err, config.ErrNotFound):
+		return ""
+	case err != nil:
+		_, _ = notify.Notify(browserapi.LevelWarn,
+			"extensions.python.config.diagnostic_mode must be a string: %v", err)
+		return ""
+	}
+	switch mode {
+	case "", "off", "openFilesOnly", "workspace":
+		return mode
+	default:
+		_, _ = notify.Notify(browserapi.LevelWarn,
+			"extensions.python.config.diagnostic_mode must be one of "+
+				"\"off\", \"openFilesOnly\", \"workspace\"; got %q", mode)
+		return ""
 	}
 }

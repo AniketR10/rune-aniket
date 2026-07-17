@@ -52,6 +52,12 @@ type server interface {
 	io.Closer
 	call(ctx context.Context, method string, params, result any) error
 	notify(ctx context.Context, method string, params any) error
+	// pullDiagnostics issues a textDocument/diagnostic pull. A
+	// single-server implementation performs one call; a multi-server
+	// implementation fans out to every child and merges the reports so
+	// findings from all backends (e.g. ty type errors and ruff lint)
+	// are returned together rather than only the default child's.
+	pullDiagnostics(ctx context.Context, params semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error)
 	initialize(ctx context.Context) (semanticapi.InitializeResult, error)
 	stop(ctx context.Context) error
 	start(ctx context.Context) error
@@ -307,6 +313,16 @@ func (s *langServer) call(
 		s.log.Debug("rpc call", "method", method, "step", "success")
 	}
 	return err
+}
+
+// pullDiagnostics issues a single textDocument/diagnostic pull against
+// this server.
+func (s *langServer) pullDiagnostics(
+	ctx context.Context, params semanticapi.DocumentDiagnosticParams,
+) (semanticapi.DocumentDiagnosticReport, error) {
+	var report semanticapi.DocumentDiagnosticReport
+	err := s.call(ctx, "textDocument/diagnostic", params, &report)
+	return report, err
 }
 
 func (s *langServer) notify(

@@ -86,6 +86,33 @@ func (m *multiLangServer) call(
 	return m.childFor(method).call(ctx, method, params, result)
 }
 
+// pullDiagnostics fans a textDocument/diagnostic pull out to every
+// child and merges their reports so a single pull returns findings
+// from all backends (e.g. ty type errors and ruff lint), not just the
+// default child's. A child that does not support the pull is skipped;
+// the call fails only if every child fails.
+func (m *multiLangServer) pullDiagnostics(
+	ctx context.Context, params semanticapi.DocumentDiagnosticParams,
+) (semanticapi.DocumentDiagnosticReport, error) {
+	children := m.allChildren()
+	merged := semanticapi.DocumentDiagnosticReport{Kind: "full"}
+	var errs []error
+	var succeeded bool
+	for _, c := range children {
+		report, err := c.pullDiagnostics(ctx, params)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		succeeded = true
+		merged.Items = append(merged.Items, report.Items...)
+	}
+	if !succeeded && len(errs) > 0 {
+		return semanticapi.DocumentDiagnosticReport{}, errors.Join(errs...)
+	}
+	return merged, nil
+}
+
 func (m *multiLangServer) notify(
 	ctx context.Context, method string, params any,
 ) error {

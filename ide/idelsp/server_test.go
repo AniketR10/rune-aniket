@@ -366,6 +366,11 @@ func (f *fakeChildServer) Close() error { f.closeCount++; return nil }
 
 func (f *fakeChildServer) call(context.Context, string, any, any) error { return nil }
 func (f *fakeChildServer) notify(context.Context, string, any) error    { return nil }
+func (f *fakeChildServer) pullDiagnostics(
+	context.Context, semanticapi.DocumentDiagnosticParams,
+) (semanticapi.DocumentDiagnosticReport, error) {
+	return semanticapi.DocumentDiagnosticReport{}, nil
+}
 func (f *fakeChildServer) initialize(context.Context) (semanticapi.InitializeResult, error) {
 	return semanticapi.InitializeResult{}, nil
 }

@@ -46,6 +46,7 @@ func pyCommand(bin, fallback, subcmd string) string {
 
 func pyInitializeParams(
 	rootURI, command string, alternates map[string]string,
+	diagnosticMode string,
 ) (semanticapi.InitializeParams, error) {
 	initOptions := map[string]any{
 		"langID":  "python",
@@ -53,6 +54,15 @@ func pyInitializeParams(
 	}
 	if len(alternates) > 0 {
 		initOptions["alternate_commands"] = alternates
+	}
+	// ty reads diagnosticMode from its (flattened) initialization
+	// options. "workspace" makes ty type-check every project file and
+	// answer workspace/diagnostic pulls for files that were never
+	// opened in the editor, at the cost of a full-project scan per
+	// pull. The Manager strips langID/command/alternate_commands and
+	// forwards the rest verbatim, so this key reaches ty unchanged.
+	if diagnosticMode != "" {
+		initOptions["diagnosticMode"] = diagnosticMode
 	}
 
 	initOptionsData, err := json.Marshal(initOptions)

@@ -124,3 +124,44 @@ func TestPyWatchEvents(t *testing.T) {
 		assert.NotEmpty(t, notify.notifs)
 	})
 }
+
+func TestPyDiagnosticMode(t *testing.T) {
+	t.Run("nil config returns empty", func(t *testing.T) {
+		assert.Equal(t, "", pyDiagnosticMode(nil, newFakeNotifications()))
+	})
+
+	t.Run("absent key returns empty", func(t *testing.T) {
+		assert.Equal(t, "", pyDiagnosticMode(config.NopConfig(), newFakeNotifications()))
+	})
+
+	t.Run("workspace accepted", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"diagnostic_mode": "workspace"})
+		notify := newFakeNotifications()
+		assert.Equal(t, "workspace", pyDiagnosticMode(cfg, notify))
+		assert.Empty(t, notify.notifs)
+	})
+
+	t.Run("openFilesOnly accepted", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"diagnostic_mode": "openFilesOnly"})
+		assert.Equal(t, "openFilesOnly", pyDiagnosticMode(cfg, newFakeNotifications()))
+	})
+
+	t.Run("off accepted", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"diagnostic_mode": "off"})
+		assert.Equal(t, "off", pyDiagnosticMode(cfg, newFakeNotifications()))
+	})
+
+	t.Run("unknown value warns and is ignored", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"diagnostic_mode": "all"})
+		notify := newFakeNotifications()
+		assert.Equal(t, "", pyDiagnosticMode(cfg, notify))
+		assert.NotEmpty(t, notify.notifs)
+	})
+
+	t.Run("non-string warns and is ignored", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"diagnostic_mode": 3})
+		notify := newFakeNotifications()
+		assert.Equal(t, "", pyDiagnosticMode(cfg, notify))
+		assert.NotEmpty(t, notify.notifs)
+	})
+}

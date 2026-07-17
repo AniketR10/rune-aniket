@@ -544,3 +544,164 @@ func TestTransientOpenWrapsDirectCallMethods(t *testing.T) {
 		"notify:textDocument/didClose",
 	}, srv.eventLog())
 }
+
+// TestTransientOpenWrapsDocumentSymbol asserts DocumentSymbol, a
+// document-scoped request, transiently opens a file that is not already
+// open so servers like ty (which reject requests on unopened documents)
+// can answer it.
+func TestTransientOpenWrapsDocumentSymbol(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+
+	m, srv := newTransientTestManager(t, tmpDir)
+
+	_, err := m.DocumentSymbol(context.Background(), semanticapi.DocumentSymbolParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"notify:textDocument/didOpen",
+		"call:textDocument/documentSymbol",
+		"notify:textDocument/didClose",
+	}, srv.eventLog())
+
+	m.mu.Lock()
+	_, cached := m.files[fileURI]
+	m.mu.Unlock()
+	assert.False(t, cached, "transient open must not cache the file in m.files")
+}
+
+// TestDiagnosticSettleTimeoutDoesNotFail asserts that a tracked file for
+// which the server never pushes publishDiagnostics does not make
+// Diagnostic fail with the caller's deadline. WaitFileProcessed would
+// otherwise block until the caller's context expires; the settle wait
+// must instead fall through to the pull request. This reproduces the
+// check_file_errors DeadlineExceeded seen with ty for unopened files.
+func TestDiagnosticSettleTimeoutDoesNotFail(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+	rootURI := "file://" + tmpDir
+
+	cb := NewCallbackHandler(nil, nil, nil, nil, nil, rootURI,
+		CallbackHandlerConfig{ScheduleNextTick: func(func()) bool { return true }})
+	uri := makeURI(t, rootURI)
+	m := New(uri, newTestScheme(), nil, nil, nil, nil,
+		Config{NoInitializeServer: true, Callback: cb})
+	t.Cleanup(func() { _ = m.Close() })
+	srv := &fakeChild{childName: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: rootURI}] = srv
+	m.mu.Unlock()
+
+	// The file must be open in the editor for the settle wait to run at
+	// all; an unopened file skips it (see
+	// TestDiagnosticUnopenedFileSkipsSettleWait).
+	fileURIParsed := makeURI(t, fileURI)
+	m.mu.Lock()
+	m.files[fileURI] = newFile(fileURIParsed, "x = 1\n", "python",
+		serverKey{languageID: "python", rootURI: rootURI})
+	m.mu.Unlock()
+
+	// Track a pending version the server will never acknowledge with a
+	// publishDiagnostics push, so WaitFileProcessed would block.
+	cb.FileDidChange(fileURI, 1, true, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := m.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 10*time.Second,
+		"Diagnostic must not block on the full caller deadline waiting "+
+			"for a publishDiagnostics that never arrives")
+	assert.Contains(t, srv.eventLog(), "call:textDocument/diagnostic",
+		"the pull request must still be issued after the settle wait")
+}
+
+// TestDiagnosticUnopenedFileSkipsSettleWait asserts that a file which
+// is not open in the editor does not pay the settle-wait timeout: the
+// pull runs immediately against a transient didOpen carrying fresh disk
+// content. Without this, ty (which never pushes publishDiagnostics for
+// untracked files) would make check_file_errors after apply_patch stall
+// for the whole diagnosticSettleTimeout on every edit.
+func TestDiagnosticUnopenedFileSkipsSettleWait(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+	rootURI := "file://" + tmpDir
+
+	cb := NewCallbackHandler(nil, nil, nil, nil, nil, rootURI,
+		CallbackHandlerConfig{ScheduleNextTick: func(func()) bool { return true }})
+	uri := makeURI(t, rootURI)
+	m := New(uri, newTestScheme(), nil, nil, nil, nil,
+		Config{NoInitializeServer: true, Callback: cb})
+	t.Cleanup(func() { _ = m.Close() })
+	srv := &fakeChild{childName: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: rootURI}] = srv
+	m.mu.Unlock()
+
+	// Mark a pending version the server will never acknowledge. Because
+	// the file is not open, the settle wait must be skipped entirely
+	// rather than waiting out diagnosticSettleTimeout.
+	cb.FileDidChange(fileURI, 1, true, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := m.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), diagnosticSettleTimeout,
+		"Diagnostic for an unopened file must not pay the settle wait")
+	// Transient open/close must bracket the pull, and the pull must run.
+	assert.Equal(t, []string{
+		"notify:textDocument/didOpen",
+		"call:textDocument/diagnostic",
+		"notify:textDocument/didClose",
+	}, srv.eventLog())
+}
+
+// TestDiagnosticPropagatesCancellation asserts that a genuinely
+// cancelled caller context aborts Diagnostic rather than proceeding to
+// the pull request.
+func TestDiagnosticPropagatesCancellation(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+	rootURI := "file://" + tmpDir
+
+	cb := NewCallbackHandler(nil, nil, nil, nil, nil, rootURI,
+		CallbackHandlerConfig{ScheduleNextTick: func(func()) bool { return true }})
+	uri := makeURI(t, rootURI)
+	m := New(uri, newTestScheme(), nil, nil, nil, nil,
+		Config{NoInitializeServer: true, Callback: cb})
+	t.Cleanup(func() { _ = m.Close() })
+	srv := &fakeChild{childName: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: rootURI}] = srv
+	m.mu.Unlock()
+
+	cb.FileDidChange(fileURI, 1, true, false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := m.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.ErrorIs(t, err, context.Canceled)
+}

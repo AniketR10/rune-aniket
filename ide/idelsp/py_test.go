@@ -540,9 +540,10 @@ func TestE2EPython(t *testing.T) {
 			},
 		},
 		{
-			// ty 0.0.51 advertises prepareRename but returns null for this
-			// function symbol. Keep rename negotiation enabled for direct rename.
-			name: "PrepareRename returns no range for function",
+			// With a canonical (symlink-resolved) workspace root, ty
+			// 0.0.51 answers prepareRename for this function symbol with
+			// the identifier's range (range-only, no placeholder).
+			name: "PrepareRename returns identifier range for function",
 			fn: func(t *testing.T, mgr *Manager) {
 				result, err := mgr.PrepareRename(ctx,
 					semanticapi.PrepareRenameParams{
@@ -555,7 +556,12 @@ func TestE2EPython(t *testing.T) {
 					},
 				)
 				require.NoError(t, err)
-				assert.Nil(t, result)
+				require.NotNil(t, result)
+				assert.Equal(t, semanticapi.Range{
+					Start: semanticapi.Position{Line: 31, Character: 4},
+					End:   semanticapi.Position{Line: 31, Character: 7},
+				}, result.Range)
+				assert.True(t, result.IsRangeOnly)
 			},
 		},
 		{
@@ -767,4 +773,252 @@ func TestE2EPythonDefinitionUnopenedFile(t *testing.T) {
 	mgr.mu.Unlock()
 	assert.False(t, cached,
 		"transient open must not cache the unopened file in m.files")
+}
+
+// TestE2EPythonUnopenedDocumentRequests reproduces the ty regression for
+// every document- and position-scoped request that ty rejects unless the
+// document was previously opened. Each of these is reachable from agent
+// tools or `lsp` subcommands with a name-resolved target file that was
+// never opened in the editor, so the Manager must transiently didOpen the
+// file around the request. Without the fix these error with
+// "Document ... is not open in the session"; with it they succeed.
+func TestE2EPythonUnopenedDocumentRequests(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	mgr, mainURI, _ := setupPythonManagerNoOpen(t, ctx, nil)
+
+	td := semanticapi.TextDocumentIdentifier{URI: mainURI}
+	// Position 39:13 is the `add` call in `result = add(1, 2)`.
+	pos := semanticapi.Position{Line: 39, Character: 13}
+
+	t.Run("Completion", func(t *testing.T) {
+		_, err := mgr.Completion(ctx, semanticapi.CompletionParams{
+			TextDocument: td, Position: pos,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("SignatureHelp", func(t *testing.T) {
+		_, err := mgr.SignatureHelp(ctx, semanticapi.SignatureHelpParams{
+			TextDocument: td, Position: pos,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("FoldingRange", func(t *testing.T) {
+		_, err := mgr.FoldingRange(ctx, semanticapi.FoldingRangeParams{
+			TextDocument: td,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("SelectionRange", func(t *testing.T) {
+		_, err := mgr.SelectionRange(ctx, semanticapi.SelectionRangeParams{
+			TextDocument: td, Positions: []semanticapi.Position{pos},
+		})
+		require.NoError(t, err)
+	})
+	t.Run("SemanticTokensFull", func(t *testing.T) {
+		_, err := mgr.SemanticTokensFull(ctx, semanticapi.SemanticTokensParams{
+			TextDocument: td,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("Diagnostic", func(t *testing.T) {
+		_, err := mgr.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+			TextDocument: td,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("PrepareCallHierarchy", func(t *testing.T) {
+		_, err := mgr.PrepareCallHierarchy(ctx, semanticapi.CallHierarchyPrepareParams{
+			TextDocument: td, Position: pos,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("PrepareRename", func(t *testing.T) {
+		_, err := mgr.PrepareRename(ctx, semanticapi.PrepareRenameParams{
+			TextDocument: td, Position: pos,
+		})
+		require.NoError(t, err)
+	})
+	t.Run("Rename", func(t *testing.T) {
+		_, err := mgr.Rename(ctx, semanticapi.RenameParams{
+			TextDocument: td, Position: pos, NewName: "add2",
+		})
+		require.NoError(t, err)
+	})
+
+	// None of the transient opens may leak into the open-file cache.
+	mgr.mu.Lock()
+	_, cached := mgr.files[mainURI]
+	mgr.mu.Unlock()
+	assert.False(t, cached,
+		"transient opens must not cache the unopened file in m.files")
+}
+
+// TestE2EPythonPullDiagnosticsUnopenedFile exercises the host path
+// behind the agent's check_file_errors tool: a pull
+// textDocument/diagnostic for a file that was never opened in the
+// editor. The report must merge every child server's findings — ty's
+// type errors and ruff's lint findings — not just the default child's,
+// since routing the pull to ty alone silently drops all lint
+// diagnostics.
+func TestE2EPythonPullDiagnosticsUnopenedFile(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	mgr, mainURI, _ := setupPythonManagerNoOpen(t, ctx, nil)
+
+	// bad.py carries one ty type error (invalid-argument-type on the
+	// f("not an int") call) and one ruff lint finding (F401 unused
+	// import). It is written to disk and never opened.
+	dir := filepath.Dir(strings.TrimPrefix(mainURI, "file://"))
+	badPath := filepath.Join(dir, "bad.py")
+	src := "import sys\n\n\ndef f(x: int) -> int:\n    return x\n\n\nf(\"not an int\")\n"
+	require.NoError(t, os.WriteFile(badPath, []byte(src), 0o644))
+	badURI := "file://" + badPath
+
+	report, err := mgr.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: badURI},
+	})
+	require.NoError(t, err)
+
+	bySource := map[string][]semanticapi.Diagnostic{}
+	for _, d := range report.Items {
+		bySource[d.Source] = append(bySource[d.Source], d)
+	}
+	require.Len(t, bySource["ty"], 1,
+		"expected ty's invalid-argument-type in the merged report, got: %+v",
+		report.Items)
+	assert.Equal(t, "invalid-argument-type", bySource["ty"][0].Code)
+	assert.Equal(t, uint32(7), bySource["ty"][0].Range.Start.Line)
+	require.Len(t, bySource["Ruff"], 1,
+		"expected ruff's F401 in the merged report, got: %+v", report.Items)
+	assert.Equal(t, "F401", bySource["Ruff"][0].Code)
+	assert.Equal(t, uint32(0), bySource["Ruff"][0].Range.Start.Line)
+
+	mgr.mu.Lock()
+	_, cached := mgr.files[badURI]
+	mgr.mu.Unlock()
+	assert.False(t, cached,
+		"transient open must not cache the unopened file in m.files")
+}
+
+// configArrayCallback answers workspace/configuration with a JSON null
+// per requested item (a well-formed array reply), which ty requires
+// before it will service workspace/diagnostic. The embedded
+// testCallback provides every other callback method.
+type configArrayCallback struct {
+	*testCallback
+}
+
+func (c *configArrayCallback) Configuration(
+	_ context.Context, p semanticapi.ConfigurationParams,
+) ([]json.RawMessage, error) {
+	out := make([]json.RawMessage, len(p.Items))
+	for i := range out {
+		out[i] = json.RawMessage("null")
+	}
+	return out, nil
+}
+
+// TestE2EPythonWorkspaceDiagnosticMode exercises B1 end-to-end against
+// real ty: with diagnosticMode=workspace in ty's initialization
+// options, a workspace/diagnostic pull must return diagnostics for a
+// file that was never opened in the editor. This also covers two
+// serialization fixes on the request path: WorkspaceDiagnosticParams
+// must always emit previousResultIds (ty rejects a missing/null value),
+// and the jsonrpc2 reply to ty's workspace/configuration request must
+// carry an explicit result member (ty otherwise stalls the pull).
+func TestE2EPythonWorkspaceDiagnosticMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	tyBin := findOnPath(t, "ty", pinnedTyVersion)
+	ruffBin := findOnPath(t, "ruff", pinnedRuffVersion)
+	tmpDir := setupTestWorkspace(t, filepath.Join("testdata", "py"))
+
+	// bad.py carries a ty type error and is never opened.
+	badPath := filepath.Join(tmpDir, "bad.py")
+	src := "import sys\n\n\ndef f(x: int) -> int:\n    return x\n\n\nf(\"not an int\")\n"
+	require.NoError(t, os.WriteFile(badPath, []byte(src), 0o644))
+	badURI := "file://" + badPath
+
+	uri := makeURI(t, "file://"+tmpDir)
+	scheme := newTestScheme()
+	// ty requests workspace/configuration during initialization and
+	// defers workspace/diagnostic until it gets a well-formed reply: an
+	// array with one entry per requested item. The reply must also
+	// carry an explicit result member on the wire (the jsonrpc2 fix);
+	// without it ty rejects the response and stalls the pull below.
+	mgr := New(uri, scheme, scheme,
+		&pyPkgManager{bins: []string{tyBin, ruffBin}},
+		nil, nil,
+		Config{Callback: &configArrayCallback{testCallback: &testCallback{}},
+			MaxRetries: 1, NoInitializeServer: true})
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	params := autoInitParams(uri.String())
+	var caps map[string]any
+	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
+	td := caps["textDocument"].(map[string]any)
+	td["diagnostic"] = map[string]any{
+		"dynamicRegistration":    false,
+		"relatedDocumentSupport": false,
+	}
+	ws := caps["workspace"].(map[string]any)
+	ws["diagnostics"] = map[string]any{"refreshSupport": true}
+	ws["configuration"] = true
+	capsData, err := json.Marshal(caps)
+	require.NoError(t, err)
+	params.Capabilities = capsData
+	initOpts, err := json.Marshal(map[string]any{
+		"langID":         "python",
+		"command":        "ty server",
+		"diagnosticMode": "workspace",
+	})
+	require.NoError(t, err)
+	params.InitializeOptions = initOpts
+	_, err = mgr.Initialize(ctx, params)
+	require.NoError(t, err)
+
+	// A first workspace/diagnostic pull against ty (the default child)
+	// runs a full-project check and returns diagnostics for every file,
+	// including the never-opened bad.py. Route directly to ty: ty
+	// long-polls (suspends) subsequent pulls when unchanged and ruff
+	// does not participate in workspace diagnostics, so the
+	// merge-and-fan-out Manager.WorkspaceDiagnostic is out of scope for
+	// this B1 check.
+	srv, err := mgr.serverForURI(badURI)
+	require.NoError(t, err)
+
+	pullCtx, pullCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer pullCancel()
+	var report semanticapi.WorkspaceDiagnosticReport
+	// Leave PreviousResultIDs nil to also exercise the SDK marshaling
+	// fix: a nil slice must serialize as [] (not null/omitted), which
+	// ty requires.
+	require.NoError(t, srv.call(pullCtx, "workspace/diagnostic",
+		semanticapi.WorkspaceDiagnosticParams{}, &report))
+
+	var found bool
+	for _, item := range report.Items {
+		if item.URI != badURI {
+			continue
+		}
+		for _, d := range item.Items {
+			if d.Code == "invalid-argument-type" {
+				found = true
+			}
+		}
+	}
+	assert.True(t, found,
+		"ty with diagnosticMode=workspace must report the unopened "+
+			"bad.py type error in a workspace/diagnostic pull; got: %+v",
+		report.Items)
 }

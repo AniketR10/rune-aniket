@@ -25,6 +25,7 @@ package idelsp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -48,6 +49,11 @@ type fakeChild struct {
 	stopped bool
 	closed  bool
 	alive   bool
+
+	// diagReport and diagErr are returned by pullDiagnostics so the
+	// multi-server merge can be exercised without a real server.
+	diagReport semanticapi.DocumentDiagnosticReport
+	diagErr    error
 }
 
 func (f *fakeChild) call(_ context.Context, method string, _, _ any) error {
@@ -56,6 +62,16 @@ func (f *fakeChild) call(_ context.Context, method string, _, _ any) error {
 	f.calls = append(f.calls, method)
 	f.events = append(f.events, "call:"+method)
 	return nil
+}
+
+func (f *fakeChild) pullDiagnostics(
+	_ context.Context, _ semanticapi.DocumentDiagnosticParams,
+) (semanticapi.DocumentDiagnosticReport, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "textDocument/diagnostic")
+	f.events = append(f.events, "call:textDocument/diagnostic")
+	return f.diagReport, f.diagErr
 }
 
 func (f *fakeChild) notify(_ context.Context, method string, params any) error {
@@ -253,4 +269,72 @@ func TestMultiServerReplaceChild(t *testing.T) {
 	require.NoError(t, mls.call(t.Context(), "textDocument/formatting", nil, nil))
 	assert.Equal(t, []string{"textDocument/formatting"}, replacement.callMethods())
 	assert.Empty(t, alt.callMethods())
+}
+
+// TestMultiServerPullDiagnosticsMerges asserts that pullDiagnostics
+// fans out to every child and concatenates their reports, so a single
+// pull returns findings from all backends (ty type errors and ruff
+// lint) rather than only the default child's.
+func TestMultiServerPullDiagnosticsMerges(t *testing.T) {
+	t.Parallel()
+
+	def := &fakeChild{childName: "ty", diagReport: semanticapi.DocumentDiagnosticReport{
+		Kind:  "full",
+		Items: []semanticapi.Diagnostic{{Source: "ty", Code: "invalid-argument-type"}},
+	}}
+	alt := &fakeChild{childName: "ruff", diagReport: semanticapi.DocumentDiagnosticReport{
+		Kind:  "full",
+		Items: []semanticapi.Diagnostic{{Source: "Ruff", Code: "F401"}},
+	}}
+	mls := newTestMultiServer(def, alt, map[string]int{
+		"textDocument/formatting": 1,
+	})
+
+	report, err := mls.pullDiagnostics(t.Context(),
+		semanticapi.DocumentDiagnosticParams{})
+	require.NoError(t, err)
+
+	bySource := map[string]string{}
+	for _, d := range report.Items {
+		bySource[d.Source] = d.Code
+	}
+	assert.Equal(t, "invalid-argument-type", bySource["ty"])
+	assert.Equal(t, "F401", bySource["Ruff"])
+	assert.Len(t, report.Items, 2)
+}
+
+// TestMultiServerPullDiagnosticsSkipsFailingChild asserts that a child
+// which errors on the pull (e.g. one that does not support it) is
+// skipped while the other child's findings are still returned.
+func TestMultiServerPullDiagnosticsSkipsFailingChild(t *testing.T) {
+	t.Parallel()
+
+	def := &fakeChild{childName: "ty", diagErr: errors.New("method not found")}
+	alt := &fakeChild{childName: "ruff", diagReport: semanticapi.DocumentDiagnosticReport{
+		Kind:  "full",
+		Items: []semanticapi.Diagnostic{{Source: "Ruff", Code: "F401"}},
+	}}
+	mls := newTestMultiServer(def, alt, nil)
+
+	report, err := mls.pullDiagnostics(t.Context(),
+		semanticapi.DocumentDiagnosticParams{})
+	require.NoError(t, err)
+	require.Len(t, report.Items, 1)
+	assert.Equal(t, "F401", report.Items[0].Code)
+}
+
+// TestMultiServerPullDiagnosticsAllFail asserts that when every child
+// fails the joined error is returned rather than an empty report.
+func TestMultiServerPullDiagnosticsAllFail(t *testing.T) {
+	t.Parallel()
+
+	def := &fakeChild{childName: "ty", diagErr: errors.New("boom-ty")}
+	alt := &fakeChild{childName: "ruff", diagErr: errors.New("boom-ruff")}
+	mls := newTestMultiServer(def, alt, nil)
+
+	_, err := mls.pullDiagnostics(t.Context(),
+		semanticapi.DocumentDiagnosticParams{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "boom-ty")
+	assert.Contains(t, err.Error(), "boom-ruff")
 }

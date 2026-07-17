@@ -134,6 +134,15 @@ func (msg *Response) marshal(to *wireCombined) {
 	to.ID = msg.ID.value
 	to.Error = toWireError(msg.Error)
 	to.Result = msg.Result
+	// JSON-RPC 2.0 requires a successful response to carry a "result"
+	// member, even when the value is null. Because wireCombined.Result
+	// is a []byte with omitempty, a nil or empty Result would drop the
+	// member entirely, producing a response with neither "result" nor
+	// "error". Some servers (e.g. ty) reject such a reply as invalid
+	// and then stall requests that depend on it. Emit explicit null.
+	if to.Error == nil && len(to.Result) == 0 {
+		to.Result = json.RawMessage("null")
+	}
 }
 
 func toWireError(err error) *WireError {

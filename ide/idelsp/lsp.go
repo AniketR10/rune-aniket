@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -56,6 +57,13 @@ const (
 	// as ty + ruff for Python) behind one language id.
 	InitializeOptionsAlternateCommands = "alternate_commands"
 )
+
+// diagnosticSettleTimeout bounds how long a pull-diagnostics request
+// waits for the server to push publishDiagnostics for the latest known
+// version before falling back to the raw pull. It keeps a server that
+// never pushes for a document (e.g. ty for files it does not track)
+// from turning check-file-errors into a caller-deadline failure.
+const diagnosticSettleTimeout = 2 * time.Second
 
 // Initialize initializes an LSP server. The incoming InitializeParams.InitializeOptions
 // json object, must have two extra properties set: `langID` and `command`, which
@@ -310,13 +318,10 @@ func (m *Manager) Completion(
 	params semanticapi.CompletionParams,
 ) (semanticapi.CompletionResult, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return semanticapi.CompletionResult{}, err
-	}
 	var result lspCompletionList
-	err = srv.call(ctx, "textDocument/completion", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/completion", params, &result)
+	}); err != nil {
 		return semanticapi.CompletionResult{}, err
 	}
 	ret := semanticapi.CompletionResult{
@@ -359,13 +364,10 @@ func (m *Manager) SignatureHelp(
 	params semanticapi.SignatureHelpParams,
 ) (*semanticapi.SignatureHelp, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/signatureHelp", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/signatureHelp", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -462,13 +464,10 @@ func (m *Manager) DocumentSymbol(
 	params semanticapi.DocumentSymbolParams,
 ) (semanticapi.DocumentSymbolResult, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return semanticapi.DocumentSymbolResult{}, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/documentSymbol", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/documentSymbol", params, &raw)
+	}); err != nil {
 		return semanticapi.DocumentSymbolResult{}, err
 	}
 	if isNull(raw) {
@@ -596,13 +595,10 @@ func (m *Manager) Rename(
 	params semanticapi.RenameParams,
 ) (*semanticapi.WorkspaceEdit, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/rename", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/rename", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -621,13 +617,10 @@ func (m *Manager) PrepareRename(
 	params semanticapi.PrepareRenameParams,
 ) (*semanticapi.PrepareRenameResult, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/prepareRename", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/prepareRename", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -646,13 +639,10 @@ func (m *Manager) FoldingRange(
 	params semanticapi.FoldingRangeParams,
 ) ([]semanticapi.FoldingRange, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var result []semanticapi.FoldingRange
-	err = srv.call(ctx, "textDocument/foldingRange", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/foldingRange", params, &result)
+	}); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -664,13 +654,10 @@ func (m *Manager) SelectionRange(
 	params semanticapi.SelectionRangeParams,
 ) ([]semanticapi.SelectionRange, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var result []semanticapi.SelectionRange
-	err = srv.call(ctx, "textDocument/selectionRange", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/selectionRange", params, &result)
+	}); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -682,13 +669,10 @@ func (m *Manager) SemanticTokensFull(
 	params semanticapi.SemanticTokensParams,
 ) (*semanticapi.SemanticTokens, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/semanticTokens/full", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/semanticTokens/full", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -707,13 +691,10 @@ func (m *Manager) SemanticTokensRange(
 	params semanticapi.SemanticTokensRangeParams,
 ) (*semanticapi.SemanticTokens, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/semanticTokens/range", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/semanticTokens/range", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -732,13 +713,10 @@ func (m *Manager) SemanticTokensFullDelta(
 	params semanticapi.SemanticTokensDeltaParams,
 ) (*semanticapi.SemanticTokensDelta, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/semanticTokens/full/delta", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/semanticTokens/full/delta", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -758,18 +736,45 @@ func (m *Manager) Diagnostic(
 ) (semanticapi.DocumentDiagnosticReport, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
 
-	err := m.callback.WaitFileProcessed(ctx, params.TextDocument.URI)
-	if err != nil {
+	// Honor a caller context that is already cancelled before doing any
+	// work, so cancellation is surfaced regardless of whether the
+	// settle wait below runs.
+	if err := ctx.Err(); err != nil {
 		return semanticapi.DocumentDiagnosticReport{}, err
 	}
 
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
+	// Resolve the owning server first so a language with no server
+	// (e.g. markdown) fails fast with ErrNoServer instead of paying the
+	// settle-wait timeout.
+	if _, err := m.serverForURI(params.TextDocument.URI); err != nil {
 		return semanticapi.DocumentDiagnosticReport{}, err
 	}
+
+	// Only wait for the server to settle diagnostics when the document
+	// is actually open in the editor. For an open file an in-flight
+	// didChange may not yet be reflected, so we wait (bounded) for the
+	// latest version to be processed. For a file that is not open, the
+	// pull runs against a transient didOpen carrying content freshly
+	// read from disk, so the report is already authoritative; waiting
+	// would only stall on a publishDiagnostics that servers like ty
+	// never send for untracked files. Only genuine cancellation of the
+	// caller's context aborts; a settle-wait timeout falls through to
+	// the pull.
+	if _, open := m.getFile(params.TextDocument.URI); open {
+		settleCtx, cancel := context.WithTimeout(ctx, diagnosticSettleTimeout)
+		err := m.callback.WaitFileProcessed(settleCtx, params.TextDocument.URI)
+		cancel()
+		if err != nil && ctx.Err() != nil {
+			return semanticapi.DocumentDiagnosticReport{}, ctx.Err()
+		}
+	}
+
 	var result semanticapi.DocumentDiagnosticReport
-	err = srv.call(ctx, "textDocument/diagnostic", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		var perr error
+		result, perr = srv.pullDiagnostics(ctx, params)
+		return perr
+	}); err != nil {
 		return semanticapi.DocumentDiagnosticReport{}, err
 	}
 	return result, nil
@@ -781,13 +786,10 @@ func (m *Manager) PrepareCallHierarchy(
 	params semanticapi.CallHierarchyPrepareParams,
 ) ([]semanticapi.CallHierarchyItem, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var result []semanticapi.CallHierarchyItem
-	err = srv.call(ctx, "textDocument/prepareCallHierarchy", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/prepareCallHierarchy", params, &result)
+	}); err != nil {
 		return nil, err
 	}
 	return result, nil
