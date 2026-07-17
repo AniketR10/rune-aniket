@@ -50,8 +50,8 @@ import (
 // progress, if non-nil, receives per-phase updates. Returns ErrNoDot when name
 // contains no ".".
 func Resolve(
-	ctx context.Context, parser Searcher, specs iterator.Iterator[Spec],
-	name string, progress syntaxapi.Progress,
+	ctx context.Context, parser Searcher, qc QualifierContext,
+	specs iterator.Iterator[Spec], name string, progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, error) {
 	if !strings.Contains(name, ".") {
 		return nil, syntaxapi.ErrNoDot
@@ -64,7 +64,7 @@ func Resolve(
 		if !ok {
 			break
 		}
-		matches, err := resolveSpec(ctx, parser, &spec, name, progress)
+		matches, err := resolveSpec(ctx, parser, &spec, qc, name, progress)
 		if err != nil {
 			lastErr = err
 			continue
@@ -84,8 +84,8 @@ func Resolve(
 
 // resolveSpec runs the resolution phases for a single language spec.
 func resolveSpec(
-	ctx context.Context, parser Searcher, spec *Spec, name string,
-	progress syntaxapi.Progress,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
+	name string, progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, error) {
 	report := func(msg string, found int, step, total int64) {
 		if progress != nil {
@@ -93,18 +93,24 @@ func resolveSpec(
 		}
 	}
 
-	pkg, typeName, sym, isMethod, ok := splitQualifiedName(name)
+	pkg, typeName, sym, isMethod, ok := splitQualifiedName(spec, name)
 	if !ok {
 		return nil, nil
 	}
 	if isMethod {
-		return resolveMethod(ctx, parser, spec, pkg, typeName, sym, name, report)
+		return resolveMethod(ctx, parser, spec, qc, pkg, typeName, sym, name, report)
 	}
 
-	report("Searching references…", 0, 0, 4)
-	collected, err := runResolvePass(ctx, parser, spec, pkg, sym, name)
-	if err != nil {
-		return nil, err
+	// The reference queries capture single-identifier qualifiers, so a
+	// dotted module path can only match through the definitions phase.
+	var collected passResult
+	if !strings.Contains(pkg, ".") {
+		report("Searching references…", 0, 0, 4)
+		var err error
+		collected, err = runResolvePass(ctx, parser, spec, pkg, sym, name)
+		if err != nil {
+			return nil, err
+		}
 	}
 	matches := collected.matches
 
@@ -119,13 +125,19 @@ func resolveSpec(
 			matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
 		}
 		if err := collectDefinitions(
-			ctx, parser, spec, collected.packages, pkg, sym, add,
+			ctx, parser, spec, qc, collected.packages, pkg, sym, add,
 		); err != nil {
 			return nil, err
 		}
 	}
 
 	if len(matches) == 0 {
+		// Nested-module names carry no marker distinguishing a symbol
+		// from a method, so fall back to the pkg.Type.method reading.
+		if mpkg, typeName, method, ok := splitNestedMethodName(spec, name); ok {
+			return resolveMethod(
+				ctx, parser, spec, qc, mpkg, typeName, method, name, report)
+		}
 		return nil, nil
 	}
 	if len(matches) > 1 && spec.ImportPathQuery != "" {
@@ -139,14 +151,23 @@ func resolveSpec(
 	return matches, nil
 }
 
-// splitQualifiedName splits a dotted name into its segments. A 2-part
-// name (pkg.sym) is a plain symbol; a 3-part name (pkg.Type.method) is a
-// method. Names with more than three segments are not resolvable and
-// report ok=false.
+// splitQualifiedName splits a dotted name into its segments. For most
+// languages a 2-part name (pkg.sym) is a plain symbol, a 3-part name
+// (pkg.Type.method) is a method, and longer names are not resolvable.
+// Nested-module specs instead read every name as modpath.sym — the
+// method interpretation is tried separately when that yields nothing
+// (see splitNestedMethodName).
 func splitQualifiedName(
-	name string,
+	spec *Spec, name string,
 ) (pkg, typeName, sym string, isMethod, ok bool) {
 	parts := strings.Split(name, ".")
+	if spec.NestedModules {
+		if len(parts) < 2 {
+			return "", "", "", false, false
+		}
+		last := len(parts) - 1
+		return strings.Join(parts[:last], "."), "", parts[last], false, true
+	}
 	switch len(parts) {
 	case 2:
 		return parts[0], "", parts[1], false, true
@@ -157,11 +178,29 @@ func splitQualifiedName(
 	}
 }
 
+// splitNestedMethodName reinterprets a nested-module name as
+// modpath.Type.method, where modpath may be empty for a bare
+// Type.method name (matched in any module). It reports ok=false for
+// specs without nested modules or names with fewer than two segments.
+func splitNestedMethodName(
+	spec *Spec, name string,
+) (pkg, typeName, method string, ok bool) {
+	if !spec.NestedModules {
+		return "", "", "", false
+	}
+	parts := strings.Split(name, ".")
+	if len(parts) < 2 {
+		return "", "", "", false
+	}
+	last := len(parts) - 1
+	return strings.Join(parts[:last-1], "."), parts[last-1], parts[last], true
+}
+
 // resolveMethod resolves a pkg.Type.method name through the definitions
 // phase alone: call-site references are out of scope. It yields nothing
 // when the spec cannot resolve methods.
 func resolveMethod(
-	ctx context.Context, parser Searcher, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
 	pkg, typeName, method, name string,
 	report func(msg string, found int, step, total int64),
 ) ([]syntaxapi.Match, error) {
@@ -185,7 +224,7 @@ func resolveMethod(
 		matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
 	}
 	if err := collectMethodDefinitions(
-		ctx, parser, spec, packages, pkg, typeName, method, add,
+		ctx, parser, spec, qc, packages, pkg, typeName, method, add,
 	); err != nil {
 		return nil, err
 	}
@@ -346,12 +385,14 @@ func collectRefPairs(
 // collectDefinitions streams workspace definitions matching sym in the
 // target package and feeds them to add. Files are qualified via their
 // package clause when the spec has one, otherwise via spec.Qualifier.
+// For specs with re-exports it also surfaces import bindings in
+// re-export files whose module path matches pkg.
 func collectDefinitions(
-	ctx context.Context, parser Searcher, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
 	packages map[workspaceapi.URI]string, pkg, sym string,
 	add func(uri string, pos term.Coordinates),
 ) error {
-	files, err := definitionFiles(ctx, parser, spec, packages, pkg)
+	files, err := definitionFiles(ctx, parser, spec, qc, packages, pkg)
 	if err != nil {
 		return err
 	}
@@ -378,7 +419,36 @@ func collectDefinitions(
 		}
 		_ = it.Close()
 	}
-	return nil
+	if !spec.hasReexports() {
+		return nil
+	}
+	return collectReexportDefs(ctx, parser, spec, qc, pkg, sym, add)
+}
+
+// collectReexportDefs streams the re-export bindings across the
+// workspace and feeds those bound as sym in a re-export file whose
+// module path matches pkg to add.
+func collectReexportDefs(
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
+	pkg, sym string, add func(uri string, pos term.Coordinates),
+) error {
+	it, err := parser.Search(spec.ReexportQuery, spec.ReexportCaptures, spec.LangID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = it.Close() }()
+	for {
+		r, ok := it.Next(ctx)
+		if !ok {
+			return it.Err()
+		}
+		uri := r.File.String()
+		if r.Text != sym || !spec.exported(sym) || !spec.isReexportFile(uri) ||
+			!modulePathHasSuffix(spec.qualifier(qc, uri), pkg) {
+			continue
+		}
+		add(uri, r.From)
+	}
 }
 
 // collectMethodDefinitions streams method definitions in the target
@@ -387,14 +457,14 @@ func collectDefinitions(
 // MethodDefQuery per candidate file so receiver/method captures pair
 // within a single file's match stream.
 func collectMethodDefinitions(
-	ctx context.Context, parser Searcher, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
 	packages map[workspaceapi.URI]string, pkg, typeName, method string,
 	add func(uri string, pos term.Coordinates),
 ) error {
 	if !spec.exported(method) {
 		return nil
 	}
-	files, err := definitionFiles(ctx, parser, spec, packages, pkg)
+	files, err := definitionFiles(ctx, parser, spec, qc, packages, pkg)
 	if err != nil {
 		return err
 	}
@@ -436,9 +506,10 @@ func collectFileMethods(
 
 // definitionFiles returns the file URIs whose qualifier equals pkg. When
 // the spec has a package clause it consults the packages map; otherwise
-// it derives the qualifier from each file's URI via spec.Qualifier.
+// it derives the qualifier from each file's URI via spec.Qualifier,
+// matching pkg against any dotted suffix of the module path.
 func definitionFiles(
-	ctx context.Context, parser Searcher, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
 	packages map[workspaceapi.URI]string, pkg string,
 ) ([]workspaceapi.URI, error) {
 	if spec.hasPackages() {
@@ -466,7 +537,8 @@ func definitionFiles(
 			return files, iter.Err()
 		}
 		uri := r.File.String()
-		if seen[r.File] || !spec.matchesFile(uri) || spec.qualifier(uri) != pkg {
+		if seen[r.File] || !spec.matchesFile(uri) ||
+			!modulePathHasSuffix(spec.qualifier(qc, uri), pkg) {
 			continue
 		}
 		seen[r.File] = true
@@ -512,10 +584,12 @@ func reducePackages(
 // according to spec. When the spec has a package clause, packages
 // provides the file→package mapping and files absent from it are
 // skipped; otherwise the qualifier is derived from each file's URI.
+// Nested-module qualifiers stream one name per dotted suffix of the
+// module path, and re-export bindings are streamed as definitions.
 // Names rejected by the spec's export predicate or by keep are skipped.
 // keep may be nil.
 func SearchDefinitions(
-	ctx context.Context, parser Searcher, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
 	packages map[workspaceapi.URI]string,
 	ch chan<- string, keep func(string) bool,
 ) error {
@@ -530,7 +604,10 @@ func SearchDefinitions(
 	for {
 		r, ok := iter.Next(ctx)
 		if !ok {
-			return iter.Err()
+			if err := iter.Err(); err != nil {
+				return err
+			}
+			break
 		}
 		if !spec.matchesFile(r.File.String()) {
 			continue
@@ -539,7 +616,7 @@ func SearchDefinitions(
 		if spec.hasPackages() {
 			pkgName = packages[r.File]
 		} else {
-			pkgName = spec.qualifier(r.File.String())
+			pkgName = spec.qualifier(qc, r.File.String())
 		}
 		if pkgName == "" {
 			continue
@@ -550,10 +627,55 @@ func SearchDefinitions(
 		if keep != nil && !keep(r.Text) {
 			continue
 		}
-		select {
-		case ch <- pkgName + "." + r.Text:
-		case <-ctx.Done():
-			return ctx.Err()
+		for _, q := range moduleSuffixes(pkgName) {
+			select {
+			case ch <- q + "." + r.Text:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	if !spec.hasReexports() {
+		return nil
+	}
+	return searchReexportDefinitions(ctx, parser, spec, qc, ch, keep)
+}
+
+// searchReexportDefinitions streams the qualified names of re-export
+// bindings, one per dotted suffix of the binding file's module path.
+func searchReexportDefinitions(
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
+	ch chan<- string, keep func(string) bool,
+) error {
+	iter, err := parser.Search(
+		spec.ReexportQuery, spec.ReexportCaptures, spec.LangID,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = iter.Close() }()
+	for {
+		r, ok := iter.Next(ctx)
+		if !ok {
+			return iter.Err()
+		}
+		uri := r.File.String()
+		if !spec.isReexportFile(uri) || !spec.exported(r.Text) {
+			continue
+		}
+		if keep != nil && !keep(r.Text) {
+			continue
+		}
+		pkgName := spec.qualifier(qc, uri)
+		if pkgName == "" {
+			continue
+		}
+		for _, q := range moduleSuffixes(pkgName) {
+			select {
+			case ch <- q + "." + r.Text:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 }
@@ -750,7 +872,7 @@ func captures2(captures []string) [2]string {
 // Names may repeat across specs; callers that need uniqueness deduplicate the
 // stream. Returns ErrNoDot is never produced here since no name is parsed.
 func ListReferences(
-	ctx context.Context, parser Searcher,
+	ctx context.Context, parser Searcher, qc QualifierContext,
 	specs iterator.Iterator[Spec], ch chan<- string,
 ) error {
 	defer func() { _ = specs.Close() }()
@@ -759,7 +881,7 @@ func ListReferences(
 		if !ok {
 			break
 		}
-		if err := listSpecReferences(ctx, parser, &spec, ch); err != nil {
+		if err := listSpecReferences(ctx, parser, &spec, qc, ch); err != nil {
 			return err
 		}
 	}
@@ -767,7 +889,8 @@ func ListReferences(
 }
 
 func listSpecReferences(
-	ctx context.Context, parser Searcher, spec *Spec, ch chan<- string,
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
+	ch chan<- string,
 ) error {
 	imports, err := ImportedAliases(ctx, parser, spec)
 	if err != nil {
@@ -792,7 +915,7 @@ func listSpecReferences(
 	if err != nil {
 		return err
 	}
-	return SearchDefinitions(ctx, parser, spec, packages, ch, nil)
+	return SearchDefinitions(ctx, parser, spec, qc, packages, ch, nil)
 }
 
 func listRefPairs(

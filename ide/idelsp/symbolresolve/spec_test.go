@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
@@ -46,4 +47,13 @@ func TestSpecFor(t *testing.T) {
 	assert.Same(t, symbolresolve.Python, symbolresolve.SpecFor("python"))
 	assert.Same(t, symbolresolve.Rust, symbolresolve.SpecFor("rust"))
 	assert.Nil(t, symbolresolve.SpecFor("ruby"))
+}
+
+func TestNewQualifierContextNilFSPanics(t *testing.T) {
+	t.Parallel()
+
+	var root workspaceapi.URI
+	assert.Panics(t, func() {
+		symbolresolve.NewQualifierContext(nil, root)
+	})
 }

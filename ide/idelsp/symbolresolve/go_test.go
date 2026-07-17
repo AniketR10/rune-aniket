@@ -320,7 +320,8 @@ func TestResolveE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Go), tt.symbol, rec,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Go), tt.symbol, rec,
 			)
 
 			if tt.wantErrIs != nil {
@@ -459,8 +460,8 @@ func TestSearchDefinitionsE2E(t *testing.T) {
 	go func() {
 		defer close(ch)
 		done <- symbolresolve.SearchDefinitions(
-			context.Background(), env.parser, symbolresolve.Go, packages, ch,
-			symbolresolve.IsExported,
+			context.Background(), env.parser, symbolresolve.Go, env.qc,
+			packages, ch, symbolresolve.IsExported,
 		)
 	}()
 
@@ -512,7 +513,8 @@ func TestResolveCancelledContext(t *testing.T) {
 
 	// The exact error is implementation-defined; what matters is
 	// that the call returns rather than hanging on a closed channel.
-	_, _ = symbolresolve.Resolve(ctx, env.parser, specIter(symbolresolve.Go), "mylib.MyType", nil)
+	_, _ = symbolresolve.Resolve(
+		ctx, env.parser, env.qc, specIter(symbolresolve.Go), "mylib.MyType", nil)
 }
 
 func TestResolveConcurrent(t *testing.T) {
@@ -535,7 +537,8 @@ func TestResolveConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Go), symbol, nil,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Go), symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)
 			assert.NotEmptyf(t, matches, "Resolve(%q)", symbol)
@@ -547,6 +550,7 @@ func TestResolveConcurrent(t *testing.T) {
 type resolveEnv struct {
 	root   string
 	parser syntax.Parser
+	qc     symbolresolve.QualifierContext
 }
 
 func (e *resolveEnv) fileURI(rel string) string {
@@ -570,7 +574,10 @@ func setupResolveEnv(t *testing.T) *resolveEnv {
 	t.Cleanup(func() { _ = scheme.Close() })
 
 	parser := syntax.NewParser(scheme, treeSitterPkgManager(t), uri)
-	return &resolveEnv{root: root, parser: parser}
+	return &resolveEnv{
+		root: root, parser: parser,
+		qc: symbolresolve.NewQualifierContext(scheme, uri),
+	}
 }
 
 func treeSitterPkgManager(t testing.TB) syntax.PkgManager {

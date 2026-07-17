@@ -36,14 +36,16 @@ import (
 
 // listReferences drains ListReferences for the given specs into a set.
 func listReferences(
-	t *testing.T, parser symbolresolve.Searcher, specs iterator.Iterator[symbolresolve.Spec],
+	t *testing.T, parser symbolresolve.Searcher,
+	qc symbolresolve.QualifierContext,
+	specs iterator.Iterator[symbolresolve.Spec],
 ) map[string]bool {
 	t.Helper()
 	ch := make(chan string, 64)
 	done := make(chan error, 1)
 	go func() {
 		defer close(ch)
-		done <- symbolresolve.ListReferences(context.Background(), parser, specs, ch)
+		done <- symbolresolve.ListReferences(context.Background(), parser, qc, specs, ch)
 	}()
 	got := make(map[string]bool)
 	for s := range ch {
@@ -58,7 +60,7 @@ func TestListReferencesGoE2E(t *testing.T) {
 
 	env := setupResolveEnv(t)
 
-	got := listReferences(t, env.parser, specIter(symbolresolve.Go))
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Go))
 
 	// Qualified references (selectors and qualified types) plus
 	// workspace definitions surfaced by SearchDefinitions.
@@ -88,7 +90,7 @@ func TestListReferencesGoImportFiltering(t *testing.T) {
 	t.Parallel()
 
 	env := setupResolveEnv(t)
-	got := listReferences(t, env.parser, specIter(symbolresolve.Go))
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Go))
 
 	// dotimport.go calls MyFunc("dot") through a dot import, so it has no
 	// package qualifier and must not surface a mylib.* reference. mylib.MyFunc
@@ -118,7 +120,7 @@ func TestListReferencesGoStreamsDuplicates(t *testing.T) {
 	go func() {
 		defer close(ch)
 		done <- symbolresolve.ListReferences(
-			context.Background(), env.parser, specIter(symbolresolve.Go), ch,
+			context.Background(), env.parser, env.qc, specIter(symbolresolve.Go), ch,
 		)
 	}()
 	counts := make(map[string]int)
@@ -140,7 +142,7 @@ func TestListReferencesPythonSpecOnGoWorkspaceEmpty(t *testing.T) {
 
 	// A workspace with no Python files must contribute nothing for the
 	// Python spec.
-	got := listReferences(t, env.parser, specIter(symbolresolve.Python))
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Python))
 	assert.Empty(t, got)
 }
 
@@ -149,7 +151,7 @@ func TestListReferencesPythonE2E(t *testing.T) {
 
 	env := setupPythonEnv(t)
 
-	got := listReferences(t, env.parser, specIter(symbolresolve.Python))
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Python))
 
 	for _, name := range []string{
 		"geometry.area", "geometry.Shape", "requests.get", "service.Service",
@@ -168,6 +170,6 @@ func TestListReferencesGoSpecOnPythonWorkspaceEmpty(t *testing.T) {
 
 	env := setupPythonEnv(t)
 
-	got := listReferences(t, env.parser, specIter(symbolresolve.Go))
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Go))
 	assert.Empty(t, got)
 }

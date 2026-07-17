@@ -202,8 +202,8 @@ func TestResolveRustE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Rust),
-				tt.symbol, rec,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Rust), tt.symbol, rec,
 			)
 
 			if tt.wantErrIs != nil {
@@ -253,8 +253,8 @@ func TestResolveRustConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Rust),
-				symbol, nil,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Rust), symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)
 			assert.NotEmptyf(t, matches, "Resolve(%q)", symbol)
@@ -280,7 +280,10 @@ func setupRustEnv(t *testing.T) *resolveEnv {
 	t.Cleanup(func() { _ = scheme.Close() })
 
 	parser := syntax.NewParser(scheme, rustPkgManager(t), uri)
-	return &resolveEnv{root: root, parser: parser}
+	return &resolveEnv{
+		root: root, parser: parser,
+		qc: symbolresolve.NewQualifierContext(scheme, uri),
+	}
 }
 
 func rustPkgManager(t *testing.T) syntax.PkgManager {

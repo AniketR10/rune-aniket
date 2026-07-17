@@ -60,8 +60,9 @@ var Rust = &Spec{
 
 // rustModuleFromURI derives a Rust module name from a file URI: the base
 // file name without its extension, or the parent directory name for the
-// module entry files mod.rs, lib.rs, and main.rs.
-func rustModuleFromURI(uri string) string {
+// module entry files mod.rs, lib.rs, and main.rs. The qualifier context
+// is unused: Rust resolution keeps single-segment module names.
+func rustModuleFromURI(_ QualifierContext, uri string) string {
 	parsed, err := workspaceapi.ParseURI(uri)
 	if err != nil {
 		return uri

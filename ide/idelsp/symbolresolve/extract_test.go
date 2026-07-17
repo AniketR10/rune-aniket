@@ -68,7 +68,7 @@ func extractFileT(
 	q := env.parser.NewQuerySession()
 	defer func() { require.NoError(t, q.Close()) }()
 	ext, err := symbolresolve.ExtractFile(
-		context.Background(), q, spec, uri)
+		context.Background(), q, spec, env.qc, uri)
 	require.NoError(t, err)
 	occs := make(map[occurrence]int, len(ext.Symbols))
 	for _, s := range ext.Symbols {
@@ -176,6 +176,62 @@ func TestExtractFilePython(t *testing.T) {
 		} {
 			assert.NotZerof(t, occs[want], "missing %+v", want)
 		}
+	})
+}
+
+func TestExtractFilePythonPackage(t *testing.T) {
+	t.Parallel()
+
+	env := setupPythonEnvAt(t, "testdata_py_pkg")
+
+	t.Run("defs are emitted under every module path suffix", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Python, "src/mypkg/_impl.py")
+
+		for _, want := range []occurrence{
+			{"mypkg._impl.Widget", symbolresolve.SymbolDef},
+			{"_impl.Widget", symbolresolve.SymbolDef},
+			{"mypkg._impl.make_widget", symbolresolve.SymbolDef},
+			{"_impl.make_widget", symbolresolve.SymbolDef},
+			{"mypkg._impl.Widget.render", symbolresolve.SymbolMethodDef},
+			{"_impl.Widget.render", symbolresolve.SymbolMethodDef},
+			// The module-less Type.method suffix is also indexed so a
+			// bare "Widget.render" lookup resolves.
+			{"Widget.render", symbolresolve.SymbolMethodDef},
+		} {
+			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+		// The bare package name is not a suffix of mypkg._impl.
+		assert.Zero(t, occs[occurrence{"mypkg.Widget", symbolresolve.SymbolDef}])
+	})
+
+	t.Run("package __init__ re-exports are defs", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Python, "src/mypkg/__init__.py")
+
+		for _, want := range []occurrence{
+			{"mypkg.Widget", symbolresolve.SymbolDef},
+			{"mypkg.make_widget", symbolresolve.SymbolDef},
+		} {
+			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+	})
+
+	t.Run("nested package __init__ re-exports carry suffixes", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Python, "src/mypkg/sub/__init__.py")
+
+		for _, want := range []occurrence{
+			{"mypkg.sub.slug", symbolresolve.SymbolDef},
+			{"sub.slug", symbolresolve.SymbolDef},
+		} {
+			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+	})
+
+	t.Run("imports outside re-export files are not defs", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Python, "main.py")
+
+		assert.Zero(t, occs[occurrence{"main.make_widget", symbolresolve.SymbolDef}],
+			"a plain module's imports must not become definitions")
+		assert.NotZero(t, occs[occurrence{"main.main", symbolresolve.SymbolDef}])
 	})
 }
 

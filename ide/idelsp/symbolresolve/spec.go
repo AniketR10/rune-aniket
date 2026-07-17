@@ -23,7 +23,68 @@
 
 package symbolresolve
 
-import "strings"
+import (
+	"os"
+	"path"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+// QualifierContext carries the workspace information a Spec's Qualifier
+// may consult when deriving a file's qualifier, such as whether package
+// marker files exist in parent directories.
+type QualifierContext struct {
+	// Root is the workspace root URI.
+	Root workspaceapi.URI
+	// Exists reports whether a workspace-relative path exists. It must
+	// be safe for concurrent use and is non-nil in every context built
+	// by NewQualifierContext. Qualifiers only consult it for files
+	// under Root, so a zero context (whose Root contains nothing)
+	// never invokes it.
+	Exists func(rel string) bool
+}
+
+// StatFS is the filesystem slice NewQualifierContext consults.
+// workspaceapi.FileSystem satisfies it.
+type StatFS interface {
+	Stat(path string) (os.FileInfo, error)
+}
+
+// NewQualifierContext returns a QualifierContext over fs rooted at
+// root, memoizing existence checks for the context's lifetime. The
+// memo is goroutine-safe but never invalidated, so build one context
+// per scan or resolution pass rather than caching it long-term.
+// Panics when fs is nil: callers without a filesystem must not build a
+// context.
+func NewQualifierContext(fs StatFS, root workspaceapi.URI) QualifierContext {
+	if fs == nil {
+		panic("symbolresolve: NewQualifierContext requires a filesystem")
+	}
+	var cache sync.Map
+	exists := func(rel string) bool {
+		if v, ok := cache.Load(rel); ok {
+			return v.(bool)
+		}
+		_, err := fs.Stat(rel)
+		exists := err == nil
+		cache.Store(rel, exists)
+		return exists
+	}
+	return QualifierContext{Root: root, Exists: exists}
+}
+
+// relPath returns uri's path relative to the context root, or "" when
+// uri lies outside it.
+func (qc QualifierContext) relPath(uri workspaceapi.URI) string {
+	rel := workspaceapi.RelPath(qc.Root, uri)
+	if rel == "" || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	return rel
+}
 
 // RefQuery is a tree-sitter query that captures a package-qualified
 // reference. Captures[0] must capture the package alias and Captures[1]
@@ -77,10 +138,27 @@ type Spec struct {
 	MethodDefQuery    string
 	MethodDefCaptures []string
 
+	// NestedModules marks languages whose qualifiers are dotted module
+	// paths (e.g. Python's "pkg.sub.mod"). Resolution then accepts
+	// names with any number of leading module segments, matching them
+	// against dotted suffixes of each file's module path.
+	NestedModules bool
+
+	// ReexportQuery, when non-empty, captures names bound by import
+	// statements in the files listed in ReexportFiles; those bindings
+	// are indexed as definitions under the file's qualifier (e.g. a
+	// Python package __init__.py re-exporting a private module's
+	// class). Captures[0] must capture the bound name.
+	ReexportQuery    string
+	ReexportCaptures []string
+	// ReexportFiles lists the base file names whose import bindings
+	// count as re-exports.
+	ReexportFiles []string
+
 	// Qualifier returns the prefix applied to bare definition names
 	// during the definitions phase when the language has no package
 	// clause (e.g. a Python module name derived from the file path).
-	Qualifier func(uri string) string
+	Qualifier func(qc QualifierContext, uri string) string
 
 	// DisplayPathFromURI derives a human-readable display prefix from a
 	// file URI, used when disambiguating matches.
@@ -113,13 +191,25 @@ func (s *Spec) hasMethods() bool {
 	return s.MethodDefQuery != ""
 }
 
+// hasReexports reports whether the spec indexes import bindings in
+// designated files as definitions.
+func (s *Spec) hasReexports() bool {
+	return s.ReexportQuery != "" && len(s.ReexportFiles) > 0
+}
+
+// isReexportFile reports whether uri's base name is one of the spec's
+// re-export files.
+func (s *Spec) isReexportFile(uri string) bool {
+	return slices.Contains(s.ReexportFiles, path.Base(uri))
+}
+
 // qualifier returns the bare-definition prefix for a file URI when the
 // spec has no package clause; it returns "" when Qualifier is nil.
-func (s *Spec) qualifier(uri string) string {
+func (s *Spec) qualifier(qc QualifierContext, uri string) string {
 	if s.Qualifier == nil {
 		return ""
 	}
-	return s.Qualifier(uri)
+	return s.Qualifier(qc, uri)
 }
 
 // displayPath derives the display prefix for a file URI, falling back to
@@ -143,4 +233,28 @@ func (s *Spec) matchesFile(uri string) bool {
 		}
 	}
 	return false
+}
+
+// moduleSuffixes returns every dotted suffix of module, from the full
+// path to the last segment: "a.b.c" → ["a.b.c", "b.c", "c"].
+func moduleSuffixes(module string) []string {
+	suffixes := []string{module}
+	for {
+		i := strings.IndexByte(module, '.')
+		if i < 0 {
+			return suffixes
+		}
+		module = module[i+1:]
+		suffixes = append(suffixes, module)
+	}
+}
+
+// modulePathHasSuffix reports whether query equals full or a
+// segment-boundary dotted suffix of it. An empty query matches any
+// module path: an unqualified name is not scoped to a module.
+func modulePathHasSuffix(full, query string) bool {
+	if query == "" {
+		return true
+	}
+	return full == query || strings.HasSuffix(full, "."+query)
 }

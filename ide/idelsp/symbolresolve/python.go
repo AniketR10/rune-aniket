@@ -25,6 +25,7 @@ package symbolresolve
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -32,8 +33,8 @@ import (
 
 // Python is the symbol-resolution spec for the Python language. Python
 // has no package clause and no enforced visibility, so qualifiers are
-// derived from the module file name and every name is considered
-// visible.
+// derived from the module file path (dotted through parent package
+// directories) and every name is considered visible.
 var Python = &Spec{
 	LangID: "python",
 	RefQueries: []RefQuery{
@@ -44,28 +45,60 @@ var Python = &Spec{
 		},
 	},
 	IsExported:         nil,
+	NestedModules:      true,
 	Qualifier:          pythonModuleFromURI,
 	DisplayPathFromURI: pythonDirFromURI,
 	Extensions:         []string{".py", ".pyi"},
 	MethodDefQuery: `(class_definition name: (identifier) @recv ` +
 		`body: (block (function_definition name: (identifier) @method)))`,
 	MethodDefCaptures: []string{"recv", "method"},
+	// Names bound by "from X import Y" (or "... as Z") in a package
+	// __init__ are re-exports: the package's public definition sites.
+	ReexportQuery: `[(import_from_statement ` +
+		`name: (dotted_name (identifier) @name .)) ` +
+		`(import_from_statement ` +
+		`(aliased_import alias: (identifier) @name))]`,
+	ReexportCaptures: []string{"name"},
+	ReexportFiles:    []string{"__init__.py", "__init__.pyi"},
 }
 
-// pythonModuleFromURI derives a Python module name from a file URI: the
-// base file name without its extension, or the parent directory name for
-// a package's __init__.py.
-func pythonModuleFromURI(uri string) string {
+// pythonModuleFromURI derives a Python module path from a file URI: the
+// base file name without its extension (or the directory name for a
+// package's __init__), prefixed with a dotted segment for every parent
+// directory that is itself a package (contains __init__.py/.pyi).
+// Files outside the context root keep the single-segment form.
+func pythonModuleFromURI(qc QualifierContext, uri string) string {
 	parsed, err := workspaceapi.ParseURI(uri)
 	if err != nil {
 		return uri
 	}
 	base := path.Base(parsed.Path())
 	stem := strings.TrimSuffix(base, path.Ext(base))
-	if stem == "__init__" {
-		return path.Base(path.Dir(parsed.Path()))
+	var dir string
+	if rel := qc.relPath(parsed); rel != "" {
+		dir = path.Dir(rel)
 	}
-	return stem
+	if stem == "__init__" {
+		if dir == "" || dir == "." || dir == "/" {
+			return path.Base(path.Dir(parsed.Path()))
+		}
+		stem = path.Base(dir)
+		dir = path.Dir(dir)
+	}
+	segments := []string{stem}
+	for dir != "" && dir != "." && dir != "/" && pythonPackageDir(qc, dir) {
+		segments = append(segments, path.Base(dir))
+		dir = path.Dir(dir)
+	}
+	slices.Reverse(segments)
+	return strings.Join(segments, ".")
+}
+
+// pythonPackageDir reports whether the workspace-relative directory is
+// a Python package.
+func pythonPackageDir(qc QualifierContext, dir string) bool {
+	return qc.Exists(path.Join(dir, "__init__.py")) ||
+		qc.Exists(path.Join(dir, "__init__.pyi"))
 }
 
 // pythonDirFromURI returns the directory path of a file URI.

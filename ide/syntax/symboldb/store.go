@@ -37,12 +37,14 @@ const (
 	// its derived tables (such as the names partition) may not exist,
 	// and per-file records alone cannot rebuild them because unchanged
 	// files are normally skipped.
-	schemaVersion = 2
+	schemaVersion = 4
 )
 
-// Kinds of stored symbol locations. Refs and defs answer 2-part
-// (pkg.Sym) lookups; method defs answer 3-part (pkg.Type.Method)
-// lookups only. The values are persisted, so the mapping from
+// Kinds of stored symbol locations. Lookups prefer refs, then defs,
+// then method defs among the locations stored under the queried name;
+// nested-module languages pre-materialize one name per dotted module
+// suffix at extraction time, so a single exact Get answers every
+// addressable form. The values are persisted, so the mapping from
 // symbolresolve.SymbolKind is explicit rather than relying on that
 // enum's ordering.
 const (

@@ -81,8 +81,8 @@ func BenchmarkResolve(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				matches, err := symbolresolve.Resolve(
-					context.Background(), parser, specIter(symbolresolve.Go),
-					"mylib.MyType", nil,
+					context.Background(), parser, symbolresolve.QualifierContext{},
+					specIter(symbolresolve.Go), "mylib.MyType", nil,
 				)
 				require.NoError(b, err)
 				require.NotEmpty(b, matches)

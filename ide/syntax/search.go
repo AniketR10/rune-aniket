@@ -100,10 +100,6 @@ type queryFilter struct {
 func (q *queryFilter) get() walkdir.Filter {
 	q.once.Do(func() {
 		hidden := hiddenDirMatcher{vctrl.HiddenBaseMatcher()}
-		if q.w == nil {
-			q.f = hidden
-			return
-		}
 		m, err := vctrl.LoadGitignore(q.w)
 		if err != nil {
 			q.f = hidden
@@ -439,7 +435,8 @@ func (p Parser) ResolveSymbol(
 		defer close(closeWaitCh)
 		defer close(results)
 
-		matches, err := symbolresolve.Resolve(runCtx, p, p.specs.detect(runCtx), name, progress)
+		matches, err := symbolresolve.Resolve(
+			runCtx, p, p.qualifierContext(), p.specs.detect(runCtx), name, progress)
 		if err != nil {
 			it.setErr(err)
 			return
@@ -479,13 +476,20 @@ func (p Parser) ListReferencedSymbols(
 		defer close(results)
 
 		if err := symbolresolve.ListReferences(
-			runCtx, p, p.specs.detect(runCtx), results,
+			runCtx, p, p.qualifierContext(), p.specs.detect(runCtx), results,
 		); err != nil {
 			it.setErr(err)
 		}
 	})
 
 	return it, nil
+}
+
+// qualifierContext builds a fresh per-call qualifier context over the
+// workspace filesystem. The existence memo must not outlive one
+// resolution pass, since the tree can change between calls.
+func (p Parser) qualifierContext() symbolresolve.QualifierContext {
+	return symbolresolve.NewQualifierContext(p.w, p.uri)
 }
 
 func (p Parser) query(

@@ -26,6 +26,7 @@ package symbolresolve
 import (
 	"context"
 	"io"
+	"path"
 
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -88,12 +89,17 @@ type FileExtraction struct {
 // and, when a reference query requires it, by the file's resolved
 // imports; definitions are qualified by the package clause (or the
 // spec's path-derived qualifier) and filtered by the export predicate;
-// method definitions are emitted as pkg.Type.Method.
+// method definitions are emitted as pkg.Type.Method. Definitions of
+// nested-module specs are emitted once per dotted suffix of the
+// file's module path, so a symbol is addressable by any trailing run
+// of module segments. Re-export bindings in the spec's re-export
+// files are emitted as definitions under the same qualifiers.
 func ExtractFile(
-	ctx context.Context, parser FileQueryer, spec *Spec, file workspaceapi.URI,
+	ctx context.Context, parser FileQueryer, spec *Spec, qc QualifierContext,
+	file workspaceapi.URI,
 ) (FileExtraction, error) {
 	refCount := len(spec.RefQueries)
-	queries := make([]MultiQuery, 0, refCount+4)
+	queries := make([]MultiQuery, 0, refCount+5)
 	for i, rq := range spec.RefQueries {
 		queries = append(queries, MultiQuery{
 			ID: i, Query: rq.Query, Captures: rq.Captures,
@@ -101,7 +107,7 @@ func ExtractFile(
 	}
 	id := refCount
 	nextID := func() int { n := id; id++; return n }
-	pkgID, pathID, aliasID, methodID := -1, -1, -1, -1
+	pkgID, pathID, aliasID, methodID, reexportID := -1, -1, -1, -1, -1
 	if spec.hasPackages() {
 		pkgID = nextID()
 		queries = append(queries, MultiQuery{
@@ -133,6 +139,17 @@ func ExtractFile(
 			Captures: spec.MethodDefCaptures,
 		})
 	}
+	// The re-export query joins the batch for every file of the
+	// language — not only re-export files — so sessions that cache the
+	// compiled batch per language never recompile it; results from
+	// other files are dropped below.
+	if spec.hasReexports() {
+		reexportID = nextID()
+		queries = append(queries, MultiQuery{
+			ID: reexportID, Query: spec.ReexportQuery,
+			Captures: spec.ReexportCaptures,
+		})
+	}
 
 	results, err := parser.QueryMulti(ctx, file, queries)
 	if err != nil {
@@ -143,7 +160,7 @@ func ExtractFile(
 	// package qualifier, so reduce those first.
 	pkg := ""
 	if !spec.hasPackages() {
-		pkg = spec.qualifier(file.String())
+		pkg = spec.qualifier(qc, file.String())
 	}
 	var paths map[workspaceapi.URI][]string
 	var explicit map[workspaceapi.URI]map[string]string
@@ -165,6 +182,12 @@ func ExtractFile(
 		ext.Imports = aliases
 	}
 
+	var pkgs []string
+	if pkg != "" {
+		pkgs = moduleSuffixes(pkg)
+	}
+	isReexportFile := reexportID >= 0 &&
+		spec.isReexportFile(path.Base(file.Path()))
 	for _, r := range results {
 		switch {
 		case r.QueryID < refCount:
@@ -183,20 +206,44 @@ func ExtractFile(
 			if pkg == "" || !spec.exported(r.Match[0].Text) {
 				continue
 			}
-			ext.Symbols = append(ext.Symbols, FileSymbol{
-				Name: pkg + "." + r.Match[0].Text,
-				Pos:  r.Match[0].From,
-				Kind: SymbolDef,
-			})
+			for _, q := range pkgs {
+				ext.Symbols = append(ext.Symbols, FileSymbol{
+					Name: q + "." + r.Match[0].Text,
+					Pos:  r.Match[0].From,
+					Kind: SymbolDef,
+				})
+			}
 		case r.QueryID == methodID:
 			if pkg == "" || !spec.exported(r.Match[1].Text) {
 				continue
 			}
-			ext.Symbols = append(ext.Symbols, FileSymbol{
-				Name: pkg + "." + r.Match[0].Text + "." + r.Match[1].Text,
-				Pos:  r.Match[1].From,
-				Kind: SymbolMethodDef,
-			})
+			for _, q := range pkgs {
+				ext.Symbols = append(ext.Symbols, FileSymbol{
+					Name: q + "." + r.Match[0].Text + "." + r.Match[1].Text,
+					Pos:  r.Match[1].From,
+					Kind: SymbolMethodDef,
+				})
+			}
+			// A bare Type.method (no module prefix) is the module-less
+			// suffix nested-module specs also address.
+			if spec.NestedModules {
+				ext.Symbols = append(ext.Symbols, FileSymbol{
+					Name: r.Match[0].Text + "." + r.Match[1].Text,
+					Pos:  r.Match[1].From,
+					Kind: SymbolMethodDef,
+				})
+			}
+		case r.QueryID == reexportID:
+			if pkg == "" || !isReexportFile || !spec.exported(r.Match[0].Text) {
+				continue
+			}
+			for _, q := range pkgs {
+				ext.Symbols = append(ext.Symbols, FileSymbol{
+					Name: q + "." + r.Match[0].Text,
+					Pos:  r.Match[0].From,
+					Kind: SymbolDef,
+				})
+			}
 		}
 	}
 	return ext, nil

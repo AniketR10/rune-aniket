@@ -176,7 +176,8 @@ func TestResolveStreamsWithoutFullBuffer(t *testing.T) {
 
 	parser := fakeSearcher{it: wrapped}
 	matches, err := symbolresolve.Resolve(
-		context.Background(), parser, specIter(streamSpec), "pkg.Sym", nil,
+		context.Background(), parser, symbolresolve.QualifierContext{},
+		specIter(streamSpec), "pkg.Sym", nil,
 	)
 	require.NoError(t, err)
 
@@ -203,7 +204,8 @@ func TestResolveCancelsLongStream(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = symbolresolve.Resolve(ctx, parser, specIter(streamSpec), "pkg.Sym", nil)
+		_, _ = symbolresolve.Resolve(ctx, parser, symbolresolve.QualifierContext{},
+			specIter(streamSpec), "pkg.Sym", nil)
 	}()
 
 	cancel()

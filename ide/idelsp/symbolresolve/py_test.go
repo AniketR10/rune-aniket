@@ -244,8 +244,8 @@ func TestResolvePythonE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Python),
-				tt.symbol, rec,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Python), tt.symbol, rec,
 			)
 
 			if tt.wantErrIs != nil {
@@ -289,11 +289,163 @@ func TestResolvePythonSelfAttributeQuirk(t *testing.T) {
 	// precise resolution on follow-up.
 	env := setupPythonEnv(t)
 	matches, err := symbolresolve.Resolve(
-		context.Background(), env.parser, specIter(symbolresolve.Python),
-		"self.helper", nil,
+		context.Background(), env.parser, env.qc,
+		specIter(symbolresolve.Python), "self.helper", nil,
 	)
 	require.NoError(t, err)
 	assert.Contains(t, uriStrings(matches), env.fileURI("app/service.py"))
+}
+
+func TestResolvePythonPackageE2E(t *testing.T) {
+	t.Parallel()
+
+	env := setupPythonEnvAt(t, "testdata_py_pkg")
+
+	pkgInitURI := env.fileURI("src/mypkg/__init__.py")
+	implURI := env.fileURI("src/mypkg/_impl.py")
+	subInitURI := env.fileURI("src/mypkg/sub/__init__.py")
+	helpersURI := env.fileURI("src/mypkg/sub/_helpers.py")
+	mainURI := env.fileURI("main.py")
+
+	tests := []struct {
+		name            string
+		symbol          string
+		wantURIs        []string
+		wantErrContains string
+	}{
+		{
+			// Widget is defined in _impl.py but re-exported by the
+			// package __init__: the public binding site answers the
+			// package-qualified name.
+			name:     "re-exported class resolves to package __init__",
+			symbol:   "mypkg.Widget",
+			wantURIs: []string{pkgInitURI},
+		},
+		{
+			name:     "re-exported function resolves to package __init__",
+			symbol:   "mypkg.make_widget",
+			wantURIs: []string{pkgInitURI},
+		},
+		{
+			// The full dotted module path addresses the private module
+			// directly.
+			name:     "full dotted module path resolves definition",
+			symbol:   "mypkg._impl.Widget",
+			wantURIs: []string{implURI},
+		},
+		{
+			// Any dotted suffix of the module path also resolves.
+			name:     "module path suffix resolves definition",
+			symbol:   "_impl.Widget",
+			wantURIs: []string{implURI},
+		},
+		{
+			name:     "nested package re-export resolves to sub __init__",
+			symbol:   "mypkg.sub.slug",
+			wantURIs: []string{subInitURI},
+		},
+		{
+			name:     "nested package re-export resolves by suffix",
+			symbol:   "sub.slug",
+			wantURIs: []string{subInitURI},
+		},
+		{
+			name:     "deep module definition resolves by full path",
+			symbol:   "mypkg.sub._helpers.slug",
+			wantURIs: []string{helpersURI},
+		},
+		{
+			// A nested-module name falls back to the method
+			// interpretation when no symbol matches.
+			name:     "method resolves under full module path",
+			symbol:   "mypkg.sub._helpers.Slugger.run",
+			wantURIs: []string{helpersURI},
+		},
+		{
+			name:     "method resolves under module path suffix",
+			symbol:   "_helpers.Slugger.run",
+			wantURIs: []string{helpersURI},
+		},
+		{
+			// A bare Type.method name — the form an agent naturally
+			// types when navigating a class method — resolves without
+			// any module qualifier.
+			name:     "bare class method resolves without module qualifier",
+			symbol:   "Slugger.run",
+			wantURIs: []string{helpersURI},
+		},
+		{
+			name:     "bare class method on _impl resolves",
+			symbol:   "Widget.render",
+			wantURIs: []string{implURI},
+		},
+		{
+			// A bare method name on an unknown class stays not-found.
+			name:            "bare method on unknown class returns not-found",
+			symbol:          "Nonexistent.render",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// A script outside any package keeps the single-segment
+			// module name.
+			name:     "script outside packages keeps file stem qualifier",
+			symbol:   "main.main",
+			wantURIs: []string{mainURI},
+		},
+		{
+			name:            "missing name in package returns not-found",
+			symbol:          "mypkg.DoesNotExist",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// Widget is bound by mypkg's __init__, not by mypkg.sub's.
+			name:            "re-export in wrong package returns not-found",
+			symbol:          "sub.Widget",
+			wantErrContains: "no symbols found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			matches, err := symbolresolve.Resolve(
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Python), tt.symbol, nil,
+			)
+
+			if tt.wantErrContains != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrContains)
+				return
+			}
+			require.NoError(t, err)
+			assert.ElementsMatchf(t, tt.wantURIs, uriStrings(matches),
+				"resolved URIs mismatch; matches=%+v", matches)
+		})
+	}
+}
+
+func TestListReferencesPythonPackageE2E(t *testing.T) {
+	t.Parallel()
+
+	env := setupPythonEnvAt(t, "testdata_py_pkg")
+
+	got := listReferences(t, env.parser, env.qc, specIter(symbolresolve.Python))
+
+	// Definitions stream under every dotted suffix of the module path,
+	// and re-export bindings stream under the package qualifier.
+	for _, name := range []string{
+		"mypkg.Widget", "mypkg.make_widget",
+		"mypkg._impl.Widget", "_impl.Widget",
+		"mypkg.sub.slug", "sub.slug",
+		"mypkg.sub._helpers.slug", "_helpers.slug",
+		"main.main",
+	} {
+		assert.Truef(t, got[name], "expected %q to be listed", name)
+	}
+	assert.False(t, got["sub.Widget"],
+		"re-export must be scoped to its own package")
 }
 
 func TestResolvePythonConcurrent(t *testing.T) {
@@ -313,8 +465,8 @@ func TestResolvePythonConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, specIter(symbolresolve.Python),
-				symbol, nil,
+				context.Background(), env.parser, env.qc,
+				specIter(symbolresolve.Python), symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)
 			assert.NotEmptyf(t, matches, "Resolve(%q)", symbol)
@@ -339,7 +491,7 @@ func TestSearchDefinitionsPythonE2E(t *testing.T) {
 	go func() {
 		defer close(ch)
 		done <- symbolresolve.SearchDefinitions(
-			context.Background(), env.parser, symbolresolve.Python,
+			context.Background(), env.parser, symbolresolve.Python, env.qc,
 			packages, ch, nil,
 		)
 	}()
@@ -376,7 +528,7 @@ func TestSearchDefinitionsPythonE2E(t *testing.T) {
 	go func() {
 		defer close(kept)
 		keepDone <- symbolresolve.SearchDefinitions(
-			context.Background(), env.parser, symbolresolve.Python,
+			context.Background(), env.parser, symbolresolve.Python, env.qc,
 			packages, kept, func(name string) bool {
 				return !strings.HasPrefix(name, "_")
 			},
@@ -394,10 +546,16 @@ func TestSearchDefinitionsPythonE2E(t *testing.T) {
 }
 
 func setupPythonEnv(t *testing.T) *resolveEnv {
+	return setupPythonEnvAt(t, "testdata_py")
+}
+
+// setupPythonEnvAt builds a resolve environment over one of the
+// committed Python fixture trees.
+func setupPythonEnvAt(t *testing.T, testdata string) *resolveEnv {
 	t.Helper()
 
 	root := t.TempDir()
-	copyDirT(t, "testdata_py", root)
+	copyDirT(t, testdata, root)
 
 	rootURI := "file://" + root
 	uri, err := workspaceapi.ParseURI(rootURI)
@@ -410,7 +568,10 @@ func setupPythonEnv(t *testing.T) *resolveEnv {
 	t.Cleanup(func() { _ = scheme.Close() })
 
 	parser := syntax.NewParser(scheme, pythonPkgManager(t), uri)
-	return &resolveEnv{root: root, parser: parser}
+	return &resolveEnv{
+		root: root, parser: parser,
+		qc: symbolresolve.NewQualifierContext(scheme, uri),
+	}
 }
 
 func pythonPkgManager(t *testing.T) syntax.PkgManager {

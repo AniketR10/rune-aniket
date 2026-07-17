@@ -257,6 +257,29 @@ func TestGoE2E(t *testing.T) {
 		assert.ErrorIs(t, err, syntaxapi.ErrNoDot)
 	})
 
+	t.Run("names with more than three parts still miss", func(t *testing.T) {
+		// The index accepts any dotted length; after a full scan the
+		// miss is authoritative (empty), while the backing fallback
+		// reports not-found.
+		for _, name := range []string{
+			"mylib.MyType.String.Extra", "a.b.c.d",
+		} {
+			it, err := env.p.ResolveSymbol(context.Background(), name, nil)
+			if err != nil {
+				assert.ErrorContainsf(t, err, "no symbols found",
+					"symbol %q must not resolve", name)
+				continue
+			}
+			matches, terr := iterator.ToSlice(context.Background(), it)
+			if terr != nil {
+				assert.ErrorContainsf(t, terr, "no symbols found",
+					"symbol %q must not resolve", name)
+				continue
+			}
+			assert.Emptyf(t, matches, "symbol %q must not resolve", name)
+		}
+	})
+
 	t.Run("listed symbols include refs, defs and methods, exclude unexported", func(t *testing.T) {
 		got := listSet(t, env.p)
 		for _, name := range []string{
@@ -318,6 +341,67 @@ func TestPythonE2E(t *testing.T) {
 	})
 }
 
+func TestPythonPackageE2E(t *testing.T) {
+	t.Parallel()
+	env := setupE2E(t, pyPkgTestdata, pyFixtures)
+
+	t.Run("dotted module paths resolve from the index", func(t *testing.T) {
+		for name, rel := range map[string]string{
+			// Re-export bindings answer the package-qualified names.
+			"mypkg.Widget":      "src/mypkg/__init__.py",
+			"mypkg.make_widget": "src/mypkg/__init__.py",
+			"mypkg.sub.slug":    "src/mypkg/sub/__init__.py",
+			"sub.slug":          "src/mypkg/sub/__init__.py",
+			// Full dotted paths and their suffixes address the module.
+			"mypkg._impl.Widget":      "src/mypkg/_impl.py",
+			"_impl.Widget":            "src/mypkg/_impl.py",
+			"mypkg.sub._helpers.slug": "src/mypkg/sub/_helpers.py",
+			// Method definitions under dotted module paths.
+			"mypkg.sub._helpers.Slugger.run": "src/mypkg/sub/_helpers.py",
+			"_helpers.Slugger.run":           "src/mypkg/sub/_helpers.py",
+			// Bare Type.method with no module qualifier.
+			"Slugger.run":   "src/mypkg/sub/_helpers.py",
+			"Widget.render": "src/mypkg/_impl.py",
+			// A script outside any package keeps its file stem.
+			"main.main": "main.py",
+		} {
+			assert.Equalf(t, []string{env.uri(t, rel)}, resolveURIs(t, env.p, name),
+				"resolution for %q", name)
+		}
+	})
+
+	t.Run("resolve matches the backing parser", func(t *testing.T) {
+		for _, name := range []string{
+			"mypkg.Widget", "mypkg._impl.Widget", "sub.slug",
+			"mypkg.sub._helpers.Slugger.run",
+		} {
+			assertResolveMatchesBacking(t, env, name)
+		}
+	})
+
+	t.Run("misses are authoritative after a full scan", func(t *testing.T) {
+		for _, name := range []string{"mypkg.DoesNotExist", "sub.Widget"} {
+			it, err := env.p.ResolveSymbol(context.Background(), name, nil)
+			require.NoError(t, err)
+			matches, err := iterator.ToSlice(context.Background(), it)
+			require.NoError(t, err)
+			assert.Emptyf(t, matches, "symbol %q must not resolve", name)
+		}
+	})
+
+	t.Run("listed symbols include dotted and re-exported names", func(t *testing.T) {
+		got := listSet(t, env.p)
+		for _, name := range []string{
+			"mypkg.Widget", "mypkg._impl.Widget", "_impl.Widget",
+			"mypkg.sub.slug", "sub.slug",
+		} {
+			assert.Truef(t, got[name], "expected %q to be listed", name)
+		}
+		assert.False(t, got["sub.Widget"],
+			"re-export must be scoped to its own package")
+	})
+}
+
 func TestRustE2E(t *testing.T) {
 	t.Parallel()
 	env := setupE2E(t, rsTestdata, rsFixtures)
@@ -352,9 +436,10 @@ func TestRustE2E(t *testing.T) {
 // Paths to the committed testdata modules and tree-sitter fixtures,
 // relative to this package's directory.
 const (
-	goTestdata = "../../idelsp/symbolresolve/testdata"
-	pyTestdata = "../../idelsp/symbolresolve/testdata_py"
-	rsTestdata = "../../idelsp/symbolresolve/testdata_rs"
+	goTestdata    = "../../idelsp/symbolresolve/testdata"
+	pyTestdata    = "../../idelsp/symbolresolve/testdata_py"
+	pyPkgTestdata = "../../idelsp/symbolresolve/testdata_py_pkg"
+	rsTestdata    = "../../idelsp/symbolresolve/testdata_rs"
 
 	goFixtures = "../../idelsp/symbolresolve/go"
 	pyFixtures = "../syntaxtest/python"

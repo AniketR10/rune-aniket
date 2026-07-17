@@ -347,7 +347,7 @@ func (p *Parser) resolveFromIndex(
 	ctx context.Context, name string, progress syntaxapi.Progress,
 ) (matches []syntaxapi.Match, indexable, found bool) {
 	parts := strings.Split(name, ".")
-	if len(parts) < 2 || len(parts) > 3 {
+	if len(parts) < 2 {
 		return nil, false, false
 	}
 	var doc symbolDoc
@@ -360,7 +360,7 @@ func (p *Parser) resolveFromIndex(
 		return doc.Locs[i].URI < doc.Locs[j].URI
 	})
 	for _, spec := range symbolresolve.AllSpecs() {
-		specMatches := matchesForSpec(spec, doc.Locs, len(parts) == 3, name)
+		specMatches := matchesForSpec(spec, doc.Locs, name)
 		if len(specMatches) == 0 {
 			continue
 		}
@@ -378,8 +378,12 @@ func (p *Parser) resolveFromIndex(
 	return nil, true, false
 }
 
+// matchesForSpec picks the spec's matches for one symbol doc,
+// preferring reference locations, then definitions, then method
+// definitions — mirroring the backing resolver's phase order, where
+// the symbol interpretation of a name precedes the method one.
 func matchesForSpec(
-	spec *symbolresolve.Spec, locs []symbolLoc, isMethod bool, name string,
+	spec *symbolresolve.Spec, locs []symbolLoc, name string,
 ) []syntaxapi.Match {
 	pick := func(kind int) []syntaxapi.Match {
 		var matches []syntaxapi.Match
@@ -398,13 +402,12 @@ func matchesForSpec(
 		}
 		return matches
 	}
-	if isMethod {
-		return pick(kindMethodDef)
+	for _, kind := range []int{kindRef, kindDef, kindMethodDef} {
+		if matches := pick(kind); len(matches) > 0 {
+			return matches
+		}
 	}
-	if matches := pick(kindRef); len(matches) > 0 {
-		return matches
-	}
-	return pick(kindDef)
+	return nil
 }
 
 func (p *Parser) dedupByImport(
@@ -537,6 +540,9 @@ func (p *Parser) scan() {
 	// backend to skip per-commit fsync; the completion marker below is
 	// written synced, restoring durability for everything before it.
 	nctx := bluebolt.ContextWithNoSync(p.ctx)
+	// One memoized qualifier context serves the whole scan: workers
+	// share its existence memo, so package markers are stat'ed once.
+	qc := symbolresolve.NewQualifierContext(p.fs, p.root)
 	workers := max(runtime.NumCPU()/2, 1)
 	updates := make(chan fileUpdate, workers)
 	writerDone := make(chan struct{})
@@ -574,7 +580,7 @@ func (p *Parser) scan() {
 				if err != nil {
 					continue
 				}
-				u, ok := p.stageFile(p.ctx, q, uri.String())
+				u, ok := p.stageFile(p.ctx, q, qc, uri.String())
 				if !ok {
 					continue
 				}
@@ -728,7 +734,8 @@ type fileUpdate struct {
 }
 
 func (p *Parser) stageFile(
-	ctx context.Context, q symbolresolve.FileQueryer, us string,
+	ctx context.Context, q symbolresolve.FileQueryer,
+	qc symbolresolve.QualifierContext, us string,
 ) (fileUpdate, bool) {
 	if ctx.Err() != nil {
 		return fileUpdate{}, false
@@ -755,7 +762,7 @@ func (p *Parser) stageFile(
 	if known && old.ModTime == modTime && old.Version == schemaVersion {
 		return fileUpdate{}, false
 	}
-	ext, err := symbolresolve.ExtractFile(ctx, q, spec, uri)
+	ext, err := symbolresolve.ExtractFile(ctx, q, spec, qc, uri)
 	if err != nil {
 		if ctx.Err() != nil {
 			return fileUpdate{}, false
@@ -827,7 +834,8 @@ func (p *Parser) applyFile(ctx context.Context, u fileUpdate) {
 func (p *Parser) indexFile(
 	ctx context.Context, q symbolresolve.FileQueryer, us string,
 ) {
-	if u, ok := p.stageFile(ctx, q, us); ok {
+	qc := symbolresolve.NewQualifierContext(p.fs, p.root)
+	if u, ok := p.stageFile(ctx, q, qc, us); ok {
 		p.applyFile(ctx, u)
 	}
 }
