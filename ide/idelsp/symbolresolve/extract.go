@@ -224,8 +224,9 @@ func ExtractFile(
 					Kind: SymbolMethodDef,
 				})
 			}
-			// A bare Type.method (no module prefix) is the module-less
-			// suffix nested-module specs also address.
+			// The class always stays attached to the method; only the
+			// module prefix is dropped, so a bare Class.method still
+			// addresses this definition.
 			if spec.NestedModules {
 				ext.Symbols = append(ext.Symbols, FileSymbol{
 					Name: r.Match[0].Text + "." + r.Match[1].Text,

@@ -202,6 +202,21 @@ func TestPlanConfigChange(t *testing.T) {
 			version:   "1",
 			wantErr:   true,
 		},
+		{
+			name:          "requirements stripped from auto-apply",
+			pkgConfig:     "requirements:\n  - python\nsettings:\n  a: 1\n",
+			userCfg:       map[string]any{},
+			version:       "1",
+			wantPrompt:    false,
+			wantAutoApply: map[string]any{"settings": map[string]any{"a": 1}},
+		},
+		{
+			name:       "requirements-only overlay yields no plan",
+			pkgConfig:  "requirements:\n  - python\n",
+			userCfg:    map[string]any{},
+			version:    "1",
+			wantPrompt: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -291,6 +292,10 @@ func (m *workspaceRunner) makeCommand(
 	waitCh := make(chan error)
 	// allow args to be passed to extensions
 	argv := strings.Split(path, " ")
+	argv, err = m.sourceEntrypointArgv(extensionID, argv)
+	if err != nil {
+		return workspaceapi.Cmd{}, err
+	}
 	ret = workspaceapi.Cmd{
 		Path:    argv[0],
 		Args:    argv[1:],
@@ -341,6 +346,99 @@ func (m *workspaceRunner) makeCommand(
 		}
 	})
 	return
+}
+
+// sourceEntrypointArgv rewrites a source-file extension entrypoint
+// (.py, .go, .rs) into an invocation of the toolchain shipped by the
+// corresponding Rune package, resolved from the shared binary dir so
+// it does not depend on PATH state. The entrypoint moves from
+// Cmd.Path to an argument, so ~ and env vars are expanded here — the
+// local fileScheme only expands Cmd.Path. Non-source paths are
+// returned unchanged.
+func (m *workspaceRunner) sourceEntrypointArgv(
+	extensionID string, argv []string,
+) ([]string, error) {
+	var pkg string
+	switch filepath.Ext(argv[0]) {
+	case ".py":
+		pkg = "python"
+	case ".go":
+		pkg = "go"
+	case ".rs":
+		pkg = "rust"
+	default:
+		return argv, nil
+	}
+
+	script, err := workspaceapi.ExpandPath(
+		argv[0], user.Current,
+		func() (string, error) { return "", nil },
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not expand extension script path %q: %w", argv[0], err)
+	}
+
+	var run []string
+	switch pkg {
+	case "python":
+		// --project pins uv to the extension's own project so the
+		// environment comes from its pyproject.toml, not from
+		// whatever project the cwd happens to be in.
+		project, ok := findFileUp(filepath.Dir(script), "pyproject.toml")
+		if !ok {
+			return nil, fmt.Errorf(
+				"extension %s: no pyproject.toml found in any directory above %s",
+				extensionID, script)
+		}
+		run = []string{"uv", "run", "--project", filepath.Dir(project), script}
+	case "go":
+		if filepath.Base(script) != "main.go" {
+			return nil, fmt.Errorf(
+				"extension %s: go entrypoint must be a main.go, got %s",
+				extensionID, script)
+		}
+		// -C runs from the entrypoint's directory so go run picks up
+		// the module's go.mod and the main package's sibling files.
+		run = []string{"go", "-C", filepath.Dir(script), "run", "."}
+	case "rust":
+		manifest, ok := findFileUp(filepath.Dir(script), "Cargo.toml")
+		if !ok {
+			return nil, fmt.Errorf(
+				"extension %s: no Cargo.toml found in any directory above %s",
+				extensionID, script)
+		}
+		run = []string{"cargo", "run", "--manifest-path", manifest, "--"}
+	}
+
+	bin := filepath.Join(m.dataDir, "bin", run[0])
+	if _, err := os.Stat(bin); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", bin, err)
+		}
+		return nil, fmt.Errorf(
+			"extension %s requires the %s package to run %s, "+
+				"but it is not installed; install it with `pkg install %s`",
+			extensionID, pkg, script, pkg)
+	}
+	run[0] = bin
+	return append(run, argv[1:]...), nil
+}
+
+// findFileUp walks from dir toward the filesystem root and returns the
+// first existing path of name.
+func findFileUp(dir, name string) (string, bool) {
+	for {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
 }
 
 func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []string) ([]string, error) {

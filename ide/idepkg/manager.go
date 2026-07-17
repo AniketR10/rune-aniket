@@ -732,8 +732,15 @@ func (m *Manager) runDownload(
 	stagingDir := makeStagingDirname(m.dataDir, pkgID, version)
 	_ = os.RemoveAll(stagingDir)
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
-	_, executables, err := m.untar(tarfile, stagingDir, pw)
+	stagingConfigFile, executables, err := m.untar(tarfile, stagingDir, pw)
 	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return err
+	}
+
+	if err := m.installRequirements(
+		ctx, pkgID, version, stagingConfigFile, pw,
+	); err != nil {
 		_ = os.RemoveAll(stagingDir)
 		return err
 	}
@@ -768,6 +775,74 @@ func (m *Manager) runDownload(
 
 	pw.Progress(1, 1, "done")
 	return nil
+}
+
+// installRequirements installs the Rune packages listed under the
+// top-level `requirements` key of the staged package config. It runs
+// before the dependent package is promoted so each requirement's full
+// install — including its config merge and gui.env live-apply —
+// completes first and the dependent extension starts with the
+// requirement's environment in place. A failed requirement install
+// aborts the dependent install.
+func (m *Manager) installRequirements(
+	ctx context.Context, pkgID string, version release.Version,
+	configFile string, pw repl.ProgressWriter,
+) error {
+	if _, err := os.Stat(configFile); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat staged config: %w", err)
+	}
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return fmt.Errorf("read staged config: %w", err)
+	}
+	reqs, err := pkgConfigRequirements(
+		configFile, data, pkgID, version, m.dataDir, m.editorMode,
+	)
+	if err != nil {
+		return fmt.Errorf("parse requirements: %w", err)
+	}
+	for _, req := range reqs {
+		req = escapeString(req)
+		if req == pkgID {
+			continue
+		}
+		if _, installed := m.PackageVersionInUse(req); installed {
+			continue
+		}
+		reqVersion, err := m.LatestVersion(ctx, req)
+		if err != nil {
+			return fmt.Errorf("resolve requirement %s: %w", req, err)
+		}
+		m.log(log.InfoLevel, "installing requirement %s version %s of package %s",
+			req, reqVersion, pkgID)
+		err = m.InstallPackageVersion(ctx, req, reqVersion,
+			requirementProgressWriter{pkgID: req, pw: pw})
+		if err != nil && !errors.Is(err, ErrAlreadyInstalled) {
+			return fmt.Errorf("install requirement %s: %w", req, err)
+		}
+	}
+	return nil
+}
+
+// requirementProgressWriter relays a requirement's install progress on
+// the dependent install's writer. Samples are labeled with the
+// requirement's package ID so the phase reset is attributable, and
+// terminal samples are suppressed: notification writers auto-dismiss
+// on progress==total, so only the outermost install may complete the
+// notification.
+type requirementProgressWriter struct {
+	pkgID string
+	pw    repl.ProgressWriter
+}
+
+func (w requirementProgressWriter) Progress(progress, total int64, units string) {
+	if total > 0 && progress == total {
+		return
+	}
+	w.pw.Progress(progress, total, units+" ("+w.pkgID+")")
 }
 
 // finishDownload releases the per-package install gate after a

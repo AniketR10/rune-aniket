@@ -27,6 +27,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -375,6 +378,163 @@ func TestWorkspaceRunnerRunSSHWorkspaceUsesExtExecutor(t *testing.T) {
 			"extensions can chdir into a path that exists on the IDE host")
 }
 
+// TestWorkspaceRunnerRunSourceEntrypoint locks in the source-entrypoint
+// launch contract: an extension path ending in .py, .go, or .rs is
+// rewritten to run under the toolchain of the corresponding language
+// package (python/uv, go, rust/cargo), resolved from the data dir's
+// shared bin. The script path is expanded on the IDE host since it is
+// no longer Cmd.Path (which the local fileScheme would expand). A
+// missing toolchain (package not installed, or removed after the
+// extension was) must fail with an actionable error instead of an
+// opaque exec failure. Non-source paths must pass through unchanged.
+func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	usr, err := user.Current()
+	require.NoError(t, err)
+
+	// uv and cargo discover the project via a pyproject.toml or
+	// Cargo.toml above the entrypoint, so the python and rust cases
+	// need real project trees.
+	pyProj := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(pyProj, "src"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pyProj, "pyproject.toml"), []byte("[project]\n"), 0o644))
+	pyMain := filepath.Join(pyProj, "src", "main.py")
+	require.NoError(t, os.WriteFile(pyMain, []byte("print()\n"), 0o644))
+	orphanPy := filepath.Join(t.TempDir(), "main.py")
+
+	rustProj := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(rustProj, "src"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(rustProj, "Cargo.toml"), []byte("[package]\n"), 0o644))
+	rustMain := filepath.Join(rustProj, "src", "main.rs")
+	require.NoError(t, os.WriteFile(rustMain, []byte("fn main() {}\n"), 0o644))
+	orphanRs := filepath.Join(t.TempDir(), "main.rs")
+
+	tests := []struct {
+		name       string
+		cmdAndArgs string
+		bin        string // toolchain binary provisioned under <dataDir>/bin
+		wantErr    string
+		wantPath   string
+		wantArgs   []string
+	}{
+		{
+			name:       "python entrypoint runs via uv project",
+			cmdAndArgs: pyMain + " --flag",
+			bin:        "uv",
+			wantArgs: []string{
+				"run", "--project", pyProj, pyMain, "--flag",
+			},
+		},
+		{
+			name:       "python entrypoint without pyproject errors",
+			cmdAndArgs: orphanPy,
+			bin:        "uv",
+			wantErr:    "no pyproject.toml",
+		},
+		{
+			name:       "python package missing",
+			cmdAndArgs: pyMain,
+			wantErr:    "pkg install python",
+		},
+		{
+			name:       "go main package with args",
+			cmdAndArgs: "/opt/ext/main.go --flag",
+			bin:        "go",
+			wantArgs:   []string{"-C", "/opt/ext", "run", ".", "--flag"},
+		},
+		{
+			name:       "go home-relative entrypoint expands",
+			cmdAndArgs: "~/ext/main.go --flag",
+			bin:        "go",
+			wantArgs: []string{
+				"-C", filepath.Join(usr.HomeDir, "ext"), "run", ".", "--flag",
+			},
+		},
+		{
+			name:       "go entrypoint must be a main.go",
+			cmdAndArgs: "/opt/ext/tool.go",
+			bin:        "go",
+			wantErr:    "must be a main.go",
+		},
+		{
+			name:       "go package missing",
+			cmdAndArgs: "/opt/ext/main.go",
+			wantErr:    "pkg install go",
+		},
+		{
+			name:       "rust entrypoint runs via cargo manifest",
+			cmdAndArgs: rustMain + " --flag",
+			bin:        "cargo",
+			wantArgs: []string{
+				"run", "--manifest-path",
+				filepath.Join(rustProj, "Cargo.toml"), "--", "--flag",
+			},
+		},
+		{
+			name:       "rust package missing",
+			cmdAndArgs: rustMain,
+			wantErr:    "pkg install rust",
+		},
+		{
+			name:       "rust entrypoint without cargo manifest errors",
+			cmdAndArgs: orphanRs,
+			bin:        "cargo",
+			wantErr:    "no Cargo.toml",
+		},
+		{
+			name:       "non-source path unchanged",
+			cmdAndArgs: "/bin/ext --flag",
+			wantPath:   "/bin/ext",
+			wantArgs:   []string{"--flag"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			keys, err := auth.GenerateKeys()
+			require.NoError(t, err)
+			uri, err := workspaceapi.ParseURI("file:///tmp")
+			require.NoError(t, err)
+
+			dataDir := t.TempDir()
+			if tt.bin != "" {
+				binDir := filepath.Join(dataDir, "bin")
+				require.NoError(t, os.MkdirAll(binDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(binDir, tt.bin), []byte("#!/bin/sh\n"), 0o755))
+			}
+
+			exec := &recordingExecutor{}
+			runner := newWorkspaceRunner(
+				exec, exec, nil, uri,
+				"/tmp/ext.sock", dataDir, "/tmp/ext-install",
+				[]byte("cert"), keys,
+			)
+			err = runner.Run("src-ext", tt.cmdAndArgs, config.NopConfig())
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.Contains(t, err.Error(), "src-ext")
+				return
+			}
+			require.NoError(t, err)
+
+			cmd := exec.snapshotCmd()
+			wantPath := tt.wantPath
+			if tt.bin != "" {
+				wantPath = filepath.Join(dataDir, "bin", tt.bin)
+			}
+			assert.Equal(t, wantPath, cmd.Path)
+			assert.Equal(t, tt.wantArgs, cmd.Args)
+		})
+	}
+}
+
 // TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor pins down
 // the other half of the dual-executor split: ad-hoc StartCommand
 // calls (used by vte.Component to open terminals, by plugins to
@@ -560,7 +720,6 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	assert.True(t, states[0].Running)
 	assert.Nil(t, states[0].LastErr)
 }
-
 
 func TestWorkspaceRunnerWaitReady(t *testing.T) {
 	t.Parallel()

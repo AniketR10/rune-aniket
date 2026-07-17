@@ -66,6 +66,9 @@ func planConfigChange(
 	if err != nil {
 		return configChangePlan{}, fmt.Errorf("decode package config: %w", err)
 	}
+	// requirements is package metadata consumed at install time; it
+	// must never reach the user config.
+	delete(pkgOverlayCfg, requirementsKey)
 	if len(pkgOverlayCfg) == 0 {
 		return configChangePlan{}, nil
 	}
