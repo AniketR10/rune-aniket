@@ -43,7 +43,9 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/gitpkg"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/multipkg"
 	"unstable.build/go-tui/text"
 )
 
@@ -77,9 +79,19 @@ func (m *pkgManager) init(
 	editorMode string,
 	autoInstall bool,
 	afterConfigMerge func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
+	gitRemoteURL func(pkgID string) string,
 ) {
 	storage := storageapi.WithPartition(rootStorage, idepkg.StoragePartition)
-	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
+	// Compose the official release manager (rm) with a git-backed one so
+	// <host>/<path> IDs install straight from their repositories while
+	// everything else — including a git package's requirements —
+	// resolves through the official distribution.
+	var gitOpts []gitpkg.Option
+	if gitRemoteURL != nil {
+		gitOpts = append(gitOpts, gitpkg.WithRemoteURL(gitRemoteURL))
+	}
+	composed := multipkg.New(gitpkg.New(gitOpts...), rm)
+	m.pkg = idepkg.NewManager(n, composed, storage, scheme, dataDir,
 		configPath, wm, scheduleNextTick, interrupter,
 		idepkg.WithFrameCharSet(fcs),
 		idepkg.WithSyntaxParser(parser),

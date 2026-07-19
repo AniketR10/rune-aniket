@@ -119,6 +119,10 @@ var _ text.EventPublisher = (*workspaceManagerHandler)(nil)
 type workspaceManagerHandler struct {
 	mu                      sync.Locker
 	pkgmanager              *pkgManager
+	// gitRemoteURL, when non-nil, overrides how git package IDs map to
+	// git remote URLs. Production leaves it nil (clone from the host in
+	// the id); tests point it at a local fixture git server.
+	gitRemoteURL            func(pkgID string) string
 	// localExecutor is a stable, IDE-scoped executor proxy handed to the
 	// llama-server backend at router construction. Its inner executor is
 	// swapped to the focused workspace's executor at each setExecutor site,
@@ -3168,7 +3172,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
-		editorMode, autoInstall, h.afterPackageConfigMerge)
+		editorMode, autoInstall, h.afterPackageConfigMerge, h.gitRemoteURL)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

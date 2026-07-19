@@ -32,7 +32,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,9 +242,8 @@ func (m *Manager) LibDir(ctx context.Context, pkgID string) (iterator.Iterator[s
 
 // DescribePackage fetches a Package manifest.
 func (m *Manager) DescribePackage(ctx context.Context, pkgID string) (release.Package, error) {
-	pkgID = escapeString(pkgID)
-	if pkgID == "" {
-		return release.Package{}, errors.New("package id must not be empty")
+	if err := validatePkgPath(pkgID); err != nil {
+		return release.Package{}, fmt.Errorf("package id: %w", err)
 	}
 	pkg, err := m.m.GetPackage(ctx, pkgID)
 	if err != nil {
@@ -258,12 +256,11 @@ func (m *Manager) DescribePackage(ctx context.Context, pkgID string) (release.Pa
 func (m *Manager) DescribeRelease(ctx context.Context, pkgID string, version string) (
 	release.Bundle, error,
 ) {
-	pkgID = escapeString(pkgID)
-	if pkgID == "" {
-		return release.Bundle{}, errors.New("package id must not be empty")
+	if err := validatePkgPath(pkgID); err != nil {
+		return release.Bundle{}, fmt.Errorf("package id: %w", err)
 	}
-	if version == "" {
-		return release.Bundle{}, errors.New("release version must not be empty")
+	if err := validatePkgPath(version); err != nil {
+		return release.Bundle{}, fmt.Errorf("release version: %w", err)
 	}
 	b, err := m.m.Get(ctx, pkgID, release.Version(version),
 		release.NopProgressWriter(io.Discard))
@@ -288,7 +285,9 @@ func (m *Manager) ListPackages(ctx context.Context, filters map[string]string) (
 func (m *Manager) ListPackageVersions(ctx context.Context, pkgID string, filters map[string]string) (
 	iterator.Iterator[release.Bundle], error,
 ) {
-	pkgID = escapeString(pkgID)
+	if err := validatePkgPath(pkgID); err != nil {
+		return nil, fmt.Errorf("package id: %w", err)
+	}
 	it, err := m.m.List(ctx, pkgID, filters)
 	if err != nil {
 		return nil, translateListErr(err, pkgID)
@@ -355,9 +354,12 @@ func (m *Manager) InstallPackageVersion(
 		pw = repl.NopProgressWriter()
 	}
 
-	// ensure no one is being naughty
-	pkgID = escapeString(pkgID)
-	version = release.Version(escapeString(string(version)))
+	if err := validatePkgPath(pkgID); err != nil {
+		return fmt.Errorf("package id: %w", err)
+	}
+	if err := validatePkgPath(string(version)); err != nil {
+		return fmt.Errorf("release version: %w", err)
+	}
 
 	m.iterators.Lock()
 	_, ok := m.iterators.m[pkgID]
@@ -413,8 +415,12 @@ func (m *Manager) DeletePackageVersion(
 	if pkgID == "" || version == "" {
 		return errors.New("package and version must not be empty")
 	}
-	pkgID = escapeString(pkgID)
-	version = release.Version(escapeString(string(version)))
+	if err := validatePkgPath(pkgID); err != nil {
+		return fmt.Errorf("package id: %w", err)
+	}
+	if err := validatePkgPath(string(version)); err != nil {
+		return fmt.Errorf("release version: %w", err)
+	}
 
 	key := m.makeDownloadKey(pkgID, version)
 	var val pkgVersionValue
@@ -465,7 +471,9 @@ func (m *Manager) DeletePackage(
 	if pkgID == "" {
 		return errors.New("package and version must not be empty")
 	}
-	pkgID = escapeString(pkgID)
+	if err := validatePkgPath(pkgID); err != nil {
+		return fmt.Errorf("package id: %w", err)
+	}
 	it, err := m.ListInstalledPackageVersions(ctx, pkgID)
 	if err != nil {
 		return fmt.Errorf("list bundles: %w", err)
@@ -580,7 +588,9 @@ func (m *Manager) ListInstalledPackageVersions(ctx context.Context, pkgID string
 	if pkgID == "" {
 		return nil, errors.New("package must not be empty")
 	}
-	pkgID = escapeString(pkgID)
+	if err := validatePkgPath(pkgID); err != nil {
+		return nil, fmt.Errorf("package id: %w", err)
+	}
 	dit, err := m.storage.List(ctx, []storageapi.Filter{{
 		Field: storageapi.Field{
 			FieldPath: []string{"Package"},
@@ -605,8 +615,11 @@ func (m *Manager) ListInstalledPackageVersions(ctx context.Context, pkgID string
 func (m *Manager) UsePackageVersion(
 	ctx context.Context, pkgID string, version release.Version,
 ) error {
-	if pkgID == "" {
-		return errors.New("package must not be empty")
+	if err := validatePkgPath(pkgID); err != nil {
+		return fmt.Errorf("package id: %w", err)
+	}
+	if err := validatePkgPath(string(version)); err != nil {
+		return fmt.Errorf("release version: %w", err)
 	}
 	key := m.makeDownloadKey(pkgID, version)
 	var val pkgVersionValue
@@ -626,7 +639,6 @@ func (m *Manager) UsePackageVersion(
 	if isInUse {
 		return ErrVersionInUse
 	}
-	pkgID = escapeString(pkgID)
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
 
 	configFile := pkgConfigFile(pkgVersionDirname)
@@ -643,10 +655,9 @@ func (m *Manager) UsePackageVersion(
 // always reflects the local source of truth. It returns false when the package
 // has no in-use version installed locally.
 func (m *Manager) PackageVersionInUse(pkgID string) (release.Version, bool) {
-	if pkgID == "" {
+	if validatePkgPath(pkgID) != nil {
 		return "", false
 	}
-	pkgID = escapeString(pkgID)
 	libDir := makePackageLibDirname(m.dataDir, pkgID)
 	target, err := os.Readlink(libDir)
 	if err != nil {
@@ -805,7 +816,9 @@ func (m *Manager) installRequirements(
 		return fmt.Errorf("parse requirements: %w", err)
 	}
 	for _, req := range reqs {
-		req = escapeString(req)
+		if err := validatePkgPath(req); err != nil {
+			return fmt.Errorf("requirement id: %w", err)
+		}
 		if req == pkgID {
 			continue
 		}
@@ -875,6 +888,11 @@ func (m *Manager) abortDownload(
 func (m *Manager) linkLibVersion(pkgID string, version release.Version) error {
 	dirname := makePackageVersionDirname(m.dataDir, pkgID, version)
 	libdirname := makePackageLibDirname(m.dataDir, pkgID)
+	// Nested package IDs (github.com/owner/repo) need the symlink's
+	// parent dirs to exist.
+	if err := os.MkdirAll(filepath.Dir(libdirname), 0777); err != nil {
+		return fmt.Errorf("mkdir lib parent dirs: %w", err)
+	}
 	tmpLink := libdirname + ".tmp"
 	_ = os.Remove(tmpLink)
 	if err := os.Symlink(dirname, tmpLink); err != nil {
@@ -1828,10 +1846,21 @@ type executableEntry struct {
 	Mode int64
 }
 
-func escapeString(val string) string {
-	val = url.PathEscape(val)
-	val = strings.ReplaceAll(val, ":", "_")
-	return val
+// validatePkgPath rejects package ids and versions that could escape the
+// datadir once joined into on-disk paths (pkg/<id>/<version>, lib/<id>).
+// Slashes are allowed so hierarchical ids such as github.com/owner/repo
+// nest as real directories and $RUNE_PKG_ID expands to the real id; only
+// empty, "." and ".." segments are traversal-unsafe and rejected.
+func validatePkgPath(val string) error {
+	if val == "" {
+		return errors.New("must not be empty")
+	}
+	for seg := range strings.SplitSeq(val, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return fmt.Errorf("invalid path segment %q in %q", seg, val)
+		}
+	}
+	return nil
 }
 
 // Reconcile cleans up incomplete installs left by a previous crash.
@@ -1875,6 +1904,9 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		dirname := makePackageVersionDirname(m.dataDir, pkv.Package, pkv.Version)
 		if !pkv.Complete {
 			_ = os.RemoveAll(dirname)
+			// The depth-1 staging sweep above cannot see staging dirs of
+			// nested package IDs (github.com/owner/repo); remove them here.
+			_ = os.RemoveAll(makeStagingDirname(m.dataDir, pkv.Package, pkv.Version))
 			// Remove lib symlink if it points to the stale version.
 			libdirname := makePackageLibDirname(m.dataDir, pkv.Package)
 			if target, lerr := os.Readlink(libdirname); lerr == nil {

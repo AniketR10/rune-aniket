@@ -789,6 +789,7 @@ func newPkgInstallExtHandler(
 	t *testing.T, configPath string, releaseManager release.Manager,
 	runner ExtensionsRunner,
 	mergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
+	gitRemoteURL ...func(pkgID string) string,
 ) *testWorkspaceManagerHandler {
 	t.Helper()
 
@@ -806,6 +807,9 @@ func newPkgInstallExtHandler(
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	m.packageConfigMergeHook = mergeHook
 	m.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
+	if len(gitRemoteURL) > 0 {
+		m.gitRemoteURL = gitRemoteURL[0]
+	}
 
 	mu := new(sync.Mutex)
 	interrupter := term.NopInterrupter()

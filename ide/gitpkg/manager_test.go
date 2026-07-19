@@ -1,0 +1,456 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package gitpkg
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"io"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	git "github.com/go-git/go-git/v6"
+	backendhttp "github.com/go-git/go-git/v6/backend/http"
+	"github.com/go-git/go-billy/v6/osfs"
+	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/release"
+)
+
+func TestIsGitPkgID(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		id string
+		ok bool
+	}{
+		{"github.com/owner/repo", true},
+		{"github.com/o-w_n.er/re.po-1", true},
+		{"github.com/Owner/Repo", true},
+		{"gitlab.com/owner/repo", true},
+		{"bitbucket.org/owner/repo", true},
+		{"git.example.com/owner/repo", true},
+		{"gitlab.com/group/subgroup/repo", true},
+		{"gitlab.com/a/b/c/d/repo", true},
+		{"go", false},
+		{"python", false},
+		{"", false},
+		{"github.com", false},
+		{"github.com/owner", false},
+		{"localhost/owner/repo", false},
+		{"host/owner/repo", false},
+		{"github.com//repo", false},
+		{"github.com/owner/", false},
+		{"github.com/./repo", false},
+		{"github.com/../repo", false},
+		{"github.com/owner/..", false},
+		{"gitlab.com/group/../repo", false},
+		{"github.com/owner/re$po", false},
+		{"github.com/owner/re po", false},
+		{"github.com/owner/re:po", false},
+		{"https://github.com/owner/repo", false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.ok, IsGitPkgID(tc.id), "id=%q", tc.id)
+	}
+}
+
+// fixtureFile is a file committed into a fixture repository.
+type fixtureFile struct {
+	content string
+	mode    os.FileMode
+}
+
+// validConfigYAML is a minimal installable git package config.
+const validConfigYAML = `extensions:
+  demo:
+    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID/main.py
+requirements:
+  - python
+`
+
+// initFixtureRepo materializes files into dir and commits them,
+// returning the commit SHA.
+func initFixtureRepo(t *testing.T, dir string, files map[string]fixtureFile) string {
+	t.Helper()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	for name, f := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o777))
+		mode := f.mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		require.NoError(t, os.WriteFile(path, []byte(f.content), mode))
+	}
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = wt.Add(".")
+	require.NoError(t, err)
+	sha, err := wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "fixture",
+			Email: "fixture@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+	return sha.String()
+}
+
+// commitFixtureRepo writes more files into an existing fixture repo and
+// commits them, returning the new commit SHA.
+func commitFixtureRepo(t *testing.T, dir string, files map[string]fixtureFile) string {
+	t.Helper()
+	repo, err := git.PlainOpen(dir)
+	require.NoError(t, err)
+	for name, f := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o777))
+		mode := f.mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		require.NoError(t, os.WriteFile(path, []byte(f.content), mode))
+	}
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = wt.Add(".")
+	require.NoError(t, err)
+	sha, err := wt.Commit("update", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "fixture",
+			Email: "fixture@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+	return sha.String()
+}
+
+// tagFixtureRepo creates a lightweight tag at the repo's current HEAD.
+func tagFixtureRepo(t *testing.T, dir, tag string) string {
+	t.Helper()
+	repo, err := git.PlainOpen(dir)
+	require.NoError(t, err)
+	head, err := repo.Head()
+	require.NoError(t, err)
+	_, err = repo.CreateTag(tag, head.Hash(), nil)
+	require.NoError(t, err)
+	return head.Hash().String()
+}
+
+// newFixtureManager serves every repository under base over git
+// smart-HTTP and returns a release.Manager whose git IDs resolve
+// against that server.
+func newFixtureManager(t *testing.T, base string) release.Manager {
+	t.Helper()
+	srv := httptest.NewServer(backendhttp.NewBackend(
+		transport.NewFilesystemLoader(osfs.New(base), false)))
+	t.Cleanup(srv.Close)
+	return New(WithRemoteURL(func(pkgID string) string {
+		return srv.URL + "/" + pkgID
+	}))
+}
+
+func TestGetPackage(t *testing.T) {
+	t.Run("resolves HEAD as latest version", func(t *testing.T) {
+		base := t.TempDir()
+		sha := initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: validConfigYAML}})
+		m := newFixtureManager(t, base)
+
+		pkg, err := m.GetPackage(context.Background(), "github.com/owner/repo")
+		require.NoError(t, err)
+		assert.Equal(t, "github.com/owner/repo", pkg.Name)
+		assert.Equal(t, release.Version(sha[:shortSHALen]), pkg.Latest)
+	})
+	t.Run("missing repository errors", func(t *testing.T) {
+		m := newFixtureManager(t, t.TempDir())
+		_, err := m.GetPackage(context.Background(), "github.com/owner/missing")
+		require.Error(t, err)
+	})
+}
+
+func TestList(t *testing.T) {
+	t.Run("latest only when no tags", func(t *testing.T) {
+		base := t.TempDir()
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: validConfigYAML}})
+		m := newFixtureManager(t, base)
+
+		it, err := m.List(context.Background(), "github.com/owner/repo", nil)
+		require.NoError(t, err)
+		bundles, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		require.Len(t, bundles, 1)
+		assert.Equal(t, release.Latest, bundles[0].Version)
+	})
+	t.Run("latest plus each tag", func(t *testing.T) {
+		base := t.TempDir()
+		repoDir := filepath.Join(base, "github.com", "owner", "repo")
+		initFixtureRepo(t, repoDir,
+			map[string]fixtureFile{"config.yaml": {content: validConfigYAML}})
+		tagFixtureRepo(t, repoDir, "v1.0.0")
+		tagFixtureRepo(t, repoDir, "v2.0.0")
+		m := newFixtureManager(t, base)
+
+		it, err := m.List(context.Background(), "github.com/owner/repo", nil)
+		require.NoError(t, err)
+		bundles, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		versions := make([]release.Version, len(bundles))
+		for i, b := range bundles {
+			versions[i] = b.Version
+		}
+		assert.Equal(t, release.Latest, versions[0], "latest must be first")
+		assert.ElementsMatch(t,
+			[]release.Version{release.Latest, "v1.0.0", "v2.0.0"}, versions)
+	})
+}
+
+// bufferProgressWriter collects the tarball and progress samples.
+type bufferProgressWriter struct {
+	bytes.Buffer
+	samples int
+}
+
+func (b *bufferProgressWriter) Progress(progress, total int64, units string) {
+	b.samples++
+}
+
+func untarAll(t *testing.T, data []byte) map[string]*tar.Header {
+	t.Helper()
+	gzr, err := gzip.NewReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	tr := tar.NewReader(gzr)
+	entries := make(map[string]*tar.Header)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		entries[hdr.Name] = hdr
+		_, err = io.Copy(io.Discard, tr)
+		require.NoError(t, err)
+	}
+	return entries
+}
+
+// entryContent returns the content of a single file from a gzipped tar
+// stream, failing the test if the file is absent.
+func entryContent(t *testing.T, data []byte, name string) string {
+	t.Helper()
+	gzr, err := gzip.NewReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		if hdr.Name == name {
+			var buf bytes.Buffer
+			_, err = io.Copy(&buf, tr)
+			require.NoError(t, err)
+			return buf.String()
+		}
+	}
+	t.Fatalf("entry %q not found in tarball", name)
+	return ""
+}
+
+func TestGet(t *testing.T) {
+	t.Run("streams worktree tarball", func(t *testing.T) {
+		base := t.TempDir()
+		sha := initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{
+				"config.yaml":    {content: validConfigYAML},
+				"main.py":        {content: "print('hi')\n"},
+				"scripts/run.sh": {content: "#!/bin/sh\n", mode: 0o755},
+			})
+		m := newFixtureManager(t, base)
+
+		pw := &bufferProgressWriter{}
+		bundle, err := m.Get(context.Background(),
+			"github.com/owner/repo", release.Latest, pw)
+		require.NoError(t, err)
+		assert.Equal(t, release.Version(sha[:shortSHALen]), bundle.Version,
+			"latest install stores the resolved HEAD short sha")
+		assert.False(t, bundle.CreatedAt.IsZero())
+		assert.Positive(t, pw.samples)
+
+		entries := untarAll(t, pw.Bytes())
+		require.Contains(t, entries, "config.yaml")
+		require.Contains(t, entries, "main.py")
+		require.Contains(t, entries, "scripts/run.sh")
+		assert.NotZero(t, entries["scripts/run.sh"].FileInfo().Mode()&0o111,
+			"exec bit must be preserved")
+		for name := range entries {
+			assert.NotContains(t, name, ".git/")
+		}
+	})
+	t.Run("discard progress writer skips cloning", func(t *testing.T) {
+		base := t.TempDir()
+		sha := initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: validConfigYAML}})
+		m := newFixtureManager(t, base)
+
+		bundle, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, release.NopProgressWriter(io.Discard))
+		require.NoError(t, err)
+		assert.Equal(t, release.Version(sha[:shortSHALen]), bundle.Version)
+	})
+	t.Run("installs a tag's worktree", func(t *testing.T) {
+		base := t.TempDir()
+		repoDir := filepath.Join(base, "github.com", "owner", "repo")
+		initFixtureRepo(t, repoDir, map[string]fixtureFile{
+			"config.yaml": {content: validConfigYAML},
+			"main.py":     {content: "print('v1')\n"},
+		})
+		tagFixtureRepo(t, repoDir, "v1.0.0")
+		// HEAD moves past the tag with different content.
+		commitFixtureRepo(t, repoDir, map[string]fixtureFile{
+			"main.py": {content: "print('head')\n"},
+		})
+		m := newFixtureManager(t, base)
+
+		pw := &bufferProgressWriter{}
+		bundle, err := m.Get(context.Background(),
+			"github.com/owner/repo", "v1.0.0", pw)
+		require.NoError(t, err)
+		assert.Equal(t, release.Version("v1.0.0"), bundle.Version,
+			"a tag install stores the tag name")
+		entries := untarAll(t, pw.Bytes())
+		require.Contains(t, entries, "main.py")
+		assert.Equal(t, "print('v1')\n", entryContent(t, pw.Bytes(), "main.py"),
+			"the tag's tree must be installed, not HEAD")
+	})
+	t.Run("installs a commit's worktree", func(t *testing.T) {
+		base := t.TempDir()
+		repoDir := filepath.Join(base, "github.com", "owner", "repo")
+		first := initFixtureRepo(t, repoDir, map[string]fixtureFile{
+			"config.yaml": {content: validConfigYAML},
+			"main.py":     {content: "print('first')\n"},
+		})
+		commitFixtureRepo(t, repoDir, map[string]fixtureFile{
+			"main.py": {content: "print('head')\n"},
+		})
+		m := newFixtureManager(t, base)
+
+		pw := &bufferProgressWriter{}
+		bundle, err := m.Get(context.Background(),
+			"github.com/owner/repo", release.Version(first[:shortSHALen]), pw)
+		require.NoError(t, err)
+		assert.Equal(t, release.Version(first[:shortSHALen]), bundle.Version,
+			"a commit install stores the requested hash")
+		assert.Equal(t, "print('first')\n", entryContent(t, pw.Bytes(), "main.py"),
+			"the requested commit's tree must be installed, not HEAD")
+	})
+	t.Run("unknown version errors", func(t *testing.T) {
+		base := t.TempDir()
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: validConfigYAML}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			"v9.9.9", &bufferProgressWriter{})
+		require.ErrorContains(t, err, "unknown version")
+	})
+	t.Run("missing config.yaml errors", func(t *testing.T) {
+		base := t.TempDir()
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"README.md": {content: "hi"}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "config.yaml")
+	})
+	t.Run("config without extensions errors", func(t *testing.T) {
+		base := t.TempDir()
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: "gui:\n  env: {}\n"}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "extensions")
+	})
+	t.Run("non-source extension path errors", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID/bin/demo\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: cfg}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "source entrypoint")
+	})
+	t.Run("go entrypoint must be main.go", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID/other.go\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: cfg}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "main.go")
+	})
+	t.Run("invalid requirements errors", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: main.py\nrequirements: python\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{"config.yaml": {content: cfg}})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "requirements")
+	})
+}
+
+func TestUnsupportedOperations(t *testing.T) {
+	t.Parallel()
+	m := New()
+	ctx := context.Background()
+	const id = "github.com/owner/repo"
+	assert.ErrorIs(t, m.Create(ctx, release.Package{Name: id}), ErrNotSupported)
+	assert.ErrorIs(t, m.UpdatePackageMetadata(ctx, id, nil), ErrNotSupported)
+	assert.ErrorIs(t, m.DeletePackage(ctx, id), ErrNotSupported)
+	assert.ErrorIs(t, m.Upload(ctx, release.Bundle{Package: id}, nil), ErrNotSupported)
+	assert.ErrorIs(t, m.Delete(ctx, id, "abc"), ErrNotSupported)
+}

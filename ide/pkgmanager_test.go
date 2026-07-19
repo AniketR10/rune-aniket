@@ -590,6 +590,7 @@ func TestSetReleaseManager(t *testing.T) {
 func newTestWorkspaceManagerHandlerForPkgManager(
 	t *testing.T, releaseManager release.Manager,
 	showManual bool, notificationsWidth int,
+	gitRemoteURL ...func(pkgID string) string,
 ) *testWorkspaceManagerHandler {
 	cfg := defaultCfg()
 	// disable progress hint animation to avoid flaky assertion on spinner frame
@@ -601,6 +602,9 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
+	if len(gitRemoteURL) > 0 {
+		m.gitRemoteURL = gitRemoteURL[0]
+	}
 
 	// ensure that command manual is always shown
 	if showManual {
