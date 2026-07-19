@@ -43,3 +43,5 @@ __pycache__/
 *.pyc
 
 python_modules/**
+*.egg-info/
+uv.lock
