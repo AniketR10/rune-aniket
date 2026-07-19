@@ -587,8 +587,10 @@ func (h *editorHandler) Close() error {
 		case <-time.After(h.gracefulQuitTimeout):
 			_, _ = h.notifications.Notify(
 				browserapi.LevelWarn,
-				"exoeditor: %s did not exit within %s of quit; "+
-					"closing pty", h.resource.Name(), h.gracefulQuitTimeout)
+				"exoeditor: closing pty: %s did not exit within %s of quit; "+
+					"please review the 'editor.exo.quit' config. "+
+					"See https://docs.rune.build/learn/exoeditor for more details.",
+				h.resource.Name(), h.gracefulQuitTimeout)
 			h.hangUp()
 		}
 		h.scheduleNextTick(func() {
