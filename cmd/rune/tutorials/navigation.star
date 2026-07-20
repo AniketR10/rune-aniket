@@ -13,6 +13,40 @@
 
 ck = command_key()
 
+# Cursor-movement keys the teaching windows must let through so the user
+# can position the cursor on a symbol before pressing the LSP binding.
+# Arrow keys work in every mode; modal adds vim's home row and emacs adds
+# the GNU-Emacs motion keys. Without these the overlay swallows the
+# keypress and pulses its hint instead of moving the cursor.
+arrow_keys = ["<up>", "<down>", "<left>", "<right>"]
+if editor_mode() == "modal":
+    move_keys = arrow_keys + ["h", "j", "k", "l", "w", "b", "e", "0", "$"]
+elif editor_mode() == "emacs":
+    move_keys = arrow_keys + ["<ctrl-p>", "<ctrl-n>", "<ctrl-f>", "<ctrl-b>",
+                              "<ctrl-a>", "<ctrl-e>"]
+else:
+    move_keys = arrow_keys
+
+# How to move through a location picker / finder list, phrased per mode.
+# Modal points with `<ctrl-j>` / `<ctrl-k>`; emacs and standard use the
+# arrow keys.
+if editor_mode() == "modal":
+    move_phrase = "`<ctrl-j>` / `<ctrl-k>` (or the arrow keys)"
+else:
+    move_phrase = "the arrow keys `<up>` / `<down>`"
+
+# `<alt-shift-d>` opens the command prompt prefilled with `lsp definition `
+# so the user only types the symbol name. That prefill binding ships in
+# modal and standard mode; emacs has no equivalent, so fall back to the
+# command-prompt wording there.
+if editor_mode() == "emacs":
+    def_by_name_cta = ("open the command prompt (`" + ck +
+                       "`) and type `lsp definition `")
+    def_by_name_dismiss = [ck]
+else:
+    def_by_name_cta = "press `<alt-shift-d>`"
+    def_by_name_dismiss = [ck, "<alt-shift-d>"]
+
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
     return (" Default key: `" + k + "`.") if k else ""
@@ -98,26 +132,23 @@ and read documentation.
 Press `<enter>` or `<space>` to continue.
 """
 
-lsp_definition_name_md = """\
-**Find a definition by name.** You do not need your cursor on a symbol
-to jump to it. Run `lsp definition <name>` and Rune resolves the symbol
-by name across the workspace, then jumps to where it is defined.
-
-At the command prompt (`""" + ck + """`), type `lsp definition ` and a
-symbol name, then press `<enter>`. In modal or standard mode the
-`<alt-shift-d>` binding prefills `lsp definition ` for you so you only
-type the name.
-
-`lsp references <name>` and `lsp hover <name>` follow the same
-by-name pattern, prefilled by `<alt-shift-r>` and `<alt-shift-t>`.
-"""
-
 lsp_definition_cursor_md = """\
-**Jump to the definition under your cursor.** With the cursor on a
-symbol, `lsp definition` (no argument) jumps to where that symbol is
-defined.""" + keyhint("lsp", "definition") + """
+**Jump to the definition under your cursor.** This is the one you will
+reach for most. Put your cursor on any symbol and `lsp definition` (no
+argument) jumps straight to where that symbol is defined.""" + keyhint("lsp", "definition") + """
 
 Put your cursor on a symbol, then """ + keypress("lsp", "definition") + """.
+"""
+
+lsp_definition_name_md = """\
+**Find a definition by name.** You do not even need your cursor on a
+symbol: `lsp definition <name>` fuzzy-matches the symbol by name across
+the whole workspace and jumps to it. `lsp references` and `lsp hover`
+take a name the same way.
+
+Search for a definition now: """ + def_by_name_cta + """ and type a
+symbol name. Cannot think of one? Peruse the completion list and press
+`<enter>` on any entry.
 """
 
 cursorhistory_md = """\
@@ -129,12 +160,19 @@ your steps.
 - `cursorhistory prev` goes back to where you were.""" + keyhint("cursorhistory", "prev") + """
 - `cursorhistory next` goes forward again.""" + keyhint("cursorhistory", "next") + """
 
-Go back to where you jumped from (""" + keypress("cursorhistory", "prev") + """),
-then forward again (""" + keypress("cursorhistory", "next") + """).
+First, go back to where you jumped from: """ + keypress("cursorhistory", "prev") + """.
 
 `cursorhistory jump` opens a picker over the whole history when you want
 to leap several stops at once. `<alt-j>` / `<alt-k>` step through the
 diagnostics in the current file the same way.
+"""
+
+cursorhistory_next_md = """\
+**Now jump forward again.** Going back left a breadcrumb ahead of you.
+`cursorhistory next` follows it forward to where you just were, so you
+can retrace an exploration in either direction.""" + keyhint("cursorhistory", "next") + """
+
+Go forward again: """ + keypress("cursorhistory", "next") + """.
 """
 
 lsp_more_md = """\
@@ -145,7 +183,10 @@ work the same way: put your cursor on a symbol and run one.
 - `lsp implementation` finds the concrete types that satisfy an interface (or the interfaces a type satisfies).""" + keyhint("lsp", "implementation") + """
 - `lsp hover` shows the symbol's type and documentation inline.""" + keyhint("lsp", "hover") + """
 
-Try one now: put your cursor on a symbol and """ + keypress("lsp", "references") + """.
+Try `lsp references` now: put your cursor on a symbol and """ + keypress("lsp", "references") + """.
+It opens the **location picker** — a list of every use of that symbol.
+Move through the list with """ + move_phrase + """ and press `<enter>` on an
+entry to jump to it.
 """
 
 wrapup_md = """\
@@ -153,7 +194,7 @@ That is code navigation in Rune. A quick recap:
 
 - **Find a file by name** with `searchfile`.
 - **Find where text lives** with `searchtext`.
-- **Jump to a definition** with `lsp definition` (by name or under the cursor).
+- **Jump to a definition** with `lsp definition` (under the cursor, or by name).
 - **Navigate back and forth** with `cursorhistory prev` / `next`.
 - **Ask about a symbol** with `lsp references`, `lsp implementation`, and `lsp hover`.
 
@@ -211,21 +252,9 @@ def teach_lsp_intro():
                     dismiss_keys = [ck])
 
 
-def teach_definition_by_name():
-    floating_window(title = "Find a definition by name",
-                    text = lsp_definition_name_md, dismiss_keys = [ck])
-    wait_command(
-        title    = "Find a definition by name",
-        command  = "lsp",
-        on_error = ("Run `<cmd>lsp definition <name>` with a symbol name, or " +
-                    "press `<alt-shift-d>` to prefill `lsp definition ` and " +
-                    "type the name."),
-    )
-    notify(level = success, message = "You jumped to a definition by name.")
-
-
 def teach_definition_at_cursor():
     floating_window(title = "Go to definition", text = lsp_definition_cursor_md,
+                    allow_keys = move_keys,
                     dismiss_keys = dismiss_for("lsp", "definition"))
     wait_command(
         title    = "Go to definition",
@@ -236,20 +265,43 @@ def teach_definition_at_cursor():
     notify(level = success, message = "You jumped to the definition under your cursor.")
 
 
+def teach_definition_by_name():
+    floating_window(title = "Find a definition by name",
+                    text = lsp_definition_name_md,
+                    dismiss_keys = def_by_name_dismiss)
+    wait_command(
+        title    = "Find a definition by name",
+        command  = "lsp",
+        on_error = ("Run `<cmd>lsp definition <name>` with a symbol name, or " +
+                    "press `<alt-shift-d>` to prefill `lsp definition ` and " +
+                    "type the name."),
+    )
+    notify(level = success, message = "You jumped to a definition by name.")
+
+
 def teach_cursorhistory():
     floating_window(title = "Navigate back and forth", text = cursorhistory_md,
                     dismiss_keys = dismiss_for("cursorhistory", "prev"))
     wait_command(
-        title    = "Navigate back and forth",
+        title    = "Jump back",
         command  = "cursorhistory",
-        on_error = ("Step through the jumplist with `<cmd>cursorhistory prev` " +
-                    "and `<cmd>cursorhistory next`."),
+        on_error = "Go back with `<cmd>cursorhistory prev`.",
     )
-    notify(level = success, message = "You walked the cursor history.")
+    notify(level = success, message = "You jumped back.")
+
+    floating_window(title = "Jump forward", text = cursorhistory_next_md,
+                    dismiss_keys = dismiss_for("cursorhistory", "next"))
+    wait_command(
+        title    = "Jump forward",
+        command  = "cursorhistory",
+        on_error = "Go forward again with `<cmd>cursorhistory next`.",
+    )
+    notify(level = success, message = "You walked the cursor history back and forth.")
 
 
 def teach_lsp_more():
     floating_window(title = "Ask about a symbol", text = lsp_more_md,
+                    allow_keys = move_keys,
                     dismiss_keys = dismiss_for("lsp", "references"))
     wait_command(
         title    = "Ask about a symbol",
@@ -280,8 +332,8 @@ def run():
     teach_searchfile()
     teach_searchtext()
     teach_lsp_intro()
-    teach_definition_by_name()
     teach_definition_at_cursor()
+    teach_definition_by_name()
     teach_cursorhistory()
     teach_lsp_more()
 
@@ -289,4 +341,4 @@ def run():
                     alignment = "top", dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "2", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "7", entry = run)
