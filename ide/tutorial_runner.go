@@ -96,6 +96,12 @@ func (r *tutorialRunner) has(name string) bool {
 	return ok
 }
 
+// running reports whether a tutorial overlay is currently active. It
+// must be called on the event loop, where overlay is mutated.
+func (r *tutorialRunner) running() bool {
+	return r.overlay != nil
+}
+
 func (r *tutorialRunner) Resize(width, height int) {
 	r.width, r.height = width, height
 	if r.overlay != nil {

@@ -127,12 +127,15 @@ func (i *IDE) onTutorialsInstalled(names []string) (bool, error) {
 
 	i.options.scheduleFn(func() {
 		prompted := false
+		// Never interrupt a tutorial the user is already running with a
+		// "run this newly installed one now?" prompt.
+		running := i.tutorial.running()
 		for _, b := range ready {
 			if !i.tutorial.register(b.name, b.t) {
 				i.notifyTutorialNotRegistered(b.name)
 				continue
 			}
-			if !prompted {
+			if !prompted && !running {
 				i.promptRunTutorial(b.name)
 				prompted = true
 			}

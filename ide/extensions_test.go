@@ -624,6 +624,90 @@ func TestPkgInstallMultipleTutorialsPromptsOnce(t *testing.T) {
 		"installing multiple tutorials must open exactly one prompt, not one per tutorial")
 }
 
+// TestPkgInstallTutorialDoesNotPromptDuringActiveTutorial asserts that
+// installing a package that adds a tutorial does not interrupt a tutorial
+// the user is already running: the new tutorial is registered live, but
+// no "run it now?" prompt is opened over the active tutorial.
+func TestPkgInstallTutorialDoesNotPromptDuringActiveTutorial(t *testing.T) {
+	const (
+		pkgID   = "livetutpkg"
+		tutName = "gamma-intro"
+		tutSrc  = "def run():\n    floating_window(title=\"hi\", text=\"hello\")\n" +
+			"tutorial(entry=run)\n"
+	)
+
+	dir := t.TempDir()
+	tutPath := filepath.Join(dir, tutName+".star")
+	require.NoError(t, os.WriteFile(tutPath, []byte(tutSrc), 0o644))
+
+	configPath := filepath.Join(dir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("editor:\n  mode: modal\n"), 0o644))
+
+	wsFile := filepath.Join(dir, "seed.go")
+	require.NoError(t, os.WriteFile(wsFile, nil, 0o644))
+
+	pkgs := idepkgtest.MakePackages(release.Package{Name: pkgID, Latest: "1"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: pkgID, Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.SetMissProgressComplete(true)
+	rm.SetTarball(pkgID, makeTutorialPkgTarball(t, map[string]string{tutName: tutPath}))
+
+	mu := new(sync.Mutex)
+	dataDir := t.TempDir()
+	sched, startSched := newDeferredScheduler(mu)
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithReleaseManager(rm),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+		WithScheduleNextTick(sched),
+		WithStarlarkTutorial("basics", minimalStarTutorial),
+		WithStartingTutorial("basics"),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	_ = i.Ready()
+	startSched()
+	i.WaitWorkspaces()
+
+	uri, err := workspaceapi.CurrentUserHostURI(wsFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(uri))
+	i.root.Resize(80, 24)
+	mu.Unlock()
+
+	// The starting tutorial must be running before the install.
+	require.Eventually(t, func() bool {
+		return activeTutorialName(i, mu) == "basics"
+	}, 10*time.Second, 20*time.Millisecond,
+		"the basics tutorial should be running before install")
+
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       i.workspaceHandler.pkgmanager.pkg,
+		UpdateChecker: i.workspaceHandler.pkgmanager.uc,
+	})
+	mu.Lock()
+	_, err = h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", pkgID},
+	}, repl.NopProgressWriter())
+	mu.Unlock()
+	require.NoError(t, err)
+
+	// The installed tutorial is still registered live...
+	require.Eventually(t, func() bool {
+		return tutorialRegistered(i, mu, tutName)
+	}, 10*time.Second, 20*time.Millisecond,
+		"installing a tutorial must register it live even while another runs")
+
+	// ...but the active tutorial is untouched and no prompt was opened.
+	assert.Equal(t, "basics", activeTutorialName(i, mu),
+		"install must not switch away from the running tutorial")
+	assert.Equal(t, 0, countFloatingWindows(i, mu),
+		"install must not open a run-it-now prompt over an active tutorial")
+}
+
 func countFloatingWindows(i *IDE, mu sync.Locker) int {
 	mu.Lock()
 	defer mu.Unlock()
@@ -640,6 +724,12 @@ func tutorialRegistered(i *IDE, mu sync.Locker, name string) bool {
 	mu.Lock()
 	defer mu.Unlock()
 	return i.tutorial.has(name)
+}
+
+func activeTutorialName(i *IDE, mu sync.Locker) string {
+	mu.Lock()
+	defer mu.Unlock()
+	return i.tutorial.activeName
 }
 
 // makeTutorialPkgTarball builds a gzipped tar of a package whose config.yaml
