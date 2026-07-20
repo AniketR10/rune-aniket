@@ -118,6 +118,12 @@ type Tutorial struct {
 	// plain prefix line.
 	commandManualLookup CommandManualLookup
 
+	// workspaceOpen reports whether a project workspace is open in the
+	// focused slot, exposed to the DSL via workspace_open(). nil makes
+	// the builtin return True so tutorials/tests without the wiring are
+	// not spuriously blocked.
+	workspaceOpen func() bool
+
 	// parsed entry function. Set once at New time.
 	entry *starlark.Function
 
@@ -176,6 +182,7 @@ func New(
 	editorMode string,
 	keyForCommand func(cmd string, args []string) string,
 	commandManualLookup CommandManualLookup,
+	workspaceOpen func() bool,
 ) (*Tutorial, error) {
 	if src == "" {
 		return nil, errors.New("starlarktutorial: empty source")
@@ -195,6 +202,7 @@ func New(
 		editorMode:          editorMode,
 		keyForCommand:       keyForCommand,
 		commandManualLookup: commandManualLookup,
+		workspaceOpen:       workspaceOpen,
 	}
 	t.overlay.C = &overlayComponent{}
 

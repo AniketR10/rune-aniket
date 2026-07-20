@@ -156,6 +156,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -300,6 +301,7 @@ func TestEntryRequired(t *testing.T) {
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entry")
@@ -316,6 +318,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entry must be a function")
@@ -331,6 +334,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -352,6 +356,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already called")
@@ -366,6 +371,7 @@ func TestEmptySourceRejected(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -859,6 +865,7 @@ tutorial(entry=run)
 			nil, nil, term.KeyComb{Ch: ':'},
 			"standard", nil,
 			nil,
+			nil,
 		)
 		require.NoError(t, err, "alignment %q must parse", a)
 		tut.Resize(80, 24)
@@ -878,6 +885,7 @@ tutorial(entry=run)
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.NoError(t, err, "unknown alignment must defer to the entry call")
@@ -1201,6 +1209,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -1545,6 +1554,7 @@ func newTutorialWith(
 		term.KeyComb{Ch: ':'},
 		mode, keyFor,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -1619,6 +1629,60 @@ tutorial(entry=run)
 	assert.True(t, notis.containsSubstring("k=[]"),
 		"key_for must return empty when the lookup func is nil, got %v",
 		notis.renderedCalls())
+}
+
+// newTutorialWorkspace builds a Tutorial with an explicit workspace_open
+// closure so tests can exercise the workspace_open() builtin.
+func newTutorialWorkspace(
+	t *testing.T, src string, workspaceOpen func() bool,
+) (*Tutorial, *fakeNotis) {
+	t.Helper()
+	notis := &fakeNotis{}
+	tut, err := New(
+		"tutorial-under-test", src,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		workspaceOpen,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	tut.Resize(80, 24)
+	return tut, notis
+}
+
+// TestWorkspaceOpenBuiltin asserts that workspace_open() returns the
+// wired closure's value and returns True when no closure is wired.
+func TestWorkspaceOpenBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="open=" + str(workspace_open()))
+tutorial(entry=run)
+`
+	cases := []struct {
+		name          string
+		workspaceOpen func() bool
+		want          string
+	}{
+		{name: "open", workspaceOpen: func() bool { return true }, want: "open=True"},
+		{name: "closed", workspaceOpen: func() bool { return false }, want: "open=False"},
+		{name: "nil defaults to open", workspaceOpen: nil, want: "open=True"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tut, notis := newTutorialWorkspace(t, src, tc.workspaceOpen)
+			resetAndWait(t, tut, time.Second)
+			waitFinished(t, tut, time.Second)
+			assert.True(t, notis.containsSubstring(tc.want),
+				"workspace_open() must expand to %q, got %v",
+				tc.want, notis.renderedCalls())
+		})
+	}
 }
 
 // TestShaderClearsAfterFloatingWindow asserts that the hint pulse
@@ -1740,6 +1804,7 @@ func TestLoadIsRejected(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.Error(t, err)

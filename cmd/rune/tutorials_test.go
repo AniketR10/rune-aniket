@@ -59,6 +59,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 		"standard",
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -89,6 +90,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 		"modal",
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -102,6 +104,93 @@ func TestEmbeddedTutorialOptionsRegistersBasics(t *testing.T) {
 	opts := embeddedTutorialOptions()
 	require.NotEmpty(t, opts,
 		"embeddedTutorialOptions must register at least basics")
+}
+
+// TestNavigationTutorialParses asserts that the embedded navigation.star
+// tutorial parses through starlarktutorial.New, registers a callable
+// entry, and reports the expected id/title/version.
+func TestNavigationTutorialParses(t *testing.T) {
+	t.Parallel()
+
+	require.NotEmpty(t, navigationTutorial,
+		"navigationTutorial embed must not be empty")
+	tut, err := starlarktutorial.New(
+		"navigation", navigationTutorial,
+		nil,
+		nil,
+		nil,
+		nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil,
+		nil,
+		term.KeyComb{Ch: ':'},
+		"standard",
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+
+	assert.Equal(t, "navigation", tut.ID())
+	assert.Equal(t, "Navigate code", tut.Title())
+	assert.Equal(t, "1", tut.Version())
+}
+
+// TestNavigationTutorialParsesModalMode asserts the embedded navigation
+// tutorial also parses under modal editor mode.
+func TestNavigationTutorialParsesModalMode(t *testing.T) {
+	t.Parallel()
+
+	tut, err := starlarktutorial.New(
+		"navigation", navigationTutorial,
+		nil,
+		nil,
+		nil,
+		nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil,
+		nil,
+		term.KeyComb{Ch: ':'},
+		"modal",
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	assert.Equal(t, "1", tut.Version())
+}
+
+// TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
+// tutorial also parses under the emacs editor mode.
+func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
+	t.Parallel()
+
+	tut, err := starlarktutorial.New(
+		"navigation", navigationTutorial,
+		nil,
+		nil,
+		nil,
+		nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil,
+		nil,
+		term.KeyComb{Ch: ':'},
+		"emacs",
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	assert.Equal(t, "1", tut.Version())
 }
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
@@ -124,6 +213,7 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		term.KeyComb{Ch: ':'},
 		"emacs",
+		nil,
 		nil,
 		nil,
 	)

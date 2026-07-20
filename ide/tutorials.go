@@ -196,6 +196,7 @@ type tutorialsConfig struct {
 	editorMode       string
 	keyForCommand    func(cmd string, args []string) string
 	manualLookup     starlarktutorial.CommandManualLookup
+	workspaceOpen    func() bool
 }
 
 func newTutorialsConfig(i *IDE) tutorialsConfig {
@@ -220,6 +221,9 @@ func newTutorialsConfig(i *IDE) tutorialsConfig {
 			return starlarktutorial.PrettyKeySpec(rawKeyFor(cmd, args))
 		},
 		manualLookup: buildTutorialCommandManualLookup(i.workspaceHandler),
+		workspaceOpen: func() bool {
+			return !i.workspaceHandler.focusEx().home
+		},
 	}
 }
 
@@ -233,6 +237,7 @@ func (c tutorialsConfig) build(
 		c.defaultAttr, c.frameCharSet, c.promptConfig,
 		c.scheduleNextTick, c.partition, c.commandKey,
 		c.editorMode, c.keyForCommand, c.manualLookup,
+		c.workspaceOpen,
 	)
 }
 

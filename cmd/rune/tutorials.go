@@ -32,8 +32,12 @@ import (
 //go:embed tutorials/basics.star
 var basicsTutorial string
 
+//go:embed tutorials/navigation.star
+var navigationTutorial string
+
 func embeddedTutorialOptions() []ide.Option {
 	return []ide.Option{
 		ide.WithStarlarkTutorial("basics", basicsTutorial),
+		ide.WithStarlarkTutorial("navigation", navigationTutorial),
 	}
 }

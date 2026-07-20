@@ -259,6 +259,7 @@ tutorial(entry=run)
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -331,6 +332,7 @@ tutorial(entry=run)
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -388,6 +390,7 @@ tutorial(entry=run)
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -435,6 +438,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -486,6 +490,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -578,6 +583,7 @@ tutorial(entry=run)
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -634,6 +640,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)

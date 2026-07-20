@@ -48,6 +48,7 @@ func builtins(t *Tutorial) starlark.StringDict {
 		"command_key":       starlark.NewBuiltin("command_key", builtinCommandKey(t)),
 		"editor_mode":       starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
 		"key_for":           starlark.NewBuiltin("key_for", builtinKeyFor(t)),
+		"workspace_open":    starlark.NewBuiltin("workspace_open", builtinWorkspaceOpen(t)),
 		"exit":              starlark.NewBuiltin("exit", builtinExit()),
 		"cancel_on_dismiss": starlark.NewBuiltin("cancel_on_dismiss", builtinCancelOnDismiss()),
 
@@ -722,5 +723,22 @@ func builtinKeyFor(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			return starlark.String(""), nil
 		}
 		return starlark.String(t.keyForCommand(cmd, cmdArgs)), nil
+	}
+}
+
+// builtinWorkspaceOpen implements workspace_open(): it reports whether
+// a project workspace is open in the focused slot. It returns True
+// when no lookup func is wired so tutorials/tests without the wiring
+// are not spuriously blocked.
+func builtinWorkspaceOpen(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		if err := starlark.UnpackArgs(b.Name(), args, kwargs); err != nil {
+			return nil, err
+		}
+		return starlark.Bool(t.workspaceOpen == nil || t.workspaceOpen()), nil
 	}
 }
