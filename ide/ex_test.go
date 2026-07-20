@@ -3279,6 +3279,99 @@ func TestCommandPromptShaderGating(t *testing.T) {
 	})
 }
 
+// TestReplacingActivePromptClosesPreviousWindow pins that opening a
+// second command prompt while the first is still active retires the old
+// floating window (and its prompt) instead of orphaning it, without the
+// old close callback clobbering the freshly installed prompt.
+func TestReplacingActivePromptClosesPreviousWindow(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+
+	b.ex.openCommandPrompt()
+	oldWin := b.ex.cmdWin
+	oldCmd := b.ex.cmd
+	require.NotNil(t, oldWin)
+	require.NotNil(t, oldCmd)
+
+	// Open a second prompt without manually closing the first.
+	b.ex.openCommandPrompt()
+	newWin := b.ex.cmdWin
+	newCmd := b.ex.cmd
+	require.NotNil(t, newWin)
+	require.NotNil(t, newCmd)
+
+	assert.True(t, oldWin.Closed(),
+		"the superseded floating window must be closed")
+	assert.NotSame(t, oldWin, newWin,
+		"a new floating window must be installed")
+	assert.NotSame(t, oldCmd, newCmd,
+		"a new prompt must be installed")
+	assert.False(t, newWin.Closed(),
+		"the newly installed window must stay open")
+	assert.Same(t, newCmd, b.ex.cmd,
+		"e.cmd must reference the new prompt")
+
+	// Closing the already-closed old window/callback must not clear the
+	// new prompt state.
+	require.NoError(t, oldWin.Close())
+	assert.Same(t, newCmd, b.ex.cmd,
+		"stale old-window close must not clear the new prompt")
+	assert.Same(t, newWin, b.ex.cmdWin,
+		"stale old-window close must not clear the new window")
+}
+
+// TestReplacingActivePromptStopsOldShader verifies that replacing an
+// active shader-backed prompt tears down the old shader and installs a
+// fresh one for the new prompt, leaving exactly one live shader.
+func TestReplacingActivePromptStopsOldShader(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+	b.ex.commandPromptCfg.shader.enabled = true
+
+	b.ex.openCommandPrompt()
+	oldShader := b.ex.promptShader
+	require.NotNil(t, oldShader)
+
+	b.ex.openCommandPrompt()
+	newShader := b.ex.promptShader
+	require.NotNil(t, newShader,
+		"the replacement prompt must have its own shader")
+	assert.NotSame(t, oldShader, newShader,
+		"the old shader must be replaced, not reused")
+
+	require.NoError(t, b.ex.cmdWin.Close())
+	assert.Nil(t, b.ex.promptShader,
+		"closing the current prompt must clear its shader")
+}
+
+// TestReplacingActivePromptFromDispatch reproduces the reentrant ordering
+// risk: the replacement prompt is opened from within command dispatch
+// while the old prompt is still installed. The old window must still be
+// retired and the new prompt must remain the active one.
+func TestReplacingActivePromptFromDispatch(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+
+	b.ex.openCommandPrompt()
+	oldWin := b.ex.cmdWin
+	require.NotNil(t, oldWin)
+
+	// Simulate a command handler that, while the old prompt is live,
+	// installs a replacement (e.g. switching to the history prompt).
+	require.NoError(t, b.ex.openCommandHistoryPrompt(context.Background()))
+	newWin := b.ex.cmdWin
+	newCmd := b.ex.cmd
+	require.NotNil(t, newWin)
+	require.NotNil(t, newCmd)
+
+	assert.True(t, oldWin.Closed(), "the superseded window must be closed")
+	assert.NotSame(t, oldWin, newWin, "a new window must be installed")
+	assert.Same(t, newCmd, b.ex.cmd, "the new prompt must remain active")
+}
+
 type closeCountingPartitionStore struct {
 	storageapi.Service
 	partitionCloseCount atomic.Int32

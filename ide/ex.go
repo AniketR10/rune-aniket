@@ -2631,6 +2631,17 @@ func (e *ex) openCommandHistoryPrompt(_ context.Context, _ ...string) error {
 }
 
 func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
+	// Retire any prompt still installed before building the replacement.
+	// Closing the previous floating window runs its onClose callback while
+	// e.cmd still refers to the old prompt, so that callback clears the old
+	// prompt state and stops the old shader. Detaching here prevents the old
+	// window and its cell/undo buffers from leaking and keeps a stale close
+	// callback from clobbering the prompt we are about to install.
+	if e.cmdWin != nil && !e.cmdWin.Closed() {
+		_ = e.cmdWin.Close()
+	}
+	e.cmdWin = nil
+
 	commandCfg := command.DefaultConfig()
 	commandCfg.NoMarkdown = false
 	commandCfg.MaxHistory = e.config.CommandMaxHistory
