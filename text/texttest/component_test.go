@@ -349,6 +349,16 @@ func TestComponentOpen(t *testing.T) {
 		assert.Equal(t, h, h2)
 	})
 
+	t.Run("remote file tab uses basename like a local file", func(t *testing.T) {
+		c, _, _, uri := newTestComponentWithFile(
+			t, "ssh://user@host:22/home/user/project/main.go",
+		)
+
+		_, defName, ok := c.Browser().TabName(uri)
+		require.True(t, ok)
+		assert.Equal(t, "main.go", defName)
+	})
+
 	t.Run("it's idempotent", func(t *testing.T) {
 		myName := "file:///var/music/La_Rosalia.mp3"
 

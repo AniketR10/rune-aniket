@@ -524,14 +524,22 @@ func (c *Component) openFileTabSync(
 	if err != nil {
 		return nil, err
 	}
-	t := c.newTab(file, c.iconFor(file), file.Name(), handler, fc)
+	t := c.newTab(file, c.iconFor(file), fileTabName(file), handler, fc)
 	return t, nil
 }
 
 func (c *Component) newViewTab(
 	file workspaceapi.URI, h browserapi.Handler,
 ) *browser.Tab {
-	return c.newTab(file, c.iconFor(file), file.Name(), h, nil)
+	return c.newTab(file, c.iconFor(file), fileTabName(file), h, nil)
+}
+
+// fileTabName returns the tab label for a file URI. It always uses the
+// basename of the URI path so that files opened from a remote workspace
+// (e.g. ssh://) show the same short name as local files instead of the
+// full URI, which URI.Name returns for remote schemes.
+func fileTabName(file workspaceapi.URI) string {
+	return filepath.Base(file.Path())
 }
 
 // iconFor returns the configured icon for the given file path.
@@ -561,7 +569,7 @@ func (c *Component) openFileTabStreaming(
 	}
 	icon := c.iconFor(file)
 	def := newDeferHandler(sh)
-	streamingTab := c.newTab(file, icon, file.Name(), def, nil)
+	streamingTab := c.newTab(file, icon, fileTabName(file), def, nil)
 	recovering := recoveryFilename != (workspaceapi.URI{})
 	loading := make(chan struct{})
 	c.streamingLoads.Add(2)
