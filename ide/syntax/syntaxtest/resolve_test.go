@@ -352,6 +352,8 @@ func TestParserListReferencedSymbolsLanguageDetection(t *testing.T) {
 
 		got := listReferencedAll(t, parser)
 		assert.True(t, got["geometry.Area"], "Go reference should be listed")
+		assert.True(t, got["geometry.Point.Norm"],
+			"Go method definition should be listed")
 		assert.False(t, got["shapes.perimeter"], "Python ref must not appear in a Go-only workspace")
 	})
 
@@ -376,6 +378,8 @@ func TestParserListReferencedSymbolsLanguageDetection(t *testing.T) {
 
 		got := listReferencedAll(t, parser)
 		assert.True(t, got["geometry.Area"], "Go reference should be listed")
+		assert.True(t, got["geometry.Point.Norm"],
+			"Go method definition should be listed")
 		assert.True(t, got["shapes.perimeter"], "Python reference should be listed")
 	})
 }

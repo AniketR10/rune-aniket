@@ -37,7 +37,7 @@ const (
 	// its derived tables (such as the names partition) may not exist,
 	// and per-file records alone cannot rebuild them because unchanged
 	// files are normally skipped.
-	schemaVersion = 4
+	schemaVersion = 5
 )
 
 // Kinds of stored symbol locations. Lookups prefer refs, then defs,
@@ -101,13 +101,13 @@ type nameDoc struct {
 	Name string
 }
 
-// listed reports whether locs contain at least one reference or
-// definition, the criterion for a name to appear in
-// ListReferencedSymbols. Method-definition-only names are excluded,
-// matching the backing parser's output.
+// listed reports whether locs contain at least one reference,
+// definition or method definition, the criterion for a name to appear
+// in ListReferencedSymbols. Every stored kind is addressable, so all
+// of them are offered as completion candidates.
 func listed(locs []symbolLoc) bool {
 	for _, l := range locs {
-		if l.Kind == kindRef || l.Kind == kindDef {
+		if l.Kind == kindRef || l.Kind == kindDef || l.Kind == kindMethodDef {
 			return true
 		}
 	}

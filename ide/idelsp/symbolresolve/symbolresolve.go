@@ -641,6 +641,54 @@ func SearchDefinitions(
 	return searchReexportDefinitions(ctx, parser, spec, qc, ch, keep)
 }
 
+// SearchMethodDefinitions streams package-qualified method-definition
+// names ("pkg.Type.Method") for every method defined in the workspace,
+// according to spec. Package qualification mirrors SearchDefinitions:
+// with a package clause the file→package mapping comes from packages,
+// otherwise the qualifier is derived from each file's URI, and one name
+// is streamed per dotted suffix of the module path. Specs without a
+// method-definition query stream nothing.
+func SearchMethodDefinitions(
+	ctx context.Context, parser Searcher, spec *Spec, qc QualifierContext,
+	packages map[workspaceapi.URI]string, ch chan<- string,
+) error {
+	if !spec.hasMethods() {
+		return nil
+	}
+	iter, err := parser.Search2(
+		spec.MethodDefQuery, captures2(spec.MethodDefCaptures), spec.LangID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = iter.Close() }()
+	for {
+		p, ok := iter.Next(ctx)
+		if !ok {
+			return iter.Err()
+		}
+		recv, method := p[0], p[1]
+		if !spec.matchesFile(method.File.String()) {
+			continue
+		}
+		var pkgName string
+		if spec.hasPackages() {
+			pkgName = packages[method.File]
+		} else {
+			pkgName = spec.qualifier(qc, method.File.String())
+		}
+		if pkgName == "" || !spec.exported(method.Text) {
+			continue
+		}
+		for _, q := range moduleSuffixes(pkgName) {
+			select {
+			case ch <- q + "." + recv.Text + "." + method.Text:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+}
+
 // searchReexportDefinitions streams the qualified names of re-export
 // bindings, one per dotted suffix of the binding file's module path.
 func searchReexportDefinitions(
@@ -915,7 +963,10 @@ func listSpecReferences(
 	if err != nil {
 		return err
 	}
-	return SearchDefinitions(ctx, parser, spec, qc, packages, ch, nil)
+	if err := SearchDefinitions(ctx, parser, spec, qc, packages, ch, nil); err != nil {
+		return err
+	}
+	return SearchMethodDefinitions(ctx, parser, spec, qc, packages, ch)
 }
 
 func listRefPairs(

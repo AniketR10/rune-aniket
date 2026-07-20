@@ -286,13 +286,12 @@ func TestGoE2E(t *testing.T) {
 			"mylib.MyType", "mylib.MyFunc", "mylib.New",
 			"iter.Iterator", "iter.OnlyDefined", "iter.Aggregate",
 			"iterator.Iterator",
+			"mylib.MyType.String", "mylib.MyType.Set",
 		} {
 			assert.Truef(t, got[name], "expected %q to be listed", name)
 		}
 		for _, name := range []string{
 			"mylib.unexportedHelper", "iter.privateOnlyDefined",
-			// method-definition-only names are excluded from the list
-			"mylib.MyType.String", "mylib.MyType.Set",
 		} {
 			assert.Falsef(t, got[name], "%q must not be listed", name)
 		}
@@ -567,7 +566,7 @@ func queryParser(b *testing.B, db storageapi.Service) *Parser {
 // BenchmarkListReferencedSymbols measures a full drain of the indexed
 // symbol list over a database shaped like a large workspace: mostly
 // small symbols, a hot tail with thousands of locations each, and a
-// fraction of method-definition-only names that must be excluded. The
+// fraction of method-definition-only names, all of which are listed. The
 // in-memory storage round-trips the same BSON marshaler as the
 // production bolt backend, so decode costs are representative.
 func BenchmarkListReferencedSymbols(b *testing.B) {
@@ -590,9 +589,8 @@ func BenchmarkListReferencedSymbols(b *testing.B) {
 				methodOnly := i%7 == 0
 				if methodOnly {
 					name += ".Method"
-				} else {
-					want++
 				}
+				want++
 				locs := make([]symbolLoc, n)
 				for j := range locs {
 					kind := kindRef

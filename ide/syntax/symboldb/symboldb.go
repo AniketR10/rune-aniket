@@ -448,8 +448,9 @@ func disambiguate(spec *symbolresolve.Spec, matches []syntaxapi.Match, name stri
 
 // ListReferencedSymbols streams the indexed symbol names once a full
 // scan has ever completed, passing through to the backing parser until
-// then. Method-definition-only names are excluded, matching the
-// backing parser's output.
+// then. The index and the backing parser offer the same names,
+// including method definitions, so the streamed set is stable across
+// the pre-scan and post-scan paths.
 func (p *Parser) ListReferencedSymbols(
 	_ context.Context,
 ) (iterator.Iterator[string], error) {

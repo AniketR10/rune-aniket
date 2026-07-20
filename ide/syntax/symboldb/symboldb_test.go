@@ -903,7 +903,11 @@ func TestPersistenceSkipsUnchangedFiles(t *testing.T) {
 func TestSchemaVersionBumpRebuildsDerivedRecords(t *testing.T) {
 	e := newEnv(t)
 	uri := e.writeFile(t, "a.go")
-	gf := goFile{pkg: "mypkg", refs: [][2]string{{"iterator", "Iterator"}}}
+	gf := goFile{
+		pkg:     "mypkg",
+		refs:    [][2]string{{"iterator", "Iterator"}},
+		methods: [][2]string{{"Widget", "Do"}},
+	}
 	e.fake.setGoFile(uri, gf)
 	p := e.start(t)
 	require.NoError(t, p.Wait(context.Background()))
@@ -933,9 +937,11 @@ func TestSchemaVersionBumpRebuildsDerivedRecords(t *testing.T) {
 
 	// The version bump must override the stat-only restart: the file is
 	// re-extracted despite its unchanged mtime, repopulating the names
-	// partition, and the list is served from the index again.
+	// partition (including the method-only name), and the list is served
+	// from the index again.
 	assert.Positive(t, fake2.callsFor(uri))
-	assert.Equal(t, []string{"iterator.Iterator"}, listReferenced(t, p2))
+	assert.Equal(t, []string{"iterator.Iterator", "mypkg.Widget.Do"},
+		listReferenced(t, p2))
 	assert.Zero(t, fake2.totalListCalls())
 }
 
@@ -1266,7 +1272,7 @@ func TestDistinctImportsDisambiguateDisplay(t *testing.T) {
 	}, displays)
 }
 
-func TestMethodResolutionAndListExclusion(t *testing.T) {
+func TestMethodResolutionAndListing(t *testing.T) {
 	e := newEnv(t)
 	uri := e.writeFile(t, "a.go")
 	e.fake.setGoFile(uri, goFile{
@@ -1283,7 +1289,8 @@ func TestMethodResolutionAndListExclusion(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 200}, matches[0].Pos)
 	assert.Equal(t, "httpx.Client.Do", matches[0].Display)
 
-	assert.Equal(t, []string{"httpx.Client"}, listReferenced(t, p))
+	assert.Equal(t, []string{"httpx.Client", "httpx.Client.Do"},
+		listReferenced(t, p))
 }
 
 func TestListReferencedPassthroughBeforeFirstScan(t *testing.T) {
