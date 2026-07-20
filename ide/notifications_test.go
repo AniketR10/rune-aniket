@@ -25,8 +25,10 @@ package ide
 
 import (
 	"context"
+	"fmt"
 	"hash/fnv"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -205,6 +207,185 @@ func TestNotifyOnce(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, mock.messages["a"])
 	})
+}
+
+// TestUpdateProgressRoutesToOriginWorkspace reproduces a hang where a
+// background progress notification created in workspace A never
+// receives its terminal (progress==total) update after focus moves to
+// workspace B. notisRouter tags each id with the origin workspace URI
+// hash so the update reaches A's container regardless of focus.
+func TestUpdateProgressRoutesToOriginWorkspace(t *testing.T) {
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+
+	newContainer := func(uri workspaceapi.URI, parent workspaceManagerIfc) *ex {
+		e := new(ex)
+		e.notifications = &notis{
+			root:    notifications.New(handler.Nop(), notificationsConfig()),
+			storage: storagestub.NewInMemoryService(),
+			parent:  parent,
+			uri:     uri,
+			cfg:     notificationsConfig(),
+		}
+		return e
+	}
+
+	t.Run("terminal update reaches origin after focus switch", func(t *testing.T) {
+		mock := &workspaceManagerMock{}
+		a := newContainer(uriA, mock)
+		b := newContainer(uriB, mock)
+		mock.byURIHash = map[string]browserapi.Notifications{
+			uriHash(uriA): a.notifications,
+			uriHash(uriB): b.notifications,
+		}
+		router := &notisRouter{parent: mock}
+
+		// A is focused when the notification is created.
+		mock.workspace, mock.wantFocusURI = a, uriA
+		id, err := router.Notify(browserapi.LevelInfo, "Indexing")
+		require.NoError(t, err)
+		require.NoError(t, router.UpdateNotificationProgress(id, "Indexing", 1, 2))
+
+		// Focus moves to B; the terminal update must still reach A.
+		mock.workspace, mock.wantFocusURI = b, uriB
+		require.NoError(t, router.UpdateNotificationProgress(id, "done", 2, 2))
+
+		hash, realID, ok := splitURIHash(id)
+		require.True(t, ok)
+		require.Equal(t, uriHash(uriA), hash)
+		assert.False(t, a.notifications.(*notis).root.UpdateProgress(realID, "", 2, 2),
+			"origin notification should be closed and removed")
+	})
+
+	t.Run("update for uninstalled origin falls back to focus", func(t *testing.T) {
+		mock := &workspaceManagerMock{workspace: newContainer(uriB, nil), wantFocusURI: uriB}
+		mock.byURIHash = map[string]browserapi.Notifications{}
+		router := &notisRouter{parent: mock}
+
+		// realID is unknown to the focused container, so it errors.
+		assert.Error(t, router.UpdateNotificationProgress(
+			withURIHash(uriA, "123"), "x", 1, 2))
+	})
+
+	t.Run("unprefixed id routes to focus", func(t *testing.T) {
+		mock := &workspaceManagerMock{workspace: newContainer(uriB, nil), wantFocusURI: uriB}
+		router := &notisRouter{parent: mock}
+
+		// No hash prefix and unknown to focus, so it errors rather than panicking.
+		assert.Error(t, router.UpdateNotificationProgress("456", "x", 1, 2))
+	})
+}
+
+// TestURIHashRoundTrip exercises the id encoding against a battery of
+// adversarial workspace URIs and notification ids. Notification messages
+// are open-ended, so the encoding must round-trip any id and never panic
+// or misroute, even when the id embeds the separator, is empty, or holds
+// unusual bytes.
+func TestURIHashRoundTrip(t *testing.T) {
+	uris := []string{
+		"file:///a",
+		"file:///deep/nested/workspace",
+		"memory:///home",
+		"file:///with:colon/in/path",
+		"file:///unicode/📁/wörk",
+	}
+	realIDs := []string{
+		"",
+		"123",
+		"18446744073709551615", // max uint64 decimal
+		":",
+		"a:b:c",
+		":leading",
+		"trailing:",
+		"has spaces",
+		"emoji-😀-id",
+		"new\nline",
+		"\x00null\x00",
+		strings.Repeat("x", 4096),
+	}
+
+	for _, us := range uris {
+		uri, err := workspaceapi.ParseURI(us)
+		require.NoError(t, err)
+		for _, realID := range realIDs {
+			name := fmt.Sprintf("%s|%q", us, realID)
+			t.Run(name, func(t *testing.T) {
+				encoded := withURIHash(uri, realID)
+				hash, decoded, ok := splitURIHash(encoded)
+				require.True(t, ok, "encoded id must carry a hash prefix")
+				assert.Equal(t, uriHash(uri), hash)
+				assert.Equal(t, realID, decoded,
+					"realID must survive the round trip verbatim")
+			})
+		}
+	}
+}
+
+// TestUpdateProgressRoutesAdversarialMessages drives the full router
+// round trip with messages whose container-hashed ids or contents could
+// trip the encoding, asserting the terminal update always reaches and
+// closes the origin notification after focus moves, without panicking.
+func TestUpdateProgressRoutesAdversarialMessages(t *testing.T) {
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+
+	messages := []string{
+		"",
+		"Indexing",
+		"progress: 50%",
+		"colon:separated:message",
+		"emoji 🚀 status",
+		"multi\nline\nmessage",
+		"tab\tseparated",
+		"very " + strings.Repeat("long ", 1000) + "message",
+		"<html>&entities;</html>",
+		"null\x00byte",
+	}
+
+	for i, msg := range messages {
+		t.Run(fmt.Sprintf("%d/%q", i, msg), func(t *testing.T) {
+			mock := &workspaceManagerMock{}
+			a := &ex{notifications: &notis{
+				root:    notifications.New(handler.Nop(), notificationsConfig()),
+				storage: storagestub.NewInMemoryService(),
+				parent:  mock,
+				uri:     uriA,
+				cfg:     notificationsConfig(),
+			}}
+			b := &ex{notifications: &notis{
+				root:    notifications.New(handler.Nop(), notificationsConfig()),
+				storage: storagestub.NewInMemoryService(),
+				parent:  mock,
+				uri:     uriB,
+				cfg:     notificationsConfig(),
+			}}
+			mock.byURIHash = map[string]browserapi.Notifications{
+				uriHash(uriA): a.notifications,
+				uriHash(uriB): b.notifications,
+			}
+			router := &notisRouter{parent: mock}
+
+			mock.workspace, mock.wantFocusURI = a, uriA
+			id, err := router.Notify(browserapi.LevelInfo, "%s", msg)
+			require.NoError(t, err)
+			require.NoError(t,
+				router.UpdateNotificationProgress(id, msg, 1, 2))
+
+			mock.workspace, mock.wantFocusURI = b, uriB
+			require.NoError(t,
+				router.UpdateNotificationProgress(id, "done", 2, 2))
+
+			_, realID, ok := splitURIHash(id)
+			require.True(t, ok)
+			assert.False(t,
+				a.notifications.(*notis).root.UpdateProgress(realID, "", 2, 2),
+				"origin notification must be closed by the terminal update")
+		})
+	}
 }
 
 type testNotifier struct {

@@ -27,7 +27,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -75,10 +78,46 @@ type notisRouter struct {
 	parent workspaceManagerIfc
 }
 
+// uriHashSep separates the origin workspace's URI hash from the
+// underlying notification id. The underlying ids are decimal digit
+// strings, so this byte never appears inside them.
+const uriHashSep = ':'
+
+// withURIHash prefixes id with a hash of the origin workspace URI so a
+// later UpdateNotificationProgress can be routed back to the container
+// that created the notification, regardless of current focus.
+func withURIHash(uri workspaceapi.URI, id string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(uri.String()))
+	return strconv.FormatUint(h.Sum64(), 16) + string(uriHashSep) + id
+}
+
+// uriHash returns the hash withURIHash embeds for uri.
+func uriHash(uri workspaceapi.URI) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(uri.String()))
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+// splitURIHash reverses withURIHash. ok is false when id carries no
+// hash prefix (e.g. it originated outside the router).
+func splitURIHash(id string) (hash, realID string, ok bool) {
+	i := strings.IndexByte(id, uriHashSep)
+	if i < 0 {
+		return "", "", false
+	}
+	return id[:i], id[i+1:], true
+}
+
 type workspaceManagerIfc interface {
 	focusHandler() tui.Handler
 	focusURI() workspaceapi.URI
 	setWorkspaceRequiresAttention(workspaceapi.URI, term.Attributes)
+	// notificationsForURIHash returns the pinned notifications of the
+	// installed workspace whose URI hashes to h, or nil when no such
+	// workspace is installed. It lets the router deliver an id-addressed
+	// update to the workspace that originally created the notification.
+	notificationsForURIHash(h string) browserapi.Notifications
 }
 
 func (r *notisRouter) focusNotifications() browserapi.Notifications {
@@ -103,20 +142,41 @@ func (r *notisRouter) focusNotifications() browserapi.Notifications {
 func (r *notisRouter) Notify(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return r.focusNotifications().Notify(level, msg, args...)
+	id, err := r.focusNotifications().Notify(level, msg, args...)
+	if err != nil || id == "" {
+		return id, err
+	}
+	return withURIHash(r.parent.focusURI(), id), nil
 }
 
 func (r *notisRouter) NotifyOnce(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return r.focusNotifications().NotifyOnce(level, msg, args...)
+	id, err := r.focusNotifications().NotifyOnce(level, msg, args...)
+	if err != nil || id == "" {
+		return id, err
+	}
+	return withURIHash(r.parent.focusURI(), id), nil
 }
 
 func (r *notisRouter) UpdateNotificationProgress(
 	id, message string, progress, total int64,
 ) error {
-	return r.focusNotifications().
-		UpdateNotificationProgress(id, message, progress, total)
+	// Notify/NotifyOnce prepend the origin workspace's URI hash to the
+	// id, so a background progress update reaches the container that
+	// created the notification even after focus moves elsewhere. Without
+	// the prefix (e.g. an id from another source) fall back to focus.
+	hash, realID, ok := splitURIHash(id)
+	if !ok {
+		return r.focusNotifications().
+			UpdateNotificationProgress(id, message, progress, total)
+	}
+	target := r.parent.notificationsForURIHash(hash)
+	if target == nil {
+		return r.focusNotifications().
+			UpdateNotificationProgress(realID, message, progress, total)
+	}
+	return target.UpdateNotificationProgress(realID, message, progress, total)
 }
 
 type nopNotifications struct{}

@@ -762,6 +762,29 @@ func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
 	return h.homeURI
 }
 
+// notificationsForURIHash returns the pinned notifications of the
+// installed workspace whose URI hashes to hash, or nil when none match.
+// Callers run on the event loop (which already holds the host lock), so
+// this reads h.workspaces/h.empty without re-acquiring h.mu, mirroring
+// focusHandler/focusURI.
+func (h *workspaceManagerHandler) notificationsForURIHash(
+	hash string,
+) browserapi.Notifications {
+	for _, wh := range h.workspaces {
+		if wh == nil || wh.ex == nil || wh.ex.notifications == nil {
+			continue
+		}
+		if uriHash(wh.uri) == hash {
+			return wh.ex.notifications
+		}
+	}
+	if h.empty != nil && h.empty.notifications != nil &&
+		uriHash(h.homeURI) == hash {
+		return h.empty.notifications
+	}
+	return nil
+}
+
 func (h *workspaceManagerHandler) focusRunner() extension.Runner {
 	if handler := h.workspaces[h.focus]; handler != nil {
 		runner, _ := handler.Extensions.Load().(extension.Runner)

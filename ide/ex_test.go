@@ -7214,10 +7214,17 @@ type workspaceManagerMock struct {
 	workspace    *ex
 	attrs        map[workspaceapi.URI]term.Attributes
 	wantFocusURI workspaceapi.URI
+	byURIHash    map[string]browserapi.Notifications
 }
 
 func (w *workspaceManagerMock) focusHandler() tui.Handler {
 	return w.workspace
+}
+
+func (w *workspaceManagerMock) notificationsForURIHash(
+	hash string,
+) browserapi.Notifications {
+	return w.byURIHash[hash]
 }
 
 func (w *workspaceManagerMock) focusURI() workspaceapi.URI {
