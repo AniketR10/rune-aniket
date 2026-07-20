@@ -54,6 +54,7 @@ func newFuzzySearchTutorial(t *testing.T) (*Tutorial, *fakeNotis) {
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)

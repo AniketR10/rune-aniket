@@ -35,6 +35,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -260,6 +261,7 @@ tutorial(entry=run)
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -333,6 +335,7 @@ tutorial(entry=run)
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -391,6 +394,7 @@ tutorial(entry=run)
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -438,6 +442,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -490,6 +495,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -584,6 +590,7 @@ tutorial(entry=run)
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -642,6 +649,7 @@ tutorial(entry=run)
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -676,6 +684,47 @@ tutorial(entry=run)
 	_, _ = r.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	require.True(t, tut.WaitFinished(time.Second),
 		"tutorial must finish after Enter resolves the confirm")
+}
+
+// TestTutorialEventObserverDefersToEventLoop is a regression test for a
+// nil-pointer crash in (*Handler).Reset reached from setActive: text/LSP
+// events are delivered on background subscriber goroutines, so calling
+// observeEvent inline let it race the event-loop setActive/clearActive
+// on the runner's overlay. The subscriber must instead marshal observe
+// onto the event loop via the host scheduler.
+func TestTutorialEventObserverDefersToEventLoop(t *testing.T) {
+	t.Parallel()
+
+	var queued []func()
+	sched := func(fn func()) bool {
+		queued = append(queued, fn)
+		return true
+	}
+	var observed [][2]string
+	observe := func(eventType, uri string) {
+		observed = append(observed, [2]string{eventType, uri})
+	}
+
+	handler := tutorialEventObserver(sched, observe)
+
+	uri, err := workspaceapi.ParseURI("file:///x.go")
+	require.NoError(t, err)
+	consumed := handler.Handle(context.Background(), textapi.Event{
+		Type: textapi.EventTypeOpen,
+		URI:  uri,
+	})
+
+	assert.False(t, consumed,
+		"the tutorial observer must never consume the event")
+	assert.Empty(t, observed,
+		"observe must be deferred to the scheduler, not called inline "+
+			"on the background subscriber goroutine")
+	require.Len(t, queued, 1, "observe must be scheduled exactly once")
+
+	queued[0]()
+	require.Len(t, observed, 1)
+	assert.Equal(t, "open", observed[0][0])
+	assert.Equal(t, uri.String(), observed[0][1])
 }
 
 // gridWriter80x24 is a minimal recording term.Writer used by

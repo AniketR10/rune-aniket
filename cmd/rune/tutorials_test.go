@@ -60,6 +60,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -88,6 +89,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 		nil,
 		term.KeyComb{Ch: ':'},
 		"modal",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -130,13 +132,14 @@ func TestNavigationTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "1", tut.Version())
+	assert.Equal(t, "2", tut.Version())
 }
 
 // TestNavigationTutorialParsesModalMode asserts the embedded navigation
@@ -160,10 +163,11 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "1", tut.Version())
+	assert.Equal(t, "2", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -187,10 +191,11 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "1", tut.Version())
+	assert.Equal(t, "2", tut.Version())
 }
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
@@ -213,6 +218,7 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		term.KeyComb{Ch: ':'},
 		"emacs",
+		nil,
 		nil,
 		nil,
 		nil,

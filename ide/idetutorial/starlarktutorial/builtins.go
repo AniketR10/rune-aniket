@@ -44,11 +44,13 @@ import (
 func builtins(t *Tutorial) starlark.StringDict {
 	return starlark.StringDict{
 		// Registration + helpers.
-		"tutorial":          starlark.NewBuiltin("tutorial", builtinTutorial(t)),
-		"command_key":       starlark.NewBuiltin("command_key", builtinCommandKey(t)),
-		"editor_mode":       starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
-		"key_for":           starlark.NewBuiltin("key_for", builtinKeyFor(t)),
-		"workspace_open":    starlark.NewBuiltin("workspace_open", builtinWorkspaceOpen(t)),
+		"tutorial":       starlark.NewBuiltin("tutorial", builtinTutorial(t)),
+		"command_key":    starlark.NewBuiltin("command_key", builtinCommandKey(t)),
+		"editor_mode":    starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
+		"key_for":        starlark.NewBuiltin("key_for", builtinKeyFor(t)),
+		"workspace_open": starlark.NewBuiltin("workspace_open", builtinWorkspaceOpen(t)),
+		"is_lsp_server_running": starlark.NewBuiltin(
+			"is_lsp_server_running", builtinLSPServerRunning(t)),
 		"exit":              starlark.NewBuiltin("exit", builtinExit()),
 		"cancel_on_dismiss": starlark.NewBuiltin("cancel_on_dismiss", builtinCancelOnDismiss()),
 
@@ -755,5 +757,22 @@ func builtinWorkspaceOpen(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			return nil, err
 		}
 		return starlark.Bool(t.workspaceOpen == nil || t.workspaceOpen()), nil
+	}
+}
+
+// builtinLSPServerRunning implements is_lsp_server_running(): it reports
+// whether the focused workspace has at least one live, initialized LSP
+// server. It returns True when no lookup func is wired so tutorials/tests
+// without the wiring are not spuriously blocked.
+func builtinLSPServerRunning(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		if err := starlark.UnpackArgs(b.Name(), args, kwargs); err != nil {
+			return nil, err
+		}
+		return starlark.Bool(t.lspServerRunning == nil || t.lspServerRunning()), nil
 	}
 }

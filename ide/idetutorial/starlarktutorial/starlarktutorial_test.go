@@ -157,6 +157,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -302,6 +303,7 @@ func TestEntryRequired(t *testing.T) {
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entry")
@@ -319,6 +321,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entry must be a function")
@@ -334,6 +337,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -357,6 +361,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 		"standard", nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already called")
@@ -371,6 +376,7 @@ func TestEmptySourceRejected(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -866,6 +872,7 @@ tutorial(entry=run)
 			"standard", nil,
 			nil,
 			nil,
+			nil,
 		)
 		require.NoError(t, err, "alignment %q must parse", a)
 		tut.Resize(80, 24)
@@ -885,6 +892,7 @@ tutorial(entry=run)
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -1209,6 +1217,7 @@ tutorial(entry=run)
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -1555,6 +1564,7 @@ func newTutorialWith(
 		mode, keyFor,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -1647,6 +1657,7 @@ func newTutorialWorkspace(
 		"standard", nil,
 		nil,
 		workspaceOpen,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
@@ -1685,6 +1696,62 @@ tutorial(entry=run)
 	}
 }
 
+// newTutorialLSP builds a Tutorial with an explicit lspServerRunning
+// closure so tests can exercise the is_lsp_server_running() builtin.
+func newTutorialLSP(
+	t *testing.T, src string, lspServerRunning func() bool,
+) (*Tutorial, *fakeNotis) {
+	t.Helper()
+	notis := &fakeNotis{}
+	tut, err := New(
+		"tutorial-under-test", src,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil,
+		lspServerRunning,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	tut.Resize(80, 24)
+	return tut, notis
+}
+
+// TestLSPServerRunningBuiltin asserts that is_lsp_server_running()
+// returns the wired closure's value and returns True when no closure is
+// wired.
+func TestLSPServerRunningBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="lsp=" + str(is_lsp_server_running()))
+tutorial(entry=run)
+`
+	cases := []struct {
+		name             string
+		lspServerRunning func() bool
+		want             string
+	}{
+		{name: "running", lspServerRunning: func() bool { return true }, want: "lsp=True"},
+		{name: "not running", lspServerRunning: func() bool { return false }, want: "lsp=False"},
+		{name: "nil defaults to running", lspServerRunning: nil, want: "lsp=True"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tut, notis := newTutorialLSP(t, src, tc.lspServerRunning)
+			resetAndWait(t, tut, time.Second)
+			waitFinished(t, tut, time.Second)
+			assert.True(t, notis.containsSubstring(tc.want),
+				"is_lsp_server_running() must expand to %q, got %v",
+				tc.want, notis.renderedCalls())
+		})
+	}
+}
+
 // TestStopUnblocksWhileFinalizingOnTUI is a regression test for a
 // deadlock: a tutorial that finishes with a runtime error surfaces the
 // error via runOnTUI, which blocks on the host event loop. If the host
@@ -1712,6 +1779,7 @@ func TestStopUnblocksWhileFinalizingOnTUI(t *testing.T) {
 		sched, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)
@@ -1862,6 +1930,7 @@ func TestLoadIsRejected(t *testing.T) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
+		nil,
 		nil,
 		nil,
 	)

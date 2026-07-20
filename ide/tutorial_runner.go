@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
 	"unstable.build/go-tui/ide/idetutorial"
+	"unstable.build/go-tui/text"
 )
 
 type tutorialRunner struct {
@@ -170,6 +171,23 @@ func (r *tutorialRunner) observeEvent(eventType, uri string) {
 	if r.overlay.ObserveEvent(eventType, uri) {
 		r.clearActive()
 	}
+}
+
+// tutorialEventObserver builds the text-event subscriber that feeds the
+// tutorial runner. Text/LSP events are delivered on background
+// subscriber goroutines, but the runner is otherwise only driven from
+// the event loop (Handle/HandleCommand); observe therefore hops onto
+// the loop via schedule so the runner's active overlay is never torn
+// from two goroutines at once. schedule must be the host's
+// event-loop scheduler.
+func tutorialEventObserver(
+	schedule func(func()) bool, observe func(eventType, uri string),
+) text.EventHandler {
+	return text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
+		eventType, uri := ev.Type.String(), ev.URI.String()
+		schedule(func() { observe(eventType, uri) })
+		return false
+	})
 }
 
 func (r *tutorialRunner) HandleCommand(_ context.Context, cmd textapi.Command) error {

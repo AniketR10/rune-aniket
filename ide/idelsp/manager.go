@@ -999,6 +999,21 @@ func (m *Manager) allServers() []server {
 	return servers
 }
 
+// AnyServerRunning reports whether at least one initialized LSP server
+// in this Manager is currently alive. Membership in m.servers already
+// implies a completed initialize handshake; the isAlive check further
+// excludes servers that have stopped but not yet been removed.
+func (m *Manager) AnyServerRunning() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.servers {
+		if s.isAlive() {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) broadcastNotify(
 	ctx context.Context, uri workspaceapi.URI, method string, params any,
 ) (ret error) {

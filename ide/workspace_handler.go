@@ -117,12 +117,12 @@ var (
 var _ text.EventPublisher = (*workspaceManagerHandler)(nil)
 
 type workspaceManagerHandler struct {
-	mu                      sync.Locker
-	pkgmanager              *pkgManager
+	mu         sync.Locker
+	pkgmanager *pkgManager
 	// gitRemoteURL, when non-nil, overrides how git package IDs map to
 	// git remote URLs. Production leaves it nil (clone from the host in
 	// the id); tests point it at a local fixture git server.
-	gitRemoteURL            func(pkgID string) string
+	gitRemoteURL func(pkgID string) string
 	// localExecutor is a stable, IDE-scoped executor proxy handed to the
 	// llama-server backend at router construction. Its inner executor is
 	// swapped to the focused workspace's executor at each setExecutor site,
@@ -921,6 +921,16 @@ func (h *workspaceManagerHandler) focusEx() *ex {
 		return handler.ex
 	}
 	return h.empty
+}
+
+// focusLSPManager returns the LSP manager of the focused workspace, or
+// the home slot's manager when no workspace is focused. It may return
+// nil (e.g. the empty slot); callers must nil-check.
+func (h *workspaceManagerHandler) focusLSPManager() *idelsp.Manager {
+	if handler := h.workspaces[h.focus]; handler != nil {
+		return handler.lspManager
+	}
+	return h.homeLSPManager
 }
 
 func (h *workspaceManagerHandler) drawBar() bool {

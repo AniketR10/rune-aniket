@@ -903,10 +903,7 @@ func (i *IDE) init(
 	commandObserver.subscribe(&i.tutorial)
 	_ = i.workspaceHandler.SubscribeEvents(
 		textapi.AllEvents(),
-		text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
-			i.tutorial.observeEvent(ev.Type.String(), ev.URI.String())
-			return false
-		}),
+		tutorialEventObserver(i.options.scheduleFn, i.tutorial.observeEvent),
 	)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())

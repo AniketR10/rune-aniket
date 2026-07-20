@@ -705,3 +705,44 @@ func TestDiagnosticPropagatesCancellation(t *testing.T) {
 	})
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// TestAnyServerRunning verifies that AnyServerRunning reports true only
+// when at least one server in m.servers is alive.
+func TestAnyServerRunning(t *testing.T) {
+	t.Parallel()
+
+	newManager := func(t *testing.T) *Manager {
+		t.Helper()
+		uri := makeURI(t, "file:///workspace")
+		m := New(uri, newTestScheme(), nil, nil, nil, nil,
+			Config{NoInitializeServer: true})
+		t.Cleanup(func() { _ = m.Close() })
+		return m
+	}
+
+	t.Run("no servers: false", func(t *testing.T) {
+		t.Parallel()
+		m := newManager(t)
+		assert.False(t, m.AnyServerRunning())
+	})
+
+	t.Run("alive server: true", func(t *testing.T) {
+		t.Parallel()
+		m := newManager(t)
+		m.mu.Lock()
+		m.servers[serverKey{languageID: "python", rootURI: "file:///workspace"}] =
+			&fakeChild{childName: "python", alive: true}
+		m.mu.Unlock()
+		assert.True(t, m.AnyServerRunning())
+	})
+
+	t.Run("only dead servers: false", func(t *testing.T) {
+		t.Parallel()
+		m := newManager(t)
+		m.mu.Lock()
+		m.servers[serverKey{languageID: "python", rootURI: "file:///workspace"}] =
+			&fakeChild{childName: "python", alive: false}
+		m.mu.Unlock()
+		assert.False(t, m.AnyServerRunning())
+	})
+}

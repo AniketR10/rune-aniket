@@ -124,6 +124,12 @@ type Tutorial struct {
 	// not spuriously blocked.
 	workspaceOpen func() bool
 
+	// lspServerRunning reports whether the focused workspace has at
+	// least one live, initialized LSP server, exposed to the DSL via
+	// is_lsp_server_running(). nil makes the builtin return True so
+	// tutorials/tests without the wiring are not spuriously blocked.
+	lspServerRunning func() bool
+
 	// parsed entry function. Set once at New time.
 	entry *starlark.Function
 
@@ -183,6 +189,7 @@ func New(
 	keyForCommand func(cmd string, args []string) string,
 	commandManualLookup CommandManualLookup,
 	workspaceOpen func() bool,
+	lspServerRunning func() bool,
 ) (*Tutorial, error) {
 	if src == "" {
 		return nil, errors.New("starlarktutorial: empty source")
@@ -203,6 +210,7 @@ func New(
 		keyForCommand:       keyForCommand,
 		commandManualLookup: commandManualLookup,
 		workspaceOpen:       workspaceOpen,
+		lspServerRunning:    lspServerRunning,
 	}
 	t.overlay.C = &overlayComponent{}
 

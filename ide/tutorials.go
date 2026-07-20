@@ -197,6 +197,7 @@ type tutorialsConfig struct {
 	keyForCommand    func(cmd string, args []string) string
 	manualLookup     starlarktutorial.CommandManualLookup
 	workspaceOpen    func() bool
+	lspServerRunning func() bool
 }
 
 func newTutorialsConfig(i *IDE) tutorialsConfig {
@@ -224,6 +225,10 @@ func newTutorialsConfig(i *IDE) tutorialsConfig {
 		workspaceOpen: func() bool {
 			return !i.workspaceHandler.focusEx().home
 		},
+		lspServerRunning: func() bool {
+			m := i.workspaceHandler.focusLSPManager()
+			return m != nil && m.AnyServerRunning()
+		},
 	}
 }
 
@@ -238,6 +243,7 @@ func (c tutorialsConfig) build(
 		c.scheduleNextTick, c.partition, c.commandKey,
 		c.editorMode, c.keyForCommand, c.manualLookup,
 		c.workspaceOpen,
+		c.lspServerRunning,
 	)
 }
 

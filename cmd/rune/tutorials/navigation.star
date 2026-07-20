@@ -266,6 +266,15 @@ def run():
              "command prompt with `" + ck + "` and run `workspaceopen`.")
         return
 
+    if not is_lsp_server_running():
+        fail("For this tutorial to be useful, you should run it in a workspace " +
+             "that contains a project module of one of our supported languages. " +
+             'Run the "help" command to learn about which languages we support. ' +
+             "If the workspace is a monorepo with multiple nested projects, " +
+             "opening a file in a sub-project will start the language server " +
+             "automatically.")
+        return
+
     floating_window(title = "Navigate code", text = intro_md, dismiss_keys = [ck])
 
     teach_searchfile()
@@ -280,4 +289,4 @@ def run():
                     alignment = "top", dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "1", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "2", entry = run)
