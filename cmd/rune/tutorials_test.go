@@ -186,6 +186,13 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	waitEvent()
 	tut.ObserveEvent("open", "file:///workspace/b.go")
 
+	// jumptoast: window -> command (fuzzy-jump to a function in the file).
+	waitFW()
+	dismiss()
+	waitCmd()
+	tut.ObserveCommand("jumptoast", "jumptoast",
+		[]string{"locals.scm", "local.definition.method|local.definition.function", "run"}, nil)
+
 	// lsp intro window.
 	waitFW()
 	dismiss()
@@ -232,6 +239,7 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	assert.Equal(t, []string{
 		"You found a file by name.",
 		"You found text across the workspace.",
+		"You jumped to a function in the current file.",
 		"You jumped to the definition under your cursor.",
 		"You jumped to a definition by name.",
 		"You jumped back.",
@@ -400,6 +408,11 @@ func advanceToDefinitionWindow(t *testing.T, mode string) *starlarktutorial.Tuto
 	tut.ObserveCommand("searchtext", "searchtext", nil, nil)
 	evt()
 	tut.ObserveEvent("open", "file:///workspace/b.go")
+	fw() // jump to a function in this file
+	dismiss()
+	cmd()
+	tut.ObserveCommand("jumptoast", "jumptoast",
+		[]string{"locals.scm", "local.definition.method|local.definition.function", "run"}, nil)
 	fw() // lsp intro
 	dismiss()
 	fw() // "Go to definition" — stop here.
@@ -484,7 +497,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "7", tut.Version())
+	assert.Equal(t, "8", tut.Version())
 }
 
 // TestNavigationTutorialParsesModalMode asserts the embedded navigation
@@ -512,7 +525,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "7", tut.Version())
+	assert.Equal(t, "8", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -540,7 +553,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "7", tut.Version())
+	assert.Equal(t, "8", tut.Version())
 }
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial

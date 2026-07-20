@@ -47,6 +47,17 @@ else:
     def_by_name_cta = "press `<alt-shift-d>`"
     def_by_name_dismiss = [ck, "<alt-shift-d>"]
 
+# The `jumptoast` prefill fuzzy-jumps to a function or method defined in
+# the current file. It is bound as a prompt-prefill macro whose chord
+# differs by mode: `<alt-f>` in modal/standard, `<meta-f>` in emacs (where
+# `<alt-f>` is reserved for Meta). `key_for` cannot resolve prefill macros,
+# so hardcode the chord per mode.
+if editor_mode() == "emacs":
+    jump_symbol_key = "<meta-f>"
+else:
+    jump_symbol_key = "<alt-f>"
+jump_symbol_dismiss = [ck, jump_symbol_key]
+
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
     return (" Default key: `" + k + "`.") if k else ""
@@ -78,6 +89,7 @@ We will answer these questions, one at a time:
 
 - How do I find a file by name?
 - How do I find where some text lives?
+- How do I jump to a function in the file I already have open?
 - How do I jump to where a symbol is defined?
 - How do I navigate back and forth as I explore?
 - What else can I ask about the symbol under my cursor?
@@ -118,6 +130,21 @@ installed here. Install it with `pkg install fuzzy-search` from Rune's
 console, then rerun this tutorial.
 
 Press `<enter>` or `<space>` to continue.
+"""
+
+jump_symbol_md = """\
+**Jump to a function in this file.** You do not always want workspace-wide
+search. When you already have the file open and just need to reach a
+function or method inside it, `jumptoast` opens a fuzzy jumper over every
+function and method defined in the current file. Type part of a name and
+it jumps straight to that definition. Default key: `""" + jump_symbol_key + """`.
+
+Under the hood it prefills the command prompt with `jumptoast`, a command
+that queries the file's syntax tree for matching definitions. There are
+sibling prefills for variables and types too.
+
+Try it now: press `""" + jump_symbol_key + """`, type part of a function
+name, and press `<enter>` to jump to it.
 """
 
 lsp_intro_md = """\
@@ -194,6 +221,7 @@ That is code navigation in Rune. A quick recap:
 
 - **Find a file by name** with `searchfile`.
 - **Find where text lives** with `searchtext`.
+- **Jump to a function in the current file** with `jumptoast`.
 - **Jump to a definition** with `lsp definition` (under the cursor, or by name).
 - **Navigate back and forth** with `cursorhistory prev` / `next`.
 - **Ask about a symbol** with `lsp references`, `lsp implementation`, and `lsp hover`.
@@ -245,6 +273,19 @@ def teach_searchtext():
         on_error = "Choose a result and press `<enter>` to jump to that line.",
     )
     notify(level = success, message = "You found text across the workspace.")
+
+
+def teach_jump_symbol():
+    floating_window(title = "Jump to a function in this file",
+                    text = jump_symbol_md,
+                    dismiss_keys = jump_symbol_dismiss)
+    wait_command(
+        title    = "Jump to a function in this file",
+        command  = "jumptoast",
+        on_error = ("Press `" + jump_symbol_key + "` and pick a function to " +
+                    "jump to."),
+    )
+    notify(level = success, message = "You jumped to a function in the current file.")
 
 
 def teach_lsp_intro():
@@ -331,6 +372,7 @@ def run():
 
     teach_searchfile()
     teach_searchtext()
+    teach_jump_symbol()
     teach_lsp_intro()
     teach_definition_at_cursor()
     teach_definition_by_name()
@@ -341,4 +383,4 @@ def run():
                     alignment = "top", dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "7", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "8", entry = run)

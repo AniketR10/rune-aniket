@@ -64,6 +64,7 @@ command:
     "<s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
+    "<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
     # <alt> is authentic Emacs Meta, owned by the editor (M-f/b/d/w, M-x,
     # M-;, M-</>, case ops). Unbind every base <alt> command chord so the
     # editor — not the command layer — receives them and nothing is shadowed.
