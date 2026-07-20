@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -514,6 +515,28 @@ func TestFindImplementations(t *testing.T) {
 }
 
 func TestFindReferences(t *testing.T) {
+	t.Run("qualified name adds no hint", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "foo.go"),
+			[]byte("package main\n\nfunc Foo() {}\n"), 0o644))
+		lsp := &stubLSP{
+			referencesFn: func(p semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+				return []semanticapi.Location{loc("file://"+dir+"/foo.go", 2, 5)}, nil
+			},
+		}
+		parser := &fakeParser{resolveFn: func(name string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{{
+				URI: "file://" + dir + "/foo.go",
+				Pos: term.Coordinates{X: 5, Y: 2},
+			}}, nil
+		}}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: parser, cwd: dirURI(dir), tracker: NewFileTracker()}
+		result := tool.Execute(context.Background(), `{"symbol":"pkg.Foo"}`)
+
+		assert.False(t, result.IsError)
+		assert.NotContains(t, result.Content, "Hint:")
+	})
+
 	t.Run("happy path returns multiple references", func(t *testing.T) {
 		dir := t.TempDir()
 		// Create source files so the tool can read line content.
@@ -546,6 +569,11 @@ func TestFindReferences(t *testing.T) {
 		assert.Contains(t, result.Content, "foo.go:5:func Foo() {}")
 		assert.Contains(t, result.Content, "foo.go:7:func init() { Foo() }")
 		assert.Contains(t, result.Content, "bar.go:3:func Bar() { Foo() }")
+		// A bare name fell back to fuzzy search: the result carries a
+		// hint nudging the model toward a dot-qualified lookup.
+		assert.Contains(t, result.Content, "Hint:")
+		assert.True(t, strings.HasPrefix(result.Content, "Hint:"),
+			"hint must be prepended before the references")
 	})
 
 	t.Run("no references found", func(t *testing.T) {
@@ -564,7 +592,10 @@ func TestFindReferences(t *testing.T) {
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.False(t, result.IsError)
-		assert.Equal(t, "no references found", result.Content)
+		// The bare name still earns a hint even when no references
+		// come back; the empty-result body follows it.
+		assert.True(t, strings.HasPrefix(result.Content, "Hint:"))
+		assert.True(t, strings.HasSuffix(result.Content, "no references found"))
 	})
 
 	t.Run("symbol not found", func(t *testing.T) {
@@ -1463,7 +1494,7 @@ func TestResolveSymbolSingleMatchByteIdentical(t *testing.T) {
 		lsp: lsp, fs: localFS{}, parser: &fakeParser{},
 		cwd: dirURI("/workspace"), tracker: NewFileTracker(),
 	}
-	got := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
+	got := tool.Execute(context.Background(), `{"symbol":"pkg.Foo"}`)
 	assert.False(t, got.IsError, got.Content)
 	// No header for single match.
 	assert.Equal(t, "pkg/foo.go:10", got.Content)

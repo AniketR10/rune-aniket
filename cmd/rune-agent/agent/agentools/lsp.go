@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package agentools
 
 import (
@@ -59,6 +58,31 @@ part of the path works:
 Pass as much of the path as you know — the full path is never
 required. A bare name with no dots falls back to a fuzzy workspace
 search, which can be slower and ambiguous.`
+
+// unqualifiedNameHint returns a one-line hint prompting the model to
+// pass a dot-qualified name when it supplied a bare name. A name
+// without a dot cannot resolve through the symbol index and always
+// falls back to a fuzzy WorkspaceSymbol search, which is slower and
+// can return unrelated matches. Returns "" for already-qualified
+// names.
+func unqualifiedNameHint(symbol string) string {
+	if strings.Contains(symbol, ".") {
+		return ""
+	}
+	return fmt.Sprintf("Hint: %q has no dot, so it resolved via a fuzzy "+
+		"workspace search that may return unrelated matches. Prefer a "+
+		"dot-qualified name (e.g. \"package.%s\") for a precise lookup.",
+		symbol, symbol)
+}
+
+// withHint prepends a hint block to tool result content, leaving the
+// content unchanged when the hint is empty.
+func withHint(hint, content string) string {
+	if hint == "" {
+		return content
+	}
+	return hint + "\n\n" + content
+}
 
 // LSPTools returns all LSP-backed agent tools. The tracker should be
 // the same instance returned by DefaultTools so that stale reads are
@@ -109,6 +133,9 @@ func resolveSymbol(
 		return nil, false, fmt.Errorf("workspace symbol lookup: %w", err)
 	}
 	if len(syms) == 0 {
+		if hint := unqualifiedNameHint(symbol); hint != "" {
+			return nil, false, fmt.Errorf("symbol %q not found. %s", symbol, hint)
+		}
 		return nil, false, fmt.Errorf("symbol %q not found", symbol)
 	}
 	locs := make([]semanticapi.Location, 0, len(syms))
@@ -391,7 +418,8 @@ func (t *findDefinitionTool) Execute(ctx context.Context, arguments string) agen
 	}
 	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
 	return agent.ToolResult{
-		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, max(totalBefore, len(locs))),
+		Content: withHint(unqualifiedNameHint(args.Symbol),
+			renderMultiLocation(t.cwd, locs, blocks, truncated, max(totalBefore, len(locs)))),
 	}
 }
 
@@ -468,7 +496,8 @@ func (t *findImplementationsTool) Execute(ctx context.Context, arguments string)
 	}
 	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
 	return agent.ToolResult{
-		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs)),
+		Content: withHint(unqualifiedNameHint(args.Symbol),
+			renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs))),
 	}
 }
 
@@ -547,7 +576,8 @@ func (t *findReferencesTool) Execute(ctx context.Context, arguments string) agen
 	}
 	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
 	return agent.ToolResult{
-		Content: renderMultiLocation(t.cwd, locs, blocks, symTruncated, len(locs)),
+		Content: withHint(unqualifiedNameHint(args.Symbol),
+			renderMultiLocation(t.cwd, locs, blocks, symTruncated, len(locs))),
 	}
 }
 
@@ -924,7 +954,8 @@ func (t *describeSymbolTool) Execute(ctx context.Context, arguments string) agen
 		blocks = append(blocks, hoverContent(hover))
 	}
 	return agent.ToolResult{
-		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs)),
+		Content: withHint(unqualifiedNameHint(args.Symbol),
+			renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs))),
 	}
 }
 
