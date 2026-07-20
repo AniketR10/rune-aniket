@@ -1232,12 +1232,13 @@ func mustNewAuthorizerWithNotifications(
 func newTestAuthorizerCore(
 	opener PromptOpener, storage storageapi.Service,
 ) *Authorizer {
-	return &Authorizer{
+	a := &Authorizer{
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, nil),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
 		pending:  make(map[string]*pendingPrompt),
 	}
+	return a
 }
 
 // newTestAuthorizerCoreWithNotifications is like newTestAuthorizerCore but
@@ -1247,12 +1248,54 @@ func newTestAuthorizerCoreWithNotifications(
 	opener PromptOpener, storage storageapi.Service,
 	noti browserapi.Notifications,
 ) *Authorizer {
-	return &Authorizer{
+	a := &Authorizer{
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, noti),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
 		pending:  make(map[string]*pendingPrompt),
 	}
+	return a
+}
+
+// TestAuthorizerDecisionChangeFiresOnRuntimeDecision verifies that a
+// registered decision-change observer runs whenever a runtime permission
+// decision is made, so a server-scoped auth cache can invalidate itself.
+func TestAuthorizerDecisionChangeFiresOnRuntimeDecision(t *testing.T) {
+	t.Parallel()
+
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a := newTestAuthorizerCore(opener, storagestub.NewInMemoryService())
+	var changed int
+	a.onDecisionChange(func() { changed++ })
+
+	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{
+		Extra: testPluginExtension(nil),
+	}, workspacerpc.Executor_Signal_FullMethodName)
+	require.NoError(t, err)
+	require.Equal(t, 1, opener.calls)
+	assert.Equal(t, 1, changed, "a runtime permission decision invalidates the cache")
+}
+
+// TestAuthorizerDecisionChangeNotifiesAllObservers verifies that
+// multiple registered observers (e.g. one cache per gRPC server) are all
+// invoked on a decision change; a later registration must not clobber an
+// earlier one and leave its cache holding stale authorizations.
+func TestAuthorizerDecisionChangeNotifiesAllObservers(t *testing.T) {
+	t.Parallel()
+
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a := newTestAuthorizerCore(opener, storagestub.NewInMemoryService())
+	var first, second int
+	a.onDecisionChange(func() { first++ })
+	a.onDecisionChange(func() { second++ })
+
+	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{
+		Extra: testPluginExtension(nil),
+	}, workspacerpc.Executor_Signal_FullMethodName)
+	require.NoError(t, err)
+	require.Equal(t, 1, opener.calls)
+	assert.Equal(t, 1, first, "the first observer must still fire")
+	assert.Equal(t, 1, second, "the second observer must also fire")
 }
 
 func TestAuthorizerRegularExtensionStartCommandRequiresExecute(t *testing.T) {

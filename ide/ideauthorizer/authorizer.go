@@ -159,8 +159,20 @@ type Authorizer struct {
 	// browser would dedup by message, silently dropping all but the first
 	// caller's PromptHandler and leaving the rest stuck on their result
 	// channel). See RUNE-97.
-	pendingMu sync.Mutex
-	pending   map[string]*pendingPrompt
+	pendingMu         sync.Mutex
+	pending           map[string]*pendingPrompt
+	decisionObservers []func()
+}
+
+func (a *Authorizer) onDecisionChange(fn func()) {
+	a.decisionObservers = append(a.decisionObservers, fn)
+}
+
+// notifyDecisionChanged invokes every registered observer.
+func (a *Authorizer) notifyDecisionChanged() {
+	for _, fn := range a.decisionObservers {
+		fn()
+	}
 }
 
 // GRPCAuthServerOptions returns the gRPC server options that install
@@ -169,10 +181,15 @@ type Authorizer struct {
 func (a *Authorizer) GRPCAuthServerOptions(
 	keys blueauth.Keys, creds credentials.TransportCredentials,
 ) []grpc.ServerOption {
+	cache := newAuthCache(
+		grpcauth.Oauth2UnaryInterceptor(keys, a),
+		grpcauth.Oauth2StreamInterceptor(keys, a),
+	)
+	a.onDecisionChange(cache.evict)
 	if creds == nil {
-		return grpcauth.GRPCServerWithInsecureOauth2(keys, a)
+		return grpcauth.GRPCServerWithInsecureOauth2Interceptors(cache.Unary, cache.Stream)
 	}
-	return grpcauth.GRPCServerWithOauth2(keys, a, creds)
+	return grpcauth.GRPCServerWithOauth2Interceptors(cache.Unary, cache.Stream, creds)
 }
 
 // Authorize satisfies blueauth.Authorizer[Extension].
@@ -314,6 +331,7 @@ func (a *Authorizer) authorizePermission(
 	if err != nil {
 		return err
 	}
+	a.notifyDecisionChanged()
 
 	switch decision {
 	case PermissionAllowOnce:
