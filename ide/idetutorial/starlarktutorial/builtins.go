@@ -528,9 +528,17 @@ func builtinCancelOnDismiss() func(*starlark.Thread, *starlark.Builtin,
 // runOnTUI runs fn synchronously: in production via the host's
 // scheduleNextTick (so the work lands on the TUI loop and runOnTUI
 // blocks until it completes), or inline when scheduleNextTick is nil.
+//
+// If the run context is cancelled while runOnTUI is waiting for the
+// scheduled callback, it stops waiting and returns. Stop cancels the
+// context and then blocks on the run goroutine; without this, a
+// finalizing runOnTUI (from handleRunResult) would wait forever for an
+// event-loop tick that the Stop-wedged loop can never deliver. The
+// scheduled callback may still run later on its own; that is harmless.
 func (t *Tutorial) runOnTUI(fn func()) {
 	t.mu.Lock()
 	sched := t.scheduleNextTick
+	ctx := t.runCtx
 	signal := t.firstSignal
 	t.firstSignal = nil
 	t.mu.Unlock()
@@ -549,7 +557,14 @@ func (t *Tutorial) runOnTUI(fn func()) {
 		fn()
 		return
 	}
-	<-done
+	if ctx == nil {
+		<-done
+		return
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 // parseFloatingAlignment maps a Starlark alignment keyword to a

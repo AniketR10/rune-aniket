@@ -356,15 +356,17 @@ func (t *Tutorial) runLoop() {
 
 // handleRunResult finalises a run: marks the tutorial finished and
 // surfaces any non-cancellation error via the notifications service.
+//
+// The run context is kept live across the error notification so a
+// concurrent Stop (which cancels it) can abort the finalizing runOnTUI
+// instead of deadlocking: Stop waits for this goroutine to exit while
+// runOnTUI would otherwise wait for an event-loop tick that the
+// Stop-wedged loop can never deliver. The context is cancelled and
+// cleared only after the notification path returns.
 func (t *Tutorial) handleRunResult(err error) {
 	t.mu.Lock()
 	t.finished = true
 	t.active = nil
-	t.runCtx = nil
-	if t.cancel != nil {
-		t.cancel()
-		t.cancel = nil
-	}
 	t.thread = nil
 	signal := t.firstSignal
 	t.firstSignal = nil
@@ -373,10 +375,24 @@ func (t *Tutorial) handleRunResult(err error) {
 		signal()
 	}
 
+	t.notifyRunError(err)
+
+	t.mu.Lock()
+	t.runCtx = nil
+	if t.cancel != nil {
+		t.cancel()
+		t.cancel = nil
+	}
+	t.mu.Unlock()
+}
+
+// notifyRunError surfaces a non-cancellation entry error via the
+// notifications service. Clean exits (errStopped, exit()) produce no
+// notification.
+func (t *Tutorial) notifyRunError(err error) {
 	if err == nil {
 		return
 	}
-	// Cancellation is a clean exit; do not notify the user.
 	if errors.Is(err, errStopped) {
 		return
 	}

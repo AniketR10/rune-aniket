@@ -1685,6 +1685,64 @@ tutorial(entry=run)
 	}
 }
 
+// TestStopUnblocksWhileFinalizingOnTUI is a regression test for a
+// deadlock: a tutorial that finishes with a runtime error surfaces the
+// error via runOnTUI, which blocks on the host event loop. If the host
+// event loop concurrently calls Stop (e.g. a command observer tears the
+// tutorial down), Stop waits for the run goroutine to exit while the run
+// goroutine's runOnTUI waits for the event loop to drain the queued
+// notification — a cycle. Stop must return without waiting for a tick
+// that the wedged loop can never deliver.
+func TestStopUnblocksWhileFinalizingOnTUI(t *testing.T) {
+	t.Parallel()
+
+	// queued holds callbacks scheduled onto the "event loop" but never
+	// runs them: this models the loop being wedged inside Stop, so the
+	// finalizing runOnTUI cannot complete on its own.
+	queued := make(chan func(), 8)
+	sched := func(fn func()) bool {
+		queued <- fn
+		return true
+	}
+	notis := &fakeNotis{}
+	tut, err := New(
+		"deadlock", "def run():\n    fail('boom')\ntutorial(entry=run)\n",
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		sched, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(80, 24)
+
+	tut.Reset()
+
+	// The fail() surfaces through handleRunResult -> runOnTUI, which
+	// queues the error notification and blocks. Wait for that queued
+	// callback to prove the run goroutine is parked in runOnTUI.
+	select {
+	case <-queued:
+	case <-time.After(time.Second):
+		t.Fatal("finalizing runOnTUI never scheduled its notification")
+	}
+
+	// Stop is called from the same logical event loop that owns the
+	// queued callback, so nothing will drain it. Stop must still return.
+	done := make(chan struct{})
+	go func() {
+		tut.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop deadlocked waiting for a wedged event loop tick")
+	}
+}
+
 // TestShaderClearsAfterFloatingWindow asserts that the hint pulse
 // goes away once floating_window is dismissed.
 func TestShaderClearsAfterFloatingWindow(t *testing.T) {
