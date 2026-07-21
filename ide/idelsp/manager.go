@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -118,6 +119,14 @@ type Config struct {
 	// notifications fire directly from background goroutines, which
 	// races workspaceManagerHandler.focus reads in notis.inFocus.
 	ScheduleNextTick func(func()) bool
+	// Parser enables a tree-sitter fallback for Definition,
+	// References and WorkspaceSymbol when no language server is
+	// available for a file's language.
+	Parser syntaxapi.Parser
+	// IndexedSymbols reports that Parser is backed by a symbol
+	// index, making workspace-wide symbol enumeration cheap enough
+	// for WorkspaceSymbol and unqualified lookups.
+	IndexedSymbols bool
 }
 
 // Manager is a multi-language LSP server manager.
@@ -137,6 +146,7 @@ type Manager struct {
 	servers       map[serverKey]server
 	files         map[string]*file
 	pendingOpens  map[string]textapi.Event
+	fallback      lspFallback
 	ctx           context.Context
 	cancel        context.CancelFunc
 	log           *slog.Logger
@@ -204,6 +214,12 @@ func New(
 	go debug.CapturePanicReport(func() {
 		ret.handleEvs()
 	})
+	ret.fallback = noFallback{}
+	if cfg.Parser != nil {
+		ret.fallback = newSyntaxFallback(
+			cfg.Parser, ret.readFileContent, cfg.IndexedSymbols,
+		)
+	}
 	return ret
 }
 

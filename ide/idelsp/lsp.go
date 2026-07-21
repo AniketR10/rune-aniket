@@ -386,10 +386,19 @@ func (m *Manager) Definition(
 	params semanticapi.DefinitionParams,
 ) (semanticapi.LocationResult, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	return m.locationRequest(
+	res, err := m.locationRequest(
 		ctx, params.TextDocument.URI,
 		"textDocument/definition", params,
 	)
+	if err != nil && isNoServer(err) {
+		fres, ferr := m.fallback.definition(ctx, params)
+		if ferr == nil {
+			return fres, nil
+		}
+		m.log.Debug("definition fallback",
+			"error", ferr, "file", params.TextDocument.URI)
+	}
+	return res, err
 }
 
 // Declaration routes to the owning server.
@@ -438,6 +447,14 @@ func (m *Manager) References(
 	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
 		return srv.call(ctx, "textDocument/references", params, &result)
 	}); err != nil {
+		if isNoServer(err) {
+			fres, ferr := m.fallback.references(ctx, params)
+			if ferr == nil {
+				return fres, nil
+			}
+			m.log.Debug("references fallback",
+				"error", ferr, "file", params.TextDocument.URI)
+		}
 		return nil, err
 	}
 	return result, nil
@@ -1163,7 +1180,7 @@ func (m *Manager) WorkspaceSymbol(
 ) ([]semanticapi.SymbolInformation, error) {
 	servers := m.allServers()
 	if len(servers) == 0 {
-		return nil, nil
+		return m.fallback.workspaceSymbol(ctx, params)
 	}
 	type result struct {
 		syms []semanticapi.SymbolInformation

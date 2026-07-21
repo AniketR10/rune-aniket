@@ -25,6 +25,7 @@ package idelsp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -32,6 +33,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/ide/idelsp/languages"
 )
+
+// ErrLanguageNotSupported is returned when a file's language has no
+// LSP server configuration. The message must keep the literal
+// "language LSP is not supported yet" suffix: agent-side code matches
+// it across the gRPC boundary, where sentinels do not survive.
+var ErrLanguageNotSupported = errors.New("language LSP is not supported yet")
 
 // PkgManager abstracts the ability to resolve package
 // directories for a given package identifier.
@@ -90,7 +97,7 @@ func languageForFilename(filename string) (langConfig, error) {
 	}
 	lang, ok := langConfigs[id]
 	if !ok {
-		return langConfig{}, fmt.Errorf("%s language LSP is not supported yet", id)
+		return langConfig{}, fmt.Errorf("%s %w", id, ErrLanguageNotSupported)
 	}
 	return lang, nil
 }

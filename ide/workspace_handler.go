@@ -664,7 +664,7 @@ func (h *workspaceManagerHandler) init(
 		return nil
 	}
 	runner, lspManager, dapManager, _, err := h.buildExtensions(
-		cfg, homeDirUri, trackedCwd, h.empty, extExec, homeParser)
+		cfg, homeDirUri, trackedCwd, h.empty, extExec, homeParser, false)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1597,7 +1597,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		return nil, fmt.Errorf("new extensions executor: %w", err)
 	}
 	runner, lspManager, dapManager, promptStorage, err := h.buildExtensions(
-		cfg, uri, trackedCwd, ex, extExec, wsParser)
+		cfg, uri, trackedCwd, ex, extExec, wsParser, symbolDB != nil)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1841,7 +1841,7 @@ func lspConfig(cfg ideConfig) config.Config {
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
 	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
-	parser syntaxapi.Parser,
+	parser syntaxapi.Parser, indexedSymbols bool,
 ) (
 	extension.Runner, *idelsp.Manager, *idedebug.Manager,
 	storageapi.Service, error,
@@ -1896,6 +1896,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		MaxRetries:         5,
 		WorkDoneProgress:   true,
 		ScheduleNextTick:   cfg.scheduleNextTick,
+		Parser:             parser,
+		IndexedSymbols:     indexedSymbols,
 	}
 	lsp := idelsp.New(rootURI, cwd,
 		cwd, h.pkgmanager, notifications,
