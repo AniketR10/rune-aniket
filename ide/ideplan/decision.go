@@ -21,12 +21,12 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-// Package ideplan implements the three-state subscription gating
-// (active / grace period / expired) that Rune drives entirely from the
-// JWT claim plan_ends. The package owns the decision function, a
-// JWT-backed Source, the reusable upgrade prompt, the daily monitor
-// that pins a soft-warning notification and signals the IDE lockdown
-// wrapper, and the checkout URL helper.
+// Package ideplan implements the subscription gating (active /
+// expired) that Rune drives entirely from the JWT claim plan_ends.
+// The package owns the decision function, a JWT-backed Source, the
+// daily monitor that signals the IDE lockdown wrapper, and the
+// checkout URL helper. Gating alone never locks: the idelockdown
+// planner interprets the lock signal against usage evidence.
 package ideplan
 
 import (
@@ -34,11 +34,6 @@ import (
 
 	"github.com/unstablebuild/ox-api/auth"
 )
-
-// GracePeriod is the duration after PlanEnds during which a lapsed
-// paid user keeps full IDE access while seeing a daily pinned warning
-// notification. Past this window the lockdown wrapper takes over.
-const GracePeriod = 7 * 24 * time.Hour
 
 // Status is the gating state for a user at a moment in time.
 type Status int
@@ -49,16 +44,8 @@ const (
 	// "sticky" — paid status is not required for staff).
 	StatusActive Status = iota
 
-	// StatusGracePeriod grants full IDE access but triggers a daily
-	// pinned warning notification. Reached when a previously paid
-	// user has lapsed (role dropped below paid) but PlanEnds+grace
-	// has not yet elapsed.
-	StatusGracePeriod
-
-	// StatusExpired blocks IDE interaction behind the lockdown
-	// prompt. Reached when the user is below paid AND either has
-	// never been paid (PlanEnds is zero) or the grace window has
-	// elapsed.
+	// StatusExpired marks a previously paid user whose plan has
+	// lapsed (role dropped below paid).
 	StatusExpired
 
 	// StatusNeverSubscribed blocks IDE interaction like StatusExpired
@@ -81,8 +68,6 @@ func (s Status) String() string {
 	switch s {
 	case StatusActive:
 		return "active"
-	case StatusGracePeriod:
-		return "grace_period"
 	case StatusExpired:
 		return "expired"
 	case StatusNeverSubscribed:
@@ -127,17 +112,14 @@ func (s SignInStatus) String() string {
 }
 
 // Decision is the full result of evaluating gating against a user's
-// claims. GraceUntil is meaningful only when Status == StatusGracePeriod
-// (callers that need it for the warning copy in other states should
-// inspect PlanEnds instead).
+// claims.
 type Decision struct {
-	Status     Status
-	SignedIn   SignInStatus
-	PlanEnds   time.Time
-	GraceUntil time.Time
+	Status   Status
+	SignedIn SignInStatus
+	PlanEnds time.Time
 }
 
-func decide(role auth.Role, planEnds, now, buildDate time.Time) Decision {
+func decide(role auth.Role, planEnds, buildDate time.Time) Decision {
 	if role == auth.RoleOneOff {
 		if planEnds.IsZero() {
 			return Decision{Status: StatusExpired}
@@ -153,13 +135,5 @@ func decide(role auth.Role, planEnds, now, buildDate time.Time) Decision {
 	if planEnds.IsZero() {
 		return Decision{Status: StatusNeverSubscribed}
 	}
-	graceUntil := planEnds.Add(GracePeriod)
-	if now.Before(graceUntil) {
-		return Decision{
-			Status:     StatusGracePeriod,
-			PlanEnds:   planEnds,
-			GraceUntil: graceUntil,
-		}
-	}
-	return Decision{Status: StatusExpired, PlanEnds: planEnds, GraceUntil: graceUntil}
+	return Decision{Status: StatusExpired, PlanEnds: planEnds}
 }

@@ -80,7 +80,7 @@ func TestJWTSourceDecision(t *testing.T) {
 	planEnds := now.Add(-24 * time.Hour)
 
 	t.Run("nil cache yields expired", func(t *testing.T) {
-		src := NewJWTSource(&stubCache{}, func() time.Time { return now })
+		src := NewJWTSource(&stubCache{})
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusExpired, d.Status)
@@ -90,23 +90,23 @@ func TestJWTSourceDecision(t *testing.T) {
 
 	t.Run("paid token yields active", func(t *testing.T) {
 		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RolePaid, now.Add(30*24*time.Hour))}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusActive, d.Status)
 	})
 
-	t.Run("lapsed user inside grace", func(t *testing.T) {
+	t.Run("lapsed user is expired", func(t *testing.T) {
 		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RoleUser, planEnds)}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, StatusGracePeriod, d.Status)
+		assert.Equal(t, StatusExpired, d.Status)
 	})
 
 	t.Run("malformed token yields expired without error", func(t *testing.T) {
 		cache := &stubCache{cached: &oauth2.Token{AccessToken: "not-a-jwt"}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusExpired, d.Status)
@@ -116,7 +116,7 @@ func TestJWTSourceDecision(t *testing.T) {
 
 	t.Run("refresh propagates source error", func(t *testing.T) {
 		cache := &stubCache{err: errors.New("network down")}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		d, err := src.Refresh(context.Background())
 		require.Error(t, err)
 		assert.Equal(t, StatusExpired, d.Status)
@@ -126,7 +126,7 @@ func TestJWTSourceDecision(t *testing.T) {
 
 	t.Run("refresh re-evaluates with new token", func(t *testing.T) {
 		cache := &stubCache{refresh: &oauth2.Token{AccessToken: makeJWT(t, auth.RolePaid, now.Add(30*24*time.Hour))}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		d, err := src.Refresh(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusActive, d.Status)
@@ -135,7 +135,7 @@ func TestJWTSourceDecision(t *testing.T) {
 	t.Run("one-off token with build past entitlement is upgrade-expired", func(t *testing.T) {
 		entitlement := now.Add(-24 * time.Hour)
 		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RoleOneOff, entitlement)}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		src.buildDate = now
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestJWTSourceDecision(t *testing.T) {
 	t.Run("one-off token with build within entitlement is active", func(t *testing.T) {
 		entitlement := now.Add(30 * 24 * time.Hour)
 		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RoleOneOff, entitlement)}}
-		src := NewJWTSource(cache, func() time.Time { return now })
+		src := NewJWTSource(cache)
 		src.buildDate = now
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)

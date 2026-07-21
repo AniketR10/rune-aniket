@@ -380,15 +380,20 @@ func planLockdownPromptSpec(reason idelockdown.LockReason) (
 ) {
 	switch reason {
 	case idelockdown.LockSignedOut:
-		return "**You're signed out.** Sign in to keep using Rune.",
+		return "**Rune is locked because your usage looks professional.**\n\n" +
+				"Rune is free for personal use. Professional use requires " +
+				"a Rune Pro license. Sign in with a licensed account, or " +
+				"upgrade to continue.",
 			[]string{optLockSignIn}, []term.KeyComb{{Ch: 's'}}
 	case idelockdown.LockParseError:
 		return "**We couldn't verify your session.** " +
 				"Please sign in again to continue.",
 			[]string{optLockSignIn}, []term.KeyComb{{Ch: 's'}}
 	case idelockdown.LockNeverSubscribed:
-		return "**Rune requires a Pro subscription.** " +
-				"Upgrade to Pro, or re-sign in if you've already upgraded your account.",
+		return "**Rune is locked because your usage looks professional.**\n\n" +
+				"Rune is free for personal use. Professional use requires " +
+				"a Rune Pro license. Upgrade to Pro, or re-sign in if " +
+				"you've already upgraded.",
 			[]string{optLockUpgrade, optLockSignIn},
 			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
 	case idelockdown.LockUpgradeExpired:
@@ -399,8 +404,10 @@ func planLockdownPromptSpec(reason idelockdown.LockReason) (
 			[]string{optLockDowngrade, optLockRenew},
 			[]term.KeyComb{{Ch: 'd'}, {Ch: 'r'}}
 	default:
-		return "**Your Pro subscription has lapsed.** " +
-				"Upgrade to Pro, or re-sign in if you've already renewed.",
+		return "**Your Rune Pro license has lapsed.**\n\n" +
+				"Your usage looks professional, and professional use " +
+				"requires an active license. Renew to continue, or " +
+				"re-sign in if you've already renewed.",
 			[]string{optLockUpgrade, optLockReSignIn},
 			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
 	}

@@ -586,7 +586,7 @@ func runTUI(
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:       ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			Source:       ideplan.NewJWTSource(client.CachedTokenSource()),
 			CheckoutURL:  checkoutURL,
 			DowngradeURL: apiclient.DefaultDownloadsHost,
 			SupportURL:   mustResolveSupportURL(*flagWebsiteAddress),

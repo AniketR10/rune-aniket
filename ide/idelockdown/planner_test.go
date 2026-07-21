@@ -168,16 +168,23 @@ func TestNewPanicsOnMissingDependencies(t *testing.T) {
 	})
 }
 
-func seedUsage(t *testing.T, store storageapi.Service, samples []time.Time) {
+// seedDays persists the given per-day activity through the tracker,
+// one recordActivity call per active slot.
+func seedDays(t *testing.T, store storageapi.Service, days []DayActivity) {
 	t.Helper()
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
-	for _, s := range samples {
-		require.NoError(t, tr.recordUsage(context.Background(), s))
+	for _, d := range days {
+		for slot := range d.ActiveSlots {
+			ts := d.Day.Add(time.Duration(slot) * slotDuration)
+			require.NoError(t, tr.recordActivity(context.Background(), ts))
+		}
 	}
 }
 
-func TestPlannerStartRecordsLaunchSample(t *testing.T) {
+// TestPlannerStartRecordsNoActivity pins that merely launching Rune
+// is not usage evidence: only RecordActivity accrues slots.
+func TestPlannerStartRecordsNoActivity(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	now := monday.Add(10 * time.Hour)
 	newTestPlanner(t, store, expiredSource(), &recordingLocker{}, func() {},
@@ -185,40 +192,55 @@ func TestPlannerStartRecordsLaunchSample(t *testing.T) {
 
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
-	assert.Equal(t, []time.Time{bucketStart(now, usageBucket)}, tr.usage(),
-		"the launch sample must be bucket-aligned")
+	assert.Empty(t, tr.days(),
+		"start and evaluation must not record activity")
 }
 
-// TestPlannerScheduledEvaluationRecordsNewSample drives the real
-// scheduling path at a fast cadence: the stub policy re-evaluates
-// every 20ms of fake time (20ms of real time on the timer), and the
-// usage-bucket advance is picked up by a scheduled evaluation, not
-// by a direct call.
-func TestPlannerScheduledEvaluationRecordsNewSample(t *testing.T) {
+func TestPlannerRecordActivityPersistsSlots(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	clock := &fakeClock{now: monday.Add(10 * time.Hour)}
-	pol := &stubPolicy{next: func(s Snapshot) time.Time {
-		return s.Now.Add(20 * time.Millisecond)
-	}}
+	p := newTestPlanner(t, store, expiredSource(), &recordingLocker{},
+		func() {}, clock.Now)
+
+	ctx := context.Background()
+	p.RecordActivity(ctx)
+	p.RecordActivity(ctx)
+	clock.Advance(time.Minute)
+	p.RecordActivity(ctx)
+
+	tr := newTracker(store)
+	require.NoError(t, tr.load(ctx))
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 1}}, tr.days(),
+		"repeat events within one slot must record a single slot")
+
+	clock.Advance(slotDuration)
+	p.RecordActivity(ctx)
+	tr2 := newTracker(store)
+	require.NoError(t, tr2.load(ctx))
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 2}}, tr2.days(),
+		"a new slot must record once the clock advances past the boundary")
+}
+
+// TestPlannerRecordActivityBeforeLoadIsNoop pins that early events
+// cannot race the storage doc bootstrap.
+func TestPlannerRecordActivityBeforeLoadIsNoop(t *testing.T) {
+	store := storagestub.NewInMemoryService()
 	p := New(Config{
 		Storage:               store,
 		Source:                expiredSource(),
-		Policies:              []Policy{pol},
+		Policies:              DefaultPolicies(),
 		Locker:                &recordingLocker{},
 		ShowNagPrompt:         func() {},
 		ShowAskMoreTimePrompt: func() {},
-		Now:                   clock.Now,
+		Now:                   func() time.Time { return monday },
 	})
-	require.NoError(t, p.Start(context.Background()))
 	t.Cleanup(p.Stop)
+	p.RecordActivity(context.Background())
 
-	clock.Advance(usageBucket)
-	require.Eventually(t, func() bool {
-		tr := newTracker(store)
-		require.NoError(t, tr.load(context.Background()))
-		return len(tr.usage()) == 2
-	}, 5*time.Second, 10*time.Millisecond,
-		"a scheduled evaluation must record the new usage sample")
+	require.NoError(t, p.Load(context.Background()))
+	tr := newTracker(store)
+	require.NoError(t, tr.load(context.Background()))
+	assert.Empty(t, tr.days())
 }
 
 // TestPlannerSchedulesEarliestPolicyTime pins the chain cadence
@@ -304,15 +326,15 @@ func TestPlannerExpiredWithoutUsageDoesNotLock(t *testing.T) {
 
 func TestPlannerExpiredWithLockdownRunLocks(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(lockdownRun/qualifyWindow)))
+	seedDays(t, store, heavyWeeks(0, lockdownRun))
 	locker := &recordingLocker{}
 	p := newTestPlanner(t, store, expiredSource(), locker, func() {},
-		func() time.Time { return windowBase.Add(lockdownRun) })
+		func() time.Time { return afterWeeks(lockdownRun) })
 
 	p.SetLocked(true)
 	last, ok := locker.last()
 	require.True(t, ok)
-	assert.True(t, last, "a lockdown run while expired must lock")
+	assert.True(t, last, "a heavy lockdown run while expired must lock")
 	reason, ok := locker.lastReason()
 	require.True(t, ok)
 	assert.Equal(t, LockExpired, reason,
@@ -321,12 +343,12 @@ func TestPlannerExpiredWithLockdownRunLocks(t *testing.T) {
 
 func TestPlannerNeverSubscribedWithLockdownRunLocksWithReason(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(lockdownRun/qualifyWindow)))
+	seedDays(t, store, heavyWeeks(0, lockdownRun))
 	locker := &recordingLocker{}
 	p := newTestPlanner(t, store,
 		staticSource{dec: ideplan.Decision{Status: ideplan.StatusNeverSubscribed}},
 		locker, func() {},
-		func() time.Time { return windowBase.Add(lockdownRun) })
+		func() time.Time { return afterWeeks(lockdownRun) })
 
 	p.SetLocked(true)
 	last, ok := locker.last()
@@ -340,12 +362,12 @@ func TestPlannerNeverSubscribedWithLockdownRunLocksWithReason(t *testing.T) {
 
 func TestPlannerActiveWithLockdownRunStaysUnlocked(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(lockdownRun/qualifyWindow)))
+	seedDays(t, store, heavyWeeks(0, lockdownRun))
 	locker := &recordingLocker{}
 	p := newTestPlanner(t, store,
 		staticSource{dec: ideplan.Decision{Status: ideplan.StatusActive}},
 		locker, func() {},
-		func() time.Time { return windowBase.Add(lockdownRun) })
+		func() time.Time { return afterWeeks(lockdownRun) })
 
 	p.SetLocked(true)
 	last, ok := locker.last()
@@ -353,12 +375,49 @@ func TestPlannerActiveWithLockdownRunStaysUnlocked(t *testing.T) {
 	assert.False(t, last, "active users must never lock regardless of usage")
 }
 
-func TestPlannerNagsOncePerCooldown(t *testing.T) {
+// TestPlannerUpgradeExpiredWithoutUsageDoesNotLock pins that an
+// upgrade-expired one-off buyer gets the normal usage runway instead
+// of an immediate lock.
+func TestPlannerUpgradeExpiredWithoutUsageDoesNotLock(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(nagRun/qualifyWindow)))
+	locker := &recordingLocker{}
+	p := newTestPlanner(t, store,
+		staticSource{dec: ideplan.Decision{Status: ideplan.StatusUpgradeExpired}},
+		locker, func() {},
+		func() time.Time { return monday })
+
+	p.SetLocked(true)
+	last, ok := locker.last()
+	require.True(t, ok)
+	assert.False(t, last,
+		"upgrade-expired without qualifying usage must not lock")
+}
+
+func TestPlannerUpgradeExpiredWithLockdownRunLocksWithReason(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	seedDays(t, store, heavyWeeks(0, lockdownRun))
+	locker := &recordingLocker{}
+	p := newTestPlanner(t, store,
+		staticSource{dec: ideplan.Decision{Status: ideplan.StatusUpgradeExpired}},
+		locker, func() {},
+		func() time.Time { return afterWeeks(lockdownRun) })
+
+	p.SetLocked(true)
+	last, ok := locker.last()
+	require.True(t, ok)
+	assert.True(t, last, "a lockdown run while upgrade-expired must lock")
+	reason, ok := locker.lastReason()
+	require.True(t, ok)
+	assert.Equal(t, LockUpgradeExpired, reason,
+		"an upgrade-expired lockdown must carry the upgrade-expired reason")
+}
+
+func TestPlannerNagsOncePerWeeklyCooldown(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	seedDays(t, store, professionalWeeks(0, nagRun))
 	var prompts int
 	var mu sync.Mutex
-	now := windowBase.Add(nagRun)
+	now := afterWeeks(nagRun)
 	getNow := func() time.Time {
 		mu.Lock()
 		defer mu.Unlock()
@@ -374,16 +433,48 @@ func TestPlannerNagsOncePerCooldown(t *testing.T) {
 		"repeat evaluations within the cooldown must not nag")
 
 	mu.Lock()
-	now = now.Add(nagCooldown)
+	now = now.Add(dailyNagCooldown)
 	mu.Unlock()
 	p.SetLocked(true)
-	assert.Equal(t, 2, prompts, "an elapsed cooldown must nag again")
+	assert.Equal(t, 1, prompts,
+		"a day within the weekly cadence must not nag again")
+
+	mu.Lock()
+	now = now.Add(weeklyNagCooldown)
+	mu.Unlock()
+	p.SetLocked(true)
+	assert.Equal(t, 2, prompts, "an elapsed weekly cooldown must nag again")
+}
+
+// TestPlannerDailyNagAfterEscalation pins the cadence escalation: at
+// dailyNagRun professional weeks the nag fires daily.
+func TestPlannerDailyNagAfterEscalation(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	seedDays(t, store, professionalWeeks(0, dailyNagRun))
+	var prompts int
+	var mu sync.Mutex
+	now := afterWeeks(dailyNagRun)
+	getNow := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	p := newTestPlanner(t, store, expiredSource(), &recordingLocker{},
+		func() { prompts++ }, getNow)
+	assert.Equal(t, 1, prompts, "startup evaluation must nag once")
+
+	mu.Lock()
+	now = now.Add(dailyNagCooldown)
+	mu.Unlock()
+	p.SetLocked(true)
+	assert.Equal(t, 2, prompts,
+		"past the escalation run the nag must fire daily")
 }
 
 func TestPlannerNagsOncePerCooldownAcrossRestarts(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(nagRun/qualifyWindow)))
-	now := func() time.Time { return windowBase.Add(nagRun) }
+	seedDays(t, store, professionalWeeks(0, nagRun))
+	now := func() time.Time { return afterWeeks(nagRun) }
 
 	var prompts int
 	newTestPlanner(t, store, expiredSource(), &recordingLocker{},
@@ -400,14 +491,15 @@ func TestPlannerNagsOncePerCooldownAcrossRestarts(t *testing.T) {
 }
 
 // TestPlannerAskMoreTimeReplacesLastNag pins that during the final
-// qualifying window before lockdown the ask-more-time prompt fires in
-// place of the nag, on the shared nag cooldown.
+// heavy week before lockdown the ask-more-time prompt fires in place
+// of the nag, on the shared (daily, since the heavy run escalates the
+// cadence) nag cooldown.
 func TestPlannerAskMoreTimeReplacesLastNag(t *testing.T) {
 	store := storagestub.NewInMemoryService()
-	seedUsage(t, store, qualifyingWindows(0, int(askMoreTimeRun/qualifyWindow)))
+	seedDays(t, store, heavyWeeks(0, askMoreTimeRun))
 	var nags, asks int
 	var mu sync.Mutex
-	now := windowBase.Add(askMoreTimeRun)
+	now := afterWeeks(askMoreTimeRun)
 	getNow := func() time.Time {
 		mu.Lock()
 		defer mu.Unlock()
@@ -435,7 +527,7 @@ func TestPlannerAskMoreTimeReplacesLastNag(t *testing.T) {
 		"repeat evaluations within the cooldown must not re-prompt")
 
 	mu.Lock()
-	now = now.Add(nagCooldown)
+	now = now.Add(dailyNagCooldown)
 	mu.Unlock()
 	p.SetLocked(true)
 	assert.Equal(t, 2, asks, "an elapsed cooldown must prompt again")
@@ -443,18 +535,19 @@ func TestPlannerAskMoreTimeReplacesLastNag(t *testing.T) {
 		"the nag must stay replaced past the ask-more-time threshold")
 }
 
-// TestPlannerSnapshotReflectsPersistedUsage pins that open-IDE time
-// is the usage evidence: the snapshot carries exactly what the
-// tracker persisted.
-func TestPlannerSnapshotReflectsPersistedUsage(t *testing.T) {
+// TestPlannerSnapshotReflectsPersistedActivity pins that recorded
+// editor activity is the usage evidence: the snapshot carries
+// exactly what the tracker persisted.
+func TestPlannerSnapshotReflectsPersistedActivity(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	now := monday.Add(15 * time.Hour)
 	p := newTestPlanner(t, store, expiredSource(), &recordingLocker{},
 		func() {}, func() time.Time { return now })
 
+	p.RecordActivity(context.Background())
 	s := p.snapshot(context.Background())
-	assert.Equal(t, []time.Time{bucketStart(now, usageBucket)}, s.Usage,
-		"the launch sample must be bucket-aligned")
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 1}}, s.Days,
+		"the recorded slot must surface in the snapshot")
 	assert.Equal(t, ideplan.StatusExpired, s.Plan.Status)
 }
 

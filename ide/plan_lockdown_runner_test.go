@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -141,6 +142,52 @@ func TestPlanLockdownRunnerUnlockedForwards(t *testing.T) {
 	r := newPlanLockdownRunner(inner)
 	r.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
 	assert.Equal(t, int32(1), inner.handles.Load())
+}
+
+// TestIDEEditorEventsReachUsagePlanner pins the activity-ingestion
+// wiring: editor open/edit/flush events dispatched through a
+// workspace's text component must reach the usage planner's
+// RecordActivity via the IDE-level subscription and persist an
+// activity slot in the idelockdown storage partition.
+func TestIDEEditorEventsReachUsagePlanner(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+	mu := new(sync.Mutex)
+	i, err := New(t.TempDir(), configFile.Name(), dataDir,
+		newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithPlanSource(PlanSourceConfig{
+			Source: staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusExpired}},
+			SignIn: NopSignIn,
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, i.Close()) })
+	_ = i.Ready()
+
+	activityDays := func() int {
+		var doc struct{ Days []struct{ Day, Slots string } }
+		store := storageapi.WithPartition(i.storage, idelockdown.Partition)
+		if err := store.Get(context.Background(), "usage", &doc); err != nil {
+			return 0
+		}
+		return len(doc.Days)
+	}
+	require.Zero(t, activityDays(),
+		"building the IDE alone must not record activity")
+
+	mu.Lock()
+	x := i.workspaceHandler.focusEx()
+	mu.Unlock()
+	for _, evType := range []textapi.EventType{
+		textapi.EventTypeOpen, textapi.EventTypeEdit, textapi.EventTypeFlush,
+	} {
+		x.comp.DispatchEvent(textapi.Event{Type: evType})
+	}
+
+	require.Eventually(t, func() bool { return activityDays() == 1 },
+		5*time.Second, 10*time.Millisecond,
+		"editor events must persist an activity day through the planner")
 }
 
 // WithPlanSource requires a complete config: a PlanSourceConfig
@@ -310,7 +357,7 @@ func TestIDELockdownE2ERendersOverlayAndSwallowsInput(t *testing.T) {
 	wrapped := &lockedHandler{Handler: root, mu: mu}
 	wrapped.Resize(80, 24)
 	frame := handlertest.DrawHandler(wrapped, 80, 24)
-	assert.Contains(t, frame, "subscription has lapsed",
+	assert.Contains(t, frame, "license has lapsed",
 		"locked IDE must render the expired lockdown copy")
 	assert.Contains(t, frame, "Upgrade to Pro",
 		"locked IDE must render the Upgrade button")
@@ -339,7 +386,7 @@ func TestIDELockdownE2EReasonAwareCopy(t *testing.T) {
 		{
 			name:       "never subscribed",
 			dec:        ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
-			wantCopy:   "requires a Pro subscription",
+			wantCopy:   "usage looks",
 			wantButton: "Upgrade to Pro",
 		},
 		{
@@ -347,7 +394,7 @@ func TestIDELockdownE2EReasonAwareCopy(t *testing.T) {
 			dec: ideplan.Decision{
 				Status: ideplan.StatusExpired, SignedIn: ideplan.SignedOut,
 			},
-			wantCopy:     "signed out",
+			wantCopy:     "usage looks",
 			wantButton:   "Sign in",
 			absentButton: "Upgrade to Pro",
 		},
@@ -392,18 +439,19 @@ func TestIDELockdownE2EReasonAwareCopy(t *testing.T) {
 	}
 }
 
-// TestIDEUpgradeExpiredLocksImmediatelyE2E pins the one-off build-date
-// paywall end to end: a plan source reporting StatusUpgradeExpired
-// flows through the usage planner's UpgradeExpiredPolicy and locks a
-// gated IDE at startup with no usage runway (the entitlement boundary
-// is deterministic, not usage-accrued), rendering the downgrade/renew
-// copy and swallowing ordinary input.
-func TestIDEUpgradeExpiredLocksImmediatelyE2E(t *testing.T) {
+// TestIDEUpgradeExpiredGetsUsageRunwayE2E pins the one-off build-date
+// gating end to end: a plan source reporting StatusUpgradeExpired no
+// longer locks at startup — like every other gated state it gets the
+// usage runway — but once the seeded heavy usage satisfies the
+// lockdown policy the overlay renders the downgrade/renew copy and
+// swallows ordinary input.
+func TestIDEUpgradeExpiredGetsUsageRunwayE2E(t *testing.T) {
 	configFile, _ := makeTestFiles(t)
 	dataDir := t.TempDir()
 	mu := new(sync.Mutex)
-	i, err := New(t.TempDir(), configFile.Name(), dataDir,
-		newTestStorage(t, dataDir),
+	storage := newTestStorage(t, dataDir)
+	seedLockdownUsage(t, storage)
+	i, err := New(t.TempDir(), configFile.Name(), dataDir, storage,
 		WithLocker(mu),
 		WithPlanSource(PlanSourceConfig{
 			Source: staticPlanSource{
@@ -422,7 +470,7 @@ func TestIDEUpgradeExpiredLocksImmediatelyE2E(t *testing.T) {
 		i.TickPlan(context.Background())
 		return runner.Locked()
 	}, 10*time.Second, 10*time.Millisecond,
-		"an upgrade-expired one-off build must lock without any usage runway")
+		"an upgrade-expired one-off build must lock after the usage runway")
 
 	wrapped := &lockedHandler{Handler: root, mu: mu}
 	wrapped.Resize(80, 24)
@@ -439,6 +487,33 @@ func TestIDEUpgradeExpiredLocksImmediatelyE2E(t *testing.T) {
 	_, handled := root.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 	assert.True(t, handled,
 		"locked IDE must claim ordinary keys so they do not fall through")
+}
+
+// TestIDEUpgradeExpiredWithoutUsageDoesNotLockE2E pins the deliberate
+// behavior change: the upgrade-expired entitlement boundary alone no
+// longer locks the IDE; only accrued professional usage does.
+func TestIDEUpgradeExpiredWithoutUsageDoesNotLockE2E(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+	i, err := New(t.TempDir(), configFile.Name(), dataDir,
+		newTestStorage(t, dataDir),
+		WithLocker(new(sync.Mutex)),
+		WithPlanSource(PlanSourceConfig{
+			Source: staticPlanSource{
+				dec: ideplan.Decision{Status: ideplan.StatusUpgradeExpired},
+			},
+			SignIn: NopSignIn,
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, i.Close()) })
+
+	root := i.Ready()
+	runner, ok := root.(*planLockdownRunner)
+	require.True(t, ok)
+	i.TickPlan(context.Background())
+	assert.False(t, runner.Locked(),
+		"upgrade-expired without qualifying usage must not lock")
 }
 
 func TestPlanLockdownRunnerLockedRoutesToPrompt(t *testing.T) {
@@ -537,7 +612,7 @@ func TestPlanLockdownRunnerLockedSequence(t *testing.T) {
 	// appears. We do not match the entire frame because the
 	// overlay padding depends on Prompt's internal layout.
 	frame := handlertest.DrawHandler(r, 80, 24)
-	assert.Contains(t, frame, "subscription has lapsed")
+	assert.Contains(t, frame, "license has lapsed")
 	assert.Contains(t, frame, "Upgrade to Pro")
 
 	// Pressing the bound key 'u' must not reach the inner handler.
@@ -639,7 +714,7 @@ func TestPlanLockdownPromptCopyPerReason(t *testing.T) {
 		{
 			name:         "signed out",
 			reason:       idelockdown.LockSignedOut,
-			wantCopy:     "signed out",
+			wantCopy:     "usage looks",
 			wantButtons:  []string{"Sign in"},
 			absentButton: "Upgrade to Pro",
 		},
@@ -653,13 +728,13 @@ func TestPlanLockdownPromptCopyPerReason(t *testing.T) {
 		{
 			name:        "never subscribed",
 			reason:      idelockdown.LockNeverSubscribed,
-			wantCopy:    "requires a Pro subscription",
+			wantCopy:    "usage looks",
 			wantButtons: []string{"Upgrade to Pro", "Sign in"},
 		},
 		{
 			name:        "expired",
 			reason:      idelockdown.LockExpired,
-			wantCopy:    "subscription has lapsed",
+			wantCopy:    "license has lapsed",
 			wantButtons: []string{"Upgrade to Pro", "Re-sign in"},
 		},
 		{

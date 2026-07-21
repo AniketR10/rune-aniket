@@ -24,7 +24,6 @@
 package idelockdown
 
 import (
-	"slices"
 	"testing"
 	"time"
 
@@ -32,33 +31,55 @@ import (
 	"unstable.build/go-tui/ide/ideplan"
 )
 
-// monday is a known UTC reference day (2026-01-05) used for sample
+// monday is a known UTC reference day (2026-01-05) used for activity
 // seeding.
 var monday = time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
 
-// windowBase is the start of the qualifyWindow containing monday.
-var windowBase = bucketStart(monday, qualifyWindow)
+// weekBase is the start of the weekWindow containing monday.
+var weekBase = bucketStart(monday, weekWindow)
 
-// windowSamples returns n samples in consecutive usage buckets
-// starting at start.
-func windowSamples(start time.Time, n int) []time.Time {
-	samples := make([]time.Time, 0, n)
+const day = 24 * time.Hour
+
+// weekDays returns n days of activity starting at start, each with
+// slots active slots.
+func weekDays(start time.Time, n, slots int) []DayActivity {
+	days := make([]DayActivity, 0, n)
 	for i := range n {
-		samples = append(samples, start.Add(time.Duration(i)*usageBucket))
+		days = append(days, DayActivity{
+			Day: start.Add(time.Duration(i) * day), ActiveSlots: slots,
+		})
 	}
-	return samples
+	return days
 }
 
-// qualifyingWindows returns qualifyingBuckets samples in each of n
-// consecutive windows, the first at windowBase+start*qualifyWindow.
-func qualifyingWindows(start, n int) []time.Time {
-	var samples []time.Time
+// weeks returns qualifyingDays days with the given slots in each of
+// n consecutive weeks, the first at weekBase+start*weekWindow.
+func weeks(start, n, slots int) []DayActivity {
+	var days []DayActivity
 	for w := range n {
-		samples = append(samples, windowSamples(
-			windowBase.Add(time.Duration(start+w)*qualifyWindow),
-			qualifyingBuckets)...)
+		days = append(days, weekDays(
+			weekBase.Add(time.Duration(start+w)*weekWindow),
+			qualifyingDays, slots)...)
 	}
-	return samples
+	return days
+}
+
+// professionalWeeks returns n consecutive qualifying professional
+// weeks starting at week offset start.
+func professionalWeeks(start, n int) []DayActivity {
+	return weeks(start, n, professionalDaySlots)
+}
+
+// heavyWeeks returns n consecutive qualifying heavy weeks starting
+// at week offset start.
+func heavyWeeks(start, n int) []DayActivity {
+	return weeks(start, n, heavyDaySlots)
+}
+
+// afterWeeks is an evaluation time right after n weeks from
+// weekBase.
+func afterWeeks(n int) time.Time {
+	return weekBase.Add(time.Duration(n) * weekWindow)
 }
 
 func TestBucketIndex(t *testing.T) {
@@ -115,113 +136,118 @@ func TestBucketStart(t *testing.T) {
 	}
 }
 
-func TestMaxConsecutiveQualifyingRun(t *testing.T) {
-	preEpochWindow := bucketStart(
-		time.Date(1969, 11, 1, 0, 0, 0, 0, time.UTC), qualifyWindow)
+func TestQualifyingWeeks(t *testing.T) {
+	baseWeek := bucketIndex(weekBase, weekWindow)
 	for _, tc := range []struct {
-		name    string
-		samples []time.Time
-		want    time.Duration
+		name     string
+		days     []DayActivity
+		minSlots int
+		want     []int64
 	}{
-		{name: "no samples", want: 0},
+		{name: "no days", minSlots: professionalDaySlots, want: nil},
 		{
-			name:    "below bucket threshold does not qualify",
-			samples: windowSamples(windowBase, qualifyingBuckets-1),
-			want:    0,
+			name:     "too few qualifying days per week",
+			days:     weekDays(weekBase, qualifyingDays-1, professionalDaySlots),
+			minSlots: professionalDaySlots,
+			want:     nil,
 		},
 		{
-			name:    "threshold buckets in one window qualify",
-			samples: windowSamples(windowBase, qualifyingBuckets),
-			want:    qualifyWindow,
+			name:     "days below the slot threshold do not count",
+			days:     weekDays(weekBase, qualifyingDays, professionalDaySlots-1),
+			minSlots: professionalDaySlots,
+			want:     nil,
 		},
 		{
-			name:    "two consecutive qualifying windows",
-			samples: qualifyingWindows(0, 2),
-			want:    2 * qualifyWindow,
+			name:     "enough professional days qualify the week",
+			days:     weekDays(weekBase, qualifyingDays, professionalDaySlots),
+			minSlots: professionalDaySlots,
+			want:     []int64{baseWeek},
 		},
 		{
-			name:    "gap resets the run",
-			samples: append(qualifyingWindows(0, 2), qualifyingWindows(3, 3)...),
-			want:    3 * qualifyWindow,
+			name:     "professional days are not heavy days",
+			days:     weekDays(weekBase, qualifyingDays, professionalDaySlots),
+			minSlots: heavyDaySlots,
+			want:     nil,
 		},
 		{
-			name: "non-qualifying window between runs resets",
-			samples: append(qualifyingWindows(0, 4),
-				append(windowSamples(windowBase.Add(4*qualifyWindow), qualifyingBuckets-1),
-					qualifyingWindows(5, 2)...)...),
-			want: 4 * qualifyWindow,
+			name:     "heavy days also qualify professionally",
+			days:     weekDays(weekBase, qualifyingDays, heavyDaySlots),
+			minSlots: professionalDaySlots,
+			want:     []int64{baseWeek},
 		},
 		{
-			name:    "five consecutive qualifying windows",
-			samples: qualifyingWindows(0, 5),
-			want:    5 * qualifyWindow,
+			name: "qualifying days split across weeks do not merge",
+			days: append(
+				weekDays(weekBase.Add(weekWindow-2*day), 2, professionalDaySlots),
+				weekDays(weekBase.Add(weekWindow), 2, professionalDaySlots)...),
+			minSlots: professionalDaySlots,
+			want:     nil,
 		},
 		{
-			name:    "six consecutive qualifying windows",
-			samples: qualifyingWindows(0, 6),
-			want:    6 * qualifyWindow,
-		},
-		{
-			name: "samples in the same bucket count once",
-			samples: []time.Time{
-				windowBase,
-				windowBase.Add(time.Hour),
-				windowBase.Add(2 * time.Hour),
-			},
-			want: 0,
-		},
-		{
-			name: "buckets straddling a window boundary do not merge",
-			samples: append(
-				windowSamples(windowBase.Add(qualifyWindow-usageBucket), 1),
-				windowSamples(windowBase.Add(qualifyWindow), qualifyingBuckets-1)...),
-			want: 0,
-		},
-		{
-			name: "unsorted samples still count",
-			samples: func() []time.Time {
-				samples := qualifyingWindows(0, 3)
-				slices.Reverse(samples)
-				return samples
-			}(),
-			want: 3 * qualifyWindow,
-		},
-		{
-			name: "distant qualifying windows do not join",
-			samples: append(qualifyingWindows(0, 1),
-				qualifyingWindows(1000000, 1)...),
-			want: qualifyWindow,
-		},
-		{
-			name: "pre-epoch windows stay aligned",
-			samples: append(windowSamples(preEpochWindow, qualifyingBuckets),
-				windowSamples(preEpochWindow.Add(qualifyWindow), qualifyingBuckets)...),
-			want: 2 * qualifyWindow,
+			name:     "multiple consecutive weeks",
+			days:     professionalWeeks(0, 3),
+			minSlots: professionalDaySlots,
+			want:     []int64{baseWeek, baseWeek + 1, baseWeek + 2},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, maxConsecutiveQualifyingRun(
-				tc.samples, qualifyWindow, usageBucket, qualifyingBuckets))
+			got := qualifyingWeeks(tc.days, tc.minSlots, qualifyingDays)
+			if len(tc.want) == 0 {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
-// TestMaxConsecutiveQualifyingRunArbitraryDurations pins the point of
-// the duration knobs: the run computation works at any timescale, so
-// a manual test build can shrink the knobs to milliseconds.
-func TestMaxConsecutiveQualifyingRunArbitraryDurations(t *testing.T) {
-	const (
-		window = 50 * time.Millisecond
-		bucket = 10 * time.Millisecond
-	)
-	base := time.Unix(0, 0).UTC()
-	samples := []time.Time{
-		base, base.Add(10 * time.Millisecond), base.Add(20 * time.Millisecond),
-		base.Add(50 * time.Millisecond), base.Add(60 * time.Millisecond),
-		base.Add(70 * time.Millisecond),
+func TestLongestRun(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		weeks []int64
+		want  int
+	}{
+		{name: "no weeks", want: 0},
+		{name: "single week", weeks: []int64{10}, want: 1},
+		{name: "consecutive weeks", weeks: []int64{10, 11, 12}, want: 3},
+		{name: "one light week is tolerated and does not count",
+			weeks: []int64{10, 11, 13, 14}, want: 4},
+		{name: "two consecutive light weeks reset",
+			weeks: []int64{10, 11, 14, 15, 16}, want: 3},
+		{name: "gap tolerance does not chain across long gaps",
+			weeks: []int64{10, 20, 30}, want: 1},
+		{name: "earlier run can be the longest",
+			weeks: []int64{1, 2, 3, 4, 10, 11}, want: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, longestRun(tc.weeks, gapWeeks))
+		})
 	}
-	assert.Equal(t, 2*window,
-		maxConsecutiveQualifyingRun(samples, window, bucket, 3))
+}
+
+func TestCurrentRun(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		weeks   []int64
+		nowWeek int64
+		want    int
+	}{
+		{name: "no weeks", nowWeek: 10, want: 0},
+		{name: "run including the current week", weeks: []int64{8, 9, 10}, nowWeek: 10, want: 3},
+		{name: "run ending the previous week", weeks: []int64{8, 9}, nowWeek: 10, want: 2},
+		{name: "one complete light week keeps the run current",
+			weeks: []int64{7, 8}, nowWeek: 10, want: 2},
+		{name: "two complete light weeks end the run",
+			weeks: []int64{6, 7}, nowWeek: 10, want: 0},
+		{name: "tolerated light week inside the run does not count",
+			weeks: []int64{6, 7, 9, 10}, nowWeek: 10, want: 4},
+		{name: "two light weeks inside history restart the count",
+			weeks: []int64{4, 5, 9, 10}, nowWeek: 10, want: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, currentRun(tc.weeks, tc.nowWeek, gapWeeks))
+		})
+	}
 }
 
 func TestPoliciesEvaluate(t *testing.T) {
@@ -229,19 +255,19 @@ func TestPoliciesEvaluate(t *testing.T) {
 	neverSubscribed := ideplan.Decision{Status: ideplan.StatusNeverSubscribed}
 	signedOut := ideplan.Decision{Status: ideplan.StatusExpired, SignedIn: ideplan.SignedOut}
 	parseError := ideplan.Decision{Status: ideplan.StatusExpired, SignedIn: ideplan.ParseClaimsError}
-	nagWindows := int(nagRun / qualifyWindow)
-	lockdownWindows := int(lockdownRun / qualifyWindow)
-	askMoreTimeWindows := int(askMoreTimeRun / qualifyWindow)
+	upgradeExpired := ideplan.Decision{Status: ideplan.StatusUpgradeExpired}
 	for _, tc := range []struct {
 		name            string
-		usage           []time.Time
+		days            []DayActivity
+		now             time.Time
 		plan            ideplan.Decision
 		wantNag         Action
 		wantAskMoreTime Action
 		wantLockdown    Action
 	}{
 		{
-			name:            "expired with no usage",
+			name:            "expired with no activity",
+			now:             afterWeeks(1),
 			plan:            expired,
 			wantNag:         ActionNone,
 			wantAskMoreTime: ActionNone,
@@ -249,7 +275,8 @@ func TestPoliciesEvaluate(t *testing.T) {
 		},
 		{
 			name:            "expired below the nag run",
-			usage:           qualifyingWindows(0, nagWindows-1),
+			days:            professionalWeeks(0, nagRun-1),
+			now:             afterWeeks(nagRun - 1),
 			plan:            expired,
 			wantNag:         ActionNone,
 			wantAskMoreTime: ActionNone,
@@ -257,39 +284,80 @@ func TestPoliciesEvaluate(t *testing.T) {
 		},
 		{
 			name:            "expired at the nag run nags",
-			usage:           qualifyingWindows(0, nagWindows),
+			days:            professionalWeeks(0, nagRun),
+			now:             afterWeeks(nagRun),
 			plan:            expired,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionNone,
 			wantLockdown:    ActionNone,
 		},
 		{
-			name:            "expired below the ask-more-time run nags only",
-			usage:           qualifyingWindows(0, askMoreTimeWindows-1),
+			name:            "professional-only usage nags forever but never locks",
+			days:            professionalWeeks(0, lockdownRun+4),
+			now:             afterWeeks(lockdownRun + 4),
 			plan:            expired,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionNone,
 			wantLockdown:    ActionNone,
 		},
 		{
-			name:            "expired at the ask-more-time run asks for more time",
-			usage:           qualifyingWindows(0, askMoreTimeWindows),
+			name:            "a tolerated light week keeps the nag run alive",
+			days:            append(professionalWeeks(0, 2), professionalWeeks(3, 1)...),
+			now:             afterWeeks(4),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
+		},
+		{
+			name:            "two light weeks stop the nag",
+			days:            professionalWeeks(0, nagRun),
+			now:             afterWeeks(nagRun + 3),
+			plan:            expired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
+		},
+		{
+			name:            "heavy below the ask-more-time run nags only",
+			days:            heavyWeeks(0, askMoreTimeRun-1),
+			now:             afterWeeks(askMoreTimeRun - 1),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
+		},
+		{
+			name:            "heavy at the ask-more-time run asks for more time",
+			days:            heavyWeeks(0, askMoreTimeRun),
+			now:             afterWeeks(askMoreTimeRun),
 			plan:            expired,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
 			wantLockdown:    ActionNone,
 		},
 		{
-			name:            "expired at the lockdown run locks",
-			usage:           qualifyingWindows(0, lockdownWindows),
+			name:            "heavy at the lockdown run locks",
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun),
 			plan:            expired,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
 			wantLockdown:    ActionLockdown,
 		},
 		{
+			name:            "the lock does not self-heal after two idle weeks",
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun + 3),
+			plan:            expired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
+		},
+		{
 			name:            "never-subscribed at the lockdown run locks",
-			usage:           qualifyingWindows(0, lockdownWindows),
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun),
 			plan:            neverSubscribed,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
@@ -297,7 +365,8 @@ func TestPoliciesEvaluate(t *testing.T) {
 		},
 		{
 			name:            "signed-out at the lockdown run locks",
-			usage:           qualifyingWindows(0, lockdownWindows),
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun),
 			plan:            signedOut,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
@@ -305,46 +374,42 @@ func TestPoliciesEvaluate(t *testing.T) {
 		},
 		{
 			name:            "parse-error at the lockdown run locks",
-			usage:           qualifyingWindows(0, lockdownWindows),
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun),
 			plan:            parseError,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
 			wantLockdown:    ActionLockdown,
 		},
 		{
-			name: "partial current window counts once it qualifies",
-			usage: append(qualifyingWindows(0, lockdownWindows-1),
-				windowSamples(
-					windowBase.Add(time.Duration(lockdownWindows-1)*qualifyWindow),
-					qualifyingBuckets)...),
-			plan:            expired,
+			name:            "upgrade-expired without activity does not lock",
+			now:             afterWeeks(1),
+			plan:            upgradeExpired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
+		},
+		{
+			name:            "upgrade-expired at the lockdown run locks",
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun),
+			plan:            upgradeExpired,
 			wantNag:         ActionPrompt,
 			wantAskMoreTime: ActionAskMoreTime,
 			wantLockdown:    ActionLockdown,
 		},
 		{
 			name:            "active user is never nagged or locked",
-			usage:           qualifyingWindows(0, lockdownWindows+4),
+			days:            heavyWeeks(0, lockdownRun+4),
+			now:             afterWeeks(lockdownRun + 4),
 			plan:            ideplan.Decision{Status: ideplan.StatusActive},
-			wantNag:         ActionNone,
-			wantAskMoreTime: ActionNone,
-			wantLockdown:    ActionNone,
-		},
-		{
-			name:            "grace-period user is never nagged or locked",
-			usage:           qualifyingWindows(0, lockdownWindows+4),
-			plan:            ideplan.Decision{Status: ideplan.StatusGracePeriod},
 			wantNag:         ActionNone,
 			wantAskMoreTime: ActionNone,
 			wantLockdown:    ActionNone,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := Snapshot{
-				Now:   windowBase.Add(100 * qualifyWindow),
-				Usage: tc.usage,
-				Plan:  tc.plan,
-			}
+			s := Snapshot{Now: tc.now, Days: tc.days, Plan: tc.plan}
 			nagNext, nag := NagPolicy{}.Evaluate(s)
 			assert.Equal(t, tc.wantNag, nag, "nag policy")
 			assert.Equal(t, s.Now.Add(evaluateInterval), nagNext,
@@ -361,13 +426,52 @@ func TestPoliciesEvaluate(t *testing.T) {
 	}
 }
 
+func TestNagCadence(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		days []DayActivity
+		now  time.Time
+		want time.Duration
+	}{
+		{
+			name: "weekly below the daily-nag run",
+			days: professionalWeeks(0, dailyNagRun-1),
+			now:  afterWeeks(dailyNagRun - 1),
+			want: weeklyNagCooldown,
+		},
+		{
+			name: "daily at the daily-nag professional run",
+			days: professionalWeeks(0, dailyNagRun),
+			now:  afterWeeks(dailyNagRun),
+			want: dailyNagCooldown,
+		},
+		{
+			name: "daily at the ask-more-time heavy run",
+			days: heavyWeeks(0, askMoreTimeRun),
+			now:  afterWeeks(askMoreTimeRun),
+			want: dailyNagCooldown,
+		},
+		{
+			name: "heavy run stays daily even after usage stops",
+			days: heavyWeeks(0, askMoreTimeRun),
+			now:  afterWeeks(askMoreTimeRun + 4),
+			want: dailyNagCooldown,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Snapshot{Now: tc.now, Days: tc.days}
+			assert.Equal(t, tc.want, nagCadence(s))
+		})
+	}
+}
+
 func TestDefaultPolicies(t *testing.T) {
 	names := make([]string, 0)
 	for _, p := range DefaultPolicies() {
 		names = append(names, p.Name())
 	}
 	assert.Equal(t, []string{
-		"nag", "ask-more-time", "lockdown", "tamper", "upgrade_expired",
+		"nag", "ask-more-time", "lockdown", "tamper",
 	}, names)
 }
 
@@ -413,12 +517,6 @@ func TestTamperPolicyEvaluate(t *testing.T) {
 			plan:     ideplan.Decision{Status: ideplan.StatusActive},
 			want:     ActionNone,
 		},
-		{
-			name:     "grace period and tampered does nothing",
-			tampered: true,
-			plan:     ideplan.Decision{Status: ideplan.StatusGracePeriod},
-			want:     ActionNone,
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := Snapshot{Now: monday, Plan: tc.plan, Tampered: tc.tampered}
@@ -426,46 +524,6 @@ func TestTamperPolicyEvaluate(t *testing.T) {
 			assert.Equal(t, tc.want, a)
 			assert.Equal(t, s.Now.Add(evaluateInterval), next,
 				"tamper policy must re-evaluate one interval later")
-		})
-	}
-}
-
-// TestUpgradeExpiredPolicyEvaluate pins the one-off build-date defense:
-// an upgrade-expired plan locks immediately, while any other gating
-// reason or an entitled plan leaves the policy inert.
-func TestUpgradeExpiredPolicyEvaluate(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		plan ideplan.Decision
-		want Action
-	}{
-		{
-			name: "upgrade expired locks without usage",
-			plan: ideplan.Decision{Status: ideplan.StatusUpgradeExpired},
-			want: ActionLockdown,
-		},
-		{
-			name: "expired subscription does nothing here",
-			plan: ideplan.Decision{Status: ideplan.StatusExpired},
-			want: ActionNone,
-		},
-		{
-			name: "never subscribed does nothing here",
-			plan: ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
-			want: ActionNone,
-		},
-		{
-			name: "active does nothing",
-			plan: ideplan.Decision{Status: ideplan.StatusActive},
-			want: ActionNone,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := Snapshot{Now: monday, Plan: tc.plan}
-			next, a := UpgradeExpiredPolicy{}.Evaluate(s)
-			assert.Equal(t, tc.want, a)
-			assert.Equal(t, s.Now.Add(evaluateInterval), next,
-				"upgrade-expired policy must re-evaluate one interval later")
 		})
 	}
 }
@@ -480,12 +538,6 @@ func TestGated(t *testing.T) {
 		{
 			name:       "active is not gated",
 			dec:        ideplan.Decision{Status: ideplan.StatusActive},
-			wantGated:  false,
-			wantReason: LockNone,
-		},
-		{
-			name:       "grace period is not gated",
-			dec:        ideplan.Decision{Status: ideplan.StatusGracePeriod},
 			wantGated:  false,
 			wantReason: LockNone,
 		},

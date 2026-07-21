@@ -30,19 +30,33 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 )
 
-// SeedQualifyingUsage writes a usage history that satisfies the
-// lockdown policy under the currently-compiled enforcement knobs: one
-// sample per usage bucket across enough windows to exceed lockdownRun,
-// so tests lock regardless of whether the knobs are production-scale
-// or compressed for manual testing. Intended for tests only.
+// SeedQualifyingUsage writes an activity history that satisfies the
+// lockdown policy under the currently-compiled enforcement knobs:
+// qualifyingDays heavy days in each of lockdownRun consecutive weeks
+// ending at the week before now, so tests lock regardless of whether
+// the knobs are production-scale or compressed for manual testing.
+// Intended for tests only.
 func SeedQualifyingUsage(ctx context.Context, storage storageapi.Service, now time.Time) error {
-	span := lockdownRun + qualifyWindow
-	end := bucketStart(now, usageBucket)
-	var samples []string
-	for t := end.Add(-span); !t.After(end); t = t.Add(usageBucket) {
-		samples = append(samples, t.UTC().Format(sampleLayout))
+	weekStart := bucketStart(now, weekWindow)
+	var days []dayUsage
+	for w := lockdownRun; w >= 1; w-- {
+		ws := weekStart.Add(-time.Duration(w) * weekWindow)
+		for d := range qualifyingDays {
+			day := ws.Add(time.Duration(d) * 24 * time.Hour)
+			days = append(days, heavyDay(day))
+		}
 	}
-	doc := usageDoc{Kind: usageDocKind, Version: 1, Usage: samples}
+	doc := usageDoc{Kind: usageDocKind, Version: 1, Days: days}
 	store := storageapi.WithPartition(storage, Partition)
 	return store.Create(ctx, usageDocID, &doc)
+}
+
+// heavyDay builds a dayUsage with heavyDaySlots active slots.
+func heavyDay(day time.Time) dayUsage {
+	d := dayUsage{Day: day.UTC().Format(dayLayout)}
+	days := []dayUsage{d}
+	for slot := range heavyDaySlots {
+		days = setSlot(days, d.Day, slot)
+	}
+	return days[0]
 }

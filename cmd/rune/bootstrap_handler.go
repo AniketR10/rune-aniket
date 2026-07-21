@@ -241,7 +241,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:       ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			Source:       ideplan.NewJWTSource(client.CachedTokenSource()),
 			CheckoutURL:  b.checkoutURL,
 			DowngradeURL: apiclient.DefaultDownloadsHost,
 			SignIn:       planSignIn(client),
@@ -551,18 +551,19 @@ var (
 	}
 
 	bootstrapUpgradeKeys = []term.KeyComb{
-		{Ch: 'u'},
+		{Ch: 'u'}, {Ch: 'c'},
 	}
 )
 
 const (
 	optWelcomeGo = " Let's go "
 
-	optLoginSignIn = "  Sign in  "
-	optLoginSignUp = "  Sign up  "
-	optLoginCancel = "  Cancel  "
-	optUpgradePro  = "  Upgrade to Pro  "
-	optLoginCopy   = "  Copy URL  "
+	optLoginSignIn  = "  Sign in  "
+	optLoginSignUp  = "  Sign up  "
+	optLoginCancel  = "  Cancel  "
+	optUpgradePro   = "  Upgrade to Pro  "
+	optUpgradeLater = "  Continue  "
+	optLoginCopy    = "  Copy URL  "
 )
 
 func (b *bootstrapHandler) openBootstrapFlow() {
@@ -634,8 +635,10 @@ func (b *bootstrapHandler) openVimPrompt() {
 }
 
 func (b *bootstrapHandler) openLoginPrompt() error {
-	msg := "## Subscription\n" +
-		"Sign in to continue, or sign up if you don't have an account yet."
+	msg := "## Sign in\n" +
+		"Rune is free for personal use. Professional use requires a " +
+		"Rune Pro license. Sign in, or sign up if you don't have an " +
+		"account yet."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
@@ -717,7 +720,7 @@ func (b *bootstrapHandler) startLogin() error {
 			coord:        coord,
 			scheduleTick: b.scheduleNextTick,
 			decide: func(ctx context.Context) (ideplan.Decision, error) {
-				source := ideplan.NewJWTSource(b.bootstrapClient.CachedTokenSource(), nil)
+				source := ideplan.NewJWTSource(b.bootstrapClient.CachedTokenSource())
 				return source.Decision(ctx)
 			},
 			onSwap:        b.performSwap,
@@ -872,21 +875,27 @@ func (b *bootstrapHandler) copyBootstrapURL(oauthURL string) (browserapi.Notific
 }
 
 func (b *bootstrapHandler) openUpgradePrompt() error {
-	msg := "**Upgrade to Rune Pro to unlock the IDE.**\n\n" +
-		"Your account is signed in but has no paid plan. Click below\n" +
-		"to open the checkout page in your browser. Once you complete\n" +
-		"checkout, return here and click Sign in again."
+	msg := "**You're signed in.**\n\n" +
+		"Your account has no Rune Pro license. Rune is free for " +
+		"personal use; professional use requires a license. You can " +
+		"upgrade now, or continue and upgrade later."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
-		[]string{optUpgradePro},
+		[]string{optUpgradePro, optUpgradeLater},
 		bootstrapUpgradeKeys,
 		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, _ string) {
-				if err := b.openBrowserURL(b.checkoutURL); err != nil {
-					b.notifyError("open checkout page", err)
+			guard.onSelect(func(_ int, option string) {
+				if option == optUpgradePro {
+					if err := b.openBrowserURL(b.checkoutURL); err != nil {
+						b.notifyError("open checkout page", err)
+					}
 				}
-				_ = b.openLoginPrompt()
+				b.scheduleNextTick(func() {
+					if err := b.performSwap(); err != nil {
+						b.notifyError("finish bootstrap", err)
+					}
+				})
 			}),
 			guard.onClose(func() { _ = b.openUpgradePrompt() }),
 		),

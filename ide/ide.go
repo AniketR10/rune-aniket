@@ -461,19 +461,37 @@ func (i *IDE) initPlanSource(cfg PlanSourceConfig) {
 		log.WithError(err).Warn("idelockdown: start usage planner")
 	}
 	i.planMonitor = ideplan.NewMonitor(ideplan.MonitorConfig{
-		Source:        cfg.Source,
-		Notifications: i.workspaceHandler.notifications.current(),
-		Locker:        i.usagePlanner,
+		Source: cfg.Source,
+		Locker: i.usagePlanner,
 	})
 	i.planMonitor.Start(context.Background())
+}
+
+// activityEvents are the editor events that count as usage evidence
+// for the idelockdown planner.
+var activityEvents = []textapi.EventType{
+	textapi.EventTypeOpen, textapi.EventTypeFlush, textapi.EventTypeEdit,
+}
+
+// activityRecorder forwards editor events to the usage planner's
+// activity ledger.
+type activityRecorder struct{ planner *idelockdown.Planner }
+
+func (r activityRecorder) Handle(ctx context.Context, _ textapi.Event) bool {
+	r.planner.RecordActivity(ctx)
+	return false
 }
 
 // nagPromptOpener returns the ShowNagPrompt callback the usage
 // planner invokes when the nag policy fires.
 func (i *IDE) nagPromptOpener(cfg PlanSourceConfig) func() {
 	const message = "**Rune seems to be working out for you.**\n\n" +
-		"Rune is built by a small team and your subscription keep it going. " +
-		"Upgrade to Pro, or sign in if you already have an account."
+		"Much of the industry is betting that we won't be writing code for much longer.\n" +
+		"We are betting that the technologists, the systems programmers, the\n" +
+		"hackers who love this craft, and the ones who'd rather read the source than the\n" +
+		"docs, will outlive every company betting against them. " +
+		"When prod is down at 3am, nobody pages the product manager.\n\n" +
+		"Buying Rune supports a small, self-funded company that wants to keep you in the driver's seat.\n\n"
 	const (
 		optUpgrade = " Upgrade to Pro "
 		optSignIn  = " Sign in "
@@ -507,8 +525,9 @@ func (i *IDE) nagPromptOpener(cfg PlanSourceConfig) func() {
 // the last nag before lockdown.
 func (i *IDE) askMoreTimePromptOpener(cfg PlanSourceConfig) func() {
 	const message = "**Rune seems to be working out for you.**\n\n" +
-		"We've put a lot of work into Rune and your subscription allows us to keep making it better. " +
-		"If you need more time, that's ok."
+		"Rune is free for personal use, but professional use requires " +
+		"a Rune Pro license. If you need more time to arrange one, " +
+		"that's ok."
 	const (
 		optUpgrade  = " Upgrade to Pro "
 		optSignIn   = " Sign in "
@@ -904,6 +923,9 @@ func (i *IDE) init(
 	_ = i.workspaceHandler.SubscribeEvents(
 		textapi.AllEvents(),
 		tutorialEventObserver(i.options.scheduleFn, i.tutorial.observeEvent),
+	)
+	_ = i.workspaceHandler.SubscribeEvents(
+		activityEvents, activityRecorder{planner: i.usagePlanner},
 	)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())

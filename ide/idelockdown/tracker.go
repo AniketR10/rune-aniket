@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,7 +42,9 @@ const (
 
 	usageDocID   = "usage"
 	usageDocKind = "usage-samples"
-	maxSamples   = 400
+	// dayLayout is fixed-width for UTC days, so lexicographic order
+	// is chronological order.
+	dayLayout = "2006-01-02"
 	// sampleLayout is fixed-width for UTC times, so lexicographic
 	// order is chronological order.
 	sampleLayout = time.RFC3339
@@ -49,12 +52,21 @@ const (
 
 var retryStrategy = retry.DefaultStrategy
 
+// dayUsage is one UTC day of activity evidence.
+type dayUsage struct {
+	// Day is the UTC day formatted as dayLayout.
+	Day string
+	// Slots is a hex bitmask of the day's slotsPerDay activity
+	// slots (slotMaskLen characters, 4 slots per character).
+	Slots string
+}
+
 type usageDoc struct {
 	Kind    string
 	Version int64
-	// Usage are unique UTC usage samples formatted as sampleLayout,
-	// ascending, capped at maxSamples.
-	Usage []string
+	// Days are per-day activity bitmasks, ascending by Day, pruned
+	// past the retention window.
+	Days []dayUsage
 	// LastNag is the UTC time the nag prompt was last shown.
 	LastNag string
 	// Tampered marks the install as having wiped the data directory
@@ -100,23 +112,26 @@ func (t *tracker) load(ctx context.Context) error {
 	return nil
 }
 
-// recordUsage adds sample to the usage series. It is a no-op when
-// the sample is already recorded.
-func (t *tracker) recordUsage(ctx context.Context, sample time.Time) error {
-	key := sample.UTC().Format(sampleLayout)
+// recordActivity sets the activity-slot bit containing now and
+// prunes days older than the retention window. It is a no-op when
+// the slot is already recorded, so at most one write lands per slot.
+func (t *tracker) recordActivity(ctx context.Context, now time.Time) error {
+	utc := now.UTC()
+	day := utc.Format(dayLayout)
+	slot := (utc.Hour()*60 + utc.Minute()) / int(slotDuration/time.Minute)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if containsSample(t.doc.Usage, key) {
+	if slotRecorded(t.doc.Days, day, slot) {
 		return nil
 	}
 	return storageapi.ConsistentUpdate(ctx, t.store, usageDocID, &t.doc, retryStrategy,
 		func() ([]storageapi.Update, []storageapi.Precondition) {
-			if containsSample(t.doc.Usage, key) {
+			if slotRecorded(t.doc.Days, day, slot) {
 				return nil, nil
 			}
-			samples := insertSample(t.doc.Usage, key)
+			days := pruneDays(setSlot(t.doc.Days, day, slot), utc)
 			return []storageapi.Update{
-					{FieldPath: []string{"Usage"}, Value: samples},
+					{FieldPath: []string{"Days"}, Value: days},
 					{FieldPath: []string{"Version"}, Value: t.doc.Version + 1},
 				}, []storageapi.Precondition{
 					{FieldPath: []string{"Version"}, Value: t.doc.Version},
@@ -199,46 +214,107 @@ func nagDue(lastNag string, now time.Time, cooldown time.Duration) bool {
 	return now.Sub(last) >= cooldown
 }
 
-// usage returns the recorded usage samples in UTC, ascending.
-func (t *tracker) usage() []time.Time {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return parseSamples(t.doc.Usage)
+// DayActivity is one UTC day of decoded activity evidence.
+type DayActivity struct {
+	// Day is the UTC midnight of the day.
+	Day time.Time
+	// ActiveSlots is the number of activity slots with at least one
+	// recorded event.
+	ActiveSlots int
 }
 
-// parseSamples decodes sampleLayout keys, skipping malformed
-// entries.
-func parseSamples(keys []string) []time.Time {
-	out := make([]time.Time, 0, len(keys))
-	for _, k := range keys {
-		s, err := time.Parse(sampleLayout, k)
+// days returns the recorded per-day activity, ascending by day.
+// Malformed entries are skipped.
+func (t *tracker) days() []DayActivity {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]DayActivity, 0, len(t.doc.Days))
+	for _, d := range t.doc.Days {
+		day, err := time.Parse(dayLayout, d.Day)
 		if err != nil {
 			continue
 		}
-		out = append(out, s.UTC())
+		out = append(out, DayActivity{Day: day.UTC(), ActiveSlots: countSlots(d.Slots)})
 	}
 	return out
 }
 
-func containsSample(samples []string, key string) bool {
-	i := sort.SearchStrings(samples, key)
-	return i < len(samples) && samples[i] == key
+// slotRecorded reports whether the slot bit for day is already set.
+func slotRecorded(days []dayUsage, day string, slot int) bool {
+	i := searchDay(days, day)
+	if i >= len(days) || days[i].Day != day {
+		return false
+	}
+	mask := days[i].Slots
+	if len(mask) != slotMaskLen {
+		return false
+	}
+	return hexNibble(mask[slot/4])&(1<<(slot%4)) != 0
 }
 
-// insertSample returns samples with key inserted in ascending order,
-// deduplicated and capped at maxSamples (oldest evicted first). The
-// input slice is not modified.
-func insertSample(samples []string, key string) []string {
-	i := sort.SearchStrings(samples, key)
-	if i < len(samples) && samples[i] == key {
-		return samples
+// setSlot returns days with the slot bit for day set, inserting the
+// day in ascending order when absent. The input slice is not
+// modified. A malformed persisted mask is replaced by an empty one
+// rather than propagated.
+func setSlot(days []dayUsage, day string, slot int) []dayUsage {
+	i := searchDay(days, day)
+	mask := emptySlotMask()
+	present := i < len(days) && days[i].Day == day
+	if present && len(days[i].Slots) == slotMaskLen {
+		mask = days[i].Slots
 	}
-	out := make([]string, 0, len(samples)+1)
-	out = append(out, samples[:i]...)
-	out = append(out, key)
-	out = append(out, samples[i:]...)
-	if len(out) > maxSamples {
-		out = out[len(out)-maxSamples:]
+	nibble := hexNibble(mask[slot/4]) | 1<<(slot%4)
+	mask = mask[:slot/4] + string(hexDigits[nibble]) + mask[slot/4+1:]
+	out := make([]dayUsage, 0, len(days)+1)
+	out = append(out, days[:i]...)
+	out = append(out, dayUsage{Day: day, Slots: mask})
+	if present {
+		out = append(out, days[i+1:]...)
+	} else {
+		out = append(out, days[i:]...)
 	}
 	return out
+}
+
+// pruneDays drops days older than the retention window ending at
+// now.
+func pruneDays(days []dayUsage, now time.Time) []dayUsage {
+	cutoff := now.UTC().Add(-retention).Format(dayLayout)
+	i := sort.Search(len(days), func(i int) bool { return days[i].Day >= cutoff })
+	return days[i:]
+}
+
+func searchDay(days []dayUsage, day string) int {
+	return sort.Search(len(days), func(i int) bool { return days[i].Day >= day })
+}
+
+const hexDigits = "0123456789abcdef"
+
+// hexNibble decodes one lowercase hex character; malformed input
+// counts as zero so a corrupt mask degrades to "no activity".
+func hexNibble(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10
+	default:
+		return 0
+	}
+}
+
+func emptySlotMask() string {
+	return strings.Repeat("0", slotMaskLen)
+}
+
+// countSlots counts the set bits in a slot mask.
+func countSlots(mask string) int {
+	n := 0
+	for i := 0; i < len(mask); i++ {
+		nibble := hexNibble(mask[i])
+		for ; nibble != 0; nibble &= nibble - 1 {
+			n++
+		}
+	}
+	return n
 }

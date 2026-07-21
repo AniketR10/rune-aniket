@@ -44,7 +44,6 @@ func TestDecide(t *testing.T) {
 		buildDate    time.Time
 		want         Status
 		wantPlanEnds time.Time
-		wantGrace    time.Time
 		wantSignedIn SignInStatus
 	}{
 		{
@@ -104,20 +103,18 @@ func TestDecide(t *testing.T) {
 			want:     StatusNeverSubscribed,
 		},
 		{
-			name:         "user inside grace window",
+			name:         "user with a freshly lapsed plan is expired",
 			role:         auth.RoleUser,
 			planEnds:     planEnds,
-			want:         StatusGracePeriod,
+			want:         StatusExpired,
 			wantPlanEnds: planEnds,
-			wantGrace:    planEnds.Add(GracePeriod),
 		},
 		{
-			name:         "user past grace window is expired",
+			name:         "user with a long-lapsed plan is expired",
 			role:         auth.RoleUser,
 			planEnds:     now.Add(-8 * 24 * time.Hour),
 			want:         StatusExpired,
 			wantPlanEnds: now.Add(-8 * 24 * time.Hour),
-			wantGrace:    now.Add(-8 * 24 * time.Hour).Add(GracePeriod),
 		},
 		{
 			name:     "basic role is expired without plan",
@@ -128,10 +125,9 @@ func TestDecide(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := decide(tc.role, tc.planEnds, now, tc.buildDate)
+			got := decide(tc.role, tc.planEnds, tc.buildDate)
 			assert.Equal(t, tc.want, got.Status, "status")
 			assert.Equal(t, tc.wantPlanEnds, got.PlanEnds, "plan ends")
-			assert.Equal(t, tc.wantGrace, got.GraceUntil, "grace until")
 			assert.Equal(t, tc.wantSignedIn, got.SignedIn,
 				"decide must always report the signed-in axis")
 		})

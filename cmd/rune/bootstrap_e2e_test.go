@@ -628,10 +628,78 @@ func TestBootstrapE2ETamperedInstallLocksConfiguredIDE(t *testing.T) {
 	require.Eventually(t, func() bool {
 		b.realIDE.TickPlan(context.Background())
 		frame := handlertest.DrawHandler(wrapped, width, height)
-		return containsAll(frame, "signed out", "Sign in")
+		return containsAll(frame, "usage looks", "Sign in")
 	}, 10*time.Second, 50*time.Millisecond,
 		"a tampered install must lock the configured IDE at startup "+
 			"and render the signed-out lockdown prompt")
+}
+
+// TestBootstrapE2EUpgradePromptContinueSwapsToConfiguredIDE pins the
+// free-personal-use bootstrap contract: a signed-in account without a
+// Rune Pro license is no longer a dead-end loop back to the login
+// prompt. The upgrade prompt offers Continue, which swaps straight
+// into the configured IDE; upgrading stays optional.
+func TestBootstrapE2EUpgradePromptContinueSwapsToConfiguredIDE(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	mu := new(sync.Mutex)
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "", "", nil,
+		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(), t.TempDir(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	t.Cleanup(stopPump)
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+	wrapped.Resize(width, height)
+
+	// The upgrade prompt is reached after the key-bindings choice in
+	// the login flow, so a choice is already recorded by then.
+	mu.Lock()
+	root.chosenEditor = editorModal
+	require.NoError(t, root.openUpgradePrompt())
+	mu.Unlock()
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return containsAll(frame, "You're signed in", "Upgrade to Pro", "Continue")
+	}, 5*time.Second, 50*time.Millisecond,
+		"the upgrade prompt must offer Continue alongside Upgrade to Pro")
+
+	// 'c' selects Continue per bootstrapUpgradeKeys.
+	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 'c'})
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return root.realIDE != nil && root.preIDE == nil
+	}, 30*time.Second, 100*time.Millisecond,
+		"Continue must swap into the configured IDE instead of looping "+
+			"back to the login prompt")
+	assert.True(t, isBootstrapped(dataDir),
+		"the swap must persist the bootstrap override config")
 }
 
 func testE2EExtensionsRunner(

@@ -160,7 +160,7 @@ func lockIDEForTest(t *testing.T, i *IDE, wrapped *lockedHandler, drain func()) 
 	t.Helper()
 	require.Eventually(t, func() bool {
 		i.TickPlan(context.Background())
-		return frameContains(wrapped, drain, "subscription has lapsed")()
+		return frameContains(wrapped, drain, "license has lapsed")()
 	}, 5*time.Second, 10*time.Millisecond,
 		"seeded qualifying usage while expired must lock with the default prompt")
 }
@@ -203,7 +203,7 @@ func TestPlanSignInLockdownFlowShowsURLCopiesAndReevaluates(t *testing.T) {
 	// the default lockdown prompt returns rather than the overlay
 	// tearing down.
 	stub.finish(nil)
-	require.Eventually(t, frameContains(wrapped, drain, "subscription has lapsed"),
+	require.Eventually(t, frameContains(wrapped, drain, "license has lapsed"),
 		5*time.Second, 10*time.Millisecond,
 		"successful sign-in must dismiss the wait prompt and re-evaluate")
 	assert.NotContains(t, handlertest.DrawHandler(wrapped, 100, 30), "auth.example",
@@ -229,7 +229,7 @@ func TestPlanSignInLockdownCancelRestoresPromptAndRetries(t *testing.T) {
 	// Mimic the login flow resolving with the cancellation.
 	stub.finish(stub.ctxErr())
 
-	require.Eventually(t, frameContains(wrapped, drain, "subscription has lapsed"),
+	require.Eventually(t, frameContains(wrapped, drain, "license has lapsed"),
 		5*time.Second, 10*time.Millisecond,
 		"cancel must restore the default lockdown prompt")
 	assert.True(t, i.planLockdown.Locked(), "cancel must not unlock the IDE")

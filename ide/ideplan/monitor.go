@@ -25,12 +25,10 @@ package ideplan
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"unstable.build/go-tui/debug"
 )
 
@@ -44,51 +42,38 @@ type Locker interface {
 }
 
 // MonitorConfig collects the dependencies of Monitor. All fields
-// except Interval and Now are required; NewMonitor panics on missing
+// except Interval are required; NewMonitor panics on missing
 // dependencies.
 type MonitorConfig struct {
-	Source        Source
-	Notifications browserapi.Notifications
-	Locker        Locker
-	Interval      time.Duration
-	Now           func() time.Time
+	Source   Source
+	Locker   Locker
+	Interval time.Duration
 }
 
-// Monitor periodically refreshes the gating decision and reacts:
-//
-//   - StatusActive: clear the pinned warning, ensure the lockdown
-//     wrapper is unlocked.
-//   - StatusGracePeriod: emit one notification per day, pinned via
-//     UpdateNotificationProgress so the user cannot dismiss it.
-//   - StatusExpired: signal the lockdown wrapper.
+// Monitor periodically refreshes the gating decision and reacts: an
+// active plan unlocks the lockdown wrapper, anything else signals it.
+// The lock signal is advisory: the idelockdown planner receiving it
+// re-evaluates against usage evidence instead of locking outright.
 type Monitor struct {
 	cfg MonitorConfig
 
-	mu              sync.Mutex
-	lastNotifiedDay time.Time
-	warningID       string
-	stopCh          chan struct{}
-	started         bool
+	mu      sync.Mutex
+	stopCh  chan struct{}
+	started bool
 }
 
 // NewMonitor constructs a Monitor with the given configuration,
-// applying defaults for unset Interval and Now fields. Panics when a
-// required dependency is missing.
+// applying a default for an unset Interval. Panics when a required
+// dependency is missing.
 func NewMonitor(cfg MonitorConfig) *Monitor {
 	if cfg.Source == nil {
 		panic("ideplan: MonitorConfig.Source is required")
-	}
-	if cfg.Notifications == nil {
-		panic("ideplan: MonitorConfig.Notifications is required")
 	}
 	if cfg.Locker == nil {
 		panic("ideplan: MonitorConfig.Locker is required")
 	}
 	if cfg.Interval <= 0 {
 		cfg.Interval = DefaultMonitorInterval
-	}
-	if cfg.Now == nil {
-		cfg.Now = time.Now
 	}
 	return &Monitor{cfg: cfg, stopCh: make(chan struct{})}
 }
@@ -141,30 +126,16 @@ func (m *Monitor) Reevaluate(ctx context.Context) {
 
 func (m *Monitor) react(dec Decision, err error) {
 	log.WithFields(log.Fields{
-		"status":      dec.Status.String(),
-		"signed_in":   dec.SignedIn.String(),
-		"plan_ends":   dec.PlanEnds.Format(time.RFC3339),
-		"grace_until": dec.GraceUntil.Format(time.RFC3339),
-		"err":         err,
+		"status":    dec.Status.String(),
+		"signed_in": dec.SignedIn.String(),
+		"plan_ends": dec.PlanEnds.Format(time.RFC3339),
+		"err":       err,
 	}).Debug("ideplan monitor: tick")
-	switch dec.Status {
-	case StatusActive:
-		m.mu.Lock()
-		warningID := m.warningID
-		m.warningID = ""
-		m.mu.Unlock()
-		if warningID != "" {
-			if err := m.cfg.Notifications.UpdateNotificationProgress(warningID, "", 100, 100); err != nil {
-				log.WithError(err).Debug("ideplan monitor: clear warning")
-			}
-		}
+	if dec.Status == StatusActive {
 		m.cfg.Locker.SetLocked(false)
-	case StatusGracePeriod:
-		m.cfg.Locker.SetLocked(false)
-		m.maybeNotifyGrace(dec)
-	case StatusExpired, StatusNeverSubscribed:
-		m.cfg.Locker.SetLocked(true)
+		return
 	}
+	m.cfg.Locker.SetLocked(true)
 }
 
 func (m *Monitor) run(ctx context.Context) {
@@ -180,41 +151,5 @@ func (m *Monitor) run(ctx context.Context) {
 		case <-ticker.C:
 			m.Tick(ctx)
 		}
-	}
-}
-
-func (m *Monitor) maybeNotifyGrace(dec Decision) {
-	now := m.cfg.Now()
-	utc := now.UTC()
-	day := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
-	m.mu.Lock()
-	if m.lastNotifiedDay.Equal(day) {
-		m.mu.Unlock()
-		return
-	}
-	m.lastNotifiedDay = day
-	m.mu.Unlock()
-
-	daysLeft := int(dec.GraceUntil.Sub(now).Hours()/24) + 1
-	if daysLeft < 1 {
-		daysLeft = 1
-	}
-	msg := fmt.Sprintf(
-		"Rune Pro subscription expired. %d day(s) remaining before access is locked.",
-		daysLeft,
-	)
-	id, err := m.cfg.Notifications.Notify(browserapi.LevelWarn, "Rune Pro subscription expired.")
-	if err != nil {
-		log.WithError(err).Debug("ideplan monitor: notify")
-		return
-	}
-	if id == "" {
-		return
-	}
-	m.mu.Lock()
-	m.warningID = id
-	m.mu.Unlock()
-	if err := m.cfg.Notifications.UpdateNotificationProgress(id, msg, 99, 100); err != nil {
-		log.WithError(err).Debug("ideplan monitor: update progress")
 	}
 }

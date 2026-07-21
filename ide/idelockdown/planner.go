@@ -26,6 +26,7 @@ package idelockdown
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -73,13 +74,18 @@ type Config struct {
 	Now func() time.Time
 }
 
-// Planner records usage days and applies enforcement policies. It
-// satisfies ideplan.Locker so the plan monitor's SetLocked(true)
+// Planner records editor activity and applies enforcement policies.
+// It satisfies ideplan.Locker so the plan monitor's SetLocked(true)
 // signal is interpreted as "enforcement requested" and re-evaluated
-// against the usage history instead of locking unconditionally.
+// against the activity history instead of locking unconditionally.
 type Planner struct {
 	cfg     Config
 	tracker *tracker
+
+	// lastSlot throttles RecordActivity to at most one tracker call
+	// per activity slot. Zero means no slot recorded yet; slot
+	// indices for any realistic clock are far from zero.
+	lastSlot atomic.Int64
 
 	mu         sync.Mutex
 	loaded     bool
@@ -116,11 +122,10 @@ func New(cfg Config) *Planner {
 	return &Planner{cfg: cfg, tracker: newTracker(cfg.Storage), stopCh: make(chan struct{})}
 }
 
-// Load fetches the usage history and records the launch usage
-// sample. It is split from Start so callers can perform the storage
-// I/O before other subsystems contend for the store; Start calls it
-// when the caller does not. Safe to call multiple times: only the
-// first call does work.
+// Load fetches the activity history. It is split from Start so
+// callers can perform the storage I/O before other subsystems
+// contend for the store; Start calls it when the caller does not.
+// Safe to call multiple times: only the first call does work.
 func (p *Planner) Load(ctx context.Context) error {
 	p.mu.Lock()
 	if p.loaded {
@@ -137,13 +142,12 @@ func (p *Planner) Load(ctx context.Context) error {
 			return err
 		}
 	}
-	return p.tracker.recordUsage(ctx, bucketStart(p.cfg.Now(), usageBucket))
+	return nil
 }
 
-// Start loads the usage history (unless Load already ran), records
-// the launch usage sample, and runs the first policy evaluation,
-// which schedules the next one at the earliest time the policies
-// request. Safe to call once.
+// Start loads the activity history (unless Load already ran) and
+// runs the first policy evaluation, which schedules the next one at
+// the earliest time the policies request. Safe to call once.
 func (p *Planner) Start(ctx context.Context) error {
 	p.mu.Lock()
 	if p.started {
@@ -159,10 +163,30 @@ func (p *Planner) Start(ctx context.Context) error {
 	return nil
 }
 
+// RecordActivity marks the activity slot containing now as active.
+// Called on editor open/flush/edit events; an in-memory throttle
+// keeps it O(1) within a slot so subscribing it to high-frequency
+// events is safe. Merely running Rune is not usage: only calls to
+// this method accrue evidence.
+func (p *Planner) RecordActivity(ctx context.Context) {
+	p.mu.Lock()
+	loaded := p.loaded
+	p.mu.Unlock()
+	if !loaded {
+		return
+	}
+	now := p.cfg.Now()
+	slot := bucketIndex(now, slotDuration)
+	if p.lastSlot.Swap(slot) == slot {
+		return
+	}
+	if err := p.tracker.recordActivity(ctx, now); err != nil {
+		log.WithError(err).Debug("idelockdown: record activity")
+	}
+}
+
 // Stop halts the evaluation chain. Safe to call multiple times.
 func (p *Planner) Stop() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	select {
 	case <-p.stopCh:
 		return
@@ -191,19 +215,16 @@ func (p *Planner) snapshot(ctx context.Context) Snapshot {
 	}
 	return Snapshot{
 		Now:      p.cfg.Now().UTC(),
-		Usage:    p.tracker.usage(),
+		Days:     p.tracker.days(),
 		Plan:     dec,
 		Tampered: p.tracker.tampered(),
 	}
 }
 
-// evaluate records the current usage sample, applies the strongest
-// Action across the configured policies, and schedules the next
-// evaluation at the earliest time they request.
+// evaluate applies the strongest Action across the configured
+// policies and schedules the next evaluation at the earliest time
+// they request.
 func (p *Planner) evaluate(ctx context.Context) {
-	if err := p.tracker.recordUsage(ctx, bucketStart(p.cfg.Now(), usageBucket)); err != nil {
-		log.WithError(err).Debug("idelockdown: record usage sample")
-	}
 	s := p.snapshot(ctx)
 	action := ActionNone
 	strongest := ""
@@ -222,7 +243,7 @@ func (p *Planner) evaluate(ctx context.Context) {
 		"action": action,
 		"policy": strongest,
 		"status": s.Plan.Status.String(),
-		"usage":  len(s.Usage),
+		"days":   len(s.Days),
 		"next":   next.Format(time.RFC3339),
 	}).Debug("idelockdown: evaluate")
 	isGated, reason := gated(s.Plan)
@@ -237,9 +258,9 @@ func (p *Planner) evaluate(ctx context.Context) {
 	case ActionLockdown:
 		p.cfg.Locker.SetLocked(true, reason)
 	case ActionAskMoreTime:
-		p.maybePrompt(ctx, s.Now, p.cfg.ShowAskMoreTimePrompt)
+		p.maybePrompt(ctx, s, p.cfg.ShowAskMoreTimePrompt)
 	case ActionPrompt:
-		p.maybePrompt(ctx, s.Now, p.cfg.ShowNagPrompt)
+		p.maybePrompt(ctx, s, p.cfg.ShowNagPrompt)
 	case ActionNone:
 		p.cfg.Locker.SetLocked(false, LockNone)
 	}
@@ -254,13 +275,13 @@ func (p *Planner) scheduleEvaluate(ctx context.Context, at time.Time) {
 	if at.IsZero() {
 		return
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	select {
 	case <-p.stopCh:
 		return
 	default:
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.nextCancel != nil {
 		close(p.nextCancel)
 	}
@@ -279,13 +300,14 @@ func (p *Planner) scheduleEvaluate(ctx context.Context, at time.Time) {
 	})
 }
 
-// maybePrompt shows a prompt at most once per nagCooldown, persisted
-// across restarts. The nag and ask-more-time prompts share the mark,
-// so the ask-more-time prompt fires on the cadence the nag would
-// have, replacing it. The CAS mark happens before the prompt so a
+// maybePrompt shows a prompt at most once per nag cadence (weekly,
+// escalating to daily on sustained usage), persisted across
+// restarts. The nag and ask-more-time prompts share the mark, so the
+// ask-more-time prompt fires on the cadence the nag would have,
+// replacing it. The CAS mark happens before the prompt so a
 // concurrent session cannot double-prompt.
-func (p *Planner) maybePrompt(ctx context.Context, now time.Time, show func()) {
-	marked, err := p.tracker.markNagged(ctx, now, nagCooldown)
+func (p *Planner) maybePrompt(ctx context.Context, s Snapshot, show func()) {
+	marked, err := p.tracker.markNagged(ctx, s.Now, nagCadence(s))
 	if err != nil {
 		log.WithError(err).Debug("idelockdown: mark nagged")
 		return

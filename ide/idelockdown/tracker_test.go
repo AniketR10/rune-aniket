@@ -43,7 +43,7 @@ func TestTrackerLoadCreatesDoc(t *testing.T) {
 	require.NoError(t, store.Get(context.Background(), usageDocID, &doc))
 	assert.Equal(t, usageDocKind, doc.Kind)
 	assert.Equal(t, int64(1), doc.Version)
-	assert.Empty(t, doc.Usage)
+	assert.Empty(t, doc.Days)
 }
 
 // retryCreateOnceStore simulates the firstmover retry behaviour that
@@ -77,64 +77,99 @@ func TestTrackerLoadReadsExistingDoc(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
-	require.NoError(t, tr.recordUsage(context.Background(), monday))
+	require.NoError(t, tr.recordActivity(context.Background(), monday))
 
 	tr2 := newTracker(store)
 	require.NoError(t, tr2.load(context.Background()))
-	assert.Equal(t, []time.Time{monday}, tr2.usage())
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 1}}, tr2.days())
 }
 
-func TestTrackerRecordUsageDedupesAndSorts(t *testing.T) {
+func TestTrackerRecordActivityDedupesSlots(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
 
 	ctx := context.Background()
-	require.NoError(t, tr.recordUsage(ctx, monday.AddDate(0, 0, 2)))
-	require.NoError(t, tr.recordUsage(ctx, monday))
-	require.NoError(t, tr.recordUsage(ctx, monday.AddDate(0, 0, 1)))
-	require.NoError(t, tr.recordUsage(ctx, monday),
-		"duplicate sample must be a no-op")
+	require.NoError(t, tr.recordActivity(ctx, monday.Add(10*time.Hour)))
+	require.NoError(t, tr.recordActivity(ctx, monday.Add(10*time.Hour+5*time.Minute)),
+		"a second event within the slot must be a no-op")
+	require.NoError(t, tr.recordActivity(ctx, monday.Add(10*time.Hour+20*time.Minute)))
 
-	assert.Equal(t, []time.Time{
-		monday, monday.AddDate(0, 0, 1), monday.AddDate(0, 0, 2),
-	}, tr.usage())
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 2}}, tr.days())
 
 	var doc usageDoc
 	require.NoError(t, store.Get(ctx, usageDocID, &doc))
-	assert.Equal(t, []string{
-		"2026-01-05T00:00:00Z", "2026-01-06T00:00:00Z", "2026-01-07T00:00:00Z",
-	}, doc.Usage)
+	require.Len(t, doc.Days, 1)
+	assert.Equal(t, "2026-01-05", doc.Days[0].Day)
+	assert.Len(t, doc.Days[0].Slots, slotMaskLen,
+		"the mask must stay fixed-width")
+	assert.Equal(t, int64(3), doc.Version,
+		"only distinct slots must bump the version")
 }
 
-func TestTrackerRecordSampleNormalizesToUTC(t *testing.T) {
+func TestTrackerRecordActivitySortsDays(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	tr := newTracker(store)
+	require.NoError(t, tr.load(context.Background()))
+
+	ctx := context.Background()
+	require.NoError(t, tr.recordActivity(ctx, monday.AddDate(0, 0, 2)))
+	require.NoError(t, tr.recordActivity(ctx, monday))
+	require.NoError(t, tr.recordActivity(ctx, monday.AddDate(0, 0, 1)))
+
+	assert.Equal(t, []DayActivity{
+		{Day: monday, ActiveSlots: 1},
+		{Day: monday.AddDate(0, 0, 1), ActiveSlots: 1},
+		{Day: monday.AddDate(0, 0, 2), ActiveSlots: 1},
+	}, tr.days())
+}
+
+func TestTrackerRecordActivityNormalizesToUTC(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
 
 	loc := time.FixedZone("minus10", -10*3600)
 	// 2026-01-05 20:00 -10:00 is 2026-01-06 06:00 UTC.
-	require.NoError(t, tr.recordUsage(context.Background(),
+	require.NoError(t, tr.recordActivity(context.Background(),
 		time.Date(2026, 1, 5, 20, 0, 0, 0, loc)))
-	assert.Equal(t, []time.Time{
-		time.Date(2026, 1, 6, 6, 0, 0, 0, time.UTC),
-	}, tr.usage())
+	assert.Equal(t, []DayActivity{
+		{Day: time.Date(2026, 1, 6, 0, 0, 0, 0, time.UTC), ActiveSlots: 1},
+	}, tr.days())
 }
 
-func TestTrackerRecordSampleCapsHistory(t *testing.T) {
+// TestTrackerRecordActivityAllSlots pins the mask encoding: all
+// slotsPerDay slots of a day round-trip through the hex bitmask.
+func TestTrackerRecordActivityAllSlots(t *testing.T) {
 	store := storagestub.NewInMemoryService()
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
 
 	ctx := context.Background()
-	for i := range maxSamples + 5 {
-		require.NoError(t, tr.recordUsage(ctx, monday.AddDate(0, 0, i)))
+	for slot := range slotsPerDay {
+		require.NoError(t, tr.recordActivity(ctx,
+			monday.Add(time.Duration(slot)*slotDuration)))
 	}
-	samples := tr.usage()
-	require.Len(t, samples, maxSamples)
-	assert.Equal(t, monday.AddDate(0, 0, 5), samples[0],
-		"oldest samples must be evicted first")
-	assert.Equal(t, monday.AddDate(0, 0, maxSamples+4), samples[len(samples)-1])
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: slotsPerDay}},
+		tr.days())
+}
+
+func TestTrackerRecordActivityPrunesOldDays(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	tr := newTracker(store)
+	require.NoError(t, tr.load(context.Background()))
+
+	ctx := context.Background()
+	old := monday.Add(-retention - 24*time.Hour)
+	kept := monday.Add(-retention + 24*time.Hour)
+	require.NoError(t, tr.recordActivity(ctx, old))
+	require.NoError(t, tr.recordActivity(ctx, kept))
+	require.NoError(t, tr.recordActivity(ctx, monday))
+
+	assert.Equal(t, []DayActivity{
+		{Day: bucketStart(kept, 24 * time.Hour), ActiveSlots: 1},
+		{Day: monday, ActiveSlots: 1},
+	}, tr.days(), "days past the retention window must be pruned")
 }
 
 func TestTrackerMarkNagged(t *testing.T) {
@@ -143,15 +178,15 @@ func TestTrackerMarkNagged(t *testing.T) {
 	require.NoError(t, tr.load(context.Background()))
 
 	ctx := context.Background()
-	marked, err := tr.markNagged(ctx, monday, nagCooldown)
+	marked, err := tr.markNagged(ctx, monday, dailyNagCooldown)
 	require.NoError(t, err)
 	assert.True(t, marked, "first nag must mark")
 
-	marked, err = tr.markNagged(ctx, monday, nagCooldown)
+	marked, err = tr.markNagged(ctx, monday, dailyNagCooldown)
 	require.NoError(t, err)
 	assert.False(t, marked, "second nag within the cooldown must not mark")
 
-	marked, err = tr.markNagged(ctx, monday.Add(nagCooldown-time.Second), nagCooldown)
+	marked, err = tr.markNagged(ctx, monday.Add(dailyNagCooldown-time.Second), dailyNagCooldown)
 	require.NoError(t, err)
 	assert.False(t, marked, "a nag just inside the cooldown must not mark")
 
@@ -159,11 +194,11 @@ func TestTrackerMarkNagged(t *testing.T) {
 	// the persisted mark.
 	tr2 := newTracker(store)
 	require.NoError(t, tr2.load(ctx))
-	marked, err = tr2.markNagged(ctx, monday, nagCooldown)
+	marked, err = tr2.markNagged(ctx, monday, dailyNagCooldown)
 	require.NoError(t, err)
 	assert.False(t, marked, "nag mark must persist across restarts")
 
-	marked, err = tr2.markNagged(ctx, monday.Add(nagCooldown), nagCooldown)
+	marked, err = tr2.markNagged(ctx, monday.Add(dailyNagCooldown), dailyNagCooldown)
 	require.NoError(t, err)
 	assert.True(t, marked, "an elapsed cooldown must mark again")
 }
@@ -187,8 +222,8 @@ func (s *conflictOnceStore) Update(
 			return err
 		}
 		concurrent := []storageapi.Update{
-			{FieldPath: []string{"Usage"},
-				Value: insertSample(doc.Usage, "2020-06-01T00:00:00Z")},
+			{FieldPath: []string{"Days"},
+				Value: setSlot(doc.Days, "2026-01-01", 0)},
 			{FieldPath: []string{"Version"}, Value: doc.Version + 1},
 		}
 		if err := s.Service.Update(ctx, id, concurrent); err != nil {
@@ -199,17 +234,18 @@ func (s *conflictOnceStore) Update(
 	return s.Service.Update(ctx, id, updates, preconditions...)
 }
 
-func TestTrackerRecordSampleRetriesOnVersionConflict(t *testing.T) {
+func TestTrackerRecordActivityRetriesOnVersionConflict(t *testing.T) {
 	store := &conflictOnceStore{Service: storagestub.NewInMemoryService()}
 	tr := newTracker(store)
 	require.NoError(t, tr.load(context.Background()))
 
-	require.NoError(t, tr.recordUsage(context.Background(), monday))
+	require.NoError(t, tr.recordActivity(context.Background(), monday))
 
 	// Both the concurrent write and ours must survive the retry.
-	assert.Equal(t, []time.Time{
-		time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC), monday,
-	}, tr.usage())
+	assert.Equal(t, []DayActivity{
+		{Day: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), ActiveSlots: 1},
+		{Day: monday, ActiveSlots: 1},
+	}, tr.days())
 }
 
 // TestTrackerSetTampered pins that the tamper mark round-trips
@@ -236,4 +272,23 @@ func TestTrackerSetTampered(t *testing.T) {
 	cleared := newTracker(store)
 	require.NoError(t, cleared.load(ctx))
 	assert.False(t, cleared.tampered(), "the cleared mark must persist")
+}
+
+// TestTrackerMalformedMaskDegradesToEmpty pins the corrupt-doc
+// behaviour: a malformed persisted mask counts as no activity and is
+// replaced wholesale on the next write instead of poisoning the doc.
+func TestTrackerMalformedMaskDegradesToEmpty(t *testing.T) {
+	ctx := context.Background()
+	store := storagestub.NewInMemoryService()
+	doc := usageDoc{Kind: usageDocKind, Version: 1, Days: []dayUsage{
+		{Day: "2026-01-05", Slots: "zz"},
+	}}
+	require.NoError(t, store.Create(ctx, usageDocID, &doc))
+
+	tr := newTracker(store)
+	require.NoError(t, tr.load(ctx))
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 0}}, tr.days())
+
+	require.NoError(t, tr.recordActivity(ctx, monday.Add(10*time.Hour)))
+	assert.Equal(t, []DayActivity{{Day: monday, ActiveSlots: 1}}, tr.days())
 }

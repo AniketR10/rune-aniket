@@ -21,11 +21,13 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-// Package idelockdown implements usage-based paywall enforcement.
-// A background planner records the UTC days on which Rune is used,
-// and a set of policies inspect that history together with the
-// ideplan gating decision to decide whether to show a closable
-// upgrade prompt or lock the IDE behind the lockdown overlay.
+// Package idelockdown implements usage-based licensing enforcement.
+// Rune is free for personal use; professional use requires a Rune
+// Pro license. A background planner records editor activity in
+// 15-minute slots, and a set of policies classify that history into
+// professional/heavy usage runs which, together with the ideplan
+// gating decision, decide whether to show a closable upgrade prompt
+// or lock the IDE behind the lockdown overlay.
 package idelockdown
 
 import (
@@ -119,8 +121,8 @@ func gated(d ideplan.Decision) (bool, LockReason) {
 type Snapshot struct {
 	// Now is the evaluation time (UTC).
 	Now time.Time
-	// Usage are the persisted usage samples, ascending.
-	Usage []time.Time
+	// Days are the persisted per-day activity records, ascending.
+	Days []DayActivity
 	// Plan is the login/plan state from ideplan.
 	Plan ideplan.Decision
 	// Tampered reports whether the usage ledger carries the tamper
@@ -157,32 +159,35 @@ func bucketStart(t time.Time, d time.Duration) time.Time {
 	return time.Unix(0, bucketIndex(t, d)*d.Nanoseconds()).UTC()
 }
 
-// maxConsecutiveQualifyingRun returns the longest run of consecutive
-// windows that each contain at least minBuckets distinct
-// bucket-sized sample buckets, as a duration (run length times
-// window). A partial current window counts once it reaches the
-// threshold.
-func maxConsecutiveQualifyingRun(
-	samples []time.Time, window, bucket time.Duration, minBuckets int,
-) time.Duration {
-	perWindow := make(map[int64]map[int64]struct{})
-	for _, s := range samples {
-		w := bucketIndex(s, window)
-		if perWindow[w] == nil {
-			perWindow[w] = make(map[int64]struct{})
-		}
-		perWindow[w][bucketIndex(s, bucket)] = struct{}{}
-	}
-	qualifying := make([]int64, 0, len(perWindow))
-	for w, buckets := range perWindow {
-		if len(buckets) >= minBuckets {
-			qualifying = append(qualifying, w)
+// qualifyingWeeks returns the epoch-anchored week indices whose days
+// include at least minDays days with at least minSlots active slots,
+// sorted ascending. A partial current week counts once it reaches
+// the threshold.
+func qualifyingWeeks(days []DayActivity, minSlots, minDays int) []int64 {
+	perWeek := make(map[int64]int)
+	for _, d := range days {
+		if d.ActiveSlots >= minSlots {
+			perWeek[bucketIndex(d.Day, weekWindow)]++
 		}
 	}
-	slices.Sort(qualifying)
+	weeks := make([]int64, 0, len(perWeek))
+	for w, n := range perWeek {
+		if n >= minDays {
+			weeks = append(weeks, w)
+		}
+	}
+	slices.Sort(weeks)
+	return weeks
+}
+
+// longestRun returns the length in qualifying weeks of the longest
+// run in weeks (sorted ascending), where up to gap consecutive
+// non-qualifying weeks between qualifying weeks are tolerated
+// (tolerated weeks do not count toward the length).
+func longestRun(weeks []int64, gap int64) int {
 	var best, run int
-	for i, w := range qualifying {
-		if i > 0 && w == qualifying[i-1]+1 {
+	for i, w := range weeks {
+		if i > 0 && w-weeks[i-1] <= gap+1 {
 			run++
 		} else {
 			run = 1
@@ -191,5 +196,25 @@ func maxConsecutiveQualifyingRun(
 			best = run
 		}
 	}
-	return time.Duration(best) * window
+	return best
+}
+
+// currentRun returns the length of the run that is still live at
+// nowWeek: its last qualifying week is recent enough that qualifying
+// in the current week would extend it. Once more than gap complete
+// weeks have passed without qualifying, the run is no longer current
+// and the result is zero.
+func currentRun(weeks []int64, nowWeek int64, gap int64) int {
+	n := len(weeks)
+	if n == 0 || nowWeek-weeks[n-1] > gap+1 {
+		return 0
+	}
+	run := 1
+	for i := n - 1; i > 0; i-- {
+		if weeks[i]-weeks[i-1] > gap+1 {
+			break
+		}
+		run++
+	}
+	return run
 }

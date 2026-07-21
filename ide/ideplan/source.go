@@ -59,23 +59,17 @@ type CachedSource interface {
 	Token() (*oauth2.Token, error)
 }
 
-// NewJWTSource wraps an oauth2 token cache as a plan Source. now is
-// indirected so tests can drive the grace-window computation
-// deterministically; pass time.Now in production. The one-off
-// upgrade-entitlement check compares PlanEnds against the compile-time
-// build date resolved by buildDate().
-func NewJWTSource(cache CachedSource, now func() time.Time) *JWTSource {
-	if now == nil {
-		now = time.Now
-	}
-	return &JWTSource{cache: cache, now: now, buildDate: buildDate()}
+// NewJWTSource wraps an oauth2 token cache as a plan Source. The
+// one-off upgrade-entitlement check compares PlanEnds against the
+// compile-time build date resolved by buildDate().
+func NewJWTSource(cache CachedSource) *JWTSource {
+	return &JWTSource{cache: cache, buildDate: buildDate()}
 }
 
 // JWTSource is the production Source. Signatures are not verified
 // client-side: ox-api verified them before issuing the token.
 type JWTSource struct {
 	cache CachedSource
-	now   func() time.Time
 	// buildDate is the compile-time date of the running binary,
 	// compared against a one-off buyer's PlanEnds to detect a build
 	// newer than their upgrade entitlement. Zero in development
@@ -101,7 +95,7 @@ func buildDate() time.Time {
 
 // NopSource is the default Source used when no plan gating is
 // configured: every Decision/Refresh resolves to StatusActive so the
-// IDE never enters the lockdown overlay or grace-period warning.
+// IDE never enters the lockdown overlay.
 type NopSource struct{}
 
 // Decision always returns StatusActive.
@@ -147,7 +141,7 @@ func (s *JWTSource) decideFromToken(tok *oauth2.Token) Decision {
 	if err != nil {
 		return Decision{Status: StatusExpired, SignedIn: ParseClaimsError}
 	}
-	return decide(role, planEnds, s.now(), s.buildDate)
+	return decide(role, planEnds, s.buildDate)
 }
 
 type jwtPayload struct {
