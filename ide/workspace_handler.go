@@ -2484,7 +2484,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (
 	}
 
 	h.persistWorkspaceStateOnClose(hm)
-	if err := hm.closeAndRemove(); err != nil {
+	if err := hm.Close(); err != nil {
 		log.Error(err)
 	} else {
 		log.Debugf("Closed all workspace resources successfully")
@@ -2663,6 +2663,17 @@ func (hm *workspaceHandler) Close() error {
 				ret = multierror.Append(ret, err)
 			}
 		}
+		// Close the workspace scheme before the symbol DB: a remote
+		// scheme's file reads are bound to its transport context, not
+		// the caller's per-op context, so the indexer can be parked in a
+		// read that only closing the scheme cancels. symbolDBCloser.Close
+		// then blocks forever waiting on that indexer.
+		if hm.cwd != nil {
+			if err := hm.cwd.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+			hm.cwd = nil
+		}
 		if hm.symbolDBCloser != nil {
 			if err := hm.symbolDBCloser.Close(); err != nil {
 				ret = multierror.Append(ret, err)
@@ -2690,19 +2701,6 @@ func (hm *workspaceHandler) Close() error {
 		hm.closeErr = ret
 	})
 	return hm.closeErr
-}
-
-func (hm *workspaceHandler) closeAndRemove() (ret error) {
-	if err := hm.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if hm.cwd != nil {
-		if err := hm.cwd.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-		hm.cwd = nil
-	}
-	return ret
 }
 
 func (h *workspaceManagerHandler) initTabs(

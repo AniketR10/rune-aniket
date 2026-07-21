@@ -1450,6 +1450,163 @@ func mustResolve(
 	return it
 }
 
+// blockingReadScheme wraps a real file scheme but stalls reads of Go
+// source files until the scheme's own context is cancelled. It models
+// the workspacessh remote scheme, whose gRPC file reads are bound to the
+// scheme context rather than the caller's per-op context, so an in-flight
+// read only unblocks when the scheme is closed. Close cancels that
+// context, mirroring workspacessh scheme.Close -> s.cancelCtx. Only *.go
+// reads block; package artifacts under lib/ (tree-sitter .so/.scm) pass
+// through so the grammar still loads.
+type blockingReadScheme struct {
+	schemeapi.Scheme
+	ctx      context.Context
+	cancel   context.CancelFunc
+	readOnce sync.Once
+	reading  chan struct{}
+}
+
+func newBlockingReadScheme(inner schemeapi.Scheme) *blockingReadScheme {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &blockingReadScheme{
+		Scheme:  inner,
+		ctx:     ctx,
+		cancel:  cancel,
+		reading: make(chan struct{}),
+	}
+}
+
+func (s *blockingReadScheme) wrap(f workspaceapi.File, name string) workspaceapi.File {
+	if !strings.HasSuffix(name, ".go") {
+		return f
+	}
+	return &blockingFile{File: f, scheme: s}
+}
+
+func (s *blockingReadScheme) Open(filename string) (workspaceapi.File, error) {
+	f, err := s.Scheme.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	return s.wrap(f, filename), nil
+}
+
+func (s *blockingReadScheme) OpenFile(
+	filename string, flag int, perm fs.FileMode,
+) (workspaceapi.File, error) {
+	f, err := s.Scheme.OpenFile(filename, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	return s.wrap(f, filename), nil
+}
+
+func (s *blockingReadScheme) Watch(
+	string, chan<- schemeapi.EventInfo, ...schemeapi.Event,
+) (int, error) {
+	return 0, nil
+}
+
+func (s *blockingReadScheme) StopWatch(int) error { return nil }
+
+func (s *blockingReadScheme) Close() error {
+	s.cancel()
+	return s.Scheme.Close()
+}
+
+type blockingFile struct {
+	workspaceapi.File
+	scheme *blockingReadScheme
+}
+
+func (f *blockingFile) Read([]byte) (int, error) {
+	f.scheme.readOnce.Do(func() { close(f.scheme.reading) })
+	<-f.scheme.ctx.Done()
+	return 0, f.scheme.ctx.Err()
+}
+
+// TestIDECloseUnblocksSymbolDBOnWedgedRead reproduces the quit deadlock
+// where IDE.Close hangs forever: the symbol DB indexer parks a scan
+// worker inside a workspace file Read that only the workspace scheme's
+// context can cancel, and Close waited on the indexer (symbolDBCloser.
+// Close -> <-p.done) before tearing down that scheme. Closing the
+// workspace scheme first cancels the read so the indexer can exit.
+func TestIDECloseUnblocksSymbolDBOnWedgedRead(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "main.go"),
+		[]byte("package main\n\nfunc main() {}\n"), 0o644))
+
+	dataDir := t.TempDir()
+	stageTreeSitterGo(t, dataDir)
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+workspace:
+  symboldb: true
+`), 0o666))
+
+	var blocking *blockingReadScheme
+	const scheme = "blockread"
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(scheme+"://"+dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithScheme(scheme, func(
+			ctx context.Context, cfg config.Config, uri workspaceapi.URI,
+		) (schemeapi.Scheme, error) {
+			fileURI, perr := workspaceapi.ParseURI("file://" + dir)
+			if perr != nil {
+				return nil, perr
+			}
+			inner, ierr := workspace.NewFileScheme(ctx, cfg, fileURI)
+			if ierr != nil {
+				return nil, ierr
+			}
+			blocking = newBlockingReadScheme(inner)
+			return blocking, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	_ = i.Ready()
+	i.WaitWorkspaces()
+	require.NotNil(t, blocking, "blocking workspace scheme must be installed")
+
+	// Wait until the scan has parked a worker inside the wedged Read so
+	// Close deterministically races the real hang rather than a scan that
+	// has not started yet.
+	select {
+	case <-blocking.reading:
+	case <-time.After(30 * time.Second):
+		t.Fatal("symbol DB scan never reached the workspace file Read")
+	}
+
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() { done <- i.Close() })
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("IDE.Close deadlocked: the workspace scheme context was " +
+			"not cancelled before symbolDBCloser.Close, so the wedged " +
+			"workspace file Read never returned")
+	}
+}
+
 // TestWorkspaceSymbolDBDisabledByDefault pins that workspaces do not
 // pay for symbol indexing unless workspace.symboldb is enabled.
 func TestWorkspaceSymbolDBDisabledByDefault(t *testing.T) {
