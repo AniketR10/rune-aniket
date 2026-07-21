@@ -462,6 +462,7 @@ func (s *Server) Read(ctx context.Context, req *workspacerpc.ReadRequest) (*work
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -491,6 +492,7 @@ func (s *Server) ReadAt(ctx context.Context, req *workspacerpc.ReadRequest) (*wo
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -520,6 +522,7 @@ func (s *Server) Write(ctx context.Context, req *workspacerpc.WriteRequest) (*wo
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -545,6 +548,7 @@ func (s *Server) Close(ctx context.Context, req *workspacerpc.CloseFileRequest) 
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -575,6 +579,7 @@ func (s *Server) Sync(ctx context.Context, req *workspacerpc.SyncRequest) (
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -600,6 +605,7 @@ func (s *Server) Truncate(ctx context.Context, req *workspacerpc.TruncateRequest
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -625,6 +631,7 @@ func (s *Server) Seek(ctx context.Context, req *workspacerpc.SeekRequest) (
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -655,6 +662,7 @@ func (s *Server) Stat(ctx context.Context, req *workspacerpc.StatRequest) (
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -714,6 +722,7 @@ func (s *Server) Watch(
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
+			s.locker.Unlock()
 			return err
 		}
 	}

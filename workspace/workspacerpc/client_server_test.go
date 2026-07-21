@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspaceapitest"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -461,6 +462,74 @@ func TestServerStartCommandAuthorizer(t *testing.T) {
 	})
 }
 
+func TestServerUnlocksAfterChrootError(t *testing.T) {
+	ctx := context.Background()
+	root := "unavailable-root"
+	chrootErr := errors.New("chroot failed")
+	tests := []struct {
+		name string
+		call func(*Server) error
+	}{
+		{"Read", func(s *Server) error {
+			_, err := s.Read(ctx, &workspacerpc.ReadRequest{Root: root})
+			return err
+		}},
+		{"ReadAt", func(s *Server) error {
+			_, err := s.ReadAt(ctx, &workspacerpc.ReadRequest{Root: root})
+			return err
+		}},
+		{"Write", func(s *Server) error {
+			_, err := s.Write(ctx, &workspacerpc.WriteRequest{Root: root})
+			return err
+		}},
+		{"Close", func(s *Server) error {
+			_, err := s.Close(ctx, &workspacerpc.CloseFileRequest{Root: root})
+			return err
+		}},
+		{"Sync", func(s *Server) error {
+			_, err := s.Sync(ctx, &workspacerpc.SyncRequest{Root: root})
+			return err
+		}},
+		{"Truncate", func(s *Server) error {
+			_, err := s.Truncate(ctx, &workspacerpc.TruncateRequest{Root: root})
+			return err
+		}},
+		{"Seek", func(s *Server) error {
+			_, err := s.Seek(ctx, &workspacerpc.SeekRequest{Root: root})
+			return err
+		}},
+		{"Stat", func(s *Server) error {
+			_, err := s.Stat(ctx, &workspacerpc.StatRequest{Root: root})
+			return err
+		}},
+		{"Watch", func(s *Server) error {
+			return s.Watch(&workspacerpc.WatchRequest{
+				Root: root,
+				Path: "path",
+				Events: []workspacerpc.Event{
+					workspacerpc.Event_Write,
+				},
+			}, testWatchServer{ctx: ctx})
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			scheme := workspacetest.NewMockWorkspace(ctrl)
+			scheme.EXPECT().Chroot(root).Return(nil, chrootErr)
+			locker := new(recordingLocker)
+			server := NewServer(scheme, locker, CommandAuthorizerFunc(
+				func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+			err := test.call(server)
+
+			require.ErrorIs(t, err, chrootErr)
+			assert.Equal(t, 0, locker.depth)
+		})
+	}
+}
+
 func setupClientServerIntegrationTest(
 	t *testing.T, scheme schemeapi.Scheme,
 ) (*workspacerpc.Client, func()) {
@@ -554,6 +623,48 @@ type dirEntry struct {
 	isDir    bool
 	modeType int32
 }
+
+type recordingLocker struct {
+	depth int
+}
+
+func (l *recordingLocker) Lock() {
+	l.depth++
+}
+
+func (l *recordingLocker) Unlock() {
+	l.depth--
+}
+
+type testWatchServer struct {
+	ctx context.Context
+}
+
+func (s testWatchServer) Send(*workspacerpc.WatchMessage) error {
+	return nil
+}
+
+func (s testWatchServer) Context() context.Context {
+	return s.ctx
+}
+
+func (testWatchServer) SendMsg(any) error {
+	return nil
+}
+
+func (testWatchServer) RecvMsg(any) error {
+	return io.EOF
+}
+
+func (testWatchServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (testWatchServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (testWatchServer) SetTrailer(metadata.MD) {}
 
 func (e dirEntry) Name() string {
 	return e.name
