@@ -48,7 +48,9 @@ var (
 	errInvalidFd = errors.New("invalid file descriptor")
 )
 
-// Server is a workspace server implementation which processes one request at a time.
+// Server is a workspace server implementation. Requests are served
+// concurrently: the underlying schemeapi.Scheme must be goroutine safe,
+// as all implementations are.
 type Server struct {
 	workspacerpc.UnimplementedSchemeServer
 	workspacerpc.UnimplementedExecutorServer
@@ -57,8 +59,8 @@ type Server struct {
 	ctx       context.Context
 	cancelCtx func()
 
-	locker            sync.Locker
 	s                 schemeapi.Scheme
+	mu                sync.Mutex // guards watchpoints
 	watchpoints       map[int]func()
 	commandAuthorizer CommandAuthorizer
 }
@@ -81,25 +83,21 @@ func (f CommandAuthorizerFunc) AuthorizeCommand(
 
 // NewServer allocates storage for a new server and initializes it with wp.
 func NewServer(
-	wp schemeapi.Scheme, locker sync.Locker,
-	commandAuthorizer CommandAuthorizer,
+	wp schemeapi.Scheme, commandAuthorizer CommandAuthorizer,
 ) *Server {
 	if commandAuthorizer == nil {
 		panic("workspacerpc: CommandAuthorizer is required")
 	}
 	ret := new(Server)
-	ret.Init(wp, locker)
+	ret.Init(wp)
 	ret.commandAuthorizer = commandAuthorizer
 	return ret
 }
 
 // Init initializes this Server with the given workspace
-func (s *Server) Init(scheme schemeapi.Scheme, locker sync.Locker) {
+func (s *Server) Init(scheme schemeapi.Scheme) {
 	s.s = scheme
-	s.locker = locker
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
-	s.s = scheme
-	s.locker = locker
 	s.watchpoints = make(map[int]func())
 }
 
@@ -137,9 +135,7 @@ func (s *Server) StartCommand(stream workspacerpc.Executor_StartCommandServer) e
 		return fmt.Errorf("authorize start command: %w", err)
 	}
 
-	s.locker.Lock()
 	pid, err := s.s.StartCommand(ctx, cmd)
-	s.locker.Unlock()
 	if err != nil {
 		cancelCtx()
 		s.log(log.WarnLevel, "start command error: %v", err)
@@ -155,8 +151,6 @@ func (s *Server) StartCommand(stream workspacerpc.Executor_StartCommandServer) e
 func (s *Server) Signal(ctx context.Context, req *workspacerpc.SignalRequest) (*workspacerpc.SignalResponse, error) {
 	pid := req.GetPid()
 	signal := req.GetSig()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	err := s.s.Signal(workspaceapi.Pid(pid), syscall.Signal(signal))
 	if err != nil {
@@ -171,9 +165,6 @@ func (s *Server) URI(ctx context.Context, req *workspacerpc.URIRequest) (
 	*workspacerpc.URIResponse, error,
 ) {
 	root := req.GetRoot()
-
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	fs := s.s
 	if root != "" {
@@ -198,8 +189,6 @@ func (s *Server) ReadDir(ctx context.Context, req *workspacerpc.ReadDirRequest) 
 ) {
 	dir := req.GetDir()
 	root := req.GetRoot()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	fs := s.s
 	if root != "" {
@@ -244,8 +233,6 @@ func (s *Server) MkdirAll(ctx context.Context, req *workspacerpc.MkdirAllRequest
 ) {
 	path := req.GetPath()
 	mode := req.GetMode()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -275,9 +262,6 @@ func (s *Server) Open(ctx context.Context, req *workspacerpc.OpenRequest) (
 	*workspacerpc.OpenResponse, error,
 ) {
 	filename := req.GetFilename()
-
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -314,8 +298,6 @@ func (s *Server) Remove(ctx context.Context, req *workspacerpc.RemoveRequest) (
 	*workspacerpc.RemoveResponse, error,
 ) {
 	filename := req.GetFilename()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -349,8 +331,6 @@ func (s *Server) Rename(ctx context.Context, req *workspacerpc.RenameRequest) (
 	*workspacerpc.RenameResponse, error,
 ) {
 	filename := req.GetFilename()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -384,8 +364,6 @@ func (s *Server) ReadLink(ctx context.Context, req *workspacerpc.ReadLinkRequest
 	*workspacerpc.ReadLinkResponse, error,
 ) {
 	filename := req.GetFilename()
-	s.locker.Lock()
-	defer s.locker.Unlock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -409,9 +387,6 @@ func (s *Server) ReadLink(ctx context.Context, req *workspacerpc.ReadLinkRequest
 func (s *Server) NewPty(ctx context.Context, req *workspacerpc.NewPtyRequest) (
 	*workspacerpc.NewPtyResponse, error,
 ) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	pty, err := s.s.NewPty(s.ctx)
 	if err != nil {
 		return nil, err
@@ -430,9 +405,6 @@ func (s *Server) NewPty(ctx context.Context, req *workspacerpc.NewPtyRequest) (
 func (s *Server) SetPtySize(ctx context.Context, req *workspacerpc.SetPtySizeRequest) (
 	*workspacerpc.SetPtySizeResponse, error,
 ) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	master := s.s.NewFile(uintptr(req.GetMasterFd()), req.GetMaster())
 	if master == nil {
 		return nil, errors.New("invalid master pty fd")
@@ -456,18 +428,15 @@ func (s *Server) Stop() error {
 
 // Read satisfies FilesServer
 func (s *Server) Read(ctx context.Context, req *workspacerpc.ReadRequest) (*workspacerpc.ReadResponse, error) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -486,18 +455,15 @@ func (s *Server) Read(ctx context.Context, req *workspacerpc.ReadRequest) (*work
 
 // ReadAt satisfies FilesServer
 func (s *Server) ReadAt(ctx context.Context, req *workspacerpc.ReadRequest) (*workspacerpc.ReadResponse, error) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -516,18 +482,15 @@ func (s *Server) ReadAt(ctx context.Context, req *workspacerpc.ReadRequest) (*wo
 
 // Write satisfies FilesServer
 func (s *Server) Write(ctx context.Context, req *workspacerpc.WriteRequest) (*workspacerpc.WriteResponse, error) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -542,13 +505,11 @@ func (s *Server) Write(ctx context.Context, req *workspacerpc.WriteRequest) (*wo
 
 // Close satisfies FilesServer
 func (s *Server) Close(ctx context.Context, req *workspacerpc.CloseFileRequest) (*workspacerpc.CloseFileResponse, error) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -556,13 +517,9 @@ func (s *Server) Close(ctx context.Context, req *workspacerpc.CloseFileRequest) 
 	f := bfs.NewFile(fd, req.GetFilename())
 	if f == nil {
 		// idempotent close
-		s.locker.Unlock()
 		return new(workspacerpc.CloseFileResponse), nil
 	}
-	// unlock after close, which in some cases
-	// might do some cleanups that require synchronization
 	err := f.Close()
-	s.locker.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("close error: %s", err)
 	}
@@ -573,18 +530,15 @@ func (s *Server) Close(ctx context.Context, req *workspacerpc.CloseFileRequest) 
 func (s *Server) Sync(ctx context.Context, req *workspacerpc.SyncRequest) (
 	*workspacerpc.SyncResponse, error,
 ) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -599,18 +553,15 @@ func (s *Server) Sync(ctx context.Context, req *workspacerpc.SyncRequest) (
 func (s *Server) Truncate(ctx context.Context, req *workspacerpc.TruncateRequest) (
 	*workspacerpc.TruncateResponse, error,
 ) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -625,18 +576,15 @@ func (s *Server) Truncate(ctx context.Context, req *workspacerpc.TruncateRequest
 func (s *Server) Seek(ctx context.Context, req *workspacerpc.SeekRequest) (
 	*workspacerpc.SeekResponse, error,
 ) {
-	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
 	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
-	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
 	}
@@ -655,14 +603,12 @@ func (s *Server) Stat(ctx context.Context, req *workspacerpc.StatRequest) (
 ) {
 	var err error
 	var fs os.FileInfo
-	s.locker.Lock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return nil, err
 		}
 	}
@@ -671,7 +617,6 @@ func (s *Server) Stat(ctx context.Context, req *workspacerpc.StatRequest) (
 	} else {
 		fs, err = bfs.Stat(req.GetFilename())
 	}
-	s.locker.Unlock()
 	if err != nil {
 		isExist := errors.Is(err, os.ErrExist)
 		isNotExist := errors.Is(err, os.ErrNotExist)
@@ -715,28 +660,28 @@ func (s *Server) Watch(
 	ch := make(chan schemeapi.EventInfo)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
-	s.locker.Lock()
 
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
 		bfs, err = s.s.Chroot(root)
 		if err != nil {
-			s.locker.Unlock()
 			return err
 		}
 	}
 	id, err := bfs.Watch(req.GetPath(), ch, events...)
-	s.watchpoints[id] = cancel
-	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.watchpoints[id] = cancel
+	s.mu.Unlock()
 
 	defer func() {
-		s.locker.Lock()
-		defer s.locker.Unlock()
 		_ = bfs.StopWatch(id)
+		s.mu.Lock()
+		delete(s.watchpoints, id)
+		s.mu.Unlock()
 	}()
 
 	resp := workspacerpc.WatchMessage{
@@ -788,33 +733,27 @@ func (s *Server) Watch(
 func (s *Server) StopWatch(ctx context.Context, req *workspacerpc.StopWatchRequest) (
 	*workspacerpc.StopWatchResponse, error,
 ) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	id := int(req.GetId())
+	s.mu.Lock()
 	cancel, ok := s.watchpoints[id]
+	delete(s.watchpoints, id)
+	s.mu.Unlock()
 	if !ok {
 		return nil, errors.New("watchpoint not found")
 	}
 	cancel()
-	delete(s.watchpoints, id)
 
 	return new(workspacerpc.StopWatchResponse), nil
 }
 
 // Root satisfies SchemeServer.
 func (s *Server) Root(ctx context.Context, req *workspacerpc.RootRequest) (*workspacerpc.RootResponse, error) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	root := s.s.Root()
 	return &workspacerpc.RootResponse{Path: root}, nil
 }
 
 // Symlink satisfies SchemeServer.
 func (s *Server) Symlink(ctx context.Context, req *workspacerpc.SymlinkRequest) (*workspacerpc.SymlinkResponse, error) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
@@ -833,9 +772,6 @@ func (s *Server) Symlink(ctx context.Context, req *workspacerpc.SymlinkRequest) 
 
 // TempFile satisfies SchemeServer.
 func (s *Server) TempFile(ctx context.Context, req *workspacerpc.TempFileRequest) (*workspacerpc.TempFileResponse, error) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
 		var err error
@@ -857,8 +793,6 @@ func (s *Server) TempFile(ctx context.Context, req *workspacerpc.TempFileRequest
 
 // Join satisfies SchemeServer.
 func (s *Server) Join(ctx context.Context, req *workspacerpc.JoinRequest) (*workspacerpc.JoinResponse, error) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	res := s.s.Join(req.GetElem()...)
 	return &workspacerpc.JoinResponse{Filename: res}, nil
 }

@@ -57,7 +57,7 @@ func newWorkspaceResourceServer(
 }
 
 func (s *workspaceResourceServer) Register(
-	registrar rpc.ServiceRegistrar, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, _ sync.Locker,
 ) (io.Closer, error) {
 	// create a closer able to close all processes created by grantee
 	// without closing workspace.Workspace, which we cannot assume about
@@ -66,7 +66,7 @@ func (s *workspaceResourceServer) Register(
 		Workspace: s.b,
 	}
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
-	server := tworkspacerpc.NewServer(w, lock, s.commandAuthorizer)
+	server := tworkspacerpc.NewServer(w, s.commandAuthorizer)
 	switch s.p {
 	case extensionapi.PermissionFileSystem:
 		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {

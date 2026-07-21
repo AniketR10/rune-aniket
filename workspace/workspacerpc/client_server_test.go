@@ -99,7 +99,7 @@ func setupClientServerUnitTest(
 			return nil
 		})
 	}
-	server := NewServer(mockExecutor, new(sync.Mutex), authorizer)
+	server := NewServer(mockExecutor, authorizer)
 	client, cleanup := setupClientServerTest(t, server)
 	return client, server, mock, cleanup
 }
@@ -462,7 +462,7 @@ func TestServerStartCommandAuthorizer(t *testing.T) {
 	})
 }
 
-func TestServerUnlocksAfterChrootError(t *testing.T) {
+func TestServerChrootErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	root := "unavailable-root"
 	chrootErr := errors.New("chroot failed")
@@ -518,22 +518,119 @@ func TestServerUnlocksAfterChrootError(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			scheme := workspacetest.NewMockWorkspace(ctrl)
 			scheme.EXPECT().Chroot(root).Return(nil, chrootErr)
-			locker := new(recordingLocker)
-			server := NewServer(scheme, locker, CommandAuthorizerFunc(
+			server := NewServer(scheme, CommandAuthorizerFunc(
 				func(context.Context, workspaceapi.Cmd) error { return nil }))
 
 			err := test.call(server)
 
 			require.ErrorIs(t, err, chrootErr)
-			assert.Equal(t, 0, locker.depth)
 		})
 	}
+}
+
+// A scheme call that blocks (e.g. a slow remote Stat) must not prevent
+// unrelated requests from being served: schemes are goroutine safe and
+// the server must not serialize calls into them.
+func TestServerDoesNotSerializeSchemeCalls(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	scheme := workspacetest.NewMockWorkspace(ctrl)
+
+	statEntered := make(chan struct{})
+	release := make(chan struct{})
+	scheme.EXPECT().Stat("slow").DoAndReturn(func(string) (os.FileInfo, error) {
+		close(statEntered)
+		<-release
+		return nil, os.ErrNotExist
+	})
+	uri, err := workspaceapi.ParseURI("file:///tmp/fast")
+	require.NoError(t, err)
+	scheme.EXPECT().URI("fast").Return(uri, nil)
+
+	server := NewServer(scheme, CommandAuthorizerFunc(
+		func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+	statDone := make(chan error, 1)
+	go func() {
+		_, err := server.Stat(ctx, &workspacerpc.StatRequest{Filename: "slow"})
+		statDone <- err
+	}()
+	<-statEntered
+
+	uriDone := make(chan error, 1)
+	go func() {
+		_, err := server.URI(ctx, &workspacerpc.URIRequest{Path: "fast"})
+		uriDone <- err
+	}()
+
+	select {
+	case err := <-uriDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("URI blocked behind an in-flight Stat: server serializes scheme calls")
+	}
+
+	close(release)
+	require.NoError(t, <-statDone)
+}
+
+func TestServerWatchpointLifecycle(t *testing.T) {
+	t.Run("error does not register watchpoint", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		scheme := workspacetest.NewMockWorkspace(ctrl)
+		watchErr := errors.New("watch failed")
+		scheme.EXPECT().Watch("path", gomock.Any(), gomock.Any()).
+			Return(0, watchErr)
+		server := NewServer(scheme, CommandAuthorizerFunc(
+			func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+		err := server.Watch(&workspacerpc.WatchRequest{
+			Path:   "path",
+			Events: []workspacerpc.Event{workspacerpc.Event_Write},
+		}, testWatchServer{ctx: context.Background()})
+
+		require.ErrorIs(t, err, watchErr)
+		server.mu.Lock()
+		assert.Empty(t, server.watchpoints)
+		server.mu.Unlock()
+	})
+
+	t.Run("watchpoint removed when stream ends", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		scheme := workspacetest.NewMockWorkspace(ctrl)
+		scheme.EXPECT().Watch("path", gomock.Any(), gomock.Any()).
+			Return(7, nil)
+		scheme.EXPECT().StopWatch(7).Return(nil)
+		server := NewServer(scheme, CommandAuthorizerFunc(
+			func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		watchDone := make(chan error, 1)
+		go func() {
+			watchDone <- server.Watch(&workspacerpc.WatchRequest{
+				Path:   "path",
+				Events: []workspacerpc.Event{workspacerpc.Event_Write},
+			}, testWatchServer{ctx: ctx})
+		}()
+
+		require.Eventually(t, func() bool {
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			return len(server.watchpoints) == 1
+		}, 5*time.Second, time.Millisecond)
+
+		cancel()
+		require.ErrorIs(t, <-watchDone, context.Canceled)
+		server.mu.Lock()
+		assert.Empty(t, server.watchpoints)
+		server.mu.Unlock()
+	})
 }
 
 func setupClientServerIntegrationTest(
 	t *testing.T, scheme schemeapi.Scheme,
 ) (*workspacerpc.Client, func()) {
-	server := NewServer(scheme, new(sync.Mutex), CommandAuthorizerFunc(
+	server := NewServer(scheme, CommandAuthorizerFunc(
 		func(context.Context, workspaceapi.Cmd) error { return nil }))
 	return setupClientServerTest(t, server)
 }
@@ -622,18 +719,6 @@ type dirEntry struct {
 	name     string
 	isDir    bool
 	modeType int32
-}
-
-type recordingLocker struct {
-	depth int
-}
-
-func (l *recordingLocker) Lock() {
-	l.depth++
-}
-
-func (l *recordingLocker) Unlock() {
-	l.depth--
 }
 
 type testWatchServer struct {

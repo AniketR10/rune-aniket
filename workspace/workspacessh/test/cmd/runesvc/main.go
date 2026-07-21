@@ -21,7 +21,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -72,7 +71,7 @@ func main() {
 	}
 	defer scheme.Close()
 
-	server := workspacerpc.NewServer(scheme, new(sync.Mutex),
+	server := workspacerpc.NewServer(scheme,
 		workspacerpc.CommandAuthorizerFunc(
 			func(context.Context, workspaceapi.Cmd) error { return nil }))
 	defer func() { _ = server.Stop() }()
