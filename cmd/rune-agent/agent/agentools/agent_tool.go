@@ -29,11 +29,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // NewAgentTool creates an "agent" tool backed by the given
@@ -144,13 +144,14 @@ The agent tool launches specialized agents that autonomously handle complex task
 
 Usage notes:
 - Always include a short description (3-5 words) summarizing what the agent will do.
-- Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses.
+- Use a sub-agent only for substantial, self-contained work that benefits from an isolated context, or for independent substantial tasks that benefit from parallel execution. Do not spawn one for work you can complete with a few targeted tool calls, and do not send multiple agents to explore the same area redundantly.
+- When parallel sub-agents are warranted, launch them in a single message with multiple tool calls.
 - When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
 - Each invocation starts fresh and you should provide a detailed task description with all necessary context.
 - Provide clear, detailed prompts so the agent can work autonomously and return exactly the information you need.
-- The agent's outputs should generally be trusted.
+- Treat sub-agent output as evidence to verify, not as authoritative. Check important code citations and conclusions yourself, and validate any code changes with relevant tests or diagnostics before reporting completion.
 - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, etc.), since it is not aware of the user's intent.
-- If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+- A description that recommends proactive use is a signal, not a requirement; still apply the threshold above before spawning the agent.
 - If the user specifies that they want you to run agents "in parallel", you MUST send a single message with multiple agent tool use content blocks.`)
 	return b.String()
 }

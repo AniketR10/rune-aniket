@@ -32,10 +32,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestAgentTool(t *testing.T) {
@@ -103,6 +103,14 @@ func TestAgentTool(t *testing.T) {
 		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "agent", def.Function.Name)
 		assert.NotEmpty(t, def.Function.Description)
+		assert.Contains(t, def.Function.Description,
+			"substantial, self-contained work")
+		assert.Contains(t, def.Function.Description,
+			"evidence to verify, not as authoritative")
+		assert.NotContains(t, def.Function.Description,
+			"Launch multiple agents concurrently whenever possible")
+		assert.NotContains(t, def.Function.Description,
+			"outputs should generally be trusted")
 		assert.NotNil(t, def.Function.Parameters)
 	})
 
