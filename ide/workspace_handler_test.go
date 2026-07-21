@@ -2699,17 +2699,15 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			}
 
 			t.Run("position is restored on close and open again", func(t *testing.T) {
-				// Use a file:// workspace so :write persists to disk
-				// across the close+reopen. Workspace close tears down the
-				// scheme, so a mem:// buffer would disappear with it even
-				// after :write.
-				dir := t.TempDir()
+				dir, err := os.MkdirTemp("", "")
+				require.NoError(t, err)
+				t.Cleanup(func() {
+					_ = os.RemoveAll(dir)
+				})
 				manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 				require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 					workspace.NewMemoryScheme))
-				require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
-					workspace.NewFileScheme))
-				uri, err := workspaceapi.ParseURI("file://" + dir)
+				uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory:///%s", dir))
 				require.NoError(t, err)
 				runner := FuncExtensionsRunner(testRunnerFn)
 
