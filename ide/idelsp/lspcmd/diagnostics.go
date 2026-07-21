@@ -112,12 +112,12 @@ func (h *diagnosticsHandler) HandleCommand(_ context.Context, _ textapi.Command)
 		locEntries[i].display = formatDiagnosticDisplay(locEntries[i].display, e.diag)
 	}
 	picker := locationpicker.New(
-		pickerEntries(locEntries), h.wm, h.fs,
+		pickerEntries(h.rootURI, locEntries), h.wm, h.fs,
 		h.scheduleNextTick, h.parser,
 		h.cfg.ListConfig, h.log,
 	)
 	picker.SetOnSelect(func(idx int) {
-		navigateTo(locEntries[idx], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
+		navigateTo(h.rootURI, locEntries[idx], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
 	})
 	win, err := h.wm.Floating(picker, browserapi.FloatingConfig{Alignment: component.AlignmentCentered})
 	if err != nil {

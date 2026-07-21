@@ -128,7 +128,7 @@ func (c *workspaceSymbolCmd) HandleCommand(ctx context.Context, cmd textapi.Comm
 		return nil
 	}
 	if len(symbols) == 1 {
-		return openLocation(c.editor, c.wm, c.opener, symbols[0].Location)
+		return openLocation(c.editor, c.wm, c.opener, cmd.URI, symbols[0].Location)
 	}
 	var b strings.Builder
 	for _, s := range symbols {

@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
@@ -71,21 +72,23 @@ func (c *navCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "%s", c.notFound)
 		return nil
 	}
-	return c.open(entries[0])
+	return c.open(cmd.URI, entries[0])
 }
 
-func (c *navCmd) open(loc semanticapi.Location) error {
-	return openLocation(c.editor, c.wm, c.opener, loc)
+func (c *navCmd) open(base workspaceapi.URI, loc semanticapi.Location) error {
+	return openLocation(c.editor, c.wm, c.opener, base, loc)
 }
 
 // openLocation opens the file at loc, focuses it, and moves the cursor to
 // the start of loc's range. It is shared by the navigation and
-// workspace-symbol commands.
+// workspace-symbol commands. base is any URI of the workspace, used to
+// rebase the server's file:// location onto the workspace scheme.
 func openLocation(
 	editor textapi.Editor, wm browserapi.WindowManager,
-	opener browserapi.ResourceOpener, loc semanticapi.Location,
+	opener browserapi.ResourceOpener, base workspaceapi.URI,
+	loc semanticapi.Location,
 ) error {
-	uri, err := lspcmd.LspToURI(loc.URI)
+	uri, err := lspcmd.LspToURI(base, loc.URI)
 	if err != nil {
 		return err
 	}

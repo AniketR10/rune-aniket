@@ -38,7 +38,6 @@ import (
 
 // TypeDefinitionConfig configures the "type-definition" subcommand.
 type TypeDefinitionConfig struct {
-	RootURI    workspaceapi.URI
 	ListConfig locationpicker.Config
 }
 
@@ -54,13 +53,13 @@ func TypeDefinitionHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	wm browserapi.WindowManager, opener browserapi.ResourceOpener,
 	notify browserapi.Notifications, fs workspaceapi.FileSystem,
-	scheduleNextTick func(func()) bool,
+	rootURI workspaceapi.URI, scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser, cfg TypeDefinitionConfig,
 	log *slog.Logger,
 ) textapi.CommandHandler {
 	return &typeDefinitionHandler{
 		lsp: lsp, editor: editor, wm: wm, opener: opener,
-		notify: notify, fs: fs,
+		notify: notify, fs: fs, rootURI: rootURI,
 		scheduleNextTick: scheduleNextTick, parser: parser, cfg: cfg,
 		log: log,
 	}
@@ -73,6 +72,7 @@ type typeDefinitionHandler struct {
 	opener           browserapi.ResourceOpener
 	notify           browserapi.Notifications
 	fs               workspaceapi.FileSystem
+	rootURI          workspaceapi.URI
 	scheduleNextTick func(func()) bool
 	parser           syntaxapi.Parser
 	cfg              TypeDefinitionConfig
@@ -80,8 +80,8 @@ type typeDefinitionHandler struct {
 }
 
 func (h *typeDefinitionHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
-		executeResolved("type-definition", h.notify, h.scheduleNextTick, h.execute))
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.rootURI, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("type-definition", h.rootURI, h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}
@@ -106,9 +106,9 @@ func (h *typeDefinitionHandler) execute(
 	if len(entries) == 0 {
 		return errNoLocations
 	}
-	entries = enrichEntries(entries, h.cfg.RootURI)
+	entries = enrichEntries(entries, h.rootURI)
 	presentLocations(
-		"type-definition", entries, h.opener, h.wm, h.editor, h.notify,
+		"type-definition", h.rootURI, entries, h.opener, h.wm, h.editor, h.notify,
 		h.fs, h.scheduleNextTick, h.parser, h.cfg.ListConfig, h.log,
 	)
 	return nil

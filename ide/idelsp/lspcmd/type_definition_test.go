@@ -117,7 +117,7 @@ func TestTypeDefinitionHandler(t *testing.T) {
 			notify := &recordingNotifications{}
 			h := TypeDefinitionHandler(
 				lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-				syncTick, nil, TypeDefinitionConfig{RootURI: rootURI}, nil,
+				rootURI, syncTick, nil, DefaultTypeDefinitionConfig(), nil,
 			)
 
 			uri, _ := workspaceapi.ParseURI("file:///project/a.go")

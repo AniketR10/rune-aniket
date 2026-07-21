@@ -38,7 +38,6 @@ import (
 
 // DeclarationConfig configures the "declaration" subcommand.
 type DeclarationConfig struct {
-	RootURI    workspaceapi.URI
 	ListConfig locationpicker.Config
 }
 
@@ -54,13 +53,13 @@ func DeclarationHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	wm browserapi.WindowManager, opener browserapi.ResourceOpener,
 	notify browserapi.Notifications, fs workspaceapi.FileSystem,
-	scheduleNextTick func(func()) bool,
+	rootURI workspaceapi.URI, scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser, cfg DeclarationConfig,
 	log *slog.Logger,
 ) textapi.CommandHandler {
 	return &declarationHandler{
 		lsp: lsp, editor: editor, wm: wm, opener: opener,
-		notify: notify, fs: fs,
+		notify: notify, fs: fs, rootURI: rootURI,
 		scheduleNextTick: scheduleNextTick, parser: parser, cfg: cfg,
 		log: log,
 	}
@@ -73,6 +72,7 @@ type declarationHandler struct {
 	opener           browserapi.ResourceOpener
 	notify           browserapi.Notifications
 	fs               workspaceapi.FileSystem
+	rootURI          workspaceapi.URI
 	scheduleNextTick func(func()) bool
 	parser           syntaxapi.Parser
 	cfg              DeclarationConfig
@@ -80,8 +80,8 @@ type declarationHandler struct {
 }
 
 func (h *declarationHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
-		executeResolved("declaration", h.notify, h.scheduleNextTick, h.execute))
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.rootURI, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("declaration", h.rootURI, h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}
@@ -106,9 +106,9 @@ func (h *declarationHandler) execute(
 	if len(entries) == 0 {
 		return errNoLocations
 	}
-	entries = enrichEntries(entries, h.cfg.RootURI)
+	entries = enrichEntries(entries, h.rootURI)
 	presentLocations(
-		"declaration", entries, h.opener, h.wm, h.editor, h.notify,
+		"declaration", h.rootURI, entries, h.opener, h.wm, h.editor, h.notify,
 		h.fs, h.scheduleNextTick, h.parser, h.cfg.ListConfig, h.log,
 	)
 	return nil

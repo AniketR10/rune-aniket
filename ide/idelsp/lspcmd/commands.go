@@ -178,19 +178,19 @@ func AllHandler(
 	}
 	r.handlers = map[string]textapi.CommandHandler{
 		"format":   formatH,
-		"hover":    HoverHandler(lsp, wm, notify, fs, cfg.ScheduleNextTick, cfg.Parser, cfg.Hover),
+		"hover":    HoverHandler(lsp, wm, notify, fs, cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser, cfg.Hover),
 		"complete": CompleteHandler(lsp, editor, wm, cfg.Complete, cfg.Interrupter, wsLog),
 		"definition": DefinitionHandler(
 			lsp, editor, wm, opener, notify, fs,
-			cfg.ScheduleNextTick, cfg.Parser, cfg.Definition, wsLog,
+			cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser, cfg.Definition, wsLog,
 		),
 		"declaration": DeclarationHandler(
 			lsp, editor, wm, opener, notify, fs,
-			cfg.ScheduleNextTick, cfg.Parser, cfg.Declaration, wsLog,
+			cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser, cfg.Declaration, wsLog,
 		),
 		"type-definition": TypeDefinitionHandler(
 			lsp, editor, wm, opener, notify, fs,
-			cfg.ScheduleNextTick, cfg.Parser, cfg.TypeDefinition, wsLog,
+			cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser, cfg.TypeDefinition, wsLog,
 		),
 		"implementation": ImplementationHandler(
 			lsp, editor, wm, opener, notify, fs,

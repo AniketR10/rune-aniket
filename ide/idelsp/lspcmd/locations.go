@@ -47,13 +47,14 @@ type locationEntry struct {
 var errNoLocations = errors.New("no location returned")
 
 func navigateTo(
+	rootURI workspaceapi.URI,
 	e locationEntry, opener browserapi.ResourceOpener,
 	wm browserapi.WindowManager,
 	editor textapi.Editor, notify browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
 ) {
 	scheduleNextTick(func() {
-		if err := doNavigate(e, opener, wm, editor); err != nil {
+		if err := doNavigate(rootURI, e, opener, wm, editor); err != nil {
 			_, _ = notify.Notify(browserapi.LevelError, "navigate: %s", err)
 			return
 		}
@@ -61,10 +62,11 @@ func navigateTo(
 }
 
 func doNavigate(
+	rootURI workspaceapi.URI,
 	e locationEntry, opener browserapi.ResourceOpener,
 	wm browserapi.WindowManager, editor textapi.Editor,
 ) error {
-	uri, err := LspToURI(e.uri)
+	uri, err := LspToURI(rootURI, e.uri)
 	if err != nil {
 		return err
 	}
@@ -112,10 +114,10 @@ func locationsFromResult(r semanticapi.LocationResult) []locationEntry {
 	return entries
 }
 
-func pickerEntries(entries []locationEntry) []locationpicker.Entry {
+func pickerEntries(rootURI workspaceapi.URI, entries []locationEntry) []locationpicker.Entry {
 	ret := make([]locationpicker.Entry, len(entries))
 	for i, e := range entries {
-		uri, err := LspToURI(e.uri)
+		uri, err := LspToURI(rootURI, e.uri)
 		if err != nil {
 			continue
 		}
@@ -140,22 +142,22 @@ func locationFromLoc(loc semanticapi.Location) locationEntry {
 // otherwise floats a location picker. It may be called from any goroutine:
 // all UI work is scheduled onto the event loop.
 func presentLocations(
-	name string, entries []locationEntry,
+	name string, rootURI workspaceapi.URI, entries []locationEntry,
 	opener browserapi.ResourceOpener, wm browserapi.WindowManager,
 	editor textapi.Editor, notify browserapi.Notifications,
 	fs workspaceapi.FileSystem, scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser, cfg locationpicker.Config, log *slog.Logger,
 ) {
 	if len(entries) == 1 {
-		navigateTo(entries[0], opener, wm, editor, notify, scheduleNextTick)
+		navigateTo(rootURI, entries[0], opener, wm, editor, notify, scheduleNextTick)
 		return
 	}
 	scheduleNextTick(func() {
 		picker := locationpicker.New(
-			pickerEntries(entries), wm, fs, scheduleNextTick, parser, cfg, log,
+			pickerEntries(rootURI, entries), wm, fs, scheduleNextTick, parser, cfg, log,
 		)
 		picker.SetOnSelect(func(idx int) {
-			navigateTo(entries[idx], opener, wm, editor, notify, scheduleNextTick)
+			navigateTo(rootURI, entries[idx], opener, wm, editor, notify, scheduleNextTick)
 		})
 		win, err := wm.Floating(picker, browserapi.FloatingConfig{
 			Alignment: component.AlignmentCentered,
@@ -176,7 +178,7 @@ func enrichEntries(
 	entries []locationEntry, rootURI workspaceapi.URI,
 ) []locationEntry {
 	for i, e := range entries {
-		uri, err := LspToURI(e.uri)
+		uri, err := LspToURI(rootURI, e.uri)
 		var rel string
 		if err == nil {
 			rel = workspaceapi.RelPath(rootURI, uri)

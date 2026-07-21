@@ -61,11 +61,11 @@ func DefaultHoverConfig() HoverConfig {
 func HoverHandler(
 	lsp semanticapi.LSP, wm browserapi.WindowManager,
 	notify browserapi.Notifications, fs workspaceapi.FileSystem,
-	scheduleNextTick func(func()) bool,
+	rootURI workspaceapi.URI, scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser, cfg HoverConfig,
 ) textapi.CommandHandler {
 	return &hoverHandler{
-		lsp: lsp, wm: wm, notify: notify, fs: fs,
+		lsp: lsp, wm: wm, notify: notify, fs: fs, rootURI: rootURI,
 		scheduleNextTick: scheduleNextTick, parser: parser, cfg: cfg,
 	}
 }
@@ -80,14 +80,15 @@ type hoverHandler struct {
 	wm               browserapi.WindowManager
 	notify           browserapi.Notifications
 	fs               workspaceapi.FileSystem
+	rootURI          workspaceapi.URI
 	scheduleNextTick func(func()) bool
 	parser           syntaxapi.Parser
 	cfg              HoverConfig
 }
 
 func (h *hoverHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
-		executeResolved("hover", h.notify, h.scheduleNextTick, h.execute))
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.rootURI, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("hover", h.rootURI, h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}

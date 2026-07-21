@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -121,7 +122,7 @@ func (h *codeActionCmd) HandleCommand(
 	}
 
 	if len(actions) == 1 {
-		return h.applyAction(ctx, actions[0])
+		return h.applyAction(ctx, cmd.URI, actions[0])
 	}
 
 	ch := make(chan int, 1)
@@ -138,15 +139,17 @@ func (h *codeActionCmd) HandleCommand(
 		if idx < 0 {
 			return nil
 		}
-		return h.applyAction(ctx, actions[idx])
+		return h.applyAction(ctx, cmd.URI, actions[idx])
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (h *codeActionCmd) applyAction(ctx context.Context, action semanticapi.CodeAction) error {
+func (h *codeActionCmd) applyAction(
+	ctx context.Context, base workspaceapi.URI, action semanticapi.CodeAction,
+) error {
 	if action.Edit != nil {
-		err := lspcmd.ApplyWorkspaceEdit(ctx, h.editor, nil, action.Edit, nil)
+		err := lspcmd.ApplyWorkspaceEdit(ctx, h.editor, nil, base, action.Edit, nil)
 		if err != nil {
 			return err
 		}

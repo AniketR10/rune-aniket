@@ -82,8 +82,8 @@ type implementationHandler struct {
 }
 
 func (h *implementationHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
-		executeResolved("implementation", h.notify, h.scheduleNextTick, h.execute))
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.rootURI, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("implementation", h.rootURI, h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (h *implementationHandler) execute(
 	}
 	entries = enrichEntries(entries, h.rootURI)
 	presentLocations(
-		"implementation", entries, h.opener, h.wm, h.editor, h.notify,
+		"implementation", h.rootURI, entries, h.opener, h.wm, h.editor, h.notify,
 		h.fs, h.scheduleNextTick, h.parser, h.cfg.ListConfig, h.log,
 	)
 	return nil

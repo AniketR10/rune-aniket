@@ -63,7 +63,7 @@ func (d editDeps) applyEdits(
 	if len(edits) == 0 {
 		return nil
 	}
-	return lspcmd.ApplyEditsForURI(ctx, d.editor, d.opener, lspcmd.URIToLSP(cmd.URI), edits)
+	return lspcmd.ApplyEditsForURI(ctx, d.editor, d.opener, cmd.URI, lspcmd.URIToLSP(cmd.URI), edits)
 }
 
 // joinLinesCmd requests experimental/joinLines over the selection (or the
@@ -210,7 +210,7 @@ func (c *ssrCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "SSR query matched nothing")
 		return nil
 	}
-	return lspcmd.ApplyWorkspaceEdit(ctx, c.editor, c.opener, edit, nil)
+	return lspcmd.ApplyWorkspaceEdit(ctx, c.editor, c.opener, cmd.URI, edit, nil)
 }
 
 func (c *ssrCmd) Complete(_ context.Context, _ string, _ []string) (

@@ -52,13 +52,27 @@ func TextDocID(uri workspaceapi.URI) semanticapi.TextDocumentIdentifier {
 }
 
 // URIToLSP converts a workspace URI to an LSP-compatible file:// URI string.
+// The language server runs on the workspace host, so only the host-local
+// path is sent; LspToURI restores the workspace scheme on the way back.
 func URIToLSP(u workspaceapi.URI) string {
 	return fmt.Sprintf("file://%s", u.Path())
 }
 
 // LspToURI converts an LSP file:// URI string to a workspace URI.
-func LspToURI(s string) (workspaceapi.URI, error) {
-	return workspaceapi.ParseURI(s)
+// base is any URI of the workspace the LSP server belongs to (typically
+// the workspace root): when base is remote (e.g. ssh://), the file://
+// path returned by the server is rebased onto base's scheme and
+// authority, since the path is local to the workspace host, not to the
+// machine running the IDE.
+func LspToURI(base workspaceapi.URI, s string) (workspaceapi.URI, error) {
+	u, err := workspaceapi.ParseURI(s)
+	if err != nil {
+		return workspaceapi.URI{}, err
+	}
+	if u.Scheme() != "file" || base.Scheme() == "" || base.Scheme() == "file" {
+		return u, nil
+	}
+	return workspaceapi.WithPath(base, u.Path())
 }
 
 // ApplyEdits applies a set of LSP TextEdits to a CellEditor in reverse

@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -108,7 +109,7 @@ func (c *hoverCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error
 	if len(links) == 0 {
 		return nil
 	}
-	return c.pickAction(ctx, links)
+	return c.pickAction(ctx, cmd.URI, links)
 }
 
 // showMarkdown floats a scrollable, dismiss-on-key markdown view of the
@@ -140,7 +141,9 @@ func (c *hoverCmd) showMarkdown(value string) error {
 
 // pickAction floats a picker of the available hover actions and dispatches
 // the chosen one.
-func (c *hoverCmd) pickAction(ctx context.Context, links []hoverCommandLink) error {
+func (c *hoverCmd) pickAction(
+	ctx context.Context, base workspaceapi.URI, links []hoverCommandLink,
+) error {
 	ch := make(chan int, 1)
 	titles := make([]string, len(links))
 	for i, l := range links {
@@ -160,7 +163,7 @@ func (c *hoverCmd) pickAction(ctx context.Context, links []hoverCommandLink) err
 		if idx < 0 || idx >= len(links) {
 			return nil
 		}
-		return c.dispatch(ctx, links[idx])
+		return c.dispatch(ctx, base, links[idx])
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -169,7 +172,9 @@ func (c *hoverCmd) pickAction(ctx context.Context, links []hoverCommandLink) err
 // dispatch performs the client-side action for a hover command link.
 // gotoLocation and showReferences navigate the buffer; runSingle/debugSingle
 // execute the carried runnable (debug lacks an adapter, so it runs like run).
-func (c *hoverCmd) dispatch(ctx context.Context, link hoverCommandLink) error {
+func (c *hoverCmd) dispatch(
+	ctx context.Context, base workspaceapi.URI, link hoverCommandLink,
+) error {
 	switch link.Command {
 	case "rust-analyzer.gotoLocation":
 		loc, ok := parseGotoLocation(link.Arguments)
@@ -177,7 +182,7 @@ func (c *hoverCmd) dispatch(ctx context.Context, link hoverCommandLink) error {
 			_, _ = c.notify.Notify(browserapi.LevelInfo, "No location for %q", link.Title)
 			return nil
 		}
-		return openLocation(c.editor, c.wm, c.opener, loc)
+		return openLocation(c.editor, c.wm, c.opener, base, loc)
 	case "rust-analyzer.showReferences":
 		locs := parseShowReferences(link.Arguments)
 		if len(locs) == 0 {
@@ -185,7 +190,7 @@ func (c *hoverCmd) dispatch(ctx context.Context, link hoverCommandLink) error {
 			return nil
 		}
 		if len(locs) == 1 {
-			return openLocation(c.editor, c.wm, c.opener, locs[0])
+			return openLocation(c.editor, c.wm, c.opener, base, locs[0])
 		}
 		return c.showLocations(locs)
 	case "rust-analyzer.runSingle", "rust-analyzer.debugSingle":

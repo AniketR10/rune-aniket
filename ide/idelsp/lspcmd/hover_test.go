@@ -107,7 +107,8 @@ func TestHoverHandlerSymbolName(t *testing.T) {
 		},
 	}
 
-	h := HoverHandler(wrapper, wm, &mockNotifications{}, &mockFileSystem{}, syncTick, parser, DefaultHoverConfig())
+	h := HoverHandler(wrapper, wm, &mockNotifications{}, &mockFileSystem{},
+		workspaceapi.URI{}, syncTick, parser, DefaultHoverConfig())
 
 	cmd := textapi.Command{
 		Name: "hover",

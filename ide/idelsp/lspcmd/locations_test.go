@@ -116,7 +116,7 @@ func TestNavigateTo(t *testing.T) {
 			}
 			syncTick := func(fn func()) bool { fn(); return true }
 			navigateTo(
-				tt.entry, opener, wm, editor, &mockNotifications{}, syncTick,
+				workspaceapi.URI{}, tt.entry, opener, wm, editor, &mockNotifications{}, syncTick,
 			)
 			assert.Equal(
 				t, tt.wantURI, openedPath,

@@ -92,13 +92,14 @@ type executeFunc func(
 // resolver goroutine and reports failures as error notifications.
 func executeResolved(
 	name string,
+	rootURI workspaceapi.URI,
 	notify browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
 	execute executeFunc,
 ) func(m syntaxapi.Match, done func()) {
 	return func(m syntaxapi.Match, done func()) {
 		defer done()
-		wsURI, err := LspToURI(m.URI)
+		wsURI, err := LspToURI(rootURI, m.URI)
 		if err == nil {
 			err = execute(context.Background(), wsURI, matchPosition(m))
 		}
@@ -141,6 +142,7 @@ func executeAtCursor(
 // its cursor-position path instead.
 func resolveCommandSymbol(
 	_ context.Context, cmd *textapi.Command,
+	rootURI workspaceapi.URI,
 	wm browserapi.WindowManager,
 	fs workspaceapi.FileSystem,
 	notify browserapi.Notifications,
@@ -186,7 +188,7 @@ func resolveCommandSymbol(
 			return
 		}
 		scheduleNextTick(func() {
-			err := showSymbolPicker(matches, wm, fs, scheduleNextTick, parser, onResolve, done)
+			err := showSymbolPicker(rootURI, matches, wm, fs, scheduleNextTick, parser, onResolve, done)
 			if err != nil {
 				done()
 				_, _ = notify.Notify(browserapi.LevelError, "%s", err)
@@ -201,6 +203,7 @@ func resolveCommandSymbol(
 // the event loop; the selection handoff spawns a goroutine because onPick
 // follows the onResolve contract and may block.
 func showSymbolPicker(
+	rootURI workspaceapi.URI,
 	matches []syntaxapi.Match,
 	wm browserapi.WindowManager,
 	fs workspaceapi.FileSystem,
@@ -219,7 +222,7 @@ func showSymbolPicker(
 	}
 	pickerEntries := make([]locationpicker.Entry, len(entries))
 	for i, e := range entries {
-		uri, err := LspToURI(e.uri)
+		uri, err := LspToURI(rootURI, e.uri)
 		if err != nil {
 			return err
 		}

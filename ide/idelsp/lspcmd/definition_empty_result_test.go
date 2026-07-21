@@ -145,7 +145,7 @@ func TestLSPHandlersSurfaceEmptyResult(t *testing.T) {
 			run: func(notify browserapi.Notifications) error {
 				h := DefinitionHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					syncTick, parser, DefinitionConfig{RootURI: rootURI}, nil,
+					rootURI, syncTick, parser, DefaultDefinitionConfig(), nil,
 				)
 				return h.HandleCommand(context.Background(), cmd)
 			},
@@ -156,7 +156,7 @@ func TestLSPHandlersSurfaceEmptyResult(t *testing.T) {
 			run: func(notify browserapi.Notifications) error {
 				h := DeclarationHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					syncTick, parser, DeclarationConfig{RootURI: rootURI}, nil,
+					rootURI, syncTick, parser, DefaultDeclarationConfig(), nil,
 				)
 				return h.HandleCommand(context.Background(), cmd)
 			},
@@ -167,7 +167,7 @@ func TestLSPHandlersSurfaceEmptyResult(t *testing.T) {
 			run: func(notify browserapi.Notifications) error {
 				h := TypeDefinitionHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					syncTick, parser, TypeDefinitionConfig{RootURI: rootURI}, nil,
+					rootURI, syncTick, parser, DefaultTypeDefinitionConfig(), nil,
 				)
 				return h.HandleCommand(context.Background(), cmd)
 			},

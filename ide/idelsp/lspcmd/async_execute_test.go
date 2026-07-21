@@ -95,7 +95,7 @@ func TestLocationHandlersCursorPathDoesNotBlockLoop(t *testing.T) {
 			) textapi.CommandHandler {
 				return DefinitionHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					tick, nil, DefinitionConfig{RootURI: rootURI}, nil,
+					rootURI, tick, nil, DefaultDefinitionConfig(), nil,
 				)
 			},
 		},
@@ -114,7 +114,7 @@ func TestLocationHandlersCursorPathDoesNotBlockLoop(t *testing.T) {
 			) textapi.CommandHandler {
 				return DeclarationHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					tick, nil, DeclarationConfig{RootURI: rootURI}, nil,
+					rootURI, tick, nil, DefaultDeclarationConfig(), nil,
 				)
 			},
 		},
@@ -133,7 +133,7 @@ func TestLocationHandlersCursorPathDoesNotBlockLoop(t *testing.T) {
 			) textapi.CommandHandler {
 				return TypeDefinitionHandler(
 					lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-					tick, nil, TypeDefinitionConfig{RootURI: rootURI}, nil,
+					rootURI, tick, nil, DefaultTypeDefinitionConfig(), nil,
 				)
 			},
 		},
@@ -191,7 +191,7 @@ func TestLocationHandlersCursorPathDoesNotBlockLoop(t *testing.T) {
 				wm browserapi.WindowManager, notify browserapi.Notifications,
 				tick func(func()) bool,
 			) textapi.CommandHandler {
-				return HoverHandler(lsp, wm, notify, &mockFileSystem{}, tick, nil, DefaultHoverConfig())
+				return HoverHandler(lsp, wm, notify, &mockFileSystem{}, rootURI, tick, nil, DefaultHoverConfig())
 			},
 		},
 	}
@@ -306,7 +306,7 @@ func TestResolvedSymbolBlockingFetchRunsOffTicks(t *testing.T) {
 	h := DefinitionHandler(
 		lsp, editor, &mockWindowManager{}, &mockResourceOpener{},
 		&recordingNotifications{}, &mockFileSystem{},
-		rec.tick, parser, DefinitionConfig{RootURI: rootURI}, nil,
+		rootURI, rec.tick, parser, DefaultDefinitionConfig(), nil,
 	)
 
 	cmd := textapi.Command{Name: "definition", Args: []string{"mylib.MyFunc"}}
@@ -353,7 +353,7 @@ func TestSymbolPickerSelectionDoesNotBlockLoop(t *testing.T) {
 
 	cmd := &textapi.Command{Args: []string{"mylib.MyFunc"}}
 	proceed, err := resolveCommandSymbol(
-		context.Background(), cmd, wm, &mockFileSystem{}, notify, syncTick, parser, onPick,
+		context.Background(), cmd, workspaceapi.URI{}, wm, &mockFileSystem{}, notify, syncTick, parser, onPick,
 	)
 	require.NoError(t, err)
 	assert.False(t, proceed)

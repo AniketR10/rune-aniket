@@ -159,7 +159,7 @@ func TestDefinitionHandler(t *testing.T) {
 			notify := &recordingNotifications{}
 			h := DefinitionHandler(
 				lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
-				syncTick, tt.parser, DefinitionConfig{RootURI: rootURI}, nil,
+				rootURI, syncTick, tt.parser, DefaultDefinitionConfig(), nil,
 			)
 
 			uri, _ := workspaceapi.ParseURI("file:///project/a.go")
@@ -205,4 +205,67 @@ func TestDefinitionHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDefinitionHandlerRemoteWorkspace reproduces the remote-workspace
+// navigation bug: on an ssh:// workspace the language server runs on the
+// remote host and returns file:// locations with remote-local paths.
+// Navigation must open the ssh:// URI, not a local file:// path.
+func TestDefinitionHandlerRemoteWorkspace(t *testing.T) {
+	rootURI, err := workspaceapi.ParseURI("ssh://host/home/user/src/rune")
+	require.NoError(t, err)
+
+	lsp := &mockLSP{
+		definitionFn: func(_ context.Context, _ semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+			return semanticapi.LocationResult{
+				Location: &semanticapi.Location{
+					URI: "file:///home/user/src/rune/cell/buffer.go",
+					Range: semanticapi.Range{
+						Start: semanticapi.Position{Line: 15, Character: 0},
+						End:   semanticapi.Position{Line: 15, Character: 5},
+					},
+				},
+			}, nil
+		},
+	}
+	done := make(chan struct{}, 1)
+	editor := &mockEditor{
+		editorFn: func(u workspaceapi.URI) (textapi.Handler, error) {
+			return &mockHandler{uri: u}, nil
+		},
+		setCursorFn: func(_ textapi.Handler, _ term.Coordinates) error {
+			select {
+			case done <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	}
+	var opened []string
+	opener := &mockResourceOpener{
+		openFn: func(u workspaceapi.URI) (browserapi.Handler, error) {
+			opened = append(opened, u.String())
+			return nil, nil
+		},
+	}
+	h := DefinitionHandler(
+		lsp, editor, &mockWindowManager{}, opener, &recordingNotifications{},
+		&mockFileSystem{}, rootURI, syncTick, nil, DefaultDefinitionConfig(), nil,
+	)
+
+	uri, err := workspaceapi.ParseURI("ssh://host/home/user/src/rune/main.go")
+	require.NoError(t, err)
+	cmd := textapi.Command{Name: "definition", URI: uri}
+	cmd.Resource = &mockHandler{uri: uri}
+	cmd.Cursor.Content = term.Coordinates{X: 5, Y: 50}
+
+	require.NoError(t, h.HandleCommand(context.Background(), cmd))
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for navigation")
+	}
+	require.Len(t, opened, 1)
+	assert.Equal(t, "ssh://host/home/user/src/rune/cell/buffer.go", opened[0],
+		"navigation must rebase the server's file:// location onto the workspace scheme")
 }

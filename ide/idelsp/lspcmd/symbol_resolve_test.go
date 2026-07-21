@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
@@ -122,7 +123,7 @@ func TestResolveCommandSymbolNoMatchesShowsError(t *testing.T) {
 		return true
 	}
 	proceed, err := resolveCommandSymbol(
-		t.Context(), cmd, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
+		t.Context(), cmd, workspaceapi.URI{}, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
 	)
 	assert.False(t, proceed)
 	assert.NoError(t, err)
@@ -168,7 +169,7 @@ func TestResolveCommandSymbolUnqualifiedShowsHint(t *testing.T) {
 		return true
 	}
 	proceed, err := resolveCommandSymbol(
-		t.Context(), cmd, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
+		t.Context(), cmd, workspaceapi.URI{}, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
 	)
 	assert.False(t, proceed)
 	assert.NoError(t, err)

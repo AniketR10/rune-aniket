@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
@@ -77,6 +78,74 @@ func (b *bufCellEditor) String() string {
 
 func pos(line, char uint32) semanticapi.Position {
 	return semanticapi.Position{Line: line, Character: char}
+}
+
+// TestLspToURI_RebasesOntoWorkspaceScheme reproduces the remote-workspace
+// navigation bug: LSP servers run on the workspace host and return
+// file:// URIs with host-local paths, so converting them back must
+// restore the workspace's scheme and authority or the IDE tries to open
+// the remote path on the local machine.
+func TestLspToURI_RebasesOntoWorkspaceScheme(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		base string
+		lsp  string
+		want string
+	}{
+		{
+			name: "file base keeps file URI",
+			base: "file:///project",
+			lsp:  "file:///project/a.go",
+			want: "file:///project/a.go",
+		},
+		{
+			name: "ssh base rebases file URI inside root",
+			base: "ssh://host/home/user/src/rune",
+			lsp:  "file:///home/user/src/rune/cell/buffer.go",
+			want: "ssh://host/home/user/src/rune/cell/buffer.go",
+		},
+		{
+			name: "ssh base rebases file URI outside root",
+			base: "ssh://host/home/user/src/rune",
+			lsp:  "file:///home/user/go/pkg/mod/dep/x.go",
+			want: "ssh://host/home/user/go/pkg/mod/dep/x.go",
+		},
+		{
+			name: "ssh base preserves user and port",
+			base: "ssh://alice@host:2222/home/alice/ws",
+			lsp:  "file:///home/alice/ws/main.go",
+			want: "ssh://alice@host:2222/home/alice/ws/main.go",
+		},
+		{
+			name: "non-file LSP URI passes through",
+			base: "ssh://host/home/user/ws",
+			lsp:  "untitled:Untitled-1",
+			want: "untitled:Untitled-1",
+		},
+		{
+			name: "zero base passes through",
+			base: "",
+			lsp:  "file:///project/a.go",
+			want: "file:///project/a.go",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var base workspaceapi.URI
+			if tt.base != "" {
+				var err error
+				base, err = workspaceapi.ParseURI(tt.base)
+				require.NoError(t, err)
+			}
+			got, err := LspToURI(base, tt.lsp)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.String())
+		})
+	}
 }
 
 func insertAt(line, char uint32, text string) semanticapi.TextEdit {

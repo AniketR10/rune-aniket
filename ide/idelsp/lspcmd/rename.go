@@ -173,7 +173,7 @@ func (r *renameFloatingHandler) Handle(ev term.Event) (bool, bool) {
 		return true, true
 	}
 
-	err = ApplyWorkspaceEdit(r.ctx, r.editor, r.opener, edit, r.log)
+	err = ApplyWorkspaceEdit(r.ctx, r.editor, r.opener, r.uri, edit, r.log)
 	if err != nil {
 		r.log.Warn("rename apply", "err", err)
 		return true, true
@@ -214,9 +214,12 @@ func (r *renameFloatingHandler) Close() error {
 // each file's text edits through the editor API.
 // Per the LSP spec, DocumentChanges is preferred over
 // Changes when both are present.
+// base is any URI of the workspace the edit belongs to; it is used to
+// rebase the server's file:// document URIs onto the workspace scheme.
 func ApplyWorkspaceEdit(
 	ctx context.Context, editor textapi.Editor,
 	opener browserapi.ResourceOpener,
+	base workspaceapi.URI,
 	edit *semanticapi.WorkspaceEdit,
 	log *slog.Logger,
 ) error {
@@ -227,7 +230,7 @@ func ApplyWorkspaceEdit(
 		for _, dc := range edit.DocumentChanges {
 			switch {
 			case dc.TextDocumentEdit != nil:
-				err := ApplyEditsForURI(ctx, editor, opener,
+				err := ApplyEditsForURI(ctx, editor, opener, base,
 					dc.TextDocumentEdit.TextDocument.URI, dc.TextDocumentEdit.Edits,
 				)
 				if err != nil {
@@ -246,7 +249,7 @@ func ApplyWorkspaceEdit(
 		return nil
 	}
 	for uriStr, edits := range edit.Changes {
-		err := ApplyEditsForURI(ctx, editor, opener, uriStr, edits)
+		err := ApplyEditsForURI(ctx, editor, opener, base, uriStr, edits)
 		if err != nil {
 			return err
 		}
@@ -258,9 +261,10 @@ func ApplyWorkspaceEdit(
 func ApplyEditsForURI(
 	ctx context.Context, editor textapi.Editor,
 	opener browserapi.ResourceOpener,
+	base workspaceapi.URI,
 	uriStr string, edits []semanticapi.TextEdit,
 ) error {
-	uri, err := LspToURI(uriStr)
+	uri, err := LspToURI(base, uriStr)
 	if err != nil {
 		return fmt.Errorf("parse URI %s: %w", uriStr, err)
 	}
