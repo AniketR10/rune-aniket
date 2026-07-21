@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -636,6 +637,11 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(dir)
 	})
+	// A package install merges the extension into the user config, so
+	// configPath must be a real writable file inside the temp dir;
+	// otherwise the default sentinel path drops config + .backup files
+	// in the package working directory.
+	cfg.configPath = filepath.Join(dir, "rune.yaml")
 	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
