@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/ideplan"
 )
 
@@ -294,6 +295,25 @@ func TestPlannerZeroNextTimeEndsChain(t *testing.T) {
 	p.SetLocked(true)
 	assert.Equal(t, int32(2), pol.calls.Load(),
 		"an enforcement signal must still evaluate after the chain ended")
+}
+
+func TestPlannerStopIsConcurrentSafe(t *testing.T) {
+	p := New(Config{
+		Storage:               storagestub.NewInMemoryService(),
+		Source:                expiredSource(),
+		Policies:              DefaultPolicies(),
+		Locker:                &recordingLocker{},
+		ShowNagPrompt:         func() {},
+		ShowAskMoreTimePrompt: func() {},
+	})
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			debug.CapturePanicReport(p.Stop)
+		})
+	}
+	wg.Wait()
 }
 
 func TestPlannerSetLockedFalseUnlocks(t *testing.T) {

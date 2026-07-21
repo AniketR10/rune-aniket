@@ -355,6 +355,15 @@ func TestPoliciesEvaluate(t *testing.T) {
 			wantLockdown:    ActionLockdown,
 		},
 		{
+			name:            "the lock ages out with its retained evidence",
+			days:            heavyWeeks(0, lockdownRun),
+			now:             afterWeeks(lockdownRun).Add(retention + day),
+			plan:            expired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
+		},
+		{
 			name:            "never-subscribed at the lockdown run locks",
 			days:            heavyWeeks(0, lockdownRun),
 			now:             afterWeeks(lockdownRun),

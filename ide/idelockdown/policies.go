@@ -87,7 +87,7 @@ const (
 // weeks. Nagging keys off it so prompts stop once usage drops back
 // to personal levels for more than gapWeeks complete weeks.
 func professionalCurrentRun(s Snapshot) int {
-	weeks := qualifyingWeeks(s.Days, professionalDaySlots, qualifyingDays)
+	weeks := qualifyingWeeks(retainedDays(s), professionalDaySlots, qualifyingDays)
 	return currentRun(weeks, bucketIndex(s.Now, weekWindow), gapWeeks)
 }
 
@@ -96,7 +96,17 @@ func professionalCurrentRun(s Snapshot) int {
 // self-heal after a couple of idle weeks; it ages out with evidence
 // retention instead.
 func heavyLongestRun(s Snapshot) int {
-	return longestRun(qualifyingWeeks(s.Days, heavyDaySlots, qualifyingDays), gapWeeks)
+	return longestRun(qualifyingWeeks(
+		retainedDays(s), heavyDaySlots, qualifyingDays), gapWeeks)
+}
+
+func retainedDays(s Snapshot) []DayActivity {
+	cutoff := bucketStart(s.Now.UTC().Add(-retention), 24*time.Hour)
+	i := 0
+	for i < len(s.Days) && s.Days[i].Day.Before(cutoff) {
+		i++
+	}
+	return s.Days[i:]
 }
 
 // nagCadence returns the minimum interval between upgrade prompts

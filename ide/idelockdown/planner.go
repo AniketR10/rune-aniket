@@ -187,6 +187,8 @@ func (p *Planner) RecordActivity(ctx context.Context) {
 
 // Stop halts the evaluation chain. Safe to call multiple times.
 func (p *Planner) Stop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	select {
 	case <-p.stopCh:
 		return
@@ -275,13 +277,13 @@ func (p *Planner) scheduleEvaluate(ctx context.Context, at time.Time) {
 	if at.IsZero() {
 		return
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	select {
 	case <-p.stopCh:
 		return
 	default:
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.nextCancel != nil {
 		close(p.nextCancel)
 	}
