@@ -121,12 +121,11 @@ func TestDream_E2E_SingleDialogueWithToolCall(t *testing.T) {
 // TestDream_E2E_LifecycleFrames captures the dream lifecycle across
 // multiple draws: while dream is mid-run the component shows the
 // working glyph, then flips to ✓ once the matching finish event lands.
-// The transition is driven by a redraw key (<c-l>) so each test case
-// triggers Handle exactly once and the asyncFlusher waits for the
-// pump goroutine to settle.
+// The transition is driven by a redraw key (<c-l>) after the first
+// command has completed.
 func TestDream_E2E_LifecycleFrames(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOpts{
+	opts := fixtureOpts{
 		dialogues: []dialoguemanager.Dialogue{{
 			ID:      "d1",
 			Version: 1,
@@ -138,6 +137,10 @@ func TestDream_E2E_LifecycleFrames(t *testing.T) {
 		responses: []mockLLMResponse{
 			stopResponse("Memories extracted."),
 		},
+	}
+	f := newFixtureWithLLM(t, opts, &mockLLMService{
+		responses:     opts.responses,
+		responseDelay: 25 * time.Millisecond,
 	})
 
 	handlertest.RunHandlerSequence(t, f.flush, testWidth, testHeight, []handlertest.SequenceTestCase{
@@ -189,11 +192,14 @@ func TestDream_E2E_InProgress(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
+	blocked := make(chan struct{})
 	llmSvc := &mockLLMService{
 		responses:     []mockLLMResponse{stopResponse("done")},
 		blockReleased: release,
+		blockEntered:  blocked,
 	}
 	f := newFixtureWithLLM(t, fixtureOpts{
+		drawWhileRunning: blocked,
 		dialogues: []dialoguemanager.Dialogue{{
 			ID:      "d1",
 			Version: 1,
@@ -302,8 +308,9 @@ type progressCall struct {
 }
 
 type fixtureOpts struct {
-	dialogues []dialoguemanager.Dialogue
-	responses []mockLLMResponse
+	dialogues        []dialoguemanager.Dialogue
+	responses        []mockLLMResponse
+	drawWhileRunning <-chan struct{}
 }
 
 type fixture struct {
@@ -365,7 +372,7 @@ func newShellFixture(t *testing.T, opts fixtureOpts) *fixture {
 		repl.WithPrompt("> "),
 		repl.WithRunningAnimationFrames([]string{}, []int{}),
 	)
-	f.flush = &asyncFlusher{f: f}
+	f.flush = &asyncFlusher{f: f, drawWhileRunning: opts.drawWhileRunning}
 
 	t.Cleanup(func() { _ = f.h.Close() })
 	return f
@@ -411,7 +418,7 @@ func newFixtureWithLLM(t *testing.T, opts fixtureOpts, llmSvc *mockLLMService) *
 		// output row (where the in-progress dialogue entry renders).
 		repl.WithRunningAnimationFrames([]string{}, []int{}),
 	)
-	f.flush = &asyncFlusher{f: f}
+	f.flush = &asyncFlusher{f: f, drawWhileRunning: opts.drawWhileRunning}
 
 	t.Cleanup(func() { _ = f.h.Close() })
 	return f
@@ -478,46 +485,22 @@ func (s *syncScheduler) flush() {
 	}
 }
 
-// drainUntilIdle alternates flushing pending callbacks and sleeping
-// for idleWindow. It returns once the scheduler stays empty for one
-// full idle window or once maxWait has elapsed. This lets in-flight
-// scheduleNextTick calls from the REPL's command-dispatch goroutine
-// land before goldens are compared.
-func (s *syncScheduler) drainUntilIdle(idleWindow, maxWait time.Duration) {
-	deadline := time.Now().Add(maxWait)
-	for {
-		s.flush()
-		time.Sleep(idleWindow)
-		s.mu.Lock()
-		idle := len(s.pending) == 0
-		s.mu.Unlock()
-		if idle {
-			return
-		}
-		if time.Now().After(deadline) {
-			s.flush()
-			return
-		}
-	}
-}
-
-// asyncFlusher drains scheduleNextTick callbacks before every Draw so
-// the REPL output goroutine (which dispatches HandleCommand and
-// streams items via scheduleNextTick) has rendered the entire dream
-// lifecycle before goldens are compared.
-//
-// The dream HandleCommand returns immediately and the iterator drains
-// synchronously inside the REPL's dispatch goroutine. After each Handle
-// we flush the scheduler repeatedly until it stays empty for an idle
-// window, allowing in-flight scheduleNextTick calls from the dispatch
-// goroutine to land.
+// asyncFlusher waits for the REPL command goroutine and then drains all
+// scheduleNextTick callbacks before Draw compares the golden frame.
 type asyncFlusher struct {
-	f *fixture
+	f                *fixture
+	drawWhileRunning <-chan struct{}
 }
 
 func (a *asyncFlusher) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = a.f.h.Handle(ev)
-	a.f.sched.drainUntilIdle(10*time.Millisecond, 5*time.Second)
+	if ev.Key == term.KeyEnter && a.drawWhileRunning != nil {
+		<-a.drawWhileRunning
+		a.drawWhileRunning = nil
+	} else {
+		a.f.h.Wait()
+	}
+	a.f.sched.flush()
 	return
 }
 
@@ -644,13 +627,16 @@ func newMemoryWorkspace(t *testing.T) string {
 // mockLLMService implements llmapi.Service for tests. Each
 // CreateCompletion returns the next pre-canned response.
 type mockLLMService struct {
-	mu        sync.Mutex
-	callCount int
-	responses []mockLLMResponse
+	mu            sync.Mutex
+	callCount     int
+	responses     []mockLLMResponse
+	responseDelay time.Duration
+	blockOnce     sync.Once
 	// blockReleased, when non-nil, makes CreateCompletion block on
 	// the channel before returning the response. Used to freeze the
 	// dream pipeline so tests can assert mid-run frames.
 	blockReleased chan struct{}
+	blockEntered  chan struct{}
 }
 
 type mockLLMResponse struct {
@@ -681,8 +667,22 @@ func (m *mockLLMService) CreateCompletion(
 		return nil, err
 	}
 	if m.blockReleased != nil {
+		m.blockOnce.Do(func() {
+			if m.blockEntered != nil {
+				close(m.blockEntered)
+			}
+		})
 		select {
 		case <-m.blockReleased:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if m.responseDelay > 0 {
+		timer := time.NewTimer(m.responseDelay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
