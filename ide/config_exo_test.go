@@ -388,10 +388,10 @@ func TestValidateExoFallbackInvalidValueRewrites(t *testing.T) {
 	assert.Equal(t, "exo", ic.editorMode())
 }
 
-// TestExoOverrideHighlights table-tests the accessor: defaults to
+// TestExoExperimentalHighlights table-tests the accessor: defaults to
 // true when unset, round-trips explicit true/false, and falls back to
 // true while recording an error when the value is the wrong type.
-func TestExoOverrideHighlights(t *testing.T) {
+func TestExoExperimentalHighlights(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -420,7 +420,7 @@ func TestExoOverrideHighlights(t *testing.T) {
 				"goto":    "<esc>:{line}<enter>",
 			}
 			if tc.setRaw {
-				exo["override_highlights"] = tc.raw
+				exo["experimental_highlights"] = tc.raw
 			}
 			cfg := ideConfig{
 				cfg: map[string]any{
@@ -431,9 +431,9 @@ func TestExoOverrideHighlights(t *testing.T) {
 				},
 				errors: map[string]error{},
 			}
-			got := cfg.exoOverrideHighlights()
+			got := cfg.exoExperimentalHighlights()
 			assert.Equal(t, tc.wantValue, got)
-			_, hadErr := cfg.errors["editor.exo.override_highlights"]
+			_, hadErr := cfg.errors["editor.exo.experimental_highlights"]
 			assert.Equal(t, tc.wantErrKey, hadErr,
 				"expected errors entry to %v", tc.wantErrKey)
 		})

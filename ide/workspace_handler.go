@@ -420,7 +420,7 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 		reloader,
 		fallback,
 		h.envSource,
-		cfg.exoOverrideHighlights(),
+		cfg.exoExperimentalHighlights(),
 		h,
 		svc,
 		h.clip,

@@ -321,6 +321,9 @@ func TestRuneStarFixture(t *testing.T) {
 				_, hasMode := editor["mode"]
 				assert.False(t, hasMode, "editor.mode should not be set in rune.star")
 				assert.Equal(t, false, editor["auto_pair"])
+				exo := editor["exo"].(map[string]any)
+				assert.Equal(t, false, exo["experimental_highlights"])
+				assert.NotContains(t, exo, "override_highlights")
 				// GUI-specific window manager frame charset should use the
 				// braille-ish corners.
 				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)

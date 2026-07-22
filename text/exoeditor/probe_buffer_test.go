@@ -345,7 +345,7 @@ func TestDrawOverlayFollowsScrolledGrid(t *testing.T) {
 
 	buf := bufferOf(t, "foo\nbar\nbaz\n")
 	h, comp := handlerForBufferTest(t, buf)
-	h.overrideHighlights = true
+	h.experimentalHighlights = true
 	h.locations = locationStoreForTest(t)
 	h.scheduleNextTick = func(fn func()) bool { fn(); return true }
 

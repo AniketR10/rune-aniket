@@ -58,7 +58,7 @@ import (
 // corresponds to a Rune-managed highlight cell. Cells the embedded
 // editor renders without an overlay show their literal rune (vim's
 // own attributes are stripped by ignoreAttrWriter under
-// override_highlights=true).
+// experimental_highlights=true).
 //
 // Skips when the local machine has no vim binary or no Go tree-sitter
 // grammar artefacts.

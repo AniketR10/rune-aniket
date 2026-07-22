@@ -2294,20 +2294,20 @@ func normalizeEditorFallback(raw string) (canonical string, ok bool) {
 	return "", false
 }
 
-// exoOverrideHighlights reports whether Rune should overlay its
+// exoExperimentalHighlights reports whether Rune should overlay its
 // location-list attributes (syntax, diagnostics, debugger variables)
 // on top of the external editor's rendered output. Defaults to true
 // so users opt out rather than in; an unparseable value also yields
 // the default while recording the error.
-func (c ideConfig) exoOverrideHighlights() bool {
+func (c ideConfig) exoExperimentalHighlights() bool {
 	cfg, ok := c.exo()
 	if !ok {
 		return true
 	}
-	enabled, err := cfg.GetBool("override_highlights")
+	enabled, err := cfg.GetBool("experimental_highlights")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.exo.override_highlights"] = err
+			c.errors["editor.exo.experimental_highlights"] = err
 		}
 		return true
 	}

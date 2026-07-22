@@ -67,14 +67,14 @@ func New(
 	vteCfg vte.Config,
 	reloader Reloader,
 	env cmdenv.Source,
-	overrideHighlights bool,
+	experimentalHighlights bool,
 	registry text.WorkspaceCommandRegistry,
 	vctrlSvc vctrl.Service,
 	clip clipboard.Register,
 ) *Editor {
 	return new(command, gotoTemplate, quit, scheduleNextTick, cwd,
 		workspaceURI, notifications, publisher, terminal, executor,
-		tabManager, vteCfg, reloader, env, overrideHighlights, registry,
+		tabManager, vteCfg, reloader, env, experimentalHighlights, registry,
 		vctrlSvc, clip, gracefulQuitTimeout)
 }
 
@@ -91,7 +91,7 @@ func new(
 	vteCfg vte.Config,
 	reloader Reloader,
 	env cmdenv.Source,
-	overrideHighlights bool,
+	experimentalHighlights bool,
 	registry text.WorkspaceCommandRegistry,
 	vctrlSvc vctrl.Service,
 	clip clipboard.Register,
@@ -126,24 +126,24 @@ func new(
 		panic("exoeditor.New: invalid quit: " + err.Error())
 	}
 	ret := &Editor{
-		command:            command,
-		gotoTemplate:       tpl,
-		quitKeys:           quitKeys,
-		scheduleNextTick:   scheduleNextTick,
-		cwd:                cwd,
-		workspaceURI:       workspaceURI,
-		notifications:      notifications,
-		publisher:          publisher,
-		terminal:           terminal,
-		executor:           executor,
-		tabManager:         tabManager,
-		vteCfg:             vteCfg,
-		reloader:           reloader,
-		env:                env,
-		overrideHighlights: overrideHighlights,
-		vctrlSvc:           vctrlSvc,
-		clipboard:          clip,
-		quitTimeout:        quitTimeout,
+		command:                command,
+		gotoTemplate:           tpl,
+		quitKeys:               quitKeys,
+		scheduleNextTick:       scheduleNextTick,
+		cwd:                    cwd,
+		workspaceURI:           workspaceURI,
+		notifications:          notifications,
+		publisher:              publisher,
+		terminal:               terminal,
+		executor:               executor,
+		tabManager:             tabManager,
+		vteCfg:                 vteCfg,
+		reloader:               reloader,
+		env:                    env,
+		experimentalHighlights: experimentalHighlights,
+		vctrlSvc:               vctrlSvc,
+		clipboard:              clip,
+		quitTimeout:            quitTimeout,
 	}
 	if registry != nil {
 		ret.fileRegistry = text.NewFileCommandRegistry(workspaceURI, registry)
@@ -155,25 +155,25 @@ func new(
 // Editor implements text.Editor. Its zero value is not usable; use
 // the New constructor.
 type Editor struct {
-	command            string
-	gotoTemplate       gotoTemplate
-	quitKeys           []term.KeyComb
-	scheduleNextTick   func(func()) bool
-	cwd                workspace.Workspace
-	workspaceURI       workspaceapi.URI
-	notifications      browserapi.Notifications
-	publisher          browser.EventPublisher
-	terminal           schemeapi.Terminal
-	executor           schemeapi.Executor
-	tabManager         browser.TabManager
-	vteCfg             vte.Config
-	reloader           Reloader
-	env                cmdenv.Source
-	overrideHighlights bool
-	fileRegistry       text.FileCommandRegistry
-	vctrlSvc           vctrl.Service
-	clipboard          clipboard.Register
-	quitTimeout        time.Duration
+	command                string
+	gotoTemplate           gotoTemplate
+	quitKeys               []term.KeyComb
+	scheduleNextTick       func(func()) bool
+	cwd                    workspace.Workspace
+	workspaceURI           workspaceapi.URI
+	notifications          browserapi.Notifications
+	publisher              browser.EventPublisher
+	terminal               schemeapi.Terminal
+	executor               schemeapi.Executor
+	tabManager             browser.TabManager
+	vteCfg                 vte.Config
+	reloader               Reloader
+	env                    cmdenv.Source
+	experimentalHighlights bool
+	fileRegistry           text.FileCommandRegistry
+	vctrlSvc               vctrl.Service
+	clipboard              clipboard.Register
+	quitTimeout            time.Duration
 
 	pub text.Publisher
 }
@@ -229,7 +229,7 @@ func (e *Editor) Edit(
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
 		e.cwd, e.notifications, e.scheduleNextTick, e.reloader,
-		e.overrideHighlights, e.quitKeys, procDone, e.quitTimeout,
+		e.experimentalHighlights, e.quitKeys, procDone, e.quitTimeout,
 		e.executor)
 	pub.setRefresh(h.refreshProbe)
 	var ret text.Handler = h
@@ -245,7 +245,7 @@ func (e *Editor) Edit(
 			return nil, fmt.Errorf("exoeditor: subscribe git commands: %w", err)
 		}
 	}
-	if e.overrideHighlights {
+	if e.experimentalHighlights {
 		ret = withMessageBar(ret, h)
 	}
 	return e.pub.PublishExternalEdit(file, buf, ret), nil

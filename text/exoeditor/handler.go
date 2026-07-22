@@ -73,12 +73,12 @@ type editorHandler struct {
 	cancelCtx        context.CancelFunc
 	reloader         Reloader
 
-	overrideHighlights bool
-	locations          *text.LocationStore
-	probeStateMu       sync.RWMutex
-	lastProbe          atomic.Pointer[vteprobe.Result]
-	lastProbeCells     [][]term.Cell
-	pendingGoto        *term.Coordinates
+	experimentalHighlights bool
+	locations              *text.LocationStore
+	probeStateMu           sync.RWMutex
+	lastProbe              atomic.Pointer[vteprobe.Result]
+	lastProbeCells         [][]term.Cell
+	pendingGoto            *term.Coordinates
 
 	bufCells        [][]term.Cell
 	bufCellsScratch [][]term.Cell
@@ -138,7 +138,7 @@ func newHandler(
 	notifications browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
 	reloader Reloader,
-	overrideHighlights bool,
+	experimentalHighlights bool,
 	quitKeys []term.KeyComb,
 	procDone <-chan error,
 	quitTimeout time.Duration,
@@ -149,24 +149,24 @@ func newHandler(
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
-		vteHandler:          vteH,
-		buf:                 buf,
-		resource:            uri,
-		gotoTemplate:        gotoTpl,
-		quitKeys:            quitKeys,
-		procDone:            procDone,
-		gracefulQuitTimeout: quitTimeout,
-		hangUpGraceTimeout:  hangUpGraceTimeout,
-		cwd:                 cwd,
-		notifications:       notifications,
-		scheduleNextTick:    scheduleNextTick,
-		executor:            executor,
-		cancelCtx:           cancel,
-		reloader:            reloader,
-		probe:               vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
-		probeSlab:           vteprobe.NewSlab(),
-		overrideHighlights:  overrideHighlights,
-		locations:           text.NewLocationStore(),
+		vteHandler:             vteH,
+		buf:                    buf,
+		resource:               uri,
+		gotoTemplate:           gotoTpl,
+		quitKeys:               quitKeys,
+		procDone:               procDone,
+		gracefulQuitTimeout:    quitTimeout,
+		hangUpGraceTimeout:     hangUpGraceTimeout,
+		cwd:                    cwd,
+		notifications:          notifications,
+		scheduleNextTick:       scheduleNextTick,
+		executor:               executor,
+		cancelCtx:              cancel,
+		reloader:               reloader,
+		probe:                  vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
+		probeSlab:              vteprobe.NewSlab(),
+		experimentalHighlights: experimentalHighlights,
+		locations:              text.NewLocationStore(),
 	}
 	h.component = vteH.Component()
 	h.snapshotBufferCells()
@@ -393,7 +393,7 @@ func (h *editorHandler) IsSearchMode() bool { return false }
 func (h *editorHandler) CellView() cell.View { return h.buf.View() }
 
 func (h *editorHandler) Draw(w term.Writer) {
-	if !h.overrideHighlights {
+	if !h.experimentalHighlights {
 		h.vteHandler.Draw(w)
 		return
 	}

@@ -74,7 +74,7 @@ func New(
 	reloader exoeditor.Reloader,
 	fallback text.Editor,
 	env cmdenv.Source,
-	overrideHighlights bool,
+	experimentalHighlights bool,
 	registry text.WorkspaceCommandRegistry,
 	vctrlSvc vctrl.Service,
 	clip clipboard.Register,
@@ -84,7 +84,7 @@ func New(
 			command, gotoTemplate, quit, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
 			terminal, executor, tabManager, vteCfg, reloader, env,
-			overrideHighlights, registry, vctrlSvc, clip,
+			experimentalHighlights, registry, vctrlSvc, clip,
 		),
 		fallback,
 	)

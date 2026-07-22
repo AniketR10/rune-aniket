@@ -239,17 +239,17 @@ func TestDrawLocationsExpandsTabs(t *testing.T) {
 	}, screenCoords(w.calls))
 }
 
-// TestEditorHandlerOverrideHighlightsDisabled verifies the editor
+// TestEditorHandlerExperimentalHighlightsDisabled verifies the editor
 // handler's Draw does not call into the location overlay path when
 // the config flag is off: SetLocationList still updates the public
 // store (so observers see the same state as on non-exo editors), but
 // no UnionAttributes calls reach the writer beyond what the embedded
 // vte already produces.
-func TestEditorHandlerOverrideHighlightsDisabled(t *testing.T) {
+func TestEditorHandlerExperimentalHighlightsDisabled(t *testing.T) {
 	t.Parallel()
 	h := &editorHandler{
-		overrideHighlights: false,
-		locations:          locationStoreForTest(t),
+		experimentalHighlights: false,
+		locations:              locationStoreForTest(t),
 	}
 	probe := fakeProbeUnwrapped()
 	h.lastProbe.Store(probe)
@@ -263,7 +263,7 @@ func TestEditorHandlerOverrideHighlightsDisabled(t *testing.T) {
 	w := &recordingWriter{}
 	// Bypass the embedded vte.Handler.Draw call; only assert the
 	// overlay path is gated by the flag.
-	if h.overrideHighlights {
+	if h.experimentalHighlights {
 		if probe := h.lastProbe.Load(); probe != nil {
 			drawLocations(w, h.locations.SortedLocations(), probe)
 		}
