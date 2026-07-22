@@ -36,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1966,6 +1967,144 @@ func TestFileCloseDoesNotWaitForInFlightReload(t *testing.T) {
 	}
 }
 
+// TestFileCloseReloadOrdering exercises the Close/Reload ownership
+// handoff across the interleavings of the two operations. reload
+// closes and reopens f.orig/f.swap and rewrites f.fileName via
+// initFiles while Close tears the same fields down, so ownership
+// must be handed off, never shared: Close returns immediately while
+// the worker owns the descriptors (its I/O can be remote and slow or
+// wedged, and Close may run on the event loop) and the worker
+// inherits the teardown; when Close wins instead, the worker must
+// refuse the swap and leave the torn-down state alone.
+//
+// Every case ends with the same postconditions: the teardown ran
+// exactly once (swap file removed, extra Close reports the file
+// gone), no copy-swap catch-up survives, and reload contents only
+// reach the buffer when the reload completed before the close.
+func TestFileCloseReloadOrdering(t *testing.T) {
+	tests := []fileCloseReloadCase{
+		{
+			name:            "reload completes then close tears down",
+			closeAt:         closeAfterReload,
+			wantBufReloaded: true,
+		},
+		{
+			// Reload must not resurrect descriptors or recreate
+			// the swap file after teardown (beginFileSwap refuses),
+			// and a later flush must keep reporting the file as
+			// not writable.
+			name:          "close before reload refuses the swap",
+			closeAt:       closeBeforeReload,
+			flushAfterAll: true,
+		},
+		{
+			// The old descriptors are already closed but the old
+			// swap file is still on disk when Close lands.
+			name:    "close while reload removes the old swap",
+			gate:    gateRemoveOldSwap,
+			closeAt: closeDuringGate,
+		},
+		{
+			// Close lands inside initFiles, right before f.orig,
+			// f.swap and f.fileName are rewritten.
+			name:    "close while reload reopens orig",
+			gate:    gateReopenOrig,
+			closeAt: closeDuringGate,
+		},
+		{
+			// Close lands after orig was reopened but before the
+			// swap file exists again.
+			name:    "close while reload recreates the swap",
+			gate:    gateReopenSwap,
+			closeAt: closeDuringGate,
+		},
+		{
+			// The swap fails after Close already handed the
+			// teardown to the worker: the error must still reach
+			// the caller and the fresh swap file must not leak.
+			name:          "close while reload fails on a deleted file",
+			gate:          gateReopenOrig,
+			closeAt:       closeDuringGate,
+			deleteOnDisk:  true,
+			wantReloadErr: "doesn't exist on disk",
+		},
+		{
+			// The error path of reloadFiles must return descriptor
+			// ownership so a later Close tears down inline.
+			name:          "reload fails then close tears down",
+			closeAt:       closeAfterReload,
+			deleteOnDisk:  true,
+			wantReloadErr: "doesn't exist on disk",
+		},
+		{
+			// The swap completed and the worker parked on
+			// scheduleNextTick with a host loop that stopped
+			// pumping (it is blocked entering Close): Close must
+			// tear down inline and unpark the worker via closedCh.
+			name:    "close while worker parked on the host loop",
+			gate:    gateParkedOnLoop,
+			closeAt: closeDuringGate,
+		},
+		{
+			// The host loop pumps the parked callback only after
+			// Close already ran: the callback must observe closed
+			// and leave the buffer alone.
+			name:           "loop pumps the stale callback after close",
+			gate:           gateParkedOnLoop,
+			closeAt:        closeDuringGate,
+			pumpAfterClose: true,
+		},
+		{
+			// A second Close while the worker still owns the
+			// descriptors must not block or tear down twice.
+			name:             "double close while the worker owns the swap",
+			gate:             gateReopenOrig,
+			closeAt:          closeDuringGate,
+			doubleCloseGated: true,
+		},
+		{
+			// An edit landing after Close, mid-swap, must be
+			// discarded (reloading=true) and must not enqueue a
+			// copy-swap catch-up that the teardown would race.
+			name:           "edit after close is discarded mid-swap",
+			gate:           gateReopenOrig,
+			closeAt:        closeDuringGate,
+			editWhileGated: true,
+		},
+		{
+			// The startAsync gate stays held for the whole swap:
+			// concurrent flushes short-circuit instead of racing
+			// the worker for the descriptors.
+			name:            "flush rejected while the worker owns the swap",
+			gate:            gateReopenOrig,
+			closeAt:         closeDuringGate,
+			flushWhileGated: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runFileCloseReloadCase(t, tc)
+		})
+	}
+}
+
+// openFileHookScheme wraps a schemeapi.Scheme so a test can observe
+// and inject behaviour around OpenFile. All other methods delegate
+// transparently.
+type openFileHookScheme struct {
+	schemeapi.Scheme
+	onOpenFile func(name string)
+}
+
+func (s *openFileHookScheme) OpenFile(
+	name string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	if s.onOpenFile != nil {
+		s.onOpenFile(name)
+	}
+	return s.Scheme.OpenFile(name, flag, perm)
+}
+
 // TestFileCloseWaitsForInFlightFlush guards the complementary
 // invariant to TestFileCloseDoesNotWaitForInFlightReload: tearing
 // down f.orig / f.swap mid-rename would leave the on-disk file
@@ -1977,20 +2116,10 @@ func TestFileCloseWaitsForInFlightFlush(t *testing.T) {
 	inner, err := newTestFileScheme(workspaceURI)
 	require.NoError(t, err)
 
+	renameEntered := make(chan struct{})
 	renameGate := make(chan struct{})
-	closeStarted := make(chan struct{})
-	var (
-		mu             sync.Mutex
-		renameSawClose bool
-	)
 	hook := &renameHookScheme{Scheme: inner, onRename: func(string, string) {
-		select {
-		case <-closeStarted:
-			mu.Lock()
-			renameSawClose = true
-			mu.Unlock()
-		default:
-		}
+		close(renameEntered)
 		<-renameGate
 	}}
 
@@ -2000,9 +2129,17 @@ func TestFileCloseWaitsForInFlightFlush(t *testing.T) {
 	flushCh, err := f.Flush(context.Background())
 	require.NoError(t, err)
 
+	// Only issue Close once the flush is provably mid-rename, so the
+	// Close/Flush overlap is guaranteed by construction regardless of
+	// goroutine scheduling.
+	select {
+	case <-renameEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("flush never reached the scheme Rename")
+	}
+
 	closeDone := make(chan error, 1)
 	go func() {
-		close(closeStarted)
 		closeDone <- f.Close()
 	}()
 
@@ -2027,11 +2164,6 @@ func TestFileCloseWaitsForInFlightFlush(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Close blocked indefinitely after flush completed")
 	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	require.True(t, renameSawClose,
-		"test setup did not actually exercise the Close/Flush overlap")
 }
 
 // TestFileFlushRejectedDuringInFlightReload guards the shared
@@ -2341,4 +2473,255 @@ func goroutineID() uint64 {
 func inlineSchedule(fn func()) bool {
 	fn()
 	return true
+}
+
+// reloadGatePoint selects where the reload worker is trapped so a
+// close/reload ordering test can interleave Close deterministically.
+type reloadGatePoint int
+
+const (
+	// gateNone lets the reload run to completion ungated.
+	gateNone reloadGatePoint = iota
+	// gateRemoveOldSwap traps the worker at the scheme.Remove of
+	// the old swap file, after the old descriptors were closed but
+	// before initFiles reopens anything.
+	gateRemoveOldSwap
+	// gateReopenOrig traps the worker inside initFiles at the
+	// OpenFile that reopens f.orig.
+	gateReopenOrig
+	// gateReopenSwap traps the worker inside initSwap at the
+	// OpenFile that recreates the swap file, after orig was already
+	// reopened.
+	gateReopenSwap
+	// gateParkedOnLoop lets the descriptor swap complete and traps
+	// the worker parked on scheduleNextTick with a host loop that
+	// never pumps the callback.
+	gateParkedOnLoop
+)
+
+// closePoint selects when Close runs relative to the Reload.
+type closePoint int
+
+const (
+	closeDuringGate closePoint = iota
+	closeBeforeReload
+	closeAfterReload
+)
+
+type fileCloseReloadCase struct {
+	name    string
+	gate    reloadGatePoint
+	closeAt closePoint
+	// deleteOnDisk removes the on-disk file before the Reload so
+	// reloadFiles fails after the old descriptors are gone.
+	deleteOnDisk bool
+	// doubleCloseGated issues a second Close while the worker still
+	// owns the descriptors.
+	doubleCloseGated bool
+	// editWhileGated applies a buffer edit after Close, while the
+	// worker is still gated mid-swap.
+	editWhileGated bool
+	// flushWhileGated attempts a Flush while the worker owns the
+	// descriptors; it must be rejected by the startAsync gate.
+	flushWhileGated bool
+	// pumpAfterClose runs the parked scheduleNextTick callback
+	// after Close returned (gateParkedOnLoop only).
+	pumpAfterClose bool
+	// flushAfterAll attempts a Flush once everything is closed.
+	flushAfterAll   bool
+	wantReloadErr   string
+	wantBufReloaded bool
+}
+
+// reloadSentinel is written to disk before the Reload so the final
+// buffer assertion can tell whether the reload contents ever reached
+// the buffer.
+const reloadSentinel = "reloaded from disk"
+
+func runFileCloseReloadCase(t *testing.T, tc fileCloseReloadCase) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	// The gate traps the reload worker at the chosen scheme call.
+	// remaining counts armed calls: the gate fires when the counter
+	// reaches zero and stays disarmed afterwards, because the
+	// inherited teardown re-enters the same scheme methods.
+	var (
+		remaining atomic.Int32
+		entered   = make(chan struct{})
+		released  = make(chan struct{})
+	)
+	gateFn := func() {
+		if remaining.Load() <= 0 {
+			return
+		}
+		if remaining.Add(-1) != 0 {
+			return
+		}
+		close(entered)
+		<-released
+	}
+
+	var scheme schemeapi.Scheme = inner
+	armCount := int32(0)
+	switch tc.gate {
+	case gateRemoveOldSwap:
+		scheme = &removeHookScheme{Scheme: inner,
+			onRemove: func(string) { gateFn() }}
+		armCount = 1
+	case gateReopenOrig:
+		scheme = &openFileHookScheme{Scheme: inner,
+			onOpenFile: func(string) { gateFn() }}
+		armCount = 1
+	case gateReopenSwap:
+		// The first armed OpenFile reopens orig and passes through;
+		// the second recreates the swap file and gates.
+		scheme = &openFileHookScheme{Scheme: inner,
+			onOpenFile: func(string) { gateFn() }}
+		armCount = 2
+	}
+
+	sched := inlineSchedule
+	loopQueue := make(chan func(), 8)
+	if tc.gate == gateParkedOnLoop {
+		sched = func(fn func()) bool {
+			loopQueue <- fn
+			return true
+		}
+	}
+
+	f, err := newFile(scheme, fileObj.Name(), buf, "", false, sched)
+	require.NoError(t, err)
+
+	if tc.deleteOnDisk {
+		require.NoError(t, os.Remove(fileObj.Name()))
+	} else {
+		require.NoError(t, os.WriteFile(
+			fileObj.Name(), []byte(reloadSentinel+"\n"), 0o600))
+	}
+
+	if tc.closeAt == closeBeforeReload {
+		require.NoError(t, closeFileWithin(t, f,
+			"Close before reload must not block"))
+	}
+
+	remaining.Store(armCount)
+	ch, err := f.Reload(context.Background())
+	require.NoError(t, err)
+
+	var parked func()
+	switch tc.gate {
+	case gateNone:
+	case gateParkedOnLoop:
+		select {
+		case parked = <-loopQueue:
+		case <-time.After(2 * time.Second):
+			t.Fatal("reload never reached scheduleNextTick")
+		}
+	default:
+		select {
+		case <-entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("reload never reached the gated scheme call")
+		}
+	}
+
+	if tc.closeAt == closeDuringGate {
+		// Blocking here would freeze the event loop behind remote
+		// reload I/O or wedge the off-loop workspace teardown.
+		require.NoError(t, closeFileWithin(t, f,
+			"Close blocked behind an in-flight reload swap"))
+		if tc.doubleCloseGated {
+			err := closeFileWithin(t, f,
+				"second Close blocked behind an in-flight reload swap")
+			require.ErrorContains(t, err, "uninitialized")
+		}
+		if tc.editWhileGated {
+			// reloading=true is still set on the worker: the edit
+			// must be discarded, not staged for a catch-up.
+			buf.WriteString(" + edit racing close")
+		}
+		if tc.flushWhileGated {
+			fch, ferr := f.Flush(context.Background())
+			assert.Nil(t, fch)
+			assert.ErrorIs(t, ferr, ErrFlushInProgress)
+		}
+	}
+
+	if armCount > 0 {
+		close(released)
+	}
+
+	select {
+	case res := <-ch:
+		if tc.wantReloadErr == "" {
+			require.NoError(t, res)
+		} else {
+			require.ErrorContains(t, res, tc.wantReloadErr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload result never delivered")
+	}
+
+	if tc.pumpAfterClose {
+		parked()
+	}
+
+	if tc.closeAt == closeAfterReload {
+		require.NoError(t, closeFileWithin(t, f,
+			"Close after reload completed must not block"))
+	}
+
+	if tc.wantBufReloaded {
+		assert.Equal(t, reloadSentinel,
+			strings.TrimRight(buf.String(), "\n"),
+			"reload contents must reach the buffer")
+	} else {
+		assert.NotContains(t, buf.String(), reloadSentinel,
+			"reload contents must not reach a closed buffer")
+	}
+
+	// Whoever ended up owning the descriptors must have run the
+	// teardown exactly once: the swap file is gone, no copy-swap
+	// catch-up survives, and an extra Close reports the file gone.
+	_, swapPath := swapFileName("", fileObj.Name())
+	_, serr := inner.Stat(swapPath)
+	require.True(t, os.IsNotExist(serr),
+		"swap file must be removed by the teardown, got %v", serr)
+
+	f.mu.Lock()
+	pendingEdits := f.pendingEdits
+	f.mu.Unlock()
+	assert.False(t, pendingEdits,
+		"no copy-swap catch-up may survive the close/reload ordering")
+
+	err = closeFileWithin(t, f, "extra Close must not block")
+	require.ErrorContains(t, err, "uninitialized",
+		"extra Close must report the file already closed")
+
+	if tc.flushAfterAll {
+		assert.ErrorIs(t,
+			awaitFlushErr(f.Flush(context.Background())),
+			workspaceapi.ErrFileIsNotWritable,
+			"flush after close must report the file as not writable")
+	}
+}
+
+// closeFileWithin runs f.Close on its own goroutine and fails the
+// test if it does not return within 2s: a blocked Close would freeze
+// the event loop or wedge the workspace teardown.
+func closeFileWithin(t *testing.T, f *file, msg string) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- f.Close() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal(msg)
+		return nil
+	}
 }

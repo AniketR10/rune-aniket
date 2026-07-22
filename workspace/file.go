@@ -88,7 +88,14 @@ type file struct {
 	lastFlush       time.Time
 	flushing        bool
 	pendingEdits    bool
+	// closed and reloadOwnsFiles form the close handoff for the
+	// descriptor state (orig/swap/fileName and friends):
+	// beginFileSwap hands ownership to the reload worker,
+	// endFileSwap returns it. Whoever holds ownership when closed
+	// flips runs teardown exactly once — Close never waits for the
+	// worker, whose disk I/O can be remote, slow or wedged.
 	closed          bool
+	reloadOwnsFiles bool
 	closedOnce      sync.Once
 	closedCh        chan struct{}
 	// scheduleNextTick dispatches buffer-mutation work for async
@@ -424,12 +431,6 @@ func (f *file) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("swap file error %s: %s", f.swapFileName, err)
 }
 
-func (f *file) isClosed() bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.closed
-}
-
 // recoverFiles closes the cached orig/swap descriptors and re-opens
 // them against the current scheme. It is used when a previous swap
 // write failed and may have left us with stale file descriptors —
@@ -639,39 +640,21 @@ func (f *file) reload() error {
 
 	f.wg.Wait()
 
-	if f.isClosed() {
+	if !f.beginFileSwap() {
 		return nil
 	}
-
-	if f.orig != nil {
-		_ = f.orig.Close()
+	contents, err := f.reloadFiles()
+	if f.endFileSwap() {
+		// Close ran mid-swap and handed the teardown to us; its
+		// caller already returned, so errors are unobservable.
+		_ = f.teardown()
+		return err
 	}
-	if f.swap != nil {
-		_ = f.swap.Close()
-		_ = f.scheme.Remove(f.swapFileName)
-	}
-
-	err := f.initFiles(f.fileName, f.swapDir, f.readOnly)
 	if err != nil {
 		return err
 	}
 
-	if f.orig == nil {
-		return errors.New("cannot reload a file that doesn't exist on disk")
-	}
-
-	data, err := io.ReadAll(f.orig)
-	if err != nil {
-		_, _ = f.orig.Seek(0, 0)
-		return fmt.Errorf("read from file: %w", err)
-	}
-	_, err = f.orig.Seek(0, 0)
-	if err != nil {
-		return fmt.Errorf("seek: %w", err)
-	}
-
 	done := make(chan struct{})
-	contents := string(data)
 	infoModTime := f.infoModTime
 	scheduled := f.scheduleNextTick(func() {
 		defer close(done)
@@ -697,6 +680,60 @@ func (f *file) reload() error {
 	case <-f.closedCh:
 	}
 	return nil
+}
+
+// beginFileSwap hands descriptor ownership (orig/swap/fileName) to
+// the reload worker. It refuses when the file is already closed.
+func (f *file) beginFileSwap() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return false
+	}
+	f.reloadOwnsFiles = true
+	return true
+}
+
+// endFileSwap returns descriptor ownership. It reports whether Close
+// ran mid-swap, in which case the worker inherited the teardown.
+func (f *file) endFileSwap() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reloadOwnsFiles = false
+	return f.closed
+}
+
+// reloadFiles is the disk half of reload: it swaps the old
+// orig/swap descriptors for freshly opened ones and reads the new
+// on-disk contents. Callers must own the descriptors via
+// beginFileSwap/endFileSwap so Close cannot tear them down mid-swap.
+func (f *file) reloadFiles() (contents string, err error) {
+	if f.orig != nil {
+		_ = f.orig.Close()
+	}
+	if f.swap != nil {
+		_ = f.swap.Close()
+		_ = f.scheme.Remove(f.swapFileName)
+	}
+
+	if err := f.initFiles(f.fileName, f.swapDir, f.readOnly); err != nil {
+		return "", err
+	}
+
+	if f.orig == nil {
+		return "", errors.New("cannot reload a file that doesn't exist on disk")
+	}
+
+	data, err := io.ReadAll(f.orig)
+	if err != nil {
+		_, _ = f.orig.Seek(0, 0)
+		return "", fmt.Errorf("read from file: %w", err)
+	}
+	if _, err := f.orig.Seek(0, 0); err != nil {
+		return "", fmt.Errorf("seek: %w", err)
+	}
+
+	return string(data), nil
 }
 
 func (f *file) startAsync(
@@ -908,22 +945,42 @@ func (f *file) flush(force bool) error {
 }
 
 // Close waits for in-flight Flush/ForceFlush (interrupting a rename
-// would corrupt the on-disk file) but not for in-flight Reload:
-// reload's worker is parked on the host event loop via
-// scheduleNextTick, so waiting on it from that same loop deadlocks.
-// The reload worker observes f.closed / closedCh and bails.
+// would corrupt the on-disk file) but never for in-flight Reload:
+// the reload worker parks on the host event loop (deadlock when
+// Close runs on that loop) and its disk I/O can be remote and slow
+// or wedged (UI freeze / wedged workspace teardown). If the worker
+// owns the descriptors it inherits the teardown when its swap
+// finishes (see endFileSwap); otherwise Close tears down inline.
 func (f *file) Close() (ret error) {
 	f.mu.Lock()
+	wasClosed := f.closed
 	f.closed = true
+	reloadOwns := f.reloadOwnsFiles
 	f.mu.Unlock()
 	f.closedOnce.Do(func() { close(f.closedCh) })
 
 	f.flushWG.Wait()
 
+	if wasClosed {
+		return errors.New("trying to Close an uninitialized file")
+	}
+	if reloadOwns {
+		// The worker may be mutating the descriptors right now;
+		// do not even read them here.
+		return nil
+	}
 	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized file")
 	}
 
+	return f.teardown()
+}
+
+// teardown releases the copy-swap worker, the buffer subscription
+// and the orig/swap descriptors. It runs exactly once: from Close
+// when no reload worker owns the descriptors, or from the reload
+// worker that inherited the close (see endFileSwap).
+func (f *file) teardown() (ret error) {
 	f.fileName = ""
 
 	f.wg.Wait()
