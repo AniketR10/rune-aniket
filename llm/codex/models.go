@@ -25,7 +25,6 @@ package codex
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
-	"unstable.build/go-tui/llm/openai"
 )
 
 // LLMProvider identifies the Codex provider in the model registry.
@@ -104,10 +103,5 @@ func FlagshipModel() string { return GPT5Dot6Sol }
 // to know whether the rune-agent transitional namespace is in use.
 func UpstreamModelName(model string) string { return model }
 
-// MaxOutputTokens returns the model's documented maximum output-token
-// ceiling, or 0 when the limit is unknown. Codex slugs are a subset of
-// the GPT-5 family, so the lookup delegates to the OpenAI catalog keyed
-// by the upstream model slug.
-func MaxOutputTokens(model string) int {
-	return openai.MaxOutputTokens(UpstreamModelName(model))
-}
+// MaxOutputTokens returns 0 because Codex does not accept client-set output limits.
+func MaxOutputTokens(string) int { return 0 }

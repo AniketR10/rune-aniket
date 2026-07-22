@@ -47,7 +47,7 @@ func TestMaxOutputTokensDispatch(t *testing.T) {
 		{"anthropic", llmapi.ModelEntry{Provider: anthropic.LLMProvider, Name: anthropic.ClaudeFable5}, 128000},
 		{"claude", llmapi.ModelEntry{Provider: claude.LLMProvider, Name: anthropic.ClaudeFable5}, 128000},
 		{"openai", llmapi.ModelEntry{Provider: openai.LLMProvider, Name: openai.GPT5Dot5}, 128000},
-		{"codex", llmapi.ModelEntry{Provider: codex.LLMProvider, Name: codex.GPT5Dot4}, 128000},
+		{"codex", llmapi.ModelEntry{Provider: codex.LLMProvider, Name: codex.GPT5Dot4}, 0},
 		{"gemini", llmapi.ModelEntry{Provider: gemini.LLMProvider, Name: gemini.Gemini_2_5_Flash}, 65536},
 		{"local", llmapi.ModelEntry{Provider: "llamacpp", Name: "anything"}, 0},
 		{"unknown provider", llmapi.ModelEntry{Provider: "mystery", Name: "x"}, 0},
@@ -81,4 +81,9 @@ func TestValidateMaxOutputTokens(t *testing.T) {
 	unknownModel := llmapi.ModelEntry{Provider: anthropic.LLMProvider, Name: "unknown"}
 	require.NoError(t, llmarg.ValidateMaxOutputTokens(unknownModel, 1<<30),
 		"unknown model ceiling (0) must never reject")
+
+	codexModel := llmapi.ModelEntry{Provider: codex.LLMProvider, Name: codex.GPT5Dot6Sol}
+	err = llmarg.ValidateMaxOutputTokens(codexModel, 4096)
+	require.EqualError(t, err,
+		"codex/gpt-5.6-sol does not support custom max output token limits")
 }

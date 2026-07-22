@@ -856,6 +856,36 @@ func TestResponsesReasoningSummaryFromRequest(t *testing.T) {
 	assert.Equal(t, "detailed", reasoning["summary"])
 }
 
+func TestResponsesMaxOutputTokens(t *testing.T) {
+	t.Run("request override", func(t *testing.T) {
+		body := captureResponsesRequestBody(t, Config{}, llmapi.Request{
+			Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hello"}},
+			MaxOutputTokens: 4096,
+		})
+		assert.Equal(t, float64(4096), body["max_output_tokens"])
+	})
+
+	t.Run("config default", func(t *testing.T) {
+		body := captureResponsesRequestBody(t, Config{
+			MaxCompletionTokens: 2048,
+		}, llmapi.Request{
+			Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hello"}},
+		})
+		assert.Equal(t, float64(2048), body["max_output_tokens"])
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		body := captureResponsesRequestBody(t, Config{
+			MaxCompletionTokens:    2048,
+			DisableMaxOutputTokens: true,
+		}, llmapi.Request{
+			Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hello"}},
+			MaxOutputTokens: 4096,
+		})
+		assert.NotContains(t, body, "max_output_tokens")
+	})
+}
+
 // TestResponsesIncludesEncryptedReasoningContent verifies that, for any
 // reasoning model on the Responses API, the client sets
 // include=[reasoning.encrypted_content] so reasoning items can be threaded

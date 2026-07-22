@@ -21,50 +21,14 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package llmarg
+package llm
 
 import (
-	"fmt"
+	"testing"
 
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
-	"unstable.build/go-tui/llm/anthropic"
-	"unstable.build/go-tui/llm/claude"
-	"unstable.build/go-tui/llm/codex"
-	"unstable.build/go-tui/llm/gemini"
-	"unstable.build/go-tui/llm/openai"
+	"github.com/stretchr/testify/assert"
 )
 
-// MaxOutputTokens returns entry's documented, client-settable output-token
-// ceiling. It returns 0 when the ceiling is unknown or cannot be configured.
-func MaxOutputTokens(entry llmapi.ModelEntry) int {
-	switch entry.Provider {
-	case anthropic.LLMProvider:
-		return anthropic.MaxOutputTokens(entry.Name)
-	case claude.LLMProvider:
-		return claude.MaxOutputTokens(entry.Name)
-	case openai.LLMProvider:
-		return openai.MaxOutputTokens(entry.Name)
-	case codex.LLMProvider:
-		return codex.MaxOutputTokens(entry.Name)
-	case gemini.LLMProvider:
-		return gemini.MaxOutputTokens(entry.Name)
-	default:
-		return 0
-	}
-}
-
-// ValidateMaxOutputTokens rejects unsupported overrides and values above a
-// documented ceiling. Unknown ceilings accept any value.
-func ValidateMaxOutputTokens(entry llmapi.ModelEntry, n int) error {
-	if entry.Provider == codex.LLMProvider {
-		return fmt.Errorf("%s/%s does not support custom max output token limits",
-			entry.Provider, entry.Name)
-	}
-	limit := MaxOutputTokens(entry)
-	if limit > 0 && n > limit {
-		return fmt.Errorf(
-			"%s supports at most %d max output tokens; %d is too large",
-			entry.Name, limit, n)
-	}
-	return nil
+func TestCodexClientConfigDisablesMaxOutputTokens(t *testing.T) {
+	assert.True(t, (Config{}).CodexClientConfig().DisableMaxOutputTokens)
 }

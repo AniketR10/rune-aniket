@@ -74,6 +74,9 @@ type Config struct {
 	// MaxCompletionTokens is an upper bound for generated tokens including
 	// reasoning tokens. Used instead of MaxTokens for reasoning models.
 	MaxCompletionTokens int
+	// DisableMaxOutputTokens prevents Responses requests from sending an
+	// explicit output limit to providers that manage it server-side.
+	DisableMaxOutputTokens bool
 
 	// A list of tools the model may call.
 	Tools []llmapi.Tool
@@ -429,10 +432,12 @@ func (a *client) createResponsesCompletion(
 		}
 	}
 
-	if request.MaxOutputTokens > 0 {
-		params.MaxOutputTokens = param.NewOpt(int64(request.MaxOutputTokens))
-	} else if a.config.MaxCompletionTokens > 0 {
-		params.MaxOutputTokens = param.NewOpt(int64(a.config.MaxCompletionTokens))
+	if !a.config.DisableMaxOutputTokens {
+		if request.MaxOutputTokens > 0 {
+			params.MaxOutputTokens = param.NewOpt(int64(request.MaxOutputTokens))
+		} else if a.config.MaxCompletionTokens > 0 {
+			params.MaxOutputTokens = param.NewOpt(int64(a.config.MaxCompletionTokens))
+		}
 	}
 
 	if a.config.Temperature != 0 {

@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/codex"
 )
 
 // newMaxTokensAdapter builds a commandAdapter whose agent is bound to a
@@ -75,6 +76,18 @@ func TestCommandAdapterMaxTokensValidatesAgainstModel(t *testing.T) {
 	_, err = a.handleMaxTokens([]string{"64000"})
 	require.NoError(t, err)
 	assert.Equal(t, 64000, a.agent.MaxOutputTokens())
+}
+
+func TestCommandAdapterMaxTokensRejectsCodex(t *testing.T) {
+	model := llmapi.ModelEntry{
+		Provider: codex.LLMProvider, Name: codex.GPT5Dot6Sol, ContextWindow: 372_000,
+	}
+
+	a := newMaxTokensAdapter(t, model)
+	_, err := a.handleMaxTokens([]string{"4096"})
+	require.EqualError(t, err,
+		"codex/gpt-5.6-sol does not support custom max output token limits")
+	assert.Equal(t, 0, a.agent.MaxOutputTokens(), "rejected value must not be applied")
 }
 
 // captureCommandHandler records the last repl.Command it received and

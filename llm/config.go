@@ -175,9 +175,10 @@ func (c Config) CodexClientConfig() openai.Config {
 		ForceResponsesAPI: true,
 		DebugHTTP:         c.DebugHTTP,
 		// ChatGPT Codex backend specifics: it is stateless and
-		// rejects parallel tool calls; mirror the rune-agent setup.
+		// rejects parallel tool calls and client-set output limits.
 		Store:                    boolPtr(false),
 		DisableParallelToolCalls: true,
+		DisableMaxOutputTokens:   true,
 	}
 }
 

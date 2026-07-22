@@ -40,12 +40,12 @@ func TestMaxOutputTokens(t *testing.T) {
 		model string
 		want  int
 	}{
-		{GPT5Dot6Sol, 128000},
-		{GPT5Dot6Terra, 128000},
-		{GPT5Dot6Luna, 128000},
-		{GPT5Dot5, 128000},
-		{GPT5Dot4, 128000},
-		{GPT5Dot3Codex, 128000},
+		{GPT5Dot6Sol, 0},
+		{GPT5Dot6Terra, 0},
+		{GPT5Dot6Luna, 0},
+		{GPT5Dot5, 0},
+		{GPT5Dot4, 0},
+		{GPT5Dot3Codex, 0},
 		{CodexAutoReview, 0},
 		{"unknown-model", 0},
 	}
