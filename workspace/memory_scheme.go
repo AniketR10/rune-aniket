@@ -88,6 +88,8 @@ type memoryScheme struct {
 	workspace      workspaceapi.URI
 	mu             sync.Locker
 	closed         bool
+	closedCh       chan struct{}
+	senders        sync.WaitGroup
 	files          map[string]*memFile
 	fd             *atomic.Uint64 // next fd
 	watchpoints    map[schemeapi.Event][]chan<- schemeapi.EventInfo
@@ -101,6 +103,7 @@ func (m *memoryScheme) init(scheme string, workspace workspaceapi.URI) error {
 	}
 	m.scheme = scheme
 	m.workspace = workspace
+	m.closedCh = make(chan struct{})
 	m.watchpoints = make(map[schemeapi.Event][]chan<- schemeapi.EventInfo)
 	m.watchpointIDs = make(map[int64]chan<- schemeapi.EventInfo)
 	m.files = make(map[string]*memFile)
@@ -108,6 +111,46 @@ func (m *memoryScheme) init(scheme string, workspace workspaceapi.URI) error {
 	m.nextWatchpoint = new(atomic.Int64)
 	m.fd = new(atomic.Uint64)
 	return nil
+}
+
+// copyWatchpoints snapshots the channels subscribed to event and
+// registers an in-flight delivery with m.senders so Close can wait
+// for it before closing the watcher channels. Must be called with
+// m.mu held; a nil return means no delivery was registered.
+func (m *memoryScheme) copyWatchpoints(
+	event schemeapi.Event,
+) []chan<- schemeapi.EventInfo {
+	watchpoints := m.watchpoints[event]
+	if len(watchpoints) == 0 {
+		return nil
+	}
+	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
+	copy(copied, watchpoints)
+	m.senders.Add(1)
+	return copied
+}
+
+// sendWatchEvents delivers fis to the channels snapshotted by
+// copyWatchpoints. It must be called exactly once after releasing
+// m.mu whenever copyWatchpoints returned non-nil. Blocked sends are
+// aborted when the scheme closes: Close closes closedCh, waits for
+// senders, and only then closes the watcher channels.
+func (m *memoryScheme) sendWatchEvents(
+	copied []chan<- schemeapi.EventInfo, fis ...watchFileInfo,
+) {
+	if copied == nil {
+		return
+	}
+	defer m.senders.Done()
+	for _, wp := range copied {
+		for _, fi := range fis {
+			select {
+			case wp <- fi:
+			case <-m.closedCh:
+				return
+			}
+		}
+	}
 }
 
 func (m *memoryScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
@@ -177,17 +220,12 @@ func (m *memoryScheme) OpenFile(path string, flag int, mode os.FileMode) (
 			return nil, os.ErrClosed
 		}
 		m.files[uriStr] = f
-		watchpoints := m.watchpoints[schemeapi.Create]
-		copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
-		copy(copied, watchpoints)
+		copied := m.copyWatchpoints(schemeapi.Create)
 		m.mu.Unlock()
-		for _, wp := range copied {
-			fi := watchFileInfo{
-				event: schemeapi.Create,
-				uri:   uri,
-			}
-			wp <- fi
-		}
+		m.sendWatchEvents(copied, watchFileInfo{
+			event: schemeapi.Create,
+			uri:   uri,
+		})
 	} else {
 		_, _ = f.Seek(0, 0)
 	}
@@ -211,18 +249,13 @@ func (m *memoryScheme) Remove(path string) error {
 	}
 
 	delete(m.files, uriStr)
-	watchpoints := m.watchpoints[schemeapi.Remove]
-	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
-	copy(copied, watchpoints)
+	copied := m.copyWatchpoints(schemeapi.Remove)
 	m.mu.Unlock()
 
-	for _, wp := range copied {
-		fi := watchFileInfo{
-			event: schemeapi.Remove,
-			uri:   uri,
-		}
-		wp <- fi
-	}
+	m.sendWatchEvents(copied, watchFileInfo{
+		event: schemeapi.Remove,
+		uri:   uri,
+	})
 	return nil
 }
 
@@ -248,26 +281,18 @@ func (m *memoryScheme) Rename(old, new string) error {
 	delete(m.files, oldURIStr)
 	f.filename = filepath.Base(new)
 	m.files[newURIStr] = f
-	watchpoints := m.watchpoints[schemeapi.Rename]
-	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
-	copy(copied, watchpoints)
+	copied := m.copyWatchpoints(schemeapi.Rename)
 	m.mu.Unlock()
 
-	for _, wp := range copied {
-		fis := []watchFileInfo{
-			{
-				event: schemeapi.Rename,
-				uri:   oldURI,
-			},
-			{
-				event: schemeapi.Rename,
-				uri:   newURI,
-			},
-		}
-		for _, fi := range fis {
-			wp <- fi
-		}
-	}
+	m.sendWatchEvents(copied,
+		watchFileInfo{
+			event: schemeapi.Rename,
+			uri:   oldURI,
+		},
+		watchFileInfo{
+			event: schemeapi.Rename,
+			uri:   newURI,
+		})
 	return nil
 }
 
@@ -437,17 +462,12 @@ func (m *memoryScheme) Symlink(oldname, newname string) error {
 		m:      m,
 	}
 	m.files[newuri.String()] = mf
-	watchpoints := m.watchpoints[schemeapi.Create]
-	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
-	copy(copied, watchpoints)
+	copied := m.copyWatchpoints(schemeapi.Create)
 	m.mu.Unlock()
-	for _, wp := range copied {
-		fi := watchFileInfo{
-			event: schemeapi.Create,
-			uri:   newuri,
-		}
-		wp <- fi
-	}
+	m.sendWatchEvents(copied, watchFileInfo{
+		event: schemeapi.Create,
+		uri:   newuri,
+	})
 	return err
 }
 
@@ -583,20 +603,30 @@ func (m *memoryScheme) StopWatch(id int) error {
 
 func (m *memoryScheme) Close() error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
 	m.closed = true
+	close(m.closedCh)
+	watchpointIDs := m.watchpointIDs
+	m.files = nil
+	m.watchpoints = nil
+	m.watchpointIDs = nil
+	m.mu.Unlock()
+
+	// In-flight event deliveries may be parked on an unconsumed
+	// watcher channel; closing it mid-send panics. closedCh aborts
+	// those sends, then wait for them to drain.
+	m.senders.Wait()
+
 	// Close each watcher channel exactly once. Watch appends the same channel
 	// into one bucket per subscribed event, so iterating m.watchpoints here
 	// would try to close the same channel multiple times. watchpointIDs is
 	// keyed by watchpoint ID and holds each channel exactly once.
-	for _, ch := range m.watchpointIDs {
+	for _, ch := range watchpointIDs {
 		close(ch)
 	}
-
-	m.files = nil
-	m.watchpoints = nil
-	m.watchpointIDs = nil
 	return nil
 }
 

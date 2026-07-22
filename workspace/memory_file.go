@@ -135,19 +135,14 @@ func (c *memFile) Sync() error {
 		return nil
 	}
 
-	watchpoints := c.m.watchpoints[schemeapi.Write]
 	uri, _ := c.m.URI(c.filename)
-	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
-	copy(copied, watchpoints)
+	copied := c.m.copyWatchpoints(schemeapi.Write)
 	c.locker.Unlock()
 
-	for _, wp := range copied {
-		fi := watchFileInfo{
-			event: schemeapi.Write,
-			uri:   uri,
-		}
-		wp <- fi
-	}
+	c.m.sendWatchEvents(copied, watchFileInfo{
+		event: schemeapi.Write,
+		uri:   uri,
+	})
 	return nil
 }
 

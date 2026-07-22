@@ -28,6 +28,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,4 +147,50 @@ func TestMemoryScheme_CloseDoesNotDoubleCloseMultiEventWatchers(t *testing.T) {
 	require.NotPanics(t, func() {
 		require.NoError(t, mem.Close())
 	})
+}
+
+// TestMemorySchemeCloseWithBlockedWatchSend guards Close against an
+// in-flight watch event delivery: Create/Remove/Rename deliver events
+// synchronously after releasing the scheme lock, so a watcher that is
+// not consuming leaves the sender parked on the channel send. Close
+// must unblock and drain those senders before closing the watcher
+// channels — closing mid-send panics with "send on closed channel".
+func TestMemorySchemeCloseWithBlockedWatchSend(t *testing.T) {
+	ctx := context.Background()
+	uri, err := workspaceapi.ParseURI("memory:///workspace")
+	require.NoError(t, err)
+	mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	// Unbuffered and never consumed: the Create event sender parks.
+	ch := make(chan schemeapi.EventInfo)
+	_, err = mem.Watch("/workspace/...", ch, schemeapi.Create)
+	require.NoError(t, err)
+
+	createDone := make(chan struct{})
+	go func() {
+		defer close(createDone)
+		_, _ = mem.Create("blocked.txt")
+	}()
+
+	// Let the creator park on the watch channel send.
+	time.Sleep(50 * time.Millisecond)
+
+	closer, ok := mem.(io.Closer)
+	require.True(t, ok)
+
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- closer.Close() }()
+
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close never returned with a blocked watch send in flight")
+	}
+	select {
+	case <-createDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Create never returned after Close")
+	}
 }
