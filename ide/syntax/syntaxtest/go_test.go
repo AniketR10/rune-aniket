@@ -1580,6 +1580,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			Folds:      false,
 			Indents:    true,
 			Highlights: true,
+			Progress:   1,
 		}, actual)
 
 		require.NoError(t, tree.Close())

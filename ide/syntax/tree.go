@@ -129,13 +129,7 @@ func WithTree(
 			if err != nil {
 				ret.currState = State{Closed: ret.closed, ParserError: err.Error()}
 			} else {
-				ret.currState = State{
-					Closed:     ret.closed,
-					LangID:     files.langID,
-					Highlights: ret.highlights != nil,
-					Folds:      ret.folds != nil,
-					Indents:    ret.indents != nil,
-				}
+				ret.updateCurrentState(files.langID)
 			}
 		})
 	})
@@ -541,6 +535,7 @@ func (t *Tree) initParser(
 	// build the syntax tree
 	t.persistCells()
 	t.parseTree(nil, "initial parse error")
+	t.updateCurrentState(langID)
 
 	// set ready to true, even if tree is nil
 	t.ready = true
@@ -818,6 +813,14 @@ func (t *Tree) streamState() {
 		default:
 		}
 	}
+}
+
+func (t *Tree) updateCurrentState(langID string) {
+	t.currState.Closed = t.closed
+	t.currState.LangID = langID
+	t.currState.Highlights = t.highlights != nil
+	t.currState.Folds = t.folds != nil
+	t.currState.Indents = t.indents != nil
 }
 
 func (t *Tree) parseTree(prev *tree_sitter.Tree, errorMsg string) {
