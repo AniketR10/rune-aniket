@@ -1713,12 +1713,16 @@ func TestHandlerCtrlLRunsClearHook(t *testing.T) {
 type blockingCmd struct {
 	line    string
 	release chan struct{}
+	started chan struct{}
 	closed  chan struct{}
 }
 
 func (c *blockingCmd) HandleCommand(
 	_ context.Context, _ repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
+	if c.started != nil {
+		close(c.started)
+	}
 	return &blockingIter{cmd: c}, nil
 }
 

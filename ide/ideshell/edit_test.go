@@ -874,6 +874,7 @@ func TestCtrlCCancelsRunningCommandBeforeEditor(t *testing.T) {
 	cmd := &blockingCmd{
 		line:    "running-marker",
 		release: make(chan struct{}),
+		started: make(chan struct{}),
 		closed:  make(chan struct{}),
 	}
 	var seen []term.Event
@@ -897,7 +898,12 @@ func TestCtrlCCancelsRunningCommandBeforeEditor(t *testing.T) {
 	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	require.Eventually(t, func() bool {
 		drain()
-		return h.shim.running()
+		select {
+		case <-cmd.started:
+			return h.shim.running()
+		default:
+			return false
+		}
 	}, time.Second, 5*time.Millisecond, "command should be in-flight")
 
 	_, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
@@ -912,6 +918,7 @@ func TestCtrlCCancelsRunningCommandBeforeEditor(t *testing.T) {
 			return false
 		}
 	}, time.Second, 5*time.Millisecond, "<c-c> should cancel the command")
+	h.Wait()
 	assert.False(t, h.shim.running(), "command should no longer be in-flight")
 	assert.Equal(t, "", h.editBuf.String(), "<c-c> should not be typed into the editor")
 	for _, ev := range seen {
