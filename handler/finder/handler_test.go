@@ -5,11 +5,14 @@
 package finder
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace"
@@ -275,6 +279,70 @@ func (s *closeCountingService) Close() error {
 	s.closeCount.Add(1)
 	return s.Service.Close()
 }
+
+// TestScanDoneWaitsForCommandOutputDrain guards the ScanWaiter
+// contract: a closed ScanDone must mean readCommand has forwarded
+// every line of the command's output to the list consumer. The
+// executor stub signals process exit immediately after writing, so
+// if the exit outruns the reader's drain, DrainList swaps the list
+// consumer away and the buffered tail is silently dropped.
+func TestScanDoneWaitsForCommandOutputDrain(t *testing.T) {
+	const total = 200
+	clients := Clients{
+		ResourceOpener: stubResourceOpener{},
+		WindowManager:  stubWindowManager{},
+		Interrupter:    term.NopInterrupter(),
+		Notifications:  stubNotifications{},
+		Executor:       &instantExitExecutor{lines: total},
+	}
+	listCfg := search.ListConfig{
+		Algo:        search.FuzzyMatch,
+		Interrupter: term.NopInterrupter(),
+		SyncSearch:  true,
+	}
+	rh, err := NewWithListConfig(
+		context.Background(), clients, stubWindow(0),
+		term.KeyComb{}, "", "list-entries", 0, listCfg,
+		nil, nil,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rh.Close() })
+	h := rh.(*fuzzyFinderHandler)
+
+	waitForScanWithTimeout(t, h, 5*time.Second)
+
+	assert.Equal(t, total, h.list.TotalCount(),
+		"every line written before the process exited must be in the list")
+}
+
+// instantExitExecutor writes its lines to the command's stdout and
+// reports process exit right away, without closing the write end —
+// mirroring a real child that exits while the parent still holds its
+// copy of the pipe and the reader has not yet drained the buffer.
+type instantExitExecutor struct {
+	lines int
+}
+
+func (e *instantExitExecutor) Start(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	var buf bytes.Buffer
+	for i := range e.lines {
+		fmt.Fprintf(&buf, "entry-%03d:1\n", i)
+	}
+	if _, err := cmd.Stdout.Write(buf.Bytes()); err != nil {
+		return 0, err
+	}
+	ch := cmd.Watcher.WatchProcess()
+	go debug.CapturePanicReport(func() { ch <- nil })
+	return 1, nil
+}
+
+func (e *instantExitExecutor) Signal(workspaceapi.Pid, syscall.Signal) error {
+	return nil
+}
+
+func (e *instantExitExecutor) Close() error { return nil }
 
 // --- stubs ----------------------------------------------------------------
 

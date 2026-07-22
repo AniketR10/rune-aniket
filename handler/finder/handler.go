@@ -218,7 +218,7 @@ type fuzzyFinderHandler struct {
 }
 
 func (h *fuzzyFinderHandler) execCommand(ctx context.Context, command string) (
-	*os.File, *os.File, workspaceapi.Pid, error,
+	*os.File, *os.File, func(), workspaceapi.Pid, error,
 ) {
 	shell := os.Getenv("SHELL")
 	if len(shell) == 0 {
@@ -262,37 +262,49 @@ func (h *fuzzyFinderHandler) DrainList() {
 
 func (h *fuzzyFinderHandler) execCommandWith(
 	ctx context.Context, shell string, commandStr string,
-) (*os.File, *os.File, workspaceapi.Pid, error) {
+) (*os.File, *os.File, func(), workspaceapi.Pid, error) {
 	cmd := workspaceapi.Cmd{
 		Path:    shell,
 		Args:    []string{"-c", commandStr},
 		Watcher: h,
 	}
-	stderr, stdout, err := h.setPipes(&cmd)
+	stderr, stdout, closeWrites, err := h.setPipes(&cmd)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	pid, err := h.executor.Start(ctx, cmd)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("failed to create command: %w", err)
+		closeWrites()
+		_ = stdout.Close()
+		_ = stderr.Close()
+		return nil, nil, nil, 0, fmt.Errorf("failed to create command: %w", err)
 	}
-	return stderr, stdout, pid, nil
+	return stderr, stdout, closeWrites, pid, nil
 }
 
 func (h *fuzzyFinderHandler) setPipes(
 	cmd *workspaceapi.Cmd,
-) (stderr, stdout *os.File, err error) {
+) (stderr, stdout *os.File, closeWrites func(), err error) {
 	stdout, stdoutWrite, err := os.Pipe()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	stderr, stderrWrite, err := os.Pipe()
 	if err != nil {
-		return nil, nil, err
+		_ = stdout.Close()
+		_ = stdoutWrite.Close()
+		return nil, nil, nil, err
 	}
 	cmd.Stdout = stdoutWrite
 	cmd.Stderr = stderrWrite
-	return stderr, stdout, nil
+	// The write ends must be closed once the child exits: the child
+	// only holds duplicates, so EOF never reaches the readers while
+	// our copies stay open.
+	closeWrites = func() {
+		_ = stdoutWrite.Close()
+		_ = stderrWrite.Close()
+	}
+	return stderr, stdout, closeWrites, nil
 }
 
 func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader, cancelScan func()) {
@@ -463,7 +475,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	log.Debugf("using resource list command: %s", h.cmdStr)
 
-	stderr, stdout, exec, err := h.execCommand(ctx, h.cmdStr)
+	stderr, stdout, closeWrites, exec, err := h.execCommand(ctx, h.cmdStr)
 	if err != nil {
 		log.Debugf("fallback to scan data via workspace API: %v", err)
 		h.scanDataViaWorkspaceAPI(ctx, datachan, cancelScan)
@@ -474,7 +486,9 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.pid = exec
 	h.mu.Unlock()
 
+	readerDone := make(chan struct{})
 	go debug.CapturePanicReport(func() {
+		defer close(readerDone)
 		h.readCommand(ctx, datachan, stdout, cancelScan)
 	})
 	go debug.CapturePanicReport(func() {
@@ -488,6 +502,13 @@ func (h *fuzzyFinderHandler) scanData() {
 	log.Debugf("waiting for command to be done")
 	err = <-h.waitChan
 	log.Debugf("command is done: %v", err)
+
+	// The child exited, but its final output may still be buffered
+	// in the pipe. Close our write ends so the reader sees EOF after
+	// the tail, then join it: a closed scanDone promises that every
+	// line has been handed to the list consumer (see ScanWaiter).
+	closeWrites()
+	<-readerDone
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
