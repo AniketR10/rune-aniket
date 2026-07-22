@@ -184,6 +184,20 @@ func TestExternalEditorOpensMissingFile(t *testing.T) {
 			cfg := text.DefaultConfig()
 			cfg.ScheduleNextTick = inline
 			cfg.StreamingOpen = streaming
+			// The streaming path defers its missing-file sync
+			// fallback to a scheduled tick; queue ticks so they
+			// run serialized on this goroutine, like the real
+			// event loop.
+			var pending []func()
+			if streaming {
+				var mu sync.Mutex
+				cfg.ScheduleNextTick = func(fn func()) bool {
+					mu.Lock()
+					pending = append(pending, fn)
+					mu.Unlock()
+					return true
+				}
+			}
 			c, err := text.NewComponent(ed, ws, cfg)
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = c.Close() })
@@ -195,6 +209,17 @@ func TestExternalEditorOpensMissingFile(t *testing.T) {
 			h, err := c.OpenFileTab(fileURI, false)
 			require.NoError(t, err)
 			require.NotNil(t, h)
+			if streaming {
+				c.WaitStreamingLoads()
+				for len(pending) > 0 {
+					fn := pending[0]
+					pending = pending[1:]
+					fn()
+				}
+				_, err = c.Editor(fileURI)
+				require.NoError(t, err,
+					"missing-file fallback must open a writable mirror tab")
+			}
 		})
 	}
 }

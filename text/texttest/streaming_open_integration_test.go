@@ -25,7 +25,6 @@ package texttest_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -116,18 +115,33 @@ func TestStreamingOpenReplacesHandlerAfterLoad(t *testing.T) {
 
 // TestStreamingOpenReadOnlyMissingFileErrors verifies that opening a
 // missing file with readOnly=true through the streaming path surfaces
-// the missing-file error to the caller (no empty-buffer fallback).
+// the missing-file error (no empty-buffer fallback). The open runs
+// asynchronously on the load worker, so the error arrives as a
+// notification and the placeholder tab is removed instead of the
+// error returning from OpenFileTab.
 func TestStreamingOpenReadOnlyMissingFileErrors(t *testing.T) {
-	c, wsURI := newStreamingComponent(t)
+	c, wsURI, sched, noti := newStreamingComponentWithScheduler(t)
 
-	// readOnly=true so workspace.Load surfaces the missing-file
-	// error instead of silently creating an empty file.
+	// readOnly=true so the missing file must error instead of
+	// silently creating an empty buffer.
 	fileURI, err := workspaceapi.ParseURI(
 		"file://" + filepath.Join(wsURI.Path(), "nope.txt"))
 	require.NoError(t, err)
 
-	_, err = c.OpenFileTab(fileURI, true)
-	require.Error(t, err)
+	h, err := c.OpenFileTab(fileURI, true)
+	require.NoError(t, err,
+		"OpenFileTab must not block on nor surface the async open error")
+	require.NotNil(t, h)
+
+	c.WaitStreamingLoads()
+	sched.drain()
+
+	_, err = c.Editor(fileURI)
+	require.Error(t, err,
+		"placeholder tab must be removed after the failed open")
+	msgs := noti.snapshot()
+	require.NotEmpty(t, msgs, "the open error must surface as a notification")
+	assert.Contains(t, msgs[len(msgs)-1], "nope.txt")
 }
 
 // TestStreamingOpenCreatesEmptyBufferForMissingFile verifies that
@@ -136,7 +150,7 @@ func TestStreamingOpenReadOnlyMissingFileErrors(t *testing.T) {
 // path's "new file" behaviour) and that flushing materializes the
 // file on disk. Regression test for RUNE-207.
 func TestStreamingOpenCreatesEmptyBufferForMissingFile(t *testing.T) {
-	c, wsURI := newStreamingComponent(t)
+	c, wsURI, sched, _ := newStreamingComponentWithScheduler(t)
 
 	fpath := filepath.Join(wsURI.Path(), "new.txt")
 	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
@@ -147,6 +161,7 @@ func TestStreamingOpenCreatesEmptyBufferForMissingFile(t *testing.T) {
 	require.NotNil(t, h)
 
 	c.WaitStreamingLoads()
+	sched.drain()
 
 	ed, err := c.Editor(fileURI)
 	require.NoError(t, err,
@@ -166,12 +181,13 @@ func TestStreamingOpenCreatesEmptyBufferForMissingFile(t *testing.T) {
 // surfaces the permission error rather than blocking the UI on a
 // synchronous fallback that would also fail. The streaming pre-read
 // already uses O_RDONLY, so no read-only demotion can rescue the
-// open; the only safe answer is to report the error.
+// open; the only safe answer is to report the error. The open runs
+// asynchronously, so the error surfaces as a notification.
 func TestStreamingOpenSurfacesPermissionError(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses file permission checks")
 	}
-	c, wsURI := newStreamingComponent(t)
+	c, wsURI, sched, noti := newStreamingComponentWithScheduler(t)
 
 	fpath := filepath.Join(wsURI.Path(), "denied.txt")
 	writeNLines(t, fpath, 3)
@@ -181,10 +197,24 @@ func TestStreamingOpenSurfacesPermissionError(t *testing.T) {
 	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
 	require.NoError(t, err)
 
-	_, err = c.OpenFileTab(fileURI, false)
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, os.ErrPermission),
-		"expected permission error, got: %v", err)
+	h, err := c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+
+	c.WaitStreamingLoads()
+	sched.drain()
+
+	_, err = c.Editor(fileURI)
+	require.Error(t, err,
+		"placeholder tab must be removed after the failed open")
+	var found bool
+	for _, msg := range noti.snapshot() {
+		if strings.Contains(msg, "permission denied") {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"expected a permission-denied notification, got: %v", noti.snapshot())
 }
 
 // TestSyncOpenCreatesEmptyBufferForMissingFile is the sync-path
@@ -789,6 +819,83 @@ func TestStreamingOpenBuildsEditorOnScheduler(t *testing.T) {
 	require.Equal(t, lastRun, editGoID,
 		"buildEditorHandler.Edit must run on the scheduler goroutine, "+
 			"not the load worker")
+}
+
+// blockingOpenWorkspace wraps a real text.Workspace and blocks the
+// first OpenFile call until release is closed. It simulates an
+// unresponsive remote (ssh) workspace whose OpenFile RPC hangs.
+type blockingOpenWorkspace struct {
+	text.Workspace
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (w *blockingOpenWorkspace) OpenFile(
+	p string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	w.once.Do(func() { close(w.entered) })
+	<-w.release
+	return w.Workspace.OpenFile(p, flag, perm)
+}
+
+// TestStreamingOpenDoesNotBlockOnFileOpen pins the event-loop-freeze
+// fix: OpenFileTab must return while the streaming pre-read's
+// OpenFile is still blocked (previously streamload.New ran the open
+// synchronously on the event loop, hanging the UI when the remote
+// workspace was unresponsive). Against the old code this test hangs
+// in OpenFileTab. After releasing the open, the load completes and
+// the tab swaps to the real editor handler.
+func TestStreamingOpenDoesNotBlockOnFileOpen(t *testing.T) {
+	dir := t.TempDir()
+	wsURI, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), wsURI)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	realWS := workspace.NewSchemeWorkspace(wsURI, scheme, inlineSchedule)
+	ws := &blockingOpenWorkspace{
+		Workspace: realWS,
+		entered:   make(chan struct{}),
+		release:   make(chan struct{}),
+	}
+
+	sched := &queuedScheduler{}
+	cfg := text.DefaultConfig()
+	cfg.ScheduleNextTick = sched.Schedule
+	cfg.StreamingOpen = true
+	c, err := text.NewComponent(texttest.NopEditor(), ws, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+
+	fpath := filepath.Join(dir, "slow.txt")
+	writeNLines(t, fpath, 5)
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	h, err := c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+
+	// The load worker is (or will shortly be) parked inside the
+	// blocked OpenFile; the event loop (this goroutine) is free.
+	<-ws.entered
+	ed, err := c.Editor(fileURI)
+	require.NoError(t, err,
+		"the placeholder tab must expose a text.Handler while the open is blocked")
+	require.NotNil(t, ed)
+
+	close(ws.release)
+	c.WaitStreamingLoads()
+	sched.drain()
+
+	ed, err = c.Editor(fileURI)
+	require.NoError(t, err)
+	assert.Positive(t, ed.CellView().Rows(),
+		"the swapped-in editor must expose the loaded file content")
 }
 
 // currentGoID returns a unique-per-goroutine integer derived from

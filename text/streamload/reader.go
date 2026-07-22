@@ -70,6 +70,17 @@ func newPageReader(r walkdir.Reader, path string) (*pageReader, error) {
 	return pr, nil
 }
 
+// ready reports whether the underlying file is usable without
+// blocking. Files opened through asyncOpenReader report false while
+// their deferred open is in flight; reading them earlier would
+// block on the open.
+func (r *pageReader) ready() bool {
+	if rf, ok := r.file.(interface{ Ready() bool }); ok {
+		return rf.Ready()
+	}
+	return true
+}
+
 // readLines pulls up to n lines from the scanner and returns them
 // joined by '\n' followed by a trailing '\n' if at least one line was
 // read. The boolean reports whether any content was read; false means

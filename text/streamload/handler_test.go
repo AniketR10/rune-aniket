@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,6 +92,14 @@ func writeLines(tb testing.TB, dir string, name string, nLines int) workspaceapi
 	return u
 }
 
+// prime waits for the handler's deferred open to complete and
+// performs the initial read, mirroring what the first Draw does in
+// production once the spinner triggers a redraw.
+func prime(tb testing.TB, h *Handler) {
+	tb.Helper()
+	require.Eventually(tb, h.primeInitial, 5*time.Second, time.Millisecond)
+}
+
 func TestHandlerCloseIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	uri := writeLines(t, dir, "a.txt", 3)
@@ -98,20 +107,30 @@ func TestHandlerCloseIsIdempotent(t *testing.T) {
 
 	h, err := New(r, uri, Config{})
 	require.NoError(t, err)
+	prime(t, h)
 
 	require.NoError(t, h.Close())
 	require.NoError(t, h.Close(), "Close must be idempotent")
 	assert.True(t, h.atEOF(), "Close should leave handler at EOF")
 }
 
-func TestHandlerOpenMissingFileReturnsError(t *testing.T) {
+// TestHandlerMissingFileReadsEmpty documents that a failed open is
+// indistinguishable from an empty file at the streamload layer: the
+// placeholder renders empty and the parallel workspace load owns
+// error reporting (see text.Component.openFileTabStreaming).
+func TestHandlerMissingFileReadsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	r := newFSReader(dir)
 	uri, err := workspaceapi.ParseURI("file://" + filepath.Join(dir, "missing.txt"))
 	require.NoError(t, err)
 
-	_, err = New(r, uri, Config{})
-	require.Error(t, err)
+	h, err := New(r, uri, Config{})
+	require.NoError(t, err,
+		"the open is deferred, so a missing file must not fail New")
+	t.Cleanup(func() { _ = h.Close() })
+	prime(t, h)
+	assert.True(t, h.atEOF())
+	assert.Zero(t, h.buf.View().Rows()-1, "placeholder must stay empty")
 }
 
 func TestHandlerNilReader(t *testing.T) {
@@ -121,6 +140,97 @@ func TestHandlerNilReader(t *testing.T) {
 		"streamload: nil walkdir.Reader",
 		func() { _, _ = New(nil, uri, Config{}) },
 		"passing a nil reader is a programmer error and must panic")
+}
+
+// blockingReader is a walkdir.Reader whose OpenFile blocks until the
+// test closes release. It records whether OpenFile was ever entered
+// so tests can prove New performs no I/O.
+type blockingReader struct {
+	fsReader
+	entered chan struct{}
+	release chan struct{}
+}
+
+func newBlockingReader(root string) *blockingReader {
+	return &blockingReader{
+		fsReader: fsReader{root: root},
+		entered:  make(chan struct{}),
+		release:  make(chan struct{}),
+	}
+}
+
+func (r *blockingReader) OpenFile(
+	p string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	close(r.entered)
+	<-r.release
+	return r.fsReader.OpenFile(p, flag, perm)
+}
+
+// TestHandlerNewDoesNotBlockOnOpen pins the event-loop-freeze fix:
+// New must return while the (asynchronously started) OpenFile RPC is
+// still blocked, and Handle/Draw stay non-blocking (paging is gated)
+// until the deferred open completes.
+func TestHandlerNewDoesNotBlockOnOpen(t *testing.T) {
+	dir := t.TempDir()
+	uri := writeLines(t, dir, "a.txt", 5)
+	r := newBlockingReader(dir)
+
+	h, err := New(r, uri, Config{InitialPages: 1, PageRows: 2})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	// New returned with the open still parked in OpenFile.
+	<-r.entered
+
+	// Events arriving during the open window must not block on it.
+	_, _ = h.Handle(term.Event{})
+	require.False(t, h.primeInitial(),
+		"paging must stay gated while the open is in flight")
+
+	close(r.release)
+	prime(t, h)
+	assert.False(t, h.atEOF())
+}
+
+// TestHandlerUsableBeforeOpenCompletes asserts that a freshly built
+// handler renders an empty frame and survives Resize/Handle (which
+// must not reach the still-opening file), and that the first prime
+// after the open completes reveals the first page.
+func TestHandlerUsableBeforeOpenCompletes(t *testing.T) {
+	const (
+		width  = 10
+		height = 4
+	)
+	dir := t.TempDir()
+	uri := writeLines(t, dir, "f.txt", 10)
+	r := newBlockingReader(dir)
+	h, err := New(r, uri, Config{InitialPages: 2, Overscan: 1, PageRows: 2})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	// Scrolling before the open completes must neither panic nor block on the
+	// unreleased open.
+	handlertest.RunHandlerSequence(t, h, width, height,
+		[]handlertest.SequenceTestCase{{
+			InputSequence: "jjG",
+			Expected: "" +
+				"          \n" +
+				"          \n" +
+				"          \n" +
+				"          ",
+		}})
+
+	close(r.release)
+	prime(t, h)
+	handlertest.RunHandlerSequence(t, h, width, height,
+		[]handlertest.SequenceTestCase{{
+			InputSequence: "g",
+			Expected: "" +
+				"line0     \n" +
+				"line1     \n" +
+				"line2     \n" +
+				"          ",
+		}})
 }
 
 // TestHandlerLifecycle drives the streaming handler through its
@@ -282,6 +392,7 @@ func TestHandlerLifecycle(t *testing.T) {
 			r := newFSReader(dir)
 			h, err := New(r, uri, tc.cfg)
 			require.NoError(t, err)
+			prime(t, h)
 			t.Cleanup(func() { _ = h.Close() })
 
 			handlertest.RunHandlerSequence(t, h, width, height, tc.cases)
@@ -304,9 +415,11 @@ func TestHandlerLifecyclePagingAcrossLazyReads(t *testing.T) {
 	r := newFSReader(dir)
 	h, err := New(r, uri, Config{InitialPages: 2, Overscan: 1, PageRows: 2})
 	require.NoError(t, err)
+	prime(t, h)
 	t.Cleanup(func() { _ = h.Close() })
 
-	// Before any input, OpenFile has been called exactly once by New.
+	// Before any input, OpenFile has been called exactly once, by
+	// the deferred open the priming read waited on.
 	require.Equal(t, int32(1), r.opens.Load())
 
 	handlertest.RunHandlerSequence(t, h, width, height, []handlertest.SequenceTestCase{
@@ -358,10 +471,10 @@ func TestHandlerSingleGoroutineContract(t *testing.T) {
 
 	h, err := New(r, uri, Config{})
 	require.NoError(t, err)
+	prime(t, h)
 
 	for range 100 {
 		_, _ = h.Handle(term.Event{})
 	}
 	require.NoError(t, h.Close())
 }
-

@@ -50,9 +50,9 @@ var (
 // Config tunes paging behaviour. Zero values fall back to package
 // defaults that work well for typical source files.
 type Config struct {
-	// InitialPages is the number of pages of content read
-	// synchronously inside New so the user sees something
-	// immediately. Defaults to 2.
+	// InitialPages is the number of pages of content pre-read by
+	// ReadInitial so the user sees something immediately once
+	// InstallInitial runs. Defaults to 2.
 	InitialPages int
 	// Overscan is the number of pages of look-ahead the handler keeps
 	// loaded ahead of the bottom of the viewport. When the viewport
@@ -88,42 +88,20 @@ func (c Config) withDefaults() Config {
 // contents off disk lazily as the user scrolls. It satisfies
 // browserapi.Handler and component.Scrollable so it can be installed
 // as a browser.Tab's content and host a scrollbar.
-//
-// Reads happen synchronously inside Handle: when the user scrolls
-// near the end of the loaded content, the handler reads another page
-// from the underlying File. Single-page reads against any workspace
-// scheme (including ssh) are O(ms); blocking the event loop briefly
-// is preferable to the cost and complexity of a worker pump.
-//
-// Handler deliberately does NOT satisfy text.Handler. Tabs whose
-// handler is a text.Handler are expected to have had EventTypeOpen
-// dispatched at construction time (see text/component.go). The
-// streaming handler is transient — text.Component swaps it out for a
-// real text.Handler when the parallel workspace.Workspace.Load
-// completes — and dispatching EventTypeOpen for it would route LSP /
-// extension / syntax-tree consumers through a half-populated buffer.
 type Handler struct {
-	uri  workspaceapi.URI
-	buf  *cell.Buffer
-	less handler.Less
-	pr   *pageReader
-	cfg  Config
-
-	// height is the last Resize height. Stored so Handle can size
-	// future page reads to match the viewport.
-	height int
-
-	// width is the last Resize width. Stored alongside height so
-	// text.Component can resize the swapped-in real handler to
-	// match the streaming tab before the next Draw.
-	width int
-
+	uri       workspaceapi.URI
+	buf       *cell.Buffer
+	less      handler.Less
+	pr        *pageReader
+	cfg       Config
+	height    int
+	width     int
+	primed    bool
 	closeOnce sync.Once
 }
 
-// New opens path on reader and reads the first cfg.InitialPages
-// worth of lines into a fresh in-memory buffer. The handler is
-// immediately usable as a browser.Tab content.
+// New opens path on reader and prepares to read the first
+// cfg.InitialPages worth of lines into a fresh in-memory buffer.
 func New(
 	reader walkdir.Reader, uri workspaceapi.URI, cfg Config,
 ) (*Handler, error) {
@@ -131,31 +109,40 @@ func New(
 		panic("streamload: nil walkdir.Reader")
 	}
 	cfg = cfg.withDefaults()
-	pr, err := newPageReader(reader, uri.Path())
+	pr, err := newPageReader(asyncOpenReader{r: reader}, uri.Path())
 	if err != nil {
+		// Unreachable today — asyncOpenReader.OpenFile never fails
+		// synchronously — but kept in the contract so the deferred
+		// open can be made synchronous again behind a flag.
 		return nil, err
 	}
 	h := &Handler{
-		uri:         uri,
-		buf:         cell.NewBuffer(),
-		pr:          pr,
-		cfg:         cfg,
-		height:      cfg.PageRows,
-	}
-	if _, err := h.readMore(cfg.InitialPages * cfg.PageRows); err != nil {
-		_ = pr.Close()
-		return nil, err
+		uri:    uri,
+		buf:    cell.NewBuffer(),
+		pr:     pr,
+		cfg:    cfg,
+		height: cfg.PageRows,
 	}
 	h.less.InitWithBuffer(h.buf, cfg.LessConfig)
 	return h, nil
 }
 
+func (h *Handler) primeInitial() bool {
+	if h.primed {
+		return true
+	}
+	if !h.pr.ready() {
+		return false
+	}
+	h.primed = true
+	_, _ = h.readMore(h.cfg.InitialPages * h.cfg.PageRows)
+	return true
+}
+
 // URI returns the URI of the file backing this handler.
 func (h *Handler) URI() workspaceapi.URI { return h.uri }
 
-// Close releases the underlying file. Safe to call multiple times.
-// The underlying pageReader is documented single-goroutine; callers
-// must serialize Close against Handle.
+// Close releases the underlying file. Safe to call multiple times,
 func (h *Handler) Close() error {
 	h.closeOnce.Do(func() {
 		_ = h.pr.Close()
@@ -175,22 +162,18 @@ func (h *Handler) Resize(width, height int) {
 }
 
 // Dimensions returns the most recent width and height passed to
-// Resize. Used by text.Component on the swap-in path to size the
-// real editor handler to match the streaming tab before its first
-// Draw.
+// Resize.
 func (h *Handler) Dimensions() (width, height int) {
 	return h.width, h.height
 }
 
 // Draw satisfies tui.Component.
-func (h *Handler) Draw(w term.Writer) { h.less.Draw(w) }
+func (h *Handler) Draw(w term.Writer) {
+	h.primeInitial()
+	h.less.Draw(w)
+}
 
-// Cursor satisfies tui.Handler. The streaming handler is a
-// read-only viewer, so the normal-mode cursor is suppressed —
-// otherwise handler.Less.Cursor would overlay a block on the
-// bottom row of the viewport. The cursor is only surfaced while
-// the / search command bar is open, where it marks the user's
-// caret in the search input.
+// Cursor satisfies tui.Handler.
 func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if h.less.Mode() != handler.LessSearchMode {
 		return term.Coordinates{}, term.CursorStyleDefault, false
@@ -201,10 +184,7 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Selection satisfies tui.Handler.
 func (h *Handler) Selection() (string, bool) { return h.less.Selection() }
 
-// Handle satisfies tui.Handler. After the inner Less handler
-// processes the event, Handle checks whether the viewport has
-// scrolled near the bottom of the loaded content and, if so,
-// synchronously reads another page from the underlying file.
+// Handle satisfies tui.Handler.
 func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = h.less.Handle(ev)
 	h.maybeReadMore()
@@ -228,18 +208,11 @@ func (h *Handler) SeekOffset() int { return h.less.Scroll().SeekOffset() }
 func (h *Handler) MaxSeekOffset() int { return h.less.Scroll().MaxSeekOffset() }
 
 // InSearchMode reports whether the inner less handler is currently
-// consuming keystrokes for its `/` search prompt. Used by the
-// deferred text.Handler wrapper installed on streaming tabs so
-// outer handlers can honour text.Handler.IsSearchMode while the
-// streaming load is still in flight.
+// consuming keystrokes for its `/` search prompt.
 func (h *Handler) InSearchMode() bool {
 	return h.less.Mode() == handler.LessSearchMode
 }
 
-// pageSize returns the current effective page height. We use the
-// last-known viewport height as the page size so a single readMore
-// covers exactly one screen of content; fall back to the configured
-// PageRows before the first Resize lands.
 func (h *Handler) pageSize() int {
 	if h.height > 0 {
 		return h.height
@@ -247,10 +220,8 @@ func (h *Handler) pageSize() int {
 	return h.cfg.PageRows
 }
 
-// maybeReadMore reads another page if the viewport bottom is within
-// Overscan*pageSize rows of the last-loaded row.
 func (h *Handler) maybeReadMore() {
-	if h.pr == nil || h.pr.atEOF() {
+	if !h.primeInitial() || h.pr.atEOF() {
 		return
 	}
 	pageSize := h.pageSize()
@@ -264,10 +235,8 @@ func (h *Handler) maybeReadMore() {
 	}
 }
 
-// readMore reads up to n lines from the underlying file and appends
-// them to the buffer. Returns the number of rows added and any error.
 func (h *Handler) readMore(n int) (int, error) {
-	if h.pr == nil || h.pr.atEOF() || n <= 0 {
+	if h.pr.atEOF() || n <= 0 {
 		return 0, nil
 	}
 	before := h.buf.View().Rows()
@@ -280,5 +249,5 @@ func (h *Handler) readMore(n int) (int, error) {
 }
 
 func (h *Handler) atEOF() bool {
-	return h.pr == nil || h.pr.atEOF()
+	return h.pr.atEOF()
 }
