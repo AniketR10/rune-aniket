@@ -309,7 +309,9 @@ func TestE2E_Rust_Launch(t *testing.T) {
 
 	outPath := h.outputPath(t)
 	require.NotEmpty(t, outPath, "output capture file path")
+	milestoneStart := h.milestoneCount()
 	h.continueUntilExit(t, threadID, 30*time.Second)
+	h.waitMilestoneAfter(t, milestoneStart, "debuggee exited", 30*time.Second)
 	_, _ = h.run(ctx, subTerminate)
 
 	data, err := os.ReadFile(outPath)

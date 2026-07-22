@@ -532,6 +532,7 @@ type e2eHarness struct {
 	mu         sync.Mutex
 	milestones []milestone
 	cond       *sync.Cond
+	closed     bool
 }
 
 type milestone struct {
@@ -597,6 +598,9 @@ func newE2EHarness(t *testing.T, dlvBin, dir string) *e2eHarness {
 }
 
 func (h *e2eHarness) close() {
+	h.mu.Lock()
+	h.closed = true
+	h.mu.Unlock()
 	_ = h.mgr.Close()
 	_ = h.scheme.Close()
 	h.cancel()
@@ -610,9 +614,12 @@ func (h *e2eHarness) notify(
 		formatted = sprintf(msg, args...)
 	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
 	h.milestones = append(h.milestones, milestone{level, formatted})
 	h.cond.Broadcast()
-	h.mu.Unlock()
 	h.t.Logf("milestone: %s", formatted)
 }
 
@@ -621,11 +628,17 @@ func (h *e2eHarness) notify(
 func (h *e2eHarness) waitMilestone(
 	t *testing.T, substr string, timeout time.Duration,
 ) {
+	h.waitMilestoneAfter(t, 0, substr, timeout)
+}
+
+func (h *e2eHarness) waitMilestoneAfter(
+	t *testing.T, start int, substr string, timeout time.Duration,
+) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	seen := 0
+	seen := start
 	for {
 		for i := seen; i < len(h.milestones); i++ {
 			if containsString(h.milestones[i].msg, substr) {
@@ -712,48 +725,98 @@ func (h *e2eHarness) stackTrace(t *testing.T, threadID int) []dap.StackFrame {
 	return resp.StackFrames
 }
 
-// continueUntilExit drains breakpoint hits by repeatedly
-// continuing until the debuggee terminates or exits. Returns
-// once the "terminated" or "exited" milestone is observed.
+func TestWaitStoppedOrCompleted(t *testing.T) {
+	tests := []struct {
+		name          string
+		milestones    []milestone
+		start         int
+		wantCompleted bool
+		wantOK        bool
+	}{
+		{
+			name:       "stopped",
+			milestones: []milestone{{msg: "debugger: stopped (breakpoint) on thread 1"}},
+			wantOK:     true,
+		},
+		{
+			name:          "debuggee exited",
+			milestones:    []milestone{{msg: "debugger: debuggee exited (code 0)"}},
+			wantCompleted: true,
+			wantOK:        true,
+		},
+		{
+			name:          "terminated fallback",
+			milestones:    []milestone{{msg: "debugger: terminated"}},
+			wantCompleted: true,
+			wantOK:        true,
+		},
+		{
+			name:       "prior exit is ignored",
+			milestones: []milestone{{msg: "debugger: debuggee exited (code 0)"}},
+			start:      1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &e2eHarness{milestones: tt.milestones}
+			h.cond = sync.NewCond(&h.mu)
+
+			completed, ok := h.waitStoppedOrCompleted(tt.start, 0)
+			assert.Equal(t, tt.wantCompleted, completed)
+			assert.Equal(t, tt.wantOK, ok)
+		})
+	}
+}
+
 func (h *e2eHarness) continueUntilExit(
 	t *testing.T, threadID int, timeout time.Duration,
 ) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		milestoneStart := h.milestoneCount()
 		_, err := h.run(h.ctx, subContinue, strconv.Itoa(threadID))
-		if err != nil {
-			// Session may have ended; that's the goal.
-			return
+		require.NoError(t, err)
+
+		completed, ok := h.waitStoppedOrCompleted(milestoneStart, time.Until(deadline))
+		if !ok {
+			break
 		}
-		// Wait briefly for either another stop or terminated.
-		if h.waitTerminatedOrStop(50 * time.Millisecond) {
+		if completed {
 			return
 		}
 	}
 	t.Fatalf("debuggee did not exit within %s", timeout)
 }
 
-// waitTerminatedOrStop returns true if a "terminated" or
-// "exited" milestone is observed within d. Returns false on
-// timeout (a stop within d also returns false so the caller
-// can continue past it).
-func (h *e2eHarness) waitTerminatedOrStop(d time.Duration) bool {
+func (h *e2eHarness) milestoneCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.milestones)
+}
+
+func (h *e2eHarness) waitStoppedOrCompleted(
+	start int, d time.Duration,
+) (completed, ok bool) {
 	deadline := time.Now().Add(d)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	seen := 0
+	seen := start
 	for {
 		for i := seen; i < len(h.milestones); i++ {
 			m := h.milestones[i]
-			if containsString(m.msg, "terminated") ||
-				containsString(m.msg, "exited") {
-				return true
+			if containsString(m.msg, "debuggee exited") ||
+				containsString(m.msg, "terminated") {
+				return true, true
+			}
+			if containsString(m.msg, "stopped") {
+				return false, true
 			}
 		}
 		seen = len(h.milestones)
 		if !time.Now().Before(deadline) {
-			return false
+			return false, false
 		}
 		done := make(chan struct{})
 		go func() {
