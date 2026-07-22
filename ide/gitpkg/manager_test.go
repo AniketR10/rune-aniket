@@ -430,6 +430,68 @@ func TestGet(t *testing.T) {
 			release.Latest, &bufferProgressWriter{})
 		require.ErrorContains(t, err, "main.go")
 	})
+	t.Run("stdlib go package directory installs without go.sum", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{
+				"config.yaml": {content: cfg},
+				"go.mod":      {content: "module demo\n\ngo 1.22\n"},
+				"main.go":     {content: "package main\n\nfunc main() {}\n"},
+			})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.NoError(t, err)
+	})
+	t.Run("go package directory with requires and go.sum installs", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID\n"
+		goMod := "module demo\n\ngo 1.22\n\nrequire example.com/dep v1.0.0\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{
+				"config.yaml": {content: cfg},
+				"go.mod":      {content: goMod},
+				"go.sum":      {content: "example.com/dep v1.0.0 h1:abc=\n"},
+				"main.go":     {content: "package main\n\nfunc main() {}\n"},
+			})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.NoError(t, err)
+	})
+	t.Run("go package directory with requires but no go.sum errors", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID\n"
+		goMod := "module demo\n\ngo 1.22\n\nrequire example.com/dep v1.0.0\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{
+				"config.yaml": {content: cfg},
+				"go.mod":      {content: goMod},
+				"main.go":     {content: "package main\n\nfunc main() {}\n"},
+			})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "go.sum")
+	})
+	t.Run("go package directory without go.mod errors", func(t *testing.T) {
+		base := t.TempDir()
+		cfg := "extensions:\n  demo:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID\n"
+		initFixtureRepo(t, filepath.Join(base, "github.com", "owner", "repo"),
+			map[string]fixtureFile{
+				"config.yaml": {content: cfg},
+				"main.go":     {content: "package main\n\nfunc main() {}\n"},
+			})
+		m := newFixtureManager(t, base)
+
+		_, err := m.Get(context.Background(), "github.com/owner/repo",
+			release.Latest, &bufferProgressWriter{})
+		require.ErrorContains(t, err, "source entrypoint")
+	})
 	t.Run("invalid requirements errors", func(t *testing.T) {
 		base := t.TempDir()
 		cfg := "extensions:\n  demo:\n    path: main.py\nrequirements: python\n"

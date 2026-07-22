@@ -412,6 +412,16 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 	require.NoError(t, os.WriteFile(rustMain, []byte("fn main() {}\n"), 0o644))
 	orphanRs := filepath.Join(t.TempDir(), "main.rs")
 
+	// A Go package-directory entrypoint points at the main package dir;
+	// the runner recognizes it as Go when the directory has a go.mod.
+	goPkgDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(goPkgDir, "go.mod"), []byte("module ext\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(goPkgDir, "main.go"),
+		[]byte("package main\n\nfunc main() {}\n"), 0o644))
+	plainDir := t.TempDir()
+
 	tests := []struct {
 		name       string
 		cmdAndArgs string
@@ -463,6 +473,23 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 			name:       "go package missing",
 			cmdAndArgs: "/opt/ext/main.go",
 			wantErr:    "pkg install go",
+		},
+		{
+			name:       "go package directory runs whole package",
+			cmdAndArgs: goPkgDir + " --flag",
+			bin:        "go",
+			wantArgs:   []string{"-C", goPkgDir, "run", ".", "--flag"},
+		},
+		{
+			name:       "go package directory missing package",
+			cmdAndArgs: goPkgDir,
+			wantErr:    "pkg install go",
+		},
+		{
+			name:       "directory without go.mod unchanged",
+			cmdAndArgs: plainDir + " --flag",
+			wantPath:   plainDir,
+			wantArgs:   []string{"--flag"},
 		},
 		{
 			name:       "rust entrypoint runs via cargo manifest",

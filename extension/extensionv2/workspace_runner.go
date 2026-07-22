@@ -359,6 +359,10 @@ func (m *workspaceRunner) sourceEntrypointArgv(
 	extensionID string, argv []string,
 ) ([]string, error) {
 	var pkg string
+	// goPackageDir is set when the entrypoint points at a Go package
+	// directory rather than a source file; the toolchain then runs the
+	// whole main package from that directory.
+	var goPackageDir string
 	switch filepath.Ext(argv[0]) {
 	case ".py":
 		pkg = "python"
@@ -367,7 +371,26 @@ func (m *workspaceRunner) sourceEntrypointArgv(
 	case ".rs":
 		pkg = "rust"
 	default:
-		return argv, nil
+		// A path with no recognized source extension may still be a Go
+		// package directory (the entrypoint pointing at the main
+		// package dir so go run picks up all its files). Otherwise it
+		// is a plain command and passes through unchanged.
+		dir, err := workspaceapi.ExpandPath(
+			argv[0], user.Current,
+			func() (string, error) { return "", nil },
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"could not expand extension path %q: %w", argv[0], err)
+		}
+		if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+			return argv, nil
+		}
+		if _, ok := findFileUp(dir, "go.mod"); !ok {
+			return argv, nil
+		}
+		pkg = "go"
+		goPackageDir = dir
 	}
 
 	script, err := workspaceapi.ExpandPath(
@@ -393,14 +416,18 @@ func (m *workspaceRunner) sourceEntrypointArgv(
 		}
 		run = []string{"uv", "run", "--project", filepath.Dir(project), script}
 	case "go":
-		if filepath.Base(script) != "main.go" {
-			return nil, fmt.Errorf(
-				"extension %s: go entrypoint must be a main.go, got %s",
-				extensionID, script)
+		dir := goPackageDir
+		if dir == "" {
+			if filepath.Base(script) != "main.go" {
+				return nil, fmt.Errorf(
+					"extension %s: go entrypoint must be a main.go, got %s",
+					extensionID, script)
+			}
+			dir = filepath.Dir(script)
 		}
-		// -C runs from the entrypoint's directory so go run picks up
-		// the module's go.mod and the main package's sibling files.
-		run = []string{"go", "-C", filepath.Dir(script), "run", "."}
+		// -C runs from the package directory so go run picks up the
+		// module's go.mod and the main package's sibling files.
+		run = []string{"go", "-C", dir, "run", "."}
 	case "rust":
 		manifest, ok := findFileUp(filepath.Dir(script), "Cargo.toml")
 		if !ok {
