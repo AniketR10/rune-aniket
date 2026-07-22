@@ -166,7 +166,7 @@ diff_buf_adjust(win_
 			wg.Add(3)
 			mu.Lock()
 			_, handled := h.Handle(term.Event{Type: term.EventKey,
-				Mod: term.ModAlt, Ch: '.'})
+				Mod: term.ModAlt, Ch: '>'})
 			require.True(t, handled)
 			_, handled = h.Handle(term.Event{Type: term.EventKey,
 				Mod: term.ModCtrl, Ch: 'A'})
@@ -200,7 +200,7 @@ diff_buf_adjust(win_
 			wg.Add(1)
 			mu.Lock()
 			_, handled := h.Handle(term.Event{Type: term.EventKey,
-				Mod: term.ModAlt, Ch: ','})
+				Mod: term.ModAlt, Ch: '<'})
 			require.True(t, handled)
 			_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
 			require.True(t, handled)
