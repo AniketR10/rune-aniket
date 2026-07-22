@@ -52,6 +52,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/gitenv"
 )
 
 // ProgressType describes the kind of progress being reported.
@@ -803,7 +804,7 @@ func runGitCmd(ctx context.Context, exec workspaceapi.Executor,
 		Path:    "git",
 		Args:    args,
 		Dir:     dataPath,
-		Env:     os.Environ(),
+		Env:     gitenv.Environ(),
 		Stdout:  &buf,
 		Stderr:  &buf,
 		Watcher: watcher,

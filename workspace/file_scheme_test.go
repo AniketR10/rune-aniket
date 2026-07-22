@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"os"
 	"os/user"
@@ -765,4 +766,121 @@ func TestReadFileClosesFile(t *testing.T) {
 		_, err := ReadFile(path)
 		require.NoError(t, err, "iteration %d", i)
 	}
+}
+
+// TestFileSchemeCloseDoesNotRaceStartCommand guards StartCommand's
+// fork/exec window against Close force-closing the scheme's tracked
+// files: os/exec reads each std file's fd during StartProcess, and
+// closing the *os.File concurrently is a data race on the fd state
+// (and can hand the child a recycled descriptor). This mirrors the
+// IDE teardown closing a workspace while a VTE warm-up is mid
+// StartCommand.
+//
+// The race only fires when Close's teardown lands inside the
+// unwrap-to-fork window, so the pair runs repeatedly from a common
+// barrier to cover the interleavings deterministically enough for
+// the race detector.
+func TestFileSchemeCloseDoesNotRaceStartCommand(t *testing.T) {
+	dir := t.TempDir()
+	uri, err := makeLocalURI(dir)
+	require.NoError(t, err)
+
+	for i := range 100 {
+		scheme, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		out, err := scheme.OpenFile(
+			filepath.Join(dir, fmt.Sprintf("out-%d.log", i)),
+			os.O_CREATE|os.O_RDWR, 0666)
+		require.NoError(t, err)
+
+		barrier := make(chan struct{})
+		execDone := make(chan struct{})
+		go func() {
+			defer close(execDone)
+			<-barrier
+			// The error is irrelevant: post-close starts may
+			// fail, but they must not race the closing of the
+			// unwrapped files.
+			_, _ = scheme.StartCommand(context.Background(), workspaceapi.Cmd{
+				Path:   "/bin/sh",
+				Args:   []string{"-c", "true"},
+				Stdout: out,
+			})
+		}()
+
+		closeDone := make(chan struct{})
+		go func() {
+			defer close(closeDone)
+			<-barrier
+			_ = scheme.Close()
+		}()
+
+		close(barrier)
+		select {
+		case <-execDone:
+		case <-time.After(10 * time.Second):
+			t.Fatal("StartCommand never returned after scheme close")
+		}
+		select {
+		case <-closeDone:
+		case <-time.After(10 * time.Second):
+			t.Fatal("Close never returned")
+		}
+	}
+}
+
+// TestFileSchemeStartCommandScrubsGitHookEnv guards the executor's
+// base environment against git's per-repository overrides: rune (or
+// its test suite) launched from a git hook inherits GIT_DIR and
+// friends, and forwarding them to workspace commands points every
+// git invocation (vctrl status/diff, console git, git grep) at the
+// hook's repository instead of the workspace. Caller-provided
+// cmd.Env is appended after the base and must still pass through.
+func TestFileSchemeStartCommandScrubsGitHookEnv(t *testing.T) {
+	dir := t.TempDir()
+	uri, err := makeLocalURI(dir)
+	require.NoError(t, err)
+	p, err := newTestFileScheme(uri)
+	require.NoError(t, err)
+	defer p.Close()
+
+	t.Setenv("GIT_DIR", "/hook/.git")
+	t.Setenv("GIT_INDEX_FILE", "/hook/.git/index")
+	t.Setenv("GIT_WORK_TREE", "/hook")
+	t.Setenv("GIT_SSH_COMMAND", "ssh -i key")
+	t.Setenv("HOOK_KEPT_VAR", "kept")
+
+	var out bytes.Buffer
+	watcher := workspaceapi.ChanProcessWatcher(make(chan error, 1))
+	_, err = p.StartCommand(context.Background(), workspaceapi.Cmd{
+		Path:    "sh",
+		Args:    []string{"-c", "env"},
+		Dir:     dir,
+		Env:     []string{"CALLER_VAR=explicit"},
+		Stdout:  &out,
+		Stderr:  &out,
+		Watcher: watcher,
+	})
+	require.NoError(t, err)
+	select {
+	case perr := <-watcher.WatchProcess():
+		require.NoError(t, perr)
+	case <-time.After(10 * time.Second):
+		t.Fatal("command never exited")
+	}
+
+	env := out.String()
+	assert.NotContains(t, env, "GIT_DIR=",
+		"per-repository override must not reach workspace commands")
+	assert.NotContains(t, env, "GIT_INDEX_FILE=",
+		"per-repository override must not reach workspace commands")
+	assert.NotContains(t, env, "GIT_WORK_TREE=",
+		"per-repository override must not reach workspace commands")
+	assert.Contains(t, env, "GIT_SSH_COMMAND=ssh -i key",
+		"user-level git configuration must be preserved")
+	assert.Contains(t, env, "HOOK_KEPT_VAR=kept",
+		"non-git environment must be preserved")
+	assert.Contains(t, env, "CALLER_VAR=explicit",
+		"caller-provided cmd.Env must still pass through")
 }

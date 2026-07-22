@@ -854,6 +854,45 @@ func TestDreamPipelineGitIntegration(t *testing.T) {
 	assert.Equal(t, int64(1), state.LastExtract)
 }
 
+// TestEnsureGitRepoIgnoresHookGitEnv guards runGitCmd against the
+// repo-location overrides git exports to hook subprocesses: with an
+// inherited GIT_DIR, `git init` re-initializes the hook's repository
+// (it once flipped a developer repo to bare) and the follow-up
+// add/commit land there instead of in the memory workspace.
+func TestEnsureGitRepoIgnoresHookGitEnv(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available on PATH")
+	}
+
+	hookRepo := t.TempDir()
+	testgit.Run(t, hookRepo, "init", "-q")
+	testgit.Run(t, hookRepo, "commit", "--allow-empty", "-m", "victim", "-q")
+
+	dataPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataPath, "memory.go"),
+		[]byte("package memory\n"), 0o600))
+
+	t.Setenv("GIT_DIR", filepath.Join(hookRepo, ".git"))
+	t.Setenv("GIT_WORK_TREE", hookRepo)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(hookRepo, ".git", "index"))
+
+	err := ensureGitRepo(context.Background(), newOSFileSystem(), osExec{}, dataPath)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(dataPath, ".git"))
+	require.NoError(t, statErr,
+		"repo must be created at dataPath, not at the hook's GIT_DIR")
+
+	bare := strings.TrimSpace(string(testgit.Run(t, hookRepo,
+		"rev-parse", "--is-bare-repository")))
+	assert.Equal(t, "false", bare,
+		"hook repo must not be re-initialized")
+	log := strings.TrimSpace(string(testgit.Run(t, hookRepo,
+		"log", "--format=%s")))
+	assert.Equal(t, "victim", log,
+		"hook repo must not receive the memory-module commit")
+}
+
 // --- Test helpers ---
 
 func validDeps(t *testing.T, dir string) Deps {

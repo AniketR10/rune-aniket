@@ -49,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/gitenv"
 )
 
 const (
@@ -396,7 +397,12 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		stdcmd.Dir = p.workspace.Path()
 	}
 
-	stdcmd.Env = stdcmd.Environ()
+	// Strip git's per-repository overrides (GIT_DIR and friends)
+	// from the inherited base: when this process runs under a git
+	// hook they pin every spawned git command to the hook's
+	// repository instead of the workspace. Caller-provided cmd.Env
+	// is appended after and wins on duplicates.
+	stdcmd.Env = gitenv.Sanitize(stdcmd.Environ())
 	stdcmd.Env = append(stdcmd.Env, cmd.Env...)
 	stdcmd.SysProcAttr = cmd.SysProcAttr
 

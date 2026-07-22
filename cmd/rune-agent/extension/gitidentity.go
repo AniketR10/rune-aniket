@@ -26,12 +26,12 @@ package extension
 import (
 	"bytes"
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/gitenv"
 )
 
 const gitTimeout = 10 * time.Second
@@ -99,7 +99,7 @@ func runGitOutput(ctx context.Context, exec workspaceapi.Executor, dir string, a
 		Path:    "git",
 		Args:    args,
 		Dir:     dir,
-		Env:     os.Environ(),
+		Env:     gitenv.Environ(),
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 		Watcher: watcher,

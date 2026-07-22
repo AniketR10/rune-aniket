@@ -285,6 +285,45 @@ func TestResolveGitIdentity(t *testing.T) {
 	}
 }
 
+// TestResolveGitIdentityIgnoresHookGitEnv guards resolveGitIdentity
+// against the repo-location overrides git exports to hook
+// subprocesses (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE): when the
+// editor or its tests run under `git commit` (pre-commit hooks,
+// `git rebase -x`, ...), those variables must not redirect identity
+// resolution away from the workspace directory to the hook's
+// repository.
+func TestResolveGitIdentityIgnoresHookGitEnv(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available on PATH")
+	}
+
+	initRepo := func(t *testing.T) string {
+		t.Helper()
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		testgit.Run(t, dir, "init", "-q")
+		testgit.Run(t, dir, "commit", "--allow-empty", "-m", "init", "-q")
+		return dir
+	}
+	hookRepo := initRepo(t)
+	target := initRepo(t)
+
+	t.Setenv("GIT_DIR", filepath.Join(hookRepo, ".git"))
+	t.Setenv("GIT_WORK_TREE", hookRepo)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(hookRepo, ".git", "index"))
+
+	uri, err := workspaceapi.ParseURI("file://" + target)
+	require.NoError(t, err)
+	id := resolveGitIdentity(context.Background(), testLocalExec{}, uri)
+
+	assert.Equal(t, filepath.Join(target, ".git"), id.commonDir,
+		"identity must come from the workspace dir, not the hook's GIT_DIR")
+	assert.Equal(t,
+		map[string]string{uri.String(): filepath.Base(target)},
+		id.worktrees,
+		"worktrees must belong to the workspace repo, not the hook's")
+}
+
 func TestCompleteWithDialoguesIterator(t *testing.T) {
 	now := time.Now()
 
