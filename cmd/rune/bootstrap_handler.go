@@ -112,7 +112,7 @@ func newBootstrapHandler(
 
 	if isBootstrapped(dataDir) {
 		client, releaseManager := newAPIClient(bh.storage, installBackupDir)
-		realIDE, err := bh.buildConfiguredIDE(releaseManager, false)
+		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
 			return nil, fmt.Errorf("build configured ide: %w", err)
@@ -171,7 +171,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 }
 
 func (b *bootstrapHandler) buildConfiguredIDE(
-	releaseManager release.Manager,
+	client *apiclient.Client, releaseManager release.Manager,
 	startingTutorial bool,
 ) (*ide.IDE, error) {
 	opts := []ide.Option{
@@ -231,6 +231,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 	}
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
+		nagPromptOption(client),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
 		b.storage, opts...)
@@ -416,7 +417,7 @@ func (b *bootstrapHandler) performSwap() error {
 	defer b.mu.Lock()
 
 	client, releaseManager := newAPIClient(b.storage, b.installBackupDir)
-	realIDE, err := b.buildConfiguredIDE(releaseManager, true)
+	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()
 		return fmt.Errorf("build configured ide: %w", err)

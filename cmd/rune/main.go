@@ -582,6 +582,7 @@ func runTUI(
 
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
+		nagPromptOption(client),
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,

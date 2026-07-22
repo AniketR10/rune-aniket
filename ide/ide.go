@@ -51,6 +51,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idenag"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -67,6 +68,7 @@ type IDE struct {
 	root             shaderRunner
 	tutorial         tutorialRunner
 	tutorialsConfig  tutorialsConfig
+	nag              *idenag.Scheduler
 	publishEventFn   EventPublisher
 	storage          storageapi.Service
 }
@@ -446,6 +448,10 @@ func (i *IDE) closeResources() (ret error) {
 	i.workspaceHandler.mu.Lock()
 	defer i.workspaceHandler.mu.Unlock()
 
+	if i.nag != nil {
+		i.nag.Stop()
+	}
+
 	if err := i.workspaceHandler.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -677,6 +683,16 @@ func (i *IDE) init(
 	)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
+	if op.nagPrompt.State != nil {
+		i.nag = idenag.New(idenag.Config{
+			Storage: storageapi.WithPartition(i.storage, idenag.Partition),
+			State:   op.nagPrompt.State,
+			Show:    i.nagPromptOpener(op.nagPrompt),
+		})
+		if err := i.nag.Start(context.Background()); err != nil {
+			log.WithError(err).Warn("idenag: start nag scheduler")
+		}
+	}
 	err = i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 	if err != nil {
 		return err

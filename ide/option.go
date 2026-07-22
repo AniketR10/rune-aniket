@@ -478,6 +478,8 @@ type options struct {
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
+	nagPrompt NagPromptConfig
+
 	disableHomePrompt bool
 }
 
