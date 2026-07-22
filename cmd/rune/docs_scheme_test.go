@@ -159,10 +159,19 @@ func TestDocsSchemeNestedDirsAreBrowsable(t *testing.T) {
 	for _, e := range develop {
 		developFiles[e.Name()] = e.IsDir()
 	}
-	assert.Contains(t, developFiles, "sdk.md", "/develop must list sdk.md")
-	assert.False(t, developFiles["sdk.md"], "/develop/sdk.md must be a file")
+	assert.Contains(t, developFiles, "sdk", "/develop must list sdk")
+	assert.True(t, developFiles["sdk"], "/develop/sdk must be a directory")
 
-	f, err := s.Open("/develop/sdk.md")
+	sdk, err := s.ReadDir("/develop/sdk")
+	require.NoError(t, err)
+	sdkFiles := map[string]bool{}
+	for _, e := range sdk {
+		sdkFiles[e.Name()] = e.IsDir()
+	}
+	assert.Contains(t, sdkFiles, "index.md", "/develop/sdk must list index.md")
+	assert.False(t, sdkFiles["index.md"], "/develop/sdk/index.md must be a file")
+
+	f, err := s.Open("/develop/sdk/index.md")
 	require.NoError(t, err)
 	data, err := io.ReadAll(f)
 	_ = f.Close()

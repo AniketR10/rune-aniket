@@ -49,6 +49,7 @@ const docsScheme = "docs"
 //
 //go:embed docs/docs/*.md
 //go:embed docs/docs/*/*.md
+//go:embed docs/docs/*/*/*.md
 var docsFS embed.FS
 
 // docsSchemeRoot is treated as the workspace root: paths under it are
