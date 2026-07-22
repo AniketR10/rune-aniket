@@ -153,24 +153,61 @@ func setupRustManager(
 	return mgr, mainURI, pos
 }
 
-// waitForRustReady polls hover on the `add` function until rust-analyzer
-// has finished its initial cargo metadata load and indexing, so later
-// request assertions are not racing the server's async startup.
+// waitForRustReady polls rust-analyzer until it answers the queries the
+// subtests assert on, so request assertions are not racing the server's
+// async startup. Definition alone is not enough: under load
+// rust-analyzer resolves single-file definitions before the symbol
+// index behind References/DocumentSymbol/WorkspaceSymbol is warm, and
+// those requests return empty results rather than errors.
 func waitForRustReady(
 	t *testing.T, ctx context.Context, mgr *Manager, mainURI string, pos rustPositions,
 ) {
 	t.Helper()
+	containsLine := func(locs []semanticapi.Location, line uint32) bool {
+		for _, l := range locs {
+			if l.Range.Start.Line == line {
+				return true
+			}
+		}
+		return false
+	}
+	probes := []func() bool{
+		func() bool {
+			res, err := mgr.Definition(ctx, semanticapi.DefinitionParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
+				Position:     pos.addCall,
+			})
+			return err == nil && len(res.Locations) > 0
+		},
+		func() bool {
+			locs, err := mgr.References(ctx, semanticapi.ReferenceParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
+				Position:     pos.addFn,
+				Context:      semanticapi.ReferenceContext{IncludeDeclaration: true},
+			})
+			return err == nil && containsLine(locs, pos.addFn.Line) &&
+				containsLine(locs, pos.addCall.Line)
+		},
+		func() bool {
+			res, err := mgr.DocumentSymbol(ctx, semanticapi.DocumentSymbolParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
+			})
+			return err == nil && len(symbolNames(res)) > 0
+		},
+		func() bool {
+			syms, err := mgr.WorkspaceSymbol(ctx, semanticapi.WorkspaceSymbolParams{
+				Query: "add",
+			})
+			return err == nil && len(syms) > 0
+		},
+	}
 	deadline := time.Now().Add(90 * time.Second)
+	next := 0
 	for time.Now().Before(deadline) {
-		// Definition is a better readiness signal than hover: once
-		// rust-analyzer has loaded cargo metadata and indexed the crate,
-		// it resolves the `add` call to its declaration. Hover markdown
-		// formatting varies by toolchain version, so it is a brittle gate.
-		res, err := mgr.Definition(ctx, semanticapi.DefinitionParams{
-			TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
-			Position:     pos.addCall,
-		})
-		if err == nil && len(res.Locations) > 0 {
+		for next < len(probes) && probes[next]() {
+			next++
+		}
+		if next == len(probes) {
 			return
 		}
 		select {

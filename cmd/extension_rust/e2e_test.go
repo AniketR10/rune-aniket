@@ -883,10 +883,24 @@ func runHoverAction(
 	t.Helper()
 	wm := handlerWM(t, handler)
 
-	done := make(chan error, 1)
-	go func() { done <- handler.HandleCommand(context.Background(), cmd) }()
-
 	deadline := time.Now().Add(30 * time.Second)
+	done := make(chan error, 1)
+	go func() {
+		for {
+			err := handler.HandleCommand(context.Background(), cmd)
+			// rust-analyzer answers ContentModified while it is
+			// (re)indexing under load; the hover is retryable until
+			// the server settles.
+			if err != nil && strings.Contains(err.Error(), "content modified") &&
+				time.Now().Before(deadline) {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			done <- err
+			return
+		}
+	}()
+
 	for {
 		select {
 		case err := <-done:
