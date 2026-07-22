@@ -436,12 +436,10 @@ func newConfiguredBootstrapForEnvTest(
 	publishEvent, stopPump := newBootstrapPublishPump(mu)
 	t.Cleanup(stopPump)
 
-	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
 	b, err := newBootstrapHandler(
 		dataDir, configPath, "" /* workspace */, "" /* zdotDir */, nil, /* filenames */
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
-		checkoutURL, signupURL,
 		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
 		installBackupDir,
 	)

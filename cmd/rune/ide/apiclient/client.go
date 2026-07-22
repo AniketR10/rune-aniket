@@ -146,9 +146,9 @@ func (a *Client) OAuthTokenSource() oauth2.TokenSource {
 	return a.tokenSource
 }
 
-// CachedTokenSource returns the underlying *auth.CachedTokenSource. It
-// is exposed so the ideplan package can drive a JWT-backed
-// ideplan.Source for the upgrade prompt and lockdown monitor.
+// CachedTokenSource returns the underlying *auth.CachedTokenSource so
+// callers can read cached JWT claims or purge the token without going
+// through the gRPC transport.
 func (a *Client) CachedTokenSource() *auth.CachedTokenSource {
 	return a.tokenSource
 }

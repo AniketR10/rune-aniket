@@ -61,7 +61,6 @@ import (
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
@@ -581,17 +580,8 @@ func runTUI(
 	client, releaseManager := newAPIClient(storage, os.TempDir())
 	defer client.Close()
 
-	checkoutURL, _ := mustResolveBootstrapURLs(*flagWebsiteAddress)
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
-		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:       ideplan.NewJWTSource(client.CachedTokenSource()),
-			CheckoutURL:  checkoutURL,
-			DowngradeURL: apiclient.DefaultDownloadsHost,
-			SupportURL:   mustResolveSupportURL(*flagWebsiteAddress),
-			SignIn:       planSignIn(client),
-			Tampered:     client.InstallTampered(),
-		}),
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,
@@ -700,12 +690,10 @@ func runGUI(
 		envErr = multierr.Append(envErr, err)
 	}
 
-	checkoutURL, signupURL := mustResolveBootstrapURLs(*flagWebsiteAddress)
 	root, err := newBootstrapHandler(
 		*flagDataPath, *flagConfigPath,
 		*flagWorkspace, *flagZdotDir, filenames,
 		launchCmd, runner, mu, publishEvent,
-		checkoutURL, signupURL,
 		func(u *url.URL) error { return extbrowser.Browse(u) },
 		text.NewSystemClipboard(), os.TempDir(),
 	)
@@ -851,7 +839,7 @@ func waitLoginShellPATH(pathDone <-chan error) error {
 
 // newAPIClient constructs the production apiclient.Client and its
 // release.Manager from a shared storage. Both can be passed to
-// ide.New via WithReleaseManager / WithPlanSource without creating an
+// ide.New via WithReleaseManager without creating an
 // IDE → apiclient → IDE cycle. installBackupDir hosts the install-ID
 // tamper-detection backup (the OS temp dir in production).
 func newAPIClient(
@@ -875,30 +863,6 @@ func newAPIClient(
 	releaseManager := cdnrelease.NewManager(httpClient,
 		idepkg.ReleasesURL(*flagHTTPAddress, idepkg.HostArch()))
 	return client, releaseManager
-}
-
-// newBootstrapAPIClient builds a slim apiclient.Client suitable for
-// driving the pre-swap login prompt. Telemetry is disabled and the
-// client is NOT subscribed to IDE events or used as a release manager
-// source — those wirings live in setupReleaseManager and belong to the
-// configured IDE only. Tokens acquired by this client are written to
-// the shared on-disk auth partition keyed by dataDir, so the real
-// client constructed after the swap reads them back transparently.
-func newBootstrapAPIClient(
-	storage storageapi.Service, openBrowser func(*url.URL) error,
-	installBackupDir string,
-) *apiclient.Client {
-	apicfg := apiclient.DefaultConfig()
-	apicfg.HTTPEndpointAddress = *flagHTTPAddress
-	apicfg.GRPCEndpointAddress = *flagGRPCAddress
-	apicfg.InsecureTransport = *flagGRPCInsecure
-	apicfg.ReleaseCollection = *flagReleaseCollection
-	apicfg.WebsiteAddress = *flagWebsiteAddress
-	apicfg.EnableTelemetry = true
-	apicfg.TelemetryPeriod = telemetryPeriod
-	apicfg.InstallBackupDir = installBackupDir
-	apicfg.OpenBrowser = openBrowser
-	return apiclient.New(storage, apicfg, *flagDataPath)
 }
 
 func doRunTUI(mu *sync.Mutex, i *ide.IDE) error {

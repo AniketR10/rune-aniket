@@ -41,12 +41,11 @@ func TestFormatStampNormalizesToUTC(t *testing.T) {
 	assert.Equal(t, "2026-07-09T11:35:42Z", got)
 }
 
-// TestFormatStampParsesWithGatingLayout is the contract test between
-// this tool and the plan-gating parser: the emitted stamp must parse
-// with debug.BuildDateLayout (the layout ide/ideplan.buildDate uses)
-// and round-trip to the same instant. If either side changes layout,
-// this trips.
-func TestFormatStampParsesWithGatingLayout(t *testing.T) {
+// TestFormatStampParsesWithBuildDateLayout is the contract test
+// between this tool and debug.BuildDate: the emitted stamp must parse
+// with debug.BuildDateLayout and round-trip to the same instant. If
+// either side changes layout, this trips.
+func TestFormatStampParsesWithBuildDateLayout(t *testing.T) {
 	want := time.Date(2026, 7, 9, 13, 35, 42, 0, time.UTC)
 	stamp := formatStamp(want)
 

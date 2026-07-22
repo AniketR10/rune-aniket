@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -246,4 +247,19 @@ func (ap *asyncPlugin) Close() error {
 	// Pre-ready: complete observes ap.closed and closes the
 	// freshly-built handler silently (the user abandoned the window).
 	return nil
+}
+
+// translateWriter offsets every coordinate before forwarding so a
+// centered animation can be placed without modifying its layout.
+type translateWriter struct {
+	w      term.Writer
+	dx, dy int
+}
+
+func (t translateWriter) Context() context.Context { return t.w.Context() }
+func (t translateWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	t.w.SetCell(term.Coordinates{X: pos.X + t.dx, Y: pos.Y + t.dy}, c)
+}
+func (t translateWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	t.w.UnionAttributes(term.Coordinates{X: pos.X + t.dx, Y: pos.Y + t.dy}, attr)
 }

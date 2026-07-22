@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ide
 
 import (
@@ -49,7 +48,6 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 )
 
@@ -115,24 +113,6 @@ func WithPackageConfigMergeHook(
 ) Option {
 	return func(opts *options) {
 		opts.packageConfigMergeHook = hook
-	}
-}
-
-// WithPlanSource installs an ideplan.Source on the IDE: the lockdown
-// overlay reacts to its decisions and the daily monitor uses it as
-// its evaluation source. Both Source and SignIn are required; a
-// config missing either is a programmer error. Callers that want no
-// gating must omit this option, which leaves the always-allowed
-// default in place.
-func WithPlanSource(cfg PlanSourceConfig) Option {
-	if cfg.Source == nil {
-		panic("ide.WithPlanSource: nil Source")
-	}
-	if cfg.SignIn == nil {
-		panic("ide.WithPlanSource: nil SignIn")
-	}
-	return func(opts *options) {
-		opts.planSource = cfg
 	}
 }
 
@@ -457,7 +437,6 @@ type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
 	releaseManager      release.Manager
-	planSource          PlanSourceConfig
 	tabBarOffset        int
 	tabsClickCallback   func(int) bool
 	tabBarHeight        int
@@ -517,7 +496,6 @@ func defaultOptions() options {
 		workspacesBarFrame: true,
 		workspacesIcon:     '1',
 		releaseManager:     docrelease.NewManager(document.NewInMemoryService()),
-		planSource:         PlanSourceConfig{Source: ideplan.NopSource{}, SignIn: NopSignIn},
 	}
 }
 

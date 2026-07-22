@@ -49,7 +49,6 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/ide/ideupgrade"
 	"unstable.build/go-tui/term/gui"
 )
@@ -66,8 +65,6 @@ type bootstrapHandler struct {
 	runner            ide.ExtensionsRunner
 	mu                *sync.Mutex
 	publishEvent      func(term.Event) bool
-	checkoutURL       string
-	signupURL         string
 	openBrowser       func(*url.URL) error
 	clip              clipboard.Register
 	installBackupDir  string
@@ -79,7 +76,6 @@ type bootstrapHandler struct {
 	client            *apiclient.Client
 	upgradeMgr        *ideupgrade.Manager
 	upgradeCancel     context.CancelFunc
-	bootstrapClient   *apiclient.Client
 	lastTabsClick     time.Time
 	clickCount        int
 	lastResizeW       int
@@ -94,7 +90,6 @@ func newBootstrapHandler(
 	runner ide.ExtensionsRunner,
 	mu *sync.Mutex,
 	publishEvent func(term.Event) bool,
-	checkoutURL, signupURL string,
 	openBrowser func(*url.URL) error,
 	clip clipboard.Register,
 	installBackupDir string,
@@ -110,8 +105,6 @@ func newBootstrapHandler(
 		runner:           runner,
 		mu:               mu,
 		publishEvent:     publishEvent,
-		checkoutURL:      checkoutURL,
-		signupURL:        signupURL,
 		openBrowser:      openBrowser,
 		clip:             clip,
 		installBackupDir: installBackupDir,
@@ -119,7 +112,7 @@ func newBootstrapHandler(
 
 	if isBootstrapped(dataDir) {
 		client, releaseManager := newAPIClient(bh.storage, installBackupDir)
-		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
+		realIDE, err := bh.buildConfiguredIDE(releaseManager, false)
 		if err != nil {
 			_ = client.Close()
 			return nil, fmt.Errorf("build configured ide: %w", err)
@@ -136,8 +129,6 @@ func newBootstrapHandler(
 	}
 	bh.preIDE = preIDE
 	bh.inner = preIDE.Ready()
-	client := newBootstrapAPIClient(preIDE.Storage(), openBrowser, installBackupDir)
-	bh.bootstrapClient = client
 	bh.openBootstrapFlow()
 	return bh, nil
 }
@@ -180,7 +171,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 }
 
 func (b *bootstrapHandler) buildConfiguredIDE(
-	client *apiclient.Client, releaseManager release.Manager,
+	releaseManager release.Manager,
 	startingTutorial bool,
 ) (*ide.IDE, error) {
 	opts := []ide.Option{
@@ -240,13 +231,6 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 	}
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
-		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:       ideplan.NewJWTSource(client.CachedTokenSource()),
-			CheckoutURL:  b.checkoutURL,
-			DowngradeURL: apiclient.DefaultDownloadsHost,
-			SignIn:       planSignIn(client),
-			Tampered:     client.InstallTampered() || b.bootstrapTampered(),
-		}),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
 		b.storage, opts...)
@@ -260,15 +244,6 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.g = g
 	b.transparentWindow = transparentWindow
-}
-
-// bootstrapTampered reports whether the pre-swap bootstrap client
-// observed the install-ID tamper signal. The signal self-heals on
-// first observation, so during a first-run bootstrap the configured
-// IDE's own client never sees it — only the bootstrap client, which
-// ran install-ID resolution first, does.
-func (b *bootstrapHandler) bootstrapTampered() bool {
-	return b.bootstrapClient != nil && b.bootstrapClient.InstallTampered()
 }
 
 // setupPreIDE registers the GUI command family on the pre-config IDE
@@ -441,7 +416,7 @@ func (b *bootstrapHandler) performSwap() error {
 	defer b.mu.Lock()
 
 	client, releaseManager := newAPIClient(b.storage, b.installBackupDir)
-	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
+	realIDE, err := b.buildConfiguredIDE(releaseManager, true)
 	if err != nil {
 		_ = client.Close()
 		return fmt.Errorf("build configured ide: %w", err)
@@ -541,29 +516,10 @@ var (
 	bootstrapWelcomeKeys = []term.KeyComb{
 		{Ch: 'g'},
 	}
-
-	bootstrapLoginChoiceKeys = []term.KeyComb{
-		{Ch: 'l'}, {Ch: 's'},
-	}
-
-	bootstrapLoginWaitKeys = []term.KeyComb{
-		{Ch: 'p'}, {Ch: 'c'},
-	}
-
-	bootstrapUpgradeKeys = []term.KeyComb{
-		{Ch: 'u'}, {Ch: 'c'},
-	}
 )
 
 const (
 	optWelcomeGo = " Let's go "
-
-	optLoginSignIn  = "  Sign in  "
-	optLoginSignUp  = "  Sign up  "
-	optLoginCancel  = "  Cancel  "
-	optUpgradePro   = "  Upgrade to Pro  "
-	optUpgradeLater = "  Continue  "
-	optLoginCopy    = "  Copy URL  "
 )
 
 func (b *bootstrapHandler) openBootstrapFlow() {
@@ -619,10 +575,6 @@ func (b *bootstrapHandler) openVimPrompt() {
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
 				b.chosenEditor = optionToChoice(option)
-				// The login gate is bypassed: usage-based paywall
-				// policies (ide/idelockdown) own enforcement now.
-				// Login stays reachable through the lockdown/nag
-				// prompts and the login command.
 				b.scheduleNextTick(func() {
 					if err := b.performSwap(); err != nil {
 						b.notifyError("finish bootstrap", err)
@@ -632,325 +584,6 @@ func (b *bootstrapHandler) openVimPrompt() {
 			guard.onClose(b.openVimPrompt),
 		),
 	)
-}
-
-func (b *bootstrapHandler) openLoginPrompt() error {
-	msg := "## Sign in\n" +
-		"Rune is free for personal use. Professional use requires a " +
-		"Rune Pro license. Sign in, or sign up if you don't have an " +
-		"account yet."
-	guard := b.promptGuard()
-	b.preIDE.Prompt(
-		msg,
-		[]string{optLoginSignIn, optLoginSignUp},
-		bootstrapLoginChoiceKeys,
-		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, option string) {
-				var err error
-				switch option {
-				case optLoginSignIn:
-					err = b.startLogin()
-				case optLoginSignUp:
-					err = b.openBrowserURL(b.signupURL)
-					b.scheduleNextTick(func() { _ = b.openLoginPrompt() })
-				}
-				if err != nil {
-					b.notifyError("login could not start", err)
-				}
-			}),
-			guard.onClose(func() { _ = b.openLoginPrompt() }),
-		),
-	)
-	return nil
-}
-
-// startLogin returns a Purge failure rather than swallowing it: a
-// stale cached token would short-circuit Login and silently pin the
-// bootstrap to the previous identity.
-func (b *bootstrapHandler) startLogin() error {
-	// A still-valid cached token would short-circuit TokenCtx and
-	// resolve Login without opening the browser, so the user could
-	// never switch identities from the bootstrap Sign in button.
-	if ts := b.bootstrapClient.CachedTokenSource(); ts != nil {
-		if err := ts.Purge(); err != nil {
-			return fmt.Errorf("purge cached token: %w", err)
-		}
-	}
-	loginCtx, loginCancel := context.WithCancel(context.Background())
-	session := b.bootstrapClient.Login(loginCtx)
-
-	// loginCoord shares state between the URL and Done watchers
-	// so the wait prompt is never left stranded when Done resolves
-	// before the URL tick lands. The done flag is set on the event
-	// loop inside Done's tick, after which the URL tick must be a
-	// no-op even if it already had a Window in hand.
-	coord := &loginCoord{loginCancel: loginCancel}
-
-	go debug.CapturePanicReport(func() {
-		u, ok := <-session.URL
-		if !ok {
-			return
-		}
-		b.scheduleNextTick(func() {
-			coord.mu.Lock()
-			if coord.done || coord.cancelled {
-				coord.mu.Unlock()
-				return
-			}
-			coord.mu.Unlock()
-			win := b.mountLoginWaitPrompt(u.String(), coord)
-			coord.mu.Lock()
-			if coord.done || coord.cancelled {
-				coord.mu.Unlock()
-				if win != nil {
-					_ = win.Close()
-				}
-				return
-			}
-			coord.window = win
-			coord.mu.Unlock()
-		})
-	})
-
-	go debug.CapturePanicReport(func() {
-		err, ok := <-session.Done
-		handleLoginDone(loginDoneArgs{
-			ok:           ok,
-			err:          err,
-			coord:        coord,
-			scheduleTick: b.scheduleNextTick,
-			decide: func(ctx context.Context) (ideplan.Decision, error) {
-				source := ideplan.NewJWTSource(b.bootstrapClient.CachedTokenSource())
-				return source.Decision(ctx)
-			},
-			onSwap:        b.performSwap,
-			onUpgrade:     b.openUpgradePrompt,
-			onLoginPrompt: b.openLoginPrompt,
-			notifyError:   b.notifyError,
-		})
-	})
-	return nil
-}
-
-type loginDoneArgs struct {
-	ok            bool
-	err           error
-	coord         *loginCoord
-	scheduleTick  func(func()) bool
-	decide        func(context.Context) (ideplan.Decision, error)
-	onSwap        func() error
-	onUpgrade     func() error
-	onLoginPrompt func() error
-	notifyError   func(context string, err error)
-}
-
-// handleLoginDone schedules the wait-window close before any
-// follow-up work so the user is never left staring at the "Follow
-// browser instructions" prompt while decide() makes a synchronous
-// claims read.
-func handleLoginDone(a loginDoneArgs) {
-	a.scheduleTick(func() {
-		a.coord.mu.Lock()
-		a.coord.done = true
-		win := a.coord.window
-		a.coord.window = nil
-		a.coord.mu.Unlock()
-		if win != nil {
-			_ = win.Close()
-		}
-	})
-
-	a.coord.mu.Lock()
-	cancelled := a.coord.cancelled
-	a.coord.mu.Unlock()
-	if cancelled {
-		return
-	}
-	if !a.ok || a.err != nil {
-		if a.err != nil {
-			a.notifyError("login", a.err)
-		}
-		a.scheduleTick(func() {
-			if err := a.onLoginPrompt(); err != nil {
-				a.notifyError("open login prompt", err)
-			}
-		})
-		return
-	}
-	dec, derr := a.decide(context.Background())
-	if derr != nil {
-		a.notifyError("read claims", derr)
-		a.scheduleTick(func() {
-			if err := a.onLoginPrompt(); err != nil {
-				a.notifyError("open login prompt", err)
-			}
-		})
-		return
-	}
-	if dec.Status == ideplan.StatusActive {
-		a.scheduleTick(func() {
-			if err := a.onSwap(); err != nil {
-				a.notifyError("finish bootstrap", err)
-			}
-		})
-		return
-	}
-	a.scheduleTick(func() {
-		if err := a.onUpgrade(); err != nil {
-			a.notifyError("open upgrade prompt", err)
-		}
-	})
-}
-
-// loginCoord serializes the two goroutines that drive the bootstrap
-// login wait prompt. Without this coordination the URL goroutine
-// could mount a wait prompt on top of whatever the Done goroutine
-// has already shown (upgrade prompt, choice prompt, performSwap'd
-// IDE), leaving two prompts stacked.
-type loginCoord struct {
-	mu          sync.Mutex
-	window      browser.Window
-	done        bool
-	cancelled   bool
-	loginCancel context.CancelFunc
-}
-
-func (b *bootstrapHandler) mountLoginWaitPrompt(
-	oauthURL string, coord *loginCoord,
-) browser.Window {
-	coord.mu.Lock()
-	stop := coord.cancelled || coord.done
-	coord.mu.Unlock()
-	if stop {
-		return nil
-	}
-	header := "**Follow the instructions in your browser.**\n\n"
-	msg := header +
-		"If your browser did not open automatically, copy this link:\n\n" +
-		"`" + oauthURL + "`"
-	guard := b.promptGuard()
-	return b.preIDE.Prompt(
-		msg,
-		[]string{optLoginCopy, optLoginCancel},
-		bootstrapLoginWaitKeys,
-		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, option string) {
-				switch option {
-				case optLoginCopy:
-					guard.advanced = false // stay in this prompt
-					level, msg := b.copyBootstrapURL(oauthURL)
-					if _, err := b.notifications().Notify(level, "%s", msg); err != nil {
-						log.Warnf("bootstrap copy url: notify: %v", err)
-					}
-					b.mountLoginWaitPrompt(oauthURL, coord)
-				case optLoginCancel:
-					coord.mu.Lock()
-					coord.cancelled = true
-					if coord.window != nil {
-						_ = coord.window.Close()
-						coord.window = nil
-					}
-					cancel := coord.loginCancel
-					coord.mu.Unlock()
-					if cancel != nil {
-						cancel()
-					}
-					_ = b.openLoginPrompt()
-				}
-			}),
-			guard.onClose(func() {
-				b.mountLoginWaitPrompt(oauthURL, coord)
-			}),
-		),
-	)
-}
-
-// copyBootstrapURL writes the OAuth URL to the clipboard.
-func (b *bootstrapHandler) copyBootstrapURL(oauthURL string) (browserapi.NotificationLevel, string) {
-	if err := b.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: oauthURL}); err != nil {
-		return browserapi.LevelWarn,
-			fmt.Sprintf("copy to clipboard failed: %v", err)
-	}
-	return browserapi.LevelSuccess, "OAuth URL copied to clipboard"
-}
-
-func (b *bootstrapHandler) openUpgradePrompt() error {
-	msg := "**You're signed in.**\n\n" +
-		"Your account has no Rune Pro license. Rune is free for " +
-		"personal use; professional use requires a license. You can " +
-		"upgrade now, or continue and upgrade later."
-	guard := b.promptGuard()
-	b.preIDE.Prompt(
-		msg,
-		[]string{optUpgradePro, optUpgradeLater},
-		bootstrapUpgradeKeys,
-		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, option string) {
-				if option == optUpgradePro {
-					if err := b.openBrowserURL(b.checkoutURL); err != nil {
-						b.notifyError("open checkout page", err)
-					}
-				}
-				b.scheduleNextTick(func() {
-					if err := b.performSwap(); err != nil {
-						b.notifyError("finish bootstrap", err)
-					}
-				})
-			}),
-			guard.onClose(func() { _ = b.openUpgradePrompt() }),
-		),
-	)
-	return nil
-}
-
-// mustParseWebsiteBase panics on parse failure because in
-// practice nobody sets -rune-website-address; the default points at
-// production and a parse failure means the build itself is broken.
-func mustParseWebsiteBase(raw string) *url.URL {
-	base, err := url.Parse(raw)
-	if err != nil {
-		panic(fmt.Sprintf("parse -rune-website-address %q: %v", raw, err))
-	}
-	return base
-}
-
-func mustResolveBootstrapURLs(raw string) (checkout, signup string) {
-	base := mustParseWebsiteBase(raw)
-	signupBase := *base
-	signupBase.Path = "/signup"
-	return checkoutURL(base).String(), signupBase.String()
-}
-
-// mustResolveSupportURL resolves the support page the ask-more-time
-// prompt opens against the configured website address.
-func mustResolveSupportURL(raw string) string {
-	u := *mustParseWebsiteBase(raw)
-	u.Path = "/support"
-	return u.String()
-}
-
-func checkoutURL(base *url.URL) *url.URL {
-	const (
-		checkoutPath   = "/checkout"
-		checkoutSource = "rune"
-	)
-	u := *base
-	u.Path = checkoutPath
-	q := u.Query()
-	q.Set("source", checkoutSource)
-	u.RawQuery = q.Encode()
-	return &u
-}
-
-func (b *bootstrapHandler) openBrowserURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("parse url %q: %w", raw, err)
-	}
-	if err := b.openBrowser(u); err != nil {
-		return fmt.Errorf("open browser: %w", err)
-	}
-	return nil
 }
 
 // guardedPromptChain re-opens a bootstrap prompt that was closed

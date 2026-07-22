@@ -25,7 +25,6 @@ package ide
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -34,7 +33,6 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -53,9 +51,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/ide/idelockdown"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -71,13 +67,6 @@ type IDE struct {
 	root             shaderRunner
 	tutorial         tutorialRunner
 	tutorialsConfig  tutorialsConfig
-	planLockdown     *planLockdownRunner
-	planPromptDeps   planLockdownPromptDeps
-	planLockReason   atomic.Int32
-	planSignInMu     sync.Mutex
-	planSignIn       *planSignInFlow
-	planMonitor      *ideplan.Monitor
-	usagePlanner     *idelockdown.Planner
 	publishEventFn   EventPublisher
 	storage          storageapi.Service
 }
@@ -279,7 +268,7 @@ func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
 	i.maybeStartTutorial()
 	i.maybeOpenHomePrompt()
-	return i.planLockdown
+	return &i.root
 }
 
 // tutorialInitShaderBuffer is an extra delay added on top of the init
@@ -428,213 +417,6 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 	i.workspaceHandler.setReleaseManager(m)
 }
 
-// PlanSourceConfig collects the dependencies WithPlanSource needs to
-// wire the lockdown overlay and monitor. CheckoutURL is the checkout
-// URL the Upgrade button opens; SupportURL is the page the
-// ask-more-time prompt's "Get more time" button opens (defaults to
-// defaultSupportURL when empty); SignIn starts a fresh browser login
-// (purging any cached token first) so the user can re-auth (possibly
-// as a paid account or a different user). The IDE owns the UX around
-// the returned session: it surfaces the OAuth URL with a clipboard
-// fallback and re-evaluates plan gating when the flow finishes.
-// Tampered reports that install-ID resolution detected a wiped data
-// directory; the usage planner persists it and locks gated users
-// immediately instead of granting a fresh usage runway.
-type PlanSourceConfig struct {
-	Source      ideplan.Source
-	CheckoutURL string
-	// DowngradeURL is the page the upgrade-expired lockdown prompt's
-	// "Downgrade Rune" button opens so a one-off buyer can install a
-	// build covered by their entitlement (typically the downloads
-	// host).
-	DowngradeURL string
-	SupportURL   string
-	SignIn       func(context.Context) SignInSession
-	Tampered     bool
-}
-
-// defaultSupportURL is where the ask-more-time prompt sends users
-// when PlanSourceConfig.SupportURL is not set.
-const defaultSupportURL = "https://rune.build/support"
-
-// initPlanSource starts the usage planner and the daily plan monitor
-// against the configured plan source.
-func (i *IDE) initPlanSource(cfg PlanSourceConfig) {
-	if err := i.usagePlanner.Start(context.Background()); err != nil {
-		log.WithError(err).Warn("idelockdown: start usage planner")
-	}
-	i.planMonitor = ideplan.NewMonitor(ideplan.MonitorConfig{
-		Source: cfg.Source,
-		Locker: i.usagePlanner,
-	})
-	i.planMonitor.Start(context.Background())
-}
-
-// activityEvents are the editor events that count as usage evidence
-// for the idelockdown planner.
-var activityEvents = []textapi.EventType{
-	textapi.EventTypeOpen, textapi.EventTypeFlush, textapi.EventTypeEdit,
-}
-
-// activityRecorder forwards editor events to the usage planner's
-// activity ledger.
-type activityRecorder struct{ planner *idelockdown.Planner }
-
-func (r activityRecorder) Handle(ctx context.Context, _ textapi.Event) bool {
-	r.planner.RecordActivity(ctx)
-	return false
-}
-
-// nagPromptOpener returns the ShowNagPrompt callback the usage
-// planner invokes when the nag policy fires.
-func (i *IDE) nagPromptOpener(cfg PlanSourceConfig) func() {
-	const message = "**Rune seems to be working out for you.**\n\n" +
-		"Much of the industry is betting that we won't be writing code for much longer.\n" +
-		"We are betting that the technologists, the systems programmers, the\n" +
-		"hackers who love this craft, and the ones who'd rather read the source than the\n" +
-		"docs, will outlive every company betting against them. " +
-		"When prod is down at 3am, nobody pages the product manager.\n\n" +
-		"Buying Rune supports a small, self-funded company that wants to keep you in the driver's seat.\n\n"
-	const (
-		optUpgrade = " Upgrade to Pro "
-		optSignIn  = " Sign in "
-	)
-	return func() {
-		i.ideConfig.scheduleNextTick(func() {
-			var win browser.Window
-			win = i.Prompt(message,
-				[]string{optUpgrade, optSignIn},
-				[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}},
-				handler.FuncPromptHandler(func(_ int, opt string) {
-					if win != nil {
-						_ = win.Close()
-					}
-					switch opt {
-					case optUpgrade:
-						openBrowser(cfg.CheckoutURL)
-					case optSignIn:
-						go debug.CapturePanicReport(func() {
-							i.startPlanSignIn(cfg)
-						})
-					}
-				}, func() error { return nil }),
-			)
-		})
-	}
-}
-
-// askMoreTimePromptOpener returns the ShowAskMoreTimePrompt callback
-// the usage planner invokes when the ask-more-time policy replaces
-// the last nag before lockdown.
-func (i *IDE) askMoreTimePromptOpener(cfg PlanSourceConfig) func() {
-	const message = "**Rune seems to be working out for you.**\n\n" +
-		"Rune is free for personal use, but professional use requires " +
-		"a Rune Pro license. If you need more time to arrange one, " +
-		"that's ok."
-	const (
-		optUpgrade  = " Upgrade to Pro "
-		optSignIn   = " Sign in "
-		optMoreTime = " Get more time "
-	)
-	supportURL := cfg.SupportURL
-	if supportURL == "" {
-		supportURL = defaultSupportURL
-	}
-	return func() {
-		i.ideConfig.scheduleNextTick(func() {
-			var win browser.Window
-			win = i.Prompt(message,
-				[]string{optUpgrade, optSignIn, optMoreTime},
-				[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}, {Ch: 'g'}},
-				handler.FuncPromptHandler(func(_ int, opt string) {
-					if win != nil {
-						_ = win.Close()
-					}
-					switch opt {
-					case optUpgrade:
-						openBrowser(cfg.CheckoutURL)
-					case optSignIn:
-						go debug.CapturePanicReport(func() {
-							i.startPlanSignIn(cfg)
-						})
-					case optMoreTime:
-						openBrowser(supportURL)
-					}
-				}, func() error { return nil }),
-			)
-		})
-	}
-}
-
-// startPlanSignIn drives one browser sign-in flow. Progress is
-// surfaced through a prompt because notifications render beneath the
-// lockdown gray fade. While a flow is in flight further calls
-// re-mount its prompt instead of starting a second OAuth flow.
-//
-// Blocks on the SignIn hook, so it must be called off the event loop.
-//
-// NOTE: this reimplements the OAuth-wait-prompt orchestration that
-// cmd/rune's bootstrap startLogin/loginCoord/mountLoginWaitPrompt
-// already has. The two share the URL/Done coordination but differ in
-// surface (overlay swap vs pre-IDE prompt), success action, and
-// package. Extraction into a shared idesignin is deferred as debt.
-func (i *IDE) startPlanSignIn(cfg PlanSourceConfig) {
-	i.planSignInMu.Lock()
-	if f := i.planSignIn; f != nil {
-		i.planSignInMu.Unlock()
-		f.scheduleRender("")
-		return
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	f := &planSignInFlow{ide: i, cancel: cancel}
-	i.planSignIn = f
-	i.planSignInMu.Unlock()
-	f.scheduleRender("")
-	session := cfg.SignIn(ctx)
-	go debug.CapturePanicReport(func() {
-		u, ok := <-session.URL
-		if !ok {
-			return
-		}
-		f.scheduleRender(u.String())
-	})
-	go debug.CapturePanicReport(func() {
-		err, ok := <-session.Done
-		cancel()
-		f.dismiss()
-		i.planSignInMu.Lock()
-		i.planSignIn = nil
-		i.planSignInMu.Unlock()
-		if !ok || errors.Is(err, context.Canceled) {
-			return
-		}
-		if err != nil {
-			log.WithError(err).Warn("plan sign-in")
-			_, _ = i.Notifications().Notify(browserapi.LevelWarn,
-				"Sign-in did not complete: %v", err)
-			return
-		}
-		i.TickPlan(context.Background())
-	})
-}
-
-// TickPlan forces an immediate plan-gating re-evaluation off the
-// daily monitor cadence, reading the currently cached token rather
-// than rotating it via refresh_token. Used by the lockdown overlay's
-// Re-signin flow to surface a freshly-paid subscription (acquired
-// through a from-scratch browser login) without waiting for the next
-// scheduled tick.
-func (i *IDE) TickPlan(ctx context.Context) {
-	i.planMonitor.Reevaluate(ctx)
-}
-
-// planLockdownReason returns the reason for the current lock so the
-// sign-in flow and nag path can rebuild the default prompt that
-// matches the user's situation.
-func (i *IDE) planLockdownReason() idelockdown.LockReason {
-	return idelockdown.LockReason(i.planLockReason.Load())
-}
-
 // Notifications returns an cross-workspace, goroutine-safe implementation
 // of browserapi.Notifications.
 func (i *IDE) Notifications() browserapi.Notifications {
@@ -663,12 +445,6 @@ func (i *IDE) Close() error {
 func (i *IDE) closeResources() (ret error) {
 	i.workspaceHandler.mu.Lock()
 	defer i.workspaceHandler.mu.Unlock()
-
-	if i.planMonitor != nil {
-		i.planMonitor.Stop()
-	}
-	i.usagePlanner.Stop()
-	i.planLockdown.SetLocked(false)
 
 	if err := i.workspaceHandler.Close(); err != nil {
 		ret = multierr.Append(ret, err)
@@ -823,34 +599,6 @@ func (i *IDE) init(
 	commandObserver := newCommandObserverRegistry()
 	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
 	i.workspaceHandler.tutorialsInstalled = i.onTutorialsInstalled
-	pcfg := i.ideConfig.promptConfig()
-	i.planPromptDeps = planLockdownPromptDeps{
-		checkoutURL:   op.planSource.CheckoutURL,
-		downgradeURL:  op.planSource.DowngradeURL,
-		onReSignIn:    func() { i.startPlanSignIn(op.planSource) },
-		notifications: &notisRouter{parent: i.workspaceHandler},
-		frameCharSet:  i.ideConfig.windowFrameCharset(),
-		textAttr:      pcfg.TextAttr,
-		highlightAttr: pcfg.HighlightAttr,
-		backgroundBg:  pcfg.BackgroundAttr,
-	}
-	i.planLockdown = newPlanLockdownRunner(&i.root)
-	i.planLockdown.setDefaultAttr(i.DefaultAttributes)
-	// Load before workspaceHandler.init: the usage doc shares the
-	// storage backend with the async workspace installs.
-	i.usagePlanner = idelockdown.New(idelockdown.Config{
-		Storage:               storageapi.WithPartition(i.storage, idelockdown.Partition),
-		Source:                op.planSource.Source,
-		Policies:              idelockdown.DefaultPolicies(),
-		Locker:                planLocker{ide: i},
-		ShowNagPrompt:         i.nagPromptOpener(op.planSource),
-		ShowAskMoreTimePrompt: i.askMoreTimePromptOpener(op.planSource),
-		Tampered:              op.planSource.Tampered,
-		Now:                   time.Now,
-	})
-	if err := i.usagePlanner.Load(context.Background()); err != nil {
-		log.WithError(err).Warn("idelockdown: load usage history")
-	}
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,
@@ -927,12 +675,8 @@ func (i *IDE) init(
 		textapi.AllEvents(),
 		tutorialEventObserver(i.options.scheduleFn, i.tutorial.observeEvent),
 	)
-	_ = i.workspaceHandler.SubscribeEvents(
-		activityEvents, activityRecorder{planner: i.usagePlanner},
-	)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
-	i.initPlanSource(i.options.planSource)
 	err = i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 	if err != nil {
 		return err
