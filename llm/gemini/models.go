@@ -34,6 +34,10 @@ import (
 const LLMProvider = "gemini"
 
 const (
+	// Gemini_3_6_Flash is the current Gemini 3.6 Flash model.
+	Gemini_3_6_Flash = "gemini-3.6-flash"
+	// Gemini_3_5_FlashLite is the current Gemini 3.5 Flash-Lite model.
+	Gemini_3_5_FlashLite = "gemini-3.5-flash-lite"
 	// Gemini_3_1_Pro_Preview is the Gemini 3.1 Pro preview model.
 	Gemini_3_1_Pro_Preview = "gemini-3.1-pro-preview"
 	// Gemini_3_Flash_Preview is the Gemini 3 Flash preview model.
@@ -66,6 +70,8 @@ const VerificationModel = Gemini_2_5_Flash
 // verify with the provider at runtime for account-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		Gemini_3_6_Flash:             1048576,
+		Gemini_3_5_FlashLite:         1048576,
 		Gemini_3_1_Pro_Preview:       1048576,
 		Gemini_3_Flash_Preview:       1048576,
 		Gemini_3_1_FlashLite_Preview: 1048576,
@@ -102,6 +108,8 @@ func FlagshipModel() string { return Gemini_3_1_Pro_Preview }
 // (API max_output_tokens) ceiling. Models absent from the map have an
 // unknown ceiling; MaxOutputTokens returns 0 for them.
 var maxOutputTokens = map[string]int{
+	Gemini_3_6_Flash:             65536,
+	Gemini_3_5_FlashLite:         65536,
 	Gemini_3_1_Pro_Preview:       65536,
 	Gemini_3_Flash_Preview:       65536,
 	Gemini_3_1_FlashLite_Preview: 65536,

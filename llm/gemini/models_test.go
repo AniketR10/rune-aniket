@@ -35,11 +35,19 @@ func TestFlagshipModelInCatalog(t *testing.T) {
 	assert.Equal(t, Gemini_3_1_Pro_Preview, FlagshipModel())
 }
 
+func TestCurrentFlashModelsInCatalog(t *testing.T) {
+	models := AvailableModels()
+	assert.Equal(t, 1_048_576, models[Gemini_3_6_Flash])
+	assert.Equal(t, 1_048_576, models[Gemini_3_5_FlashLite])
+}
+
 func TestMaxOutputTokens(t *testing.T) {
 	tests := []struct {
 		model string
 		want  int
 	}{
+		{Gemini_3_6_Flash, 65536},
+		{Gemini_3_5_FlashLite, 65536},
 		{Gemini_3_1_Pro_Preview, 65536},
 		{Gemini_2_5_Flash, 65536},
 		{Gemini_2_0_Flash, 8192},

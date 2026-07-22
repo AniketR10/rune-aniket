@@ -49,6 +49,8 @@ func TestMaxOutputTokensDispatch(t *testing.T) {
 		{"openai", llmapi.ModelEntry{Provider: openai.LLMProvider, Name: openai.GPT5Dot5}, 128000},
 		{"codex", llmapi.ModelEntry{Provider: codex.LLMProvider, Name: codex.GPT5Dot4}, 0},
 		{"gemini", llmapi.ModelEntry{Provider: gemini.LLMProvider, Name: gemini.Gemini_2_5_Flash}, 65536},
+		{"gemini 3.6 flash", llmapi.ModelEntry{Provider: gemini.LLMProvider, Name: gemini.Gemini_3_6_Flash}, 65536},
+		{"gemini 3.5 flash-lite", llmapi.ModelEntry{Provider: gemini.LLMProvider, Name: gemini.Gemini_3_5_FlashLite}, 65536},
 		{"local", llmapi.ModelEntry{Provider: "llamacpp", Name: "anything"}, 0},
 		{"unknown provider", llmapi.ModelEntry{Provider: "mystery", Name: "x"}, 0},
 		{"unknown model", llmapi.ModelEntry{Provider: anthropic.LLMProvider, Name: "unknown"}, 0},

@@ -326,6 +326,64 @@ func TestCreateCompletionAlwaysSendsThinkingConfigForGemini3(t *testing.T) {
 	})
 }
 
+func TestCreateCompletionMaxOutputTokens(t *testing.T) {
+	doneChunk := `{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP"}]}`
+	model := llmapi.ModelEntry{Name: Gemini_3_6_Flash, Provider: LLMProvider}
+
+	tests := []struct {
+		name       string
+		provider   int
+		request    int
+		wantValue  string
+		wantAbsent bool
+	}{
+		{name: "provider default omitted", wantAbsent: true},
+		{name: "request override", request: 4096, wantValue: `"maxOutputTokens":4096`},
+		{name: "request override capped", request: 100000, wantValue: `"maxOutputTokens":65536`},
+		{name: "config fallback capped", provider: 100000, wantValue: `"maxOutputTokens":65536`},
+		{name: "request wins before cap", provider: 2048, request: 4096, wantValue: `"maxOutputTokens":4096`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, cfg := capturingSSEServer(t, []string{doneChunk})
+			cfg.MaxOutputTokens = tt.provider
+			svc := NewClient("k", cfg)
+			drain(t, svc, model, llmapi.Request{
+				Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+				MaxOutputTokens: tt.request,
+			})
+			if tt.wantAbsent {
+				assert.NotContains(t, *body, "maxOutputTokens")
+				return
+			}
+			assert.Contains(t, *body, tt.wantValue)
+		})
+	}
+}
+
+func TestEffectiveMaxOutputTokens(t *testing.T) {
+	tests := []struct {
+		name          string
+		model         string
+		requestLimit  int
+		configLimit   int
+		wantEffective int
+	}{
+		{name: "no override", model: Gemini_3_6_Flash},
+		{name: "request override", model: Gemini_3_6_Flash, requestLimit: 4096, configLimit: 2048, wantEffective: 4096},
+		{name: "config fallback", model: Gemini_3_6_Flash, configLimit: 2048, wantEffective: 2048},
+		{name: "3.6 flash cap", model: Gemini_3_6_Flash, requestLimit: 100000, wantEffective: 65536},
+		{name: "3.5 flash-lite cap", model: Gemini_3_5_FlashLite, requestLimit: 100000, wantEffective: 65536},
+		{name: "unknown model unchanged", model: "gemini-future", requestLimit: 100000, wantEffective: 100000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantEffective,
+				effectiveMaxOutputTokens(tt.model, tt.requestLimit, tt.configLimit))
+		})
+	}
+}
+
 // listServer serves a single page of the Gemini ListModels response using the
 // wire field names the genai SDK expects (supportedGenerationMethods,
 // inputTokenLimit). The body is intentionally Gemini-API shaped.

@@ -146,10 +146,10 @@ func (c *client) CreateCompletion(
 	if c.config.TopP != 0 {
 		cfg.TopP = new(float32(c.config.TopP))
 	}
-	if request.MaxOutputTokens > 0 {
-		cfg.MaxOutputTokens = int32(request.MaxOutputTokens)
-	} else if c.config.MaxOutputTokens > 0 {
-		cfg.MaxOutputTokens = int32(c.config.MaxOutputTokens)
+	if maxOutputTokens := effectiveMaxOutputTokens(
+		model.Name, request.MaxOutputTokens, c.config.MaxOutputTokens,
+	); maxOutputTokens > 0 {
+		cfg.MaxOutputTokens = int32(maxOutputTokens)
 	}
 	if tc := thinkingConfig(normalized); tc != nil {
 		cfg.ThinkingConfig = tc
@@ -158,6 +158,17 @@ func (c *client) CreateCompletion(
 
 	seq := c.genai.Models.GenerateContentStream(ctx, model.Name, contents, cfg)
 	return newStreamIterator(seq, warnings), nil
+}
+
+func effectiveMaxOutputTokens(model string, requestLimit, configLimit int) int {
+	limit := requestLimit
+	if limit <= 0 {
+		limit = configLimit
+	}
+	if ceiling := MaxOutputTokens(model); ceiling > 0 && limit > ceiling {
+		return ceiling
+	}
+	return limit
 }
 
 // CountTokens returns the token count for the given messages using the Gemini

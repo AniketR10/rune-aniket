@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
 	"unstable.build/go-tui/llm/anthropic"
 	"unstable.build/go-tui/llm/codex"
+	"unstable.build/go-tui/llm/gemini"
 )
 
 // newMaxTokensAdapter builds a commandAdapter whose agent is bound to a
@@ -88,6 +89,26 @@ func TestCommandAdapterMaxTokensRejectsCodex(t *testing.T) {
 	require.EqualError(t, err,
 		"codex/gpt-5.6-sol does not support custom max output token limits")
 	assert.Equal(t, 0, a.agent.MaxOutputTokens(), "rejected value must not be applied")
+}
+
+func TestCommandAdapterMaxTokensValidatesCurrentGeminiFlashModels(t *testing.T) {
+	for _, name := range []string{gemini.Gemini_3_6_Flash, gemini.Gemini_3_5_FlashLite} {
+		t.Run(name, func(t *testing.T) {
+			model := llmapi.ModelEntry{
+				Provider: gemini.LLMProvider, Name: name, ContextWindow: 1_048_576,
+			}
+
+			a := newMaxTokensAdapter(t, model)
+			_, err := a.handleMaxTokens([]string{"65537"})
+			require.EqualError(t, err,
+				name+" supports at most 65536 max output tokens; 65537 is too large")
+			assert.Equal(t, 0, a.agent.MaxOutputTokens(), "rejected value must not be applied")
+
+			_, err = a.handleMaxTokens([]string{"65536"})
+			require.NoError(t, err)
+			assert.Equal(t, 65536, a.agent.MaxOutputTokens())
+		})
+	}
 }
 
 // captureCommandHandler records the last repl.Command it received and
