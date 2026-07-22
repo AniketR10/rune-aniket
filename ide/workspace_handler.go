@@ -209,6 +209,8 @@ type workspaceManagerHandler struct {
 	pending             map[string]*pendingWorkspace
 	lastReservedPending *pendingWorkspace
 	pendingWG           sync.WaitGroup
+	closing             map[string]chan struct{}
+	closeWG             sync.WaitGroup
 
 	// Fields, not constants, so tests can shorten the extensionready
 	// readiness and command-registration timeouts.
@@ -268,6 +270,12 @@ func (m visibleWorkspaceManager) IncrementReference(uri workspaceapi.URI) {
 
 func (m visibleWorkspaceManager) DecrementReference(uri workspaceapi.URI) error {
 	return m.manager.DecrementReference(uri)
+}
+
+func (m visibleWorkspaceManager) RemoveWorkspace(
+	uri workspaceapi.URI,
+) (workspace.Workspace, bool) {
+	return m.manager.RemoveWorkspace(uri)
 }
 
 func (h *workspaceManagerHandler) newEditor(
@@ -588,6 +596,7 @@ func (h *workspaceManagerHandler) init(
 	h.streamingOpen = streamingOpen
 	h.commandObserver = commandObserver
 	h.pending = make(map[string]*pendingWorkspace)
+	h.closing = make(map[string]chan struct{})
 	h.extReadyWait = extensionReadyWait
 	h.extCommandWait = extensionCommandWait
 	h.extHandleWait = extensionHandleWait
@@ -1367,9 +1376,27 @@ func (h *workspaceManagerHandler) addWorkspace(
 			"workspace %q is already loading", uri.String())
 		return nil
 	}
-	cwd, ctx, cancel, err := h.createWorkspaceScheme(uri)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithCancel(context.Background())
+	done, ok := h.closing[uri.String()]
+	if !ok {
+		pending, err := h.reservePendingSlot(uri, slot, cancel)
+		if err != nil {
+			cancel()
+			return err
+		}
+		cwd, err := h.createWorkspaceScheme(uri)
+		if err != nil {
+			delete(h.pending, uri.String())
+			if h.lastReservedPending == pending {
+				h.lastReservedPending = nil
+			}
+			cancel()
+			return err
+		}
+		h.shaderRunner.startLoading()
+		h.pendingWG.Add(1)
+		h.launchBuild(pending, uri, cwd, ctx, cancel, shouldRestore, promptRecommended)
+		return nil
 	}
 	pending, err := h.reservePendingSlot(uri, slot, cancel)
 	if err != nil {
@@ -1378,6 +1405,45 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 	h.shaderRunner.startLoading()
 	h.pendingWG.Add(1)
+	go debug.CapturePanicReport(func() {
+		<-done
+		if pending.canceled.Load() {
+			h.abortPendingBuild(pending, uri, nil, nil, cancel)
+			return
+		}
+		scheduled := h.scheduleNextTick(func() {
+			cwd, err := h.createWorkspaceScheme(uri)
+			if err != nil {
+				delete(h.pending, uri.String())
+				if h.lastReservedPending == pending {
+					h.lastReservedPending = nil
+				}
+				h.shaderRunner.stopLoading()
+				cancel()
+				log.Errorf("load workspace %s: %v", uri.String(), err)
+				_, _ = h.notifications.current().Notify(browserapi.LevelError,
+					"Failed to load workspace %s: %v", uri.String(), err)
+				h.pendingWG.Done()
+				return
+			}
+			h.launchBuild(pending, uri, cwd, ctx, cancel,
+				shouldRestore, promptRecommended)
+		})
+		if !scheduled {
+			h.abortPendingBuild(pending, uri, nil, nil, cancel)
+		}
+	})
+	return nil
+}
+
+// launchBuild runs the async workspace build for an already-reserved
+// pending slot. Callers must have incremented pendingWG; every exit
+// path below (install, abort) decrements it.
+func (h *workspaceManagerHandler) launchBuild(
+	pending *pendingWorkspace, uri workspaceapi.URI,
+	cwd workspace.Workspace, ctx context.Context, cancel context.CancelFunc,
+	shouldRestore, promptRecommended bool,
+) {
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
 		if pending.canceled.Load() {
@@ -1393,7 +1459,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
 		}
 	})
-	return nil
 }
 
 func (h *workspaceManagerHandler) abortPendingBuild(
@@ -1431,14 +1496,13 @@ func (h *workspaceManagerHandler) isPending(uri workspaceapi.URI) bool {
 }
 
 func (h *workspaceManagerHandler) createWorkspaceScheme(uri workspaceapi.URI) (
-	workspace.Workspace, context.Context, context.CancelFunc, error,
+	workspace.Workspace, error,
 ) {
 	cwd, err := h.workspace.AddWorkspace(context.Background(), uri)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("create new workspace for %q: %w", uri, err)
+		return nil, fmt.Errorf("create new workspace for %q: %w", uri, err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	return cwd, ctx, cancel, nil
+	return cwd, nil
 }
 
 func (h *workspaceManagerHandler) reservePendingSlot(
@@ -2486,11 +2550,32 @@ func (h *workspaceManagerHandler) closeWorkspace() (
 	}
 
 	h.persistWorkspaceStateOnClose(hm)
-	if err := hm.closeAndRemove(); err != nil {
+	// ex.Close is UI-owned and idempotent: closing it here establishes
+	// e.closed before the background goroutine re-enters it via
+	// workspaceHandler.Close, keeping all UI teardown on the loop.
+	if err := hm.ex.Close(); err != nil {
 		log.Error(err)
-	} else {
-		log.Debugf("Closed all workspace resources successfully")
 	}
+	// Detach the raw workspace so the background managerWorkspace.Close
+	// cannot write the manager maps off-loop.
+	if raw, ok := h.workspace.RemoveWorkspace(hm.uri); ok {
+		hm.cwd = raw
+	}
+	done := make(chan struct{})
+	h.closing[uri.String()] = done
+	h.closeWG.Add(1)
+	go debug.CapturePanicReport(func() {
+		defer h.closeWG.Done()
+		if err := hm.closeAndRemove(); err != nil {
+			log.Error(err)
+		} else {
+			log.Debugf("Closed all workspace resources successfully")
+		}
+		h.mu.Lock()
+		delete(h.closing, uri.String())
+		h.mu.Unlock()
+		close(done)
+	})
 
 	h.workspaces[focus] = nil
 	h.workspaceCount--
@@ -2581,6 +2666,11 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	h.mu.Unlock()
 	h.pendingWG.Wait()
+	// Background workspace closes must finish before the shared
+	// resources below (llmRouter, home LSP/DAP) are torn down. Pending
+	// cancellation above guarantees gated reopen waiters exit via their
+	// canceled path once these complete, so this cannot deadlock.
+	h.closeWG.Wait()
 	h.mu.Lock()
 	for _, hm := range h.workspaces {
 		if hm == nil {
@@ -3172,6 +3262,12 @@ func (h *workspaceManagerHandler) waitInflight() {
 	for _, e := range exes {
 		e.waitInflight()
 	}
+}
+
+// waitClosing is TEST ONLY and blocks until every background workspace teardown spawned
+// by closeWorkspace has completed
+func (h *workspaceManagerHandler) waitClosing() {
+	h.closeWG.Wait()
 }
 
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {

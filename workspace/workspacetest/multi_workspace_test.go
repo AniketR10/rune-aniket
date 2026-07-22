@@ -149,6 +149,10 @@ func (m *mockManager) IncrementReference(workspaceapi.URI) {}
 
 func (m *mockManager) DecrementReference(workspaceapi.URI) error { return nil }
 
+func (m *mockManager) RemoveWorkspace(workspaceapi.URI) (workspace.Workspace, bool) {
+	panic("should not be called")
+}
+
 // TestMultiForwardsRemoteScheme guards against the regression
 // where workspace.Multi only exposes the embedded Workspace's
 // promoted method set, hiding OnDisconnect on schemes that
@@ -364,4 +368,8 @@ func (h hidingManager) IncrementReference(uri workspaceapi.URI) {
 
 func (h hidingManager) DecrementReference(uri workspaceapi.URI) error {
 	return h.m.DecrementReference(uri)
+}
+
+func (h hidingManager) RemoveWorkspace(uri workspaceapi.URI) (workspace.Workspace, bool) {
+	return h.m.RemoveWorkspace(uri)
 }

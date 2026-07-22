@@ -96,7 +96,7 @@ type Facility struct {
 // loop (behind the asyncVTE placeholder), so the bound only keeps
 // background attempts finite: a spawn against a wedged transport
 // fails after the timeout so the placeholder shows an error instead
-// of spinning forever, and WaitForPendingInit teardown stays finite.
+// of spinning forever.
 const defaultSpawnTimeout = 30 * time.Second
 
 // New allocates storage for a new Facility and initializes it.
@@ -217,26 +217,6 @@ func (f *Facility) WaitForInitialFill() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for f.pendingInit > 0 && !f.closed {
-		f.cond.Wait()
-	}
-}
-
-// WaitForPendingInit blocks until every initCap warm-up goroutine has
-// observed the current state and decremented pendingInit. Unlike
-// WaitForInitialFill, this does not exit early on Close — the warm-up
-// is still racing the underlying factory at that point, and the
-// goroutine has side effects on the executor/workspace (opening pty
-// pairs, launching shells) that the workspace teardown needs to be
-// sequenced after to avoid concurrent fd destroy / startProcess access.
-//
-// Use this from owners that need to fence their own resource teardown
-// against an in-flight warm-up; Close itself remains non-blocking so
-// stuck factories cannot wedge shutdown of unrelated callers (see the
-// "initCap does not resurrect a closed pool" facility test).
-func (f *Facility) WaitForPendingInit() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for f.pendingInit > 0 {
 		f.cond.Wait()
 	}
 }

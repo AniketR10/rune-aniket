@@ -3109,7 +3109,10 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, ex1.comp.Browser().FloatingWindows())
 
-		require.NoError(t, m.commandReloadWorkspace())
+		m.mu.Lock()
+		err = m.commandReloadWorkspace()
+		m.mu.Unlock()
+		require.NoError(t, err)
 		m.drainPendingWorkspaces()
 		m.Resize(80, 24)
 		ex2 := m.exHandler(m.focusHandler())
@@ -5327,11 +5330,13 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 	return quit, handle
 }
 
-// drainPendingWorkspaces blocks until h.pending is empty. The caller
-// must NOT hold h.mu; we acquire it briefly each iteration to read
-// the pending map and release it so the install goroutine queued by
-// scheduleNextTick can run.
+// drainPendingWorkspaces blocks until every background workspace
+// teardown has finished and h.pending is empty. Background closes are
+// drained first so gated reopen waiters (which block on the close
+// gate while holding a pendingWG count) can proceed. The caller must
+// NOT hold h.mu.
 func (t *testWorkspaceManagerHandler) drainPendingWorkspaces() {
+	t.workspaceManagerHandler.waitClosing()
 	t.workspaceManagerHandler.pendingWG.Wait()
 }
 
@@ -5454,7 +5459,11 @@ func TestCloseWorkspaceRemovesClosedWorkspaceFromManager(t *testing.T) {
 	require.True(t, manager.HasWorkspace(uri),
 		"workspace should be registered with the Manager after init")
 
-	require.NoError(t, m.commandCloseWorkspace())
+	m.mu.Lock()
+	err = m.commandCloseWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
+	m.drainPendingWorkspaces()
 	require.Equal(t, 0, m.workspaceCount)
 
 	require.False(t, manager.HasWorkspace(uri),
@@ -5494,7 +5503,10 @@ func TestCloseWorkspaceClosesScheme(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, m.commandCloseWorkspace())
+	m.mu.Lock()
+	err = m.commandCloseWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
 	require.Equal(t, 0, m.workspaceCount)
 	require.False(t, manager.HasWorkspace(uri),
 		"closing a workspace must remove it from workspace.Manager")
@@ -5540,7 +5552,10 @@ func TestReloadWorkspaceClosesAndReopensScheme(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, m.commandReloadWorkspace())
+	m.mu.Lock()
+	err = m.commandReloadWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
 	m.drainPendingWorkspaces()
 
 	select {
@@ -5575,6 +5590,619 @@ func TestReloadWorkspaceClosesAndReopensScheme(t *testing.T) {
 	case <-ch2:
 	case <-time.After(5 * time.Second):
 		t.Fatal("new scheme did not run a trivial command after reload")
+	}
+}
+
+// blockingCloser is an io.Closer whose Close blocks until release is
+// closed. Tests inject it as a workspaceHandler.symbolDBCloser to hold
+// the background workspace teardown open at a controlled point.
+type blockingCloser struct {
+	entered   chan struct{}
+	release   chan struct{}
+	completed atomic.Bool
+	once      sync.Once
+}
+
+func newBlockingCloser() *blockingCloser {
+	return &blockingCloser{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (b *blockingCloser) Close() error {
+	b.once.Do(func() { close(b.entered) })
+	<-b.release
+	b.completed.Store(true)
+	return nil
+}
+
+// TestCloseWorkspaceReturnsBeforeTeardown guards the async-close
+// contract: commandCloseWorkspace must return on the event loop (slot
+// cleared, count decremented, manager detached) while the expensive
+// teardown is still running in a background goroutine. It also hammers
+// the detached workspace with scheme calls that overlap the teardown
+// (including scheme.Close) so the race detector can catch
+// close-vs-in-flight-call hazards.
+func TestCloseWorkspaceReturnsBeforeTeardown(t *testing.T) {
+	dir := t.TempDir()
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	slot := m.focus
+	hm := m.workspaces[slot]
+	hm.symbolDBCloser = blocker
+	err = m.commandCloseWorkspace()
+	slotCleared := m.workspaces[slot] == nil
+	count := m.workspaceCount
+	// hm.cwd now holds the detached raw workspace. The background
+	// goroutine only touches it after blocker.release, so this read
+	// happens-before the teardown's writes via the release channel.
+	cwd := hm.cwd
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	// All of this must hold while the teardown is still blocked.
+	require.True(t, slotCleared,
+		"closeWorkspace must clear the slot on the event loop")
+	require.Equal(t, 0, count)
+	require.False(t, manager.HasWorkspace(uri),
+		"closeWorkspace must detach the workspace from the manager "+
+			"synchronously")
+	select {
+	case <-blocker.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("background teardown never reached the symbolDB closer")
+	}
+	require.False(t, blocker.completed.Load())
+
+	// Hammer the detached workspace with scheme calls while the
+	// teardown is parked, then keep hammering across the release so
+	// the calls overlap the LSP/DAP/ctx/scheme close sequence. Errors
+	// are expected once the scheme closes; -race and orderly loop
+	// completion are the assertions.
+	hammerStarted := make(chan struct{})
+	hammerStop := make(chan struct{})
+	hammerDone := make(chan struct{})
+	var hammerFinished atomic.Bool
+	go debug.CapturePanicReport(func() {
+		defer close(hammerDone)
+		first := true
+		for {
+			select {
+			case <-hammerStop:
+				hammerFinished.Store(true)
+				return
+			default:
+			}
+			if f, err := cwd.Create("hammer.txt"); err == nil {
+				_, _ = f.Write([]byte("x"))
+				_ = f.Close()
+			}
+			_, _ = cwd.Stat("hammer.txt")
+			if f, err := cwd.Open("hammer.txt"); err == nil {
+				_ = f.Close()
+			}
+			if first {
+				first = false
+				close(hammerStarted)
+			}
+		}
+	})
+	select {
+	case <-hammerStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("scheme-call hammer never completed an iteration")
+	}
+
+	close(blocker.release)
+	m.workspaceManagerHandler.waitClosing()
+	require.True(t, blocker.completed.Load(),
+		"background teardown must complete after the closer unblocks")
+
+	close(hammerStop)
+	select {
+	case <-hammerDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("scheme-call hammer wedged against the closed scheme")
+	}
+	require.True(t, hammerFinished.Load(),
+		"hammer must exit its loop normally; an early exit means a "+
+			"scheme call panicked during teardown")
+}
+
+// TestReloadWaitsForCloseBeforeReopen guards the RUNE-180 real
+// close+open invariant under the async close: :workspacereload must
+// reserve the pending slot immediately, but only create the fresh
+// scheme once the previous instance has fully torn down.
+func TestReloadWaitsForCloseBeforeReopen(t *testing.T) {
+	dir := t.TempDir()
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	slot := m.focus
+	origCwd := m.workspaces[slot].cwd
+	m.workspaces[slot].symbolDBCloser = blocker
+	err = m.commandReloadWorkspace()
+	pending := m.isPending(uri)
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	require.True(t, pending,
+		"reload must reserve the pending slot immediately")
+
+	// The old instance is still blocked in teardown: the fresh scheme
+	// must not exist yet. Reads are taken under m.mu because the gated
+	// waiter creates the scheme through the scheduler (which holds mu).
+	m.mu.Lock()
+	reopened := manager.HasWorkspace(uri)
+	m.mu.Unlock()
+	require.False(t, reopened,
+		"reload must not recreate the scheme while the previous "+
+			"instance is still closing")
+
+	close(blocker.release)
+	m.drainPendingWorkspaces()
+	m.waitForWorkspace(t, uri)
+
+	m.mu.Lock()
+	reopened = manager.HasWorkspace(uri)
+	newCwd := m.workspaces[m.focus].cwd
+	m.mu.Unlock()
+	require.True(t, reopened,
+		":workspacereload must re-register the workspace after the "+
+			"old instance closed")
+	require.NotEqual(t,
+		fmt.Sprintf("%p", origCwd), fmt.Sprintf("%p", newCwd),
+		"reload must install a fresh workspace.Workspace")
+}
+
+// TestOpenSameURIWhileClosingIsDeferred asserts that opening a URI
+// whose previous instance is still tearing down defers the build until
+// the close finishes, installs exactly one instance, and dedupes
+// concurrent opens through the pending reservation.
+func TestOpenSameURIWhileClosingIsDeferred(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+	require.NoError(t, err)
+
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	m.workspaces[m.focus].symbolDBCloser = blocker
+	err = m.commandCloseWorkspace()
+	require.NoError(t, err)
+
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	require.True(t, m.isPending(uri),
+		"open-while-closing must reserve a pending slot immediately")
+
+	// A duplicate open during the window must be deduped by the
+	// pending reservation, not queue a second build.
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	pendingCount := len(m.pending)
+	m.mu.Unlock()
+	require.Equal(t, 1, pendingCount,
+		"duplicate open while closing must not reserve a second slot")
+
+	close(blocker.release)
+	m.drainPendingWorkspaces()
+	m.waitForWorkspace(t, uri)
+
+	m.mu.Lock()
+	installed := 0
+	for _, w := range m.workspaces {
+		if w != nil && w.uri.Equal(uri) {
+			installed++
+		}
+	}
+	count := m.workspaceCount
+	m.mu.Unlock()
+	require.Equal(t, 1, installed,
+		"exactly one instance must be installed after the drain")
+	require.Equal(t, 1, count)
+}
+
+// TestManagerCloseWaitsForBackgroundCloses asserts that shutting the
+// handler down while a background workspace teardown is in flight
+// blocks until that teardown completes, so shared resources are not
+// freed under it.
+func TestManagerCloseWaitsForBackgroundCloses(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	m.drainPendingWorkspaces()
+
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	m.workspaces[m.focus].symbolDBCloser = blocker
+	err := m.commandCloseWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	closed := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		_ = m.Close()
+		close(closed)
+	})
+
+	select {
+	case <-closed:
+		t.Fatal("Close returned while a background workspace teardown " +
+			"was still blocked")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(blocker.release)
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close did not return after the background teardown " +
+			"completed")
+	}
+	require.True(t, blocker.completed.Load())
+}
+
+// TestCloseGatedReloadCancelsQueuedReopen asserts that closing the
+// pending (gated) workspace of an in-flight reload makes the gated
+// waiter clean up its reservation without installing anything.
+func TestCloseGatedReloadCancelsQueuedReopen(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+	require.NoError(t, err)
+
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	m.workspaces[m.focus].symbolDBCloser = blocker
+	err = m.commandReloadWorkspace()
+	require.NoError(t, err)
+	pending, ok := m.pending[uri.String()]
+	require.True(t, ok, "reload must have reserved a gated pending slot")
+
+	// Close the reloading (pending) workspace while the gate is held:
+	// the pending-cancel branch of closeWorkspace must fire.
+	m.focus = pending.slot
+	_, _, err = m.closeWorkspace()
+	require.NoError(t, err)
+	require.False(t, m.isPending(uri),
+		"closing a gated pending workspace must drop the reservation")
+	m.mu.Unlock()
+
+	close(blocker.release)
+	m.drainPendingWorkspaces()
+
+	m.mu.Lock()
+	_, installed := m.findInstalledSlot(uri)
+	m.mu.Unlock()
+	require.False(t, installed,
+		"a canceled gated reload must not install a workspace")
+}
+
+// TestGatedReopenAbortsWhenSchedulerRejects covers the shutdown race
+// where the host loop stops accepting ticks while a gated reopen is
+// queued behind an in-flight close: the waiter must abort its pending
+// reservation (releasing pendingWG) instead of leaking it, or Close's
+// pendingWG.Wait would deadlock.
+func TestGatedReopenAbortsWhenSchedulerRejects(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+	require.NoError(t, err)
+
+	var reject atomic.Bool
+	blocker := newBlockingCloser()
+	m.mu.Lock()
+	// Swapped before the gated waiter spawns so the field write
+	// happens-before the goroutine's read.
+	orig := m.scheduleNextTick
+	m.scheduleNextTick = func(fn func()) bool {
+		if reject.Load() {
+			return false
+		}
+		return orig(fn)
+	}
+	m.workspaces[m.focus].symbolDBCloser = blocker
+	err = m.commandCloseWorkspace()
+	require.NoError(t, err)
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	require.True(t, m.isPending(uri),
+		"open-while-closing must reserve a pending slot immediately")
+	m.mu.Unlock()
+
+	// The loop stops accepting ticks before the close finishes, so
+	// the waiter wakes into the rejected-schedule path.
+	reject.Store(true)
+	close(blocker.release)
+	m.drainPendingWorkspaces()
+
+	m.mu.Lock()
+	pendingAfter := m.isPending(uri)
+	_, installed := m.findInstalledSlot(uri)
+	m.mu.Unlock()
+	require.False(t, pendingAfter,
+		"rejected gated reopen must drop its pending reservation")
+	require.False(t, installed,
+		"rejected gated reopen must not install a workspace")
+}
+
+// blockingPtyScheme wraps a scheme so NewPty wedges until the scheme
+// is closed, ignoring the spawn ctx. This models the live deadlock
+// where a VTE warm-up goroutine is stuck in an unbounded remote RPC
+// (remoteFile.Close on a stalled SSH transport) that only the scheme
+// teardown can abort.
+type blockingPtyScheme struct {
+	schemeapi.Scheme
+	entered   chan struct{}
+	release   chan struct{}
+	enterOnce sync.Once
+	closeOnce sync.Once
+}
+
+func newBlockingPtyScheme(inner schemeapi.Scheme) *blockingPtyScheme {
+	return &blockingPtyScheme{
+		Scheme:  inner,
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (s *blockingPtyScheme) NewPty(context.Context) (workspaceapi.Pty, error) {
+	s.enterOnce.Do(func() { close(s.entered) })
+	<-s.release
+	return workspaceapi.Pty{}, errors.New("scheme closed")
+}
+
+func (s *blockingPtyScheme) Close() error {
+	s.closeOnce.Do(func() { close(s.release) })
+	return s.Scheme.Close()
+}
+
+// TestReloadWithWedgedVTEWarmupDoesNotDeadlock reproduces the live
+// :workspacereload deadlock: a VTE warm-up goroutine wedged in a
+// scheme call that only the scheme teardown can abort, while
+// closeWorkspace's on-loop ex.Close fenced on WaitForPendingInit —
+// before the teardown that would abort the call. The event loop froze
+// forever.
+//
+// Teardown never waits for warm-ups before closing the scheme: the
+// close is what aborts the wedged call, and the background teardown
+// drains the goroutine only after that. The test asserts the reload
+// returns promptly and that the teardown un-wedges the warm-up on
+// its own — no external release.
+func TestReloadWithWedgedVTEWarmupDoesNotDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	var schemesMu sync.Mutex
+	var schemes []*blockingPtyScheme
+	// Runs before the handler-close cleanup above (LIFO): un-wedge
+	// every scheme so no wedged warm-up goroutine outlives the test
+	// if an assertion fails before the teardown closes the scheme.
+	t.Cleanup(func() {
+		schemesMu.Lock()
+		defer schemesMu.Unlock()
+		for _, s := range schemes {
+			s.closeOnce.Do(func() { close(s.release) })
+		}
+	})
+	m.mu.Lock()
+	err := m.workspace.RegisterScheme("blockpty",
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+			schemeapi.Scheme, error,
+		) {
+			memURI, err := workspaceapi.ParseURI("memory://" + uri.Path())
+			if err != nil {
+				return nil, err
+			}
+			inner, err := workspace.NewMemoryScheme(ctx, cfg, memURI)
+			if err != nil {
+				return nil, err
+			}
+			s := newBlockingPtyScheme(inner)
+			schemesMu.Lock()
+			schemes = append(schemes, s)
+			schemesMu.Unlock()
+			return s, nil
+		})
+	// Warm one VTE per workspace so a wedged warm-up is in flight.
+	m.initialVTECapacity = 1
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("blockpty://" + t.TempDir())
+	require.NoError(t, err)
+	m.mu.Lock()
+	err = m.addWorkspace(uri, false, false, -1)
+	m.mu.Unlock()
+	require.NoError(t, err)
+	m.waitForWorkspace(t, uri)
+
+	schemesMu.Lock()
+	require.Len(t, schemes, 1)
+	first := schemes[0]
+	schemesMu.Unlock()
+	select {
+	case <-first.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("VTE warm-up never reached the wedged NewPty")
+	}
+
+	m.mu.Lock()
+	slot, ok := m.findInstalledSlot(uri)
+	require.True(t, ok)
+	m.switchToWorkspace(slot)
+	m.mu.Unlock()
+
+	reloadDone := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		reloadDone <- m.commandReloadWorkspace()
+	})
+
+	select {
+	case err := <-reloadDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		// Un-wedge manually so cleanup can proceed, then fail.
+		t.Error(":workspacereload blocked the event loop " +
+			"behind a wedged VTE warm-up")
+		first.closeOnce.Do(func() { close(first.release) })
+		<-reloadDone
+		return
+	}
+
+	// The background teardown must abort the wedged warm-up on its
+	// own: closing the scheme is the un-wedge, and nothing waits for
+	// the warm-up before that close.
+	select {
+	case <-first.release:
+	case <-time.After(10 * time.Second):
+		t.Fatal("reload teardown never closed the old scheme")
+	}
+	m.drainPendingWorkspaces()
+	m.waitForWorkspace(t, uri)
+	m.mu.Lock()
+	_, reopened := m.findInstalledSlot(uri)
+	m.mu.Unlock()
+	require.True(t, reopened, "reload must reopen the workspace")
+}
+
+// brokenClosePtyScheme models a transport whose Close fails to abort
+// an in-flight NewPty: the warm-up goroutine stays wedged across the
+// entire teardown and only the test's cleanup releases it.
+type brokenClosePtyScheme struct {
+	*blockingPtyScheme
+}
+
+func (s *brokenClosePtyScheme) Close() error {
+	return s.Scheme.Close()
+}
+
+// TestBackgroundCloseCompletesWithUnabortableWarmup asserts that the
+// background workspace teardown never waits on VTE warm-up
+// goroutines: they are self-disposing (Facility.initCap closes any
+// late VTE against a closed pool), so joining them only converts a
+// self-limiting goroutine into a permanent hang of the closing gate
+// and closeWG.Wait when a broken transport's scheme close cannot
+// abort the wedged call.
+func TestBackgroundCloseCompletesWithUnabortableWarmup(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	var schemesMu sync.Mutex
+	var schemes []*brokenClosePtyScheme
+	// Runs before the handler-close cleanup above (LIFO): release
+	// the wedged warm-up goroutines at test end.
+	t.Cleanup(func() {
+		schemesMu.Lock()
+		defer schemesMu.Unlock()
+		for _, s := range schemes {
+			s.closeOnce.Do(func() { close(s.release) })
+		}
+	})
+	m.mu.Lock()
+	err := m.workspace.RegisterScheme("brokenpty",
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+			schemeapi.Scheme, error,
+		) {
+			memURI, err := workspaceapi.ParseURI("memory://" + uri.Path())
+			if err != nil {
+				return nil, err
+			}
+			inner, err := workspace.NewMemoryScheme(ctx, cfg, memURI)
+			if err != nil {
+				return nil, err
+			}
+			s := &brokenClosePtyScheme{newBlockingPtyScheme(inner)}
+			schemesMu.Lock()
+			schemes = append(schemes, s)
+			schemesMu.Unlock()
+			return s, nil
+		})
+	m.initialVTECapacity = 1
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("brokenpty://" + t.TempDir())
+	require.NoError(t, err)
+	m.mu.Lock()
+	err = m.addWorkspace(uri, false, false, -1)
+	m.mu.Unlock()
+	require.NoError(t, err)
+	m.waitForWorkspace(t, uri)
+
+	schemesMu.Lock()
+	require.Len(t, schemes, 1)
+	first := schemes[0]
+	schemesMu.Unlock()
+	select {
+	case <-first.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("VTE warm-up never reached the wedged NewPty")
+	}
+
+	m.mu.Lock()
+	slot, ok := m.findInstalledSlot(uri)
+	require.True(t, ok)
+	m.switchToWorkspace(slot)
+	err = m.commandCloseWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	drained := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		m.drainPendingWorkspaces()
+		close(drained)
+	})
+	select {
+	case <-drained:
+	case <-time.After(10 * time.Second):
+		t.Fatal("background close never completed: teardown waited " +
+			"on a warm-up goroutine the scheme close could not abort")
 	}
 }
 
@@ -5662,7 +6290,13 @@ func TestCloseWorkspaceClosesExtensionPermissionsPartition(t *testing.T) {
 	openedDuringInstall := tracker.opens.Load()
 	closedDuringInstall := tracker.closes.Load()
 
-	require.NoError(t, m.commandCloseWorkspace())
+	m.mu.Lock()
+	err = m.commandCloseWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
+	// Teardown now runs in a background goroutine; drain before
+	// counting closes.
+	m.drainPendingWorkspaces()
 
 	openedDuringClose := tracker.opens.Load() - openedDuringInstall
 	closedDuringClose := tracker.closes.Load() - closedDuringInstall

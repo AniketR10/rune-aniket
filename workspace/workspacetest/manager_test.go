@@ -164,6 +164,67 @@ func TestManager(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("RemoveWorkspace removes the entry and returns the raw workspace", func(t *testing.T) {
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
+		err := m.RegisterScheme("test", NewNopScheme("test"))
+		require.NoError(t, err)
+
+		uri := parseURI(t, "test:///tmp/")
+		w, err := m.AddWorkspace(ctx, uri)
+		require.NoError(t, err)
+		require.NotNil(t, w)
+
+		detached, ok := m.RemoveWorkspace(uri)
+		require.True(t, ok)
+		require.NotNil(t, detached)
+		assert.False(t, m.HasWorkspace(uri),
+			"detach must unregister the uri from the manager")
+
+		_, ok = m.RemoveWorkspace(uri)
+		assert.False(t, ok, "second detach must return false")
+
+		// A new workspace registered under the same uri must survive
+		// closing the detached one: the detached value must not be
+		// wrapped in the manager-removing decorator.
+		w2, err := m.AddWorkspace(ctx, uri)
+		require.NoError(t, err)
+		require.NotNil(t, w2)
+
+		require.NoError(t, detached.Close())
+		assert.True(t, m.HasWorkspace(uri),
+			"closing a detached workspace must not touch the manager maps")
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("stale wrapped Close does not evict a successor instance", func(t *testing.T) {
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
+		err := m.RegisterScheme("test", NewNopScheme("test"))
+		require.NoError(t, err)
+
+		uri := parseURI(t, "test:///tmp/")
+		stale, err := m.AddWorkspace(ctx, uri)
+		require.NoError(t, err)
+
+		_, ok := m.RemoveWorkspace(uri)
+		require.True(t, ok)
+
+		successor, err := m.AddWorkspace(ctx, uri)
+		require.NoError(t, err)
+
+		// The wrapped handle from before the remove is now stale:
+		// closing it must not evict the successor entry.
+		require.NoError(t, stale.Close())
+		assert.True(t, m.HasWorkspace(uri),
+			"a stale wrapped handle's Close must not evict the successor")
+		w, err := m.AddWorkspace(ctx, uri)
+		require.NoError(t, err)
+		assert.True(t, successor == w,
+			"the successor must remain the registered entry")
+
+		require.NoError(t, m.Close())
+	})
+
 	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
 		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test",

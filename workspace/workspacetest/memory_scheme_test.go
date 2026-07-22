@@ -69,6 +69,32 @@ func TestMemoryScheme(t *testing.T) {
 	})
 }
 
+// TestMemorySchemeCallsAfterClose guards against panics when scheme
+// calls race Close: the async workspace teardown closes the scheme in
+// a background goroutine while extensions or warm-up goroutines may
+// still be issuing calls against it. Post-close calls must surface an
+// error, not assign into the nil maps Close leaves behind.
+func TestMemorySchemeCallsAfterClose(t *testing.T) {
+	ctx := context.Background()
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	closer, ok := mem.(io.Closer)
+	require.True(t, ok)
+	require.NoError(t, closer.Close())
+
+	_, err = mem.Create("post-close.txt")
+	require.Error(t, err,
+		"Create after Close must error instead of panicking on the nil files map")
+
+	ch := make(chan schemeapi.EventInfo, 1)
+	_, err = mem.Watch("/", ch, schemeapi.Create)
+	require.Error(t, err,
+		"Watch after Close must error instead of panicking on the nil watchpoint maps")
+}
+
 // TODO add to scheme suite
 func TestMemoryFile(t *testing.T) {
 	t.Run("Write overwrites data", func(t *testing.T) {

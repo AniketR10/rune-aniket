@@ -87,6 +87,7 @@ type memoryScheme struct {
 	scheme         string
 	workspace      workspaceapi.URI
 	mu             sync.Locker
+	closed         bool
 	files          map[string]*memFile
 	fd             *atomic.Uint64 // next fd
 	watchpoints    map[schemeapi.Event][]chan<- schemeapi.EventInfo
@@ -169,6 +170,12 @@ func (m *memoryScheme) OpenFile(path string, flag int, mode os.FileMode) (
 		f = NewMemoryFile(filename, uintptr(fd), mode, data, m.mu).(*memFile)
 		f.m = m
 		m.mu.Lock()
+		// The async workspace teardown closes the scheme off the
+		// event loop, so calls can race Close; the maps are nil then.
+		if m.closed {
+			m.mu.Unlock()
+			return nil, os.ErrClosed
+		}
 		m.files[uriStr] = f
 		watchpoints := m.watchpoints[schemeapi.Create]
 		copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
@@ -539,6 +546,9 @@ func (m *memoryScheme) Watch(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.closed {
+		return 0, os.ErrClosed
+	}
 	next := m.nextWatchpoint.Add(1)
 	m.watchpointIDs[next] = c
 	for _, event := range events {
@@ -575,6 +585,7 @@ func (m *memoryScheme) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.closed = true
 	// Close each watcher channel exactly once. Watch appends the same channel
 	// into one bucket per subscribed event, so iterating m.watchpoints here
 	// would try to close the same channel multiple times. watchpointIDs is

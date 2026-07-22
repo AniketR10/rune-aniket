@@ -225,6 +225,21 @@ func (m *Manager) DecrementReference(uri workspaceapi.URI) error {
 	return w.Close()
 }
 
+// RemoveWorkspace unregisters uri and returns the underlying
+// Workspace, unwrapped so closing it cannot touch the manager's maps.
+// Callers are responsible for calling Close on the returned
+// workspace. Stale wrapped handles from before the remove stay
+// harmless: their Close only evicts the entry they correspond to.
+func (m *Manager) RemoveWorkspace(uri workspaceapi.URI) (Workspace, bool) {
+	w, ok := m.workspaces[uri.String()]
+	if !ok {
+		return nil, false
+	}
+	m.removeWorkspace(uri)
+	m.log(log.DebugLevel, "RemoveWorkspace(%q)", uri.String())
+	return w.Workspace, true
+}
+
 // Close closes all resources associated with this Manager.
 func (m *Manager) Close() error {
 	var ret error
@@ -253,7 +268,13 @@ type managerWorkspace struct {
 
 func (w managerWorkspace) Close() error {
 	ret := w.Workspace.Close()
-	w.m.removeWorkspace(w.uri)
+	// A stale handle can outlive RemoveWorkspace and a re-add of the
+	// same uri: only evict the entry this handle corresponds to, so a
+	// late Close cannot remove a successor instance.
+	cur, ok := w.m.workspaces[w.uri.String()]
+	if ok && cur.Workspace == w.Workspace {
+		w.m.removeWorkspace(w.uri)
+	}
 	return ret
 }
 

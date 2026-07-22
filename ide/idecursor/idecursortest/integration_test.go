@@ -528,6 +528,10 @@ func (testWorkspaceManager) IncrementReference(workspaceapi.URI) {}
 
 func (testWorkspaceManager) DecrementReference(workspaceapi.URI) error { return nil }
 
+func (testWorkspaceManager) RemoveWorkspace(workspaceapi.URI) (workspace.Workspace, bool) {
+	return nil, false
+}
+
 type testParser struct{}
 
 func (testParser) Search(

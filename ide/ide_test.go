@@ -1220,6 +1220,163 @@ workspace:
 		"the restored terminal must live in the right leaf of the post-reload layout")
 }
 
+// TestE2EWorkspaceCloseThenQuit drives :workspaceclose through the real
+// IDE command prompt on a second, user-opened workspace that owns a
+// live subprocess, then quits via i.Close(). It guards the RUNE async-
+// close contract end-to-end on the real event loop:
+//
+//  1. :workspaceclose returns to the loop immediately (the count drops
+//     and the slot is freed) even though the scheme teardown runs in a
+//     background goroutine.
+//  2. The background teardown really closes the scheme, so the
+//     subprocess bound to the scheme ctx dies.
+//  3. Quitting afterwards (i.Close) returns cleanly and promptly — the
+//     scenario that previously froze the UI for seconds / deadlocked
+//     when the whole teardown ran inline on the event loop.
+func TestE2EWorkspaceCloseThenQuit(t *testing.T) {
+	homeDir := t.TempDir()
+	// The second workspace must be a child of the home workspace so
+	// the empty-argument :workspaceopen completion resolves it.
+	wsDir := filepath.Join(homeDir, "child")
+	require.NoError(t, os.MkdirAll(wsDir, 0o755))
+	dataDir := t.TempDir()
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+workspace:
+  auto_restore: false
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(homeDir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	closed := false
+	t.Cleanup(func() {
+		if !closed {
+			_ = i.Close()
+		}
+	})
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	wh := i.workspaceHandler
+
+	sendKeys := func(seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			mu.Lock()
+			root.Handle(term.Event{
+				Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key,
+			})
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	// Open the child workspace as a real second workspace slot,
+	// exactly as a user would.
+	sendKeys("<c-\\\\>workspaceopen<space>" + wsDir + "<enter>")
+	i.WaitWorkspaces()
+
+	// Locate the freshly opened child workspace slot (home does not
+	// occupy a slot, so the child is the only non-nil entry) and
+	// start a long-running subprocess whose lifetime is bound to that
+	// workspace's scheme ctx.
+	mu.Lock()
+	childSlot := -1
+	for idx, w := range wh.workspaces {
+		if w != nil {
+			childSlot = idx
+			break
+		}
+	}
+	var (
+		switched    bool
+		childCwd    workspace.Workspace
+		startErr    error
+		countBefore int
+	)
+	ch := make(chan error, 1)
+	if childSlot != -1 {
+		switched = wh.switchToWorkspace(childSlot)
+		childCwd = wh.workspaces[childSlot].cwd
+		countBefore = wh.workspaceCount
+		if childCwd != nil {
+			_, startErr = childCwd.StartCommand(context.Background(),
+				workspaceapi.Cmd{
+					Path:    "/bin/sh",
+					Args:    []string{"-c", "sleep 30"},
+					Watcher: workspaceapi.ChanProcessWatcher(ch),
+				})
+		}
+	}
+	mu.Unlock()
+	require.NotEqual(t, -1, childSlot,
+		":workspaceopen must install the child workspace in a slot")
+	require.True(t, switched)
+	require.NotNil(t, childCwd)
+	require.NoError(t, startErr)
+
+	// Drive :workspaceclose through the command prompt, exactly as a
+	// user would.
+	sendKeys("<c-\\\\>workspaceclose<enter>")
+
+	// The count must drop on the event loop while the background
+	// teardown may still be running.
+	mu.Lock()
+	countAfter := wh.workspaceCount
+	mu.Unlock()
+	require.Equal(t, countBefore-1, countAfter,
+		":workspaceclose must free the slot on the event loop")
+
+	// The background teardown must close the scheme and kill the
+	// subprocess bound to its ctx.
+	select {
+	case <-ch:
+	case <-time.After(15 * time.Second):
+		t.Fatal("subprocess survived :workspaceclose: the scheme ctx " +
+			"was not canceled by the background teardown")
+	}
+
+	// Drain the background close, then quit. i.Close must return
+	// cleanly and promptly — the freeze/deadlock regression guard.
+	i.WaitWorkspaces()
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() { done <- i.Close() })
+	select {
+	case cerr := <-done:
+		closed = true
+		require.NoError(t, cerr, "quitting after :workspaceclose must "+
+			"shut down cleanly")
+	case <-time.After(30 * time.Second):
+		t.Fatal("i.Close deadlocked after :workspaceclose")
+	}
+}
+
 func TestE2EClipboardPasteIntoNoEchoTerminalRead(t *testing.T) {
 	dir := t.TempDir()
 	dataDir := t.TempDir()
