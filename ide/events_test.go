@@ -51,7 +51,7 @@ func TestEventDispatching(t *testing.T) {
 	t.Run("empty event does not panic", func(t *testing.T) {
 		var mu sync.Mutex
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		fsev := testEventInfo{}
 
 		assert.NotPanics(t, func() {
@@ -76,7 +76,7 @@ func TestEventDispatching(t *testing.T) {
 				testURI, err := workspaceapi.ParseURI("file:///a")
 				require.NoError(t, err)
 
-				x := newExForEventTesting(t)
+				x := newExForEventTesting(t, &mu)
 				fsev := testEventInfo{e: test.in, u: testURI}
 
 				var called int
@@ -112,7 +112,7 @@ func TestEventDispatching(t *testing.T) {
 
 				ignores := vctrl.NopMatcher(true)
 
-				x := newExForEventTesting(t)
+				x := newExForEventTesting(t, &mu)
 				fsev := testEventInfo{e: test.in, u: testURI}
 
 				var called int
@@ -150,7 +150,7 @@ func TestEventDispatching(t *testing.T) {
 
 				ignores := vctrl.NopMatcher(true)
 
-				x := newExForEventTesting(t)
+				x := newExForEventTesting(t, &mu)
 				testURI, err := x.workspace.URI("a")
 				require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestEventDispatching(t *testing.T) {
 				fsev := testEventInfo{e: test.in, u: testURI}
 				dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-				assertNoPrompt(t, x)
+				assertNoPrompt(t, x, &mu)
 
 				lastFlush, err := x.comp.LastFlush(res)
 				require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -242,7 +242,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -258,7 +258,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -274,7 +274,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -285,18 +285,18 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptDiscards(t, x)
+		userPromptDiscards(t, x, &mu)
 
 		assertBufferContent(t, x, testURI, "abc")
 
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("write triggers prompt if open, dirty file changes, user overwrites", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -306,19 +306,19 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptOverwrites(t, x)
+		userPromptOverwrites(t, x, &mu)
 
 		assertFileContent(t, x, testURI, "ABC")
 		assertBufferContent(t, x, testURI, "ABC")
 
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("create triggers reload file if open, uncreated, non-dirty", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -334,7 +334,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -344,14 +344,14 @@ func TestEventDispatching(t *testing.T) {
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertBufferContent(t, x, testURI, "abc")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("create triggers prompt if open, dirty file changes; user discards", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -362,17 +362,17 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptDiscards(t, x)
+		userPromptDiscards(t, x, &mu)
 
 		assertBufferContent(t, x, testURI, "abc")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("create triggers prompt if open, dirty file changes; user overwrites", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -383,18 +383,18 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptOverwrites(t, x)
+		userPromptOverwrites(t, x, &mu)
 
 		assertFileContent(t, x, testURI, "ABC")
 		assertBufferContent(t, x, testURI, "ABC")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("remove triggers nothing if open, non-dirty file", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -403,7 +403,7 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 		assertTabNotRemoved(t, x, testURI)
 	})
 
@@ -411,7 +411,7 @@ func TestEventDispatching(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -426,17 +426,17 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptDiscards(t, x)
+		userPromptDiscards(t, x, &mu)
 
 		assertTabRemoved(t, x, testURI)
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("remove triggers prompt if open, dirty file; user overwrites", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -447,18 +447,18 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptOverwrites(t, x)
+		userPromptOverwrites(t, x, &mu)
 
 		assertTabNotRemoved(t, x, testURI)
 		assertBufferContent(t, x, testURI, "ABC")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("rename original file triggers remove tab if open, non-dirty", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -468,14 +468,14 @@ func TestEventDispatching(t *testing.T) {
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertTabRemoved(t, x, testURI)
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("rename target file triggers reload tab if open, non-dirty", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -497,14 +497,14 @@ func TestEventDispatching(t *testing.T) {
 		assert.NotEqual(t, flush, lastFlush)
 
 		assertBufferContent(t, x, testURI, "abc")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("rename target file opens prompt if open, dirty; user discards triggers reload", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -515,17 +515,17 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptDiscards(t, x)
+		userPromptDiscards(t, x, &mu)
 
 		assertBufferContent(t, x, testURI, "abc")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("rename original file opens prompt if open, dirty; user discards triggers remove tab", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -536,17 +536,17 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptDiscards(t, x)
+		userPromptDiscards(t, x, &mu)
 
 		assertTabRemoved(t, x, testURI)
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 
 	t.Run("rename target file opens prompt if open, dirty; user overwrites", func(t *testing.T) {
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
-		x := newExForEventTesting(t)
+		x := newExForEventTesting(t, &mu)
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
@@ -557,10 +557,10 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
-		userPromptOverwrites(t, x)
+		userPromptOverwrites(t, x, &mu)
 
 		assertBufferContent(t, x, testURI, "ABC")
-		assertNoPrompt(t, x)
+		assertNoPrompt(t, x, &mu)
 	})
 }
 
@@ -586,7 +586,7 @@ func TestHandleFSChange_NoPromptForSecondWriteDuringReload(t *testing.T) {
 	var mu sync.Mutex
 	ignores := vctrl.NopMatcher(false)
 
-	x := newExForEventTesting(t)
+	x := newExForEventTesting(t, &mu)
 	testURI, err := x.workspace.URI("a")
 	require.NoError(t, err)
 
@@ -624,7 +624,7 @@ func TestHandleFSChange_NoPromptForSecondWriteDuringReload(t *testing.T) {
 	// If openFileChangedPrompt opened, the next keypress would be
 	// handled by the prompt (returning handled=true). assertNoPrompt
 	// verifies it wasn't.
-	assertNoPrompt(t, x)
+	assertNoPrompt(t, x, &mu)
 
 	// Final sanity: drain everything and confirm the buffer
 	// reflects the latest disk content.
@@ -663,13 +663,21 @@ func assertTabNotRemoved(t *testing.T, x *ex, file workspaceapi.URI) {
 	require.NoError(t, err, "tab was removed")
 }
 
-func assertNoPrompt(t *testing.T, x *ex) {
+func assertNoPrompt(t *testing.T, x *ex, mu sync.Locker) {
+	mu.Lock()
 	exit, handled := x.Handle(term.Event{Type: term.EventKey, Ch: 'o'})
+	mu.Unlock()
 	assert.False(t, exit)
 	require.False(t, handled)
 }
 
-func newExForEventTesting(t *testing.T) *ex {
+// newExForEventTesting builds an ex whose workspace scheduler runs
+// reload callbacks under mu, mirroring the host event loop where
+// scheduled ticks and event handling share the UI lock. Callers must
+// hold the same mu around x.Handle (and pass it to
+// dispatchFilesystemEvent) so the async reload worker's buffer
+// mutations cannot race in-flight event handling.
+func newExForEventTesting(t *testing.T, mu sync.Locker) *ex {
 	ctx := context.Background()
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
@@ -686,7 +694,13 @@ func newExForEventTesting(t *testing.T) *ex {
 	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
+	lockedSchedule := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		return true
+	}
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, lockedSchedule)
 
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
 		vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
@@ -740,19 +754,23 @@ func openWriteUncreatedFile(t *testing.T, x *ex, file workspaceapi.URI, content 
 	require.NoError(t, os.WriteFile(file.Path(), []byte("abc"), 0666))
 }
 
-func userPromptDiscards(t *testing.T, x *ex) {
+func userPromptDiscards(t *testing.T, x *ex, mu sync.Locker) {
 	keyCombs := []rune{'d', 'y'}
 	for _, key := range keyCombs {
+		mu.Lock()
 		exit, handled := x.Handle(term.Event{Type: term.EventKey, Ch: key})
+		mu.Unlock()
 		assert.False(t, exit)
 		assert.True(t, handled)
 	}
 }
 
-func userPromptOverwrites(t *testing.T, x *ex) {
+func userPromptOverwrites(t *testing.T, x *ex, mu sync.Locker) {
 	keyCombs := []rune{'o'}
 	for _, key := range keyCombs {
+		mu.Lock()
 		exit, handled := x.Handle(term.Event{Type: term.EventKey, Ch: key})
+		mu.Unlock()
 		assert.False(t, exit)
 		assert.True(t, handled)
 	}
