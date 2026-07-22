@@ -118,7 +118,10 @@ func (s *sandbox) launch() error {
 	storage := storagestub.NewInMemoryService()
 	tick := func(fn func()) bool { fn(); return true }
 	authorizer, err := ideauthorizer.NewAuthorizer(
-		s.editor, prompt, storage, tick, nil, true)
+		s.editor, prompt, storage, tick, nil, ideauthorizer.Config{
+			AutoAuthorizeExtensions: true,
+			AutoAuthorizeCommands:   true,
+		})
 	if err != nil {
 		return fmt.Errorf("new authorizer: %w", err)
 	}

@@ -479,11 +479,11 @@ config = {
     "extensions": {},
     # Extension and plugin permission authorizer.
     "authorizer": {
-        # When True, permission requests from extensions and plugins are
-        # granted automatically instead of prompting once per permission.
-        # Persisted decisions made while this was False still apply.
-        # Set to False to review each permission interactively.
-        "auto_authorize": True,
+        # Automatically grant non-command permission requests from extensions
+        # and plugins. Persisted decisions still apply.
+        "auto_authorize_extensions": True,
+        # Automatically grant workspace command execution requests.
+        "auto_authorize_commands": False,
     },
     "updates": {
         # Automatically install language packages on demand. When False,

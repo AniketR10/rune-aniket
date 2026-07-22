@@ -482,17 +482,39 @@ func TestUpdatesAutoInstall(t *testing.T) {
 
 func TestAuthorizerAutoAuthorize(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		authorizer any
-		want       bool
-		wantErr    bool
+		name           string
+		authorizer     any
+		wantExtensions bool
+		wantCommands   bool
+		wantErrKeys    []string
 	}{
-		{"absent authorizer defaults true", nil, true, false},
-		{"absent key defaults true", map[string]any{}, true, false},
-		{"explicit true", map[string]any{"auto_authorize": true}, true, false},
-		{"explicit false", map[string]any{"auto_authorize": false}, false, false},
-		{"invalid type defaults true", map[string]any{"auto_authorize": "yes"},
-			true, true},
+		{"absent authorizer uses defaults", nil, true, false, nil},
+		{"absent keys use defaults", map[string]any{}, true, false, nil},
+		{"neither", map[string]any{
+			"auto_authorize_extensions": false,
+			"auto_authorize_commands":   false,
+		}, false, false, nil},
+		{"extensions only", map[string]any{
+			"auto_authorize_extensions": true,
+			"auto_authorize_commands":   false,
+		}, true, false, nil},
+		{"commands only", map[string]any{
+			"auto_authorize_extensions": false,
+			"auto_authorize_commands":   true,
+		}, false, true, nil},
+		{"both", map[string]any{
+			"auto_authorize_extensions": true,
+			"auto_authorize_commands":   true,
+		}, true, true, nil},
+		{"invalid extensions fails closed", map[string]any{
+			"auto_authorize_extensions": "yes",
+		}, false, false, []string{"authorizer.auto_authorize_extensions"}},
+		{"invalid commands fails closed", map[string]any{
+			"auto_authorize_commands": "yes",
+		}, true, false, []string{"authorizer.auto_authorize_commands"}},
+		{"legacy key is ignored", map[string]any{
+			"auto_authorize": true,
+		}, true, false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := map[string]any{}
@@ -500,11 +522,11 @@ func TestAuthorizerAutoAuthorize(t *testing.T) {
 				m["authorizer"] = tc.authorizer
 			}
 			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
-			assert.Equal(t, tc.want, cfg.authorizerAutoAuthorize())
-			if tc.wantErr {
-				assert.Error(t, cfg.errors["authorizer.auto_authorize"])
-			} else {
-				assert.Empty(t, cfg.errors)
+			assert.Equal(t, tc.wantExtensions, cfg.authorizerAutoAuthorizeExtensions())
+			assert.Equal(t, tc.wantCommands, cfg.authorizerAutoAuthorizeCommands())
+			assert.Len(t, cfg.errors, len(tc.wantErrKeys))
+			for _, key := range tc.wantErrKeys {
+				assert.Error(t, cfg.errors[key])
 			}
 		})
 	}

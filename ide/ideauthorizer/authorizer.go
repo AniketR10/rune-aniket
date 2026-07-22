@@ -107,29 +107,31 @@ type PromptOpener interface {
 	) browser.Window
 }
 
+// Config controls which permission requests are granted without prompting.
+type Config struct {
+	AutoAuthorizeExtensions bool
+	AutoAuthorizeCommands   bool
+}
+
 // NewAuthorizer returns an Authorizer that satisfies both the workspace
 // CommandAuthorizer interface and the blue auth authorizer used by the
 // extension runner for gRPC middleware.
-//
-// When autoAuthorize is true, permission requests that would otherwise
-// prompt the user are granted automatically. Persisted decisions
-// (including denies) still apply.
 func NewAuthorizer(
 	editor text.Editor,
 	promptOpener PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 	notifications browserapi.Notifications,
-	autoAuthorize bool,
+	config Config,
 ) (*Authorizer, error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
 	}
 	a := &Authorizer{
-		prompter:      newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
-		storage:       storage,
-		autoAuthorize: autoAuthorize,
-		once:          make(map[string]pluginPermissionOnceDecision),
-		pending:       make(map[string]*pendingPrompt),
+		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
+		storage:  storage,
+		config:   config,
+		once:     make(map[string]pluginPermissionOnceDecision),
+		pending:  make(map[string]*pendingPrompt),
 	}
 	if err := registerAuthorizerREPLCommand(editor, a); err != nil {
 		return nil, fmt.Errorf("register authorizer repl command: %w", err)
@@ -144,11 +146,7 @@ func NewAuthorizer(
 type Authorizer struct {
 	prompter *permissionPrompter
 	storage  storageapi.Service
-
-	// autoAuthorize grants permission requests without prompting the
-	// user. Persisted decisions are still honored, so previously denied
-	// permissions stay denied.
-	autoAuthorize bool
+	config   Config
 
 	onceMu sync.Mutex
 	once   map[string]pluginPermissionOnceDecision
@@ -226,7 +224,8 @@ func (a *Authorizer) authorizePlugin(
 	identity := pluginPermissionIdentityFromContext(ctx, ext)
 	key := pluginPermissionProgramStorageKey(identity.Path, perm)
 	onceKey := pluginPermissionOnceKey(identity, perm, nil)
-	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
+	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource,
+		nil, a.config.AutoAuthorizeExtensions)
 }
 
 // AuthorizeCommand satisfies workspacerpc.CommandAuthorizer.
@@ -259,7 +258,8 @@ func (a *Authorizer) AuthorizeCommand(
 		keys = extensionPermissionCommandStorageKeys(claims.Extra, perm, command)
 		onceKey = stablePermissionOnceKey(identity, perm, &command)
 	}
-	return a.authorizePermission(ctx, claims.Extra, identity, keys, onceKey, perm, resource, &command)
+	return a.authorizePermission(ctx, claims.Extra, identity, keys, onceKey, perm, resource,
+		&command, a.config.AutoAuthorizeCommands)
 }
 
 func (a *Authorizer) authorizeExtension(
@@ -268,13 +268,14 @@ func (a *Authorizer) authorizeExtension(
 	identity := extensionPermissionIdentity(ext)
 	key := extensionPermissionStorageKey(ext, perm)
 	onceKey := stablePermissionOnceKey(identity, perm, nil)
-	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
+	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource,
+		nil, a.config.AutoAuthorizeExtensions)
 }
 
 func (a *Authorizer) authorizePermission(
 	ctx context.Context, ext Extension, identity pluginPermissionIdentity,
 	keys []string, onceKey string, perm extensionapi.Permission, resource string,
-	command *pluginPermissionCommandDetail,
+	command *pluginPermissionCommandDetail, autoAuthorize bool,
 ) error {
 	missingKeys := keys
 	if a.storage != nil && len(keys) > 0 {
@@ -288,7 +289,7 @@ func (a *Authorizer) authorizePermission(
 		}
 	}
 
-	if a.autoAuthorize {
+	if autoAuthorize {
 		return nil
 	}
 

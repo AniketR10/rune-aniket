@@ -2152,20 +2152,26 @@ func (c ideConfig) authorizer() (config.Config, bool) {
 	return c.getConfig(config.MapConfig(c.cfg), "authorizer")
 }
 
-// authorizerAutoAuthorize reports whether extension and plugin
-// permission requests should be granted automatically instead of
-// prompting the user per permission. Defaults to true.
-func (c ideConfig) authorizerAutoAuthorize() bool {
+func (c ideConfig) authorizerAutoAuthorizeExtensions() bool {
+	return c.authorizerAutoAuthorize("auto_authorize_extensions", true)
+}
+
+func (c ideConfig) authorizerAutoAuthorizeCommands() bool {
+	return c.authorizerAutoAuthorize("auto_authorize_commands", false)
+}
+
+func (c ideConfig) authorizerAutoAuthorize(key string, defaultValue bool) bool {
 	cfg, ok := c.authorizer()
 	if !ok {
-		return true
+		return defaultValue
 	}
-	enabled, err := cfg.GetBool("auto_authorize")
+	enabled, err := cfg.GetBool(key)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["authorizer.auto_authorize"] = err
+			c.errors["authorizer."+key] = err
+			return false
 		}
-		return true
+		return defaultValue
 	}
 	return enabled
 }

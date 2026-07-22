@@ -231,9 +231,53 @@ func mustNewAutoAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, true)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, Config{
+		AutoAuthorizeExtensions: true,
+		AutoAuthorizeCommands:   true,
+	})
 	require.NoError(t, err)
 	return a
+}
+
+func TestAuthorizerAutoAuthorizeScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name                 string
+		config               Config
+		wantExtensionPrompts int
+		wantCommandPrompts   int
+	}{
+		{"neither", Config{}, 1, 1},
+		{"extensions only", Config{AutoAuthorizeExtensions: true}, 0, 1},
+		{"commands only", Config{AutoAuthorizeCommands: true}, 1, 0},
+		{"both", Config{
+			AutoAuthorizeExtensions: true,
+			AutoAuthorizeCommands:   true,
+		}, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			opener := &stubPromptOpener{decision: PermissionAllowOnce}
+			a, err := NewAuthorizer(texttest.NopEditor(), opener,
+				storagestub.NewInMemoryService(), syncScheduleNextTick, nil, tc.config)
+			require.NoError(t, err)
+			ext := testPluginExtension(nil)
+
+			err = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+				testWindowManagerResource)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantExtensionPrompts, opener.calls)
+
+			ctx := blueauth.ContextWithClaims(context.Background(),
+				blueauth.UserClaims[Extension]{Extra: ext})
+			cmd := workspaceapi.Cmd{Path: "/bin/grep", Args: []string{"foo"}, Dir: "/tmp"}
+			err = a.AuthorizeCommand(ctx, cmd)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantExtensionPrompts+tc.wantCommandPrompts, opener.calls)
+		})
+	}
 }
 
 func TestAuthorizerAutoAuthorizeGrantsWithoutPrompt(t *testing.T) {
@@ -293,8 +337,8 @@ func TestAuthorizerAutoAuthorizeStartCommandGrantsWithoutPrompt(t *testing.T) {
 	require.NoError(t, a.AuthorizeCommand(ctx, cmd))
 	assert.Zero(t, opener.calls)
 
-	// Auto-granted decisions are not persisted, so disabling
-	// auto_authorize later prompts again.
+	// Auto-granted decisions are not persisted, so disabling automatic
+	// command authorization later prompts again.
 	command := pluginPermissionCommandDetail{Path: cmd.Path, Args: cmd.Args, Dir: cmd.Dir}
 	keys := pluginPermissionCommandStorageKeys(ext.Path, ext.Args,
 		extensionapi.PermissionExecute, command)
@@ -1210,7 +1254,7 @@ func mustNewAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, false)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, Config{})
 	require.NoError(t, err)
 	return a
 }
@@ -1224,7 +1268,7 @@ func mustNewAuthorizerWithNotifications(
 	noti browserapi.Notifications,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti, false)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti, Config{})
 	require.NoError(t, err)
 	return a
 }
