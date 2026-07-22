@@ -138,6 +138,15 @@ type fileScheme struct {
 	// A pointer is used so a chrooted view can share the same map
 	// with its parent — see Chroot below.
 	files *sync.Map // map[uintptr]workspaceapi.File
+
+	// execMu serializes StartCommand's unwrap-to-fork window
+	// against Close force-closing the tracked files: os/exec reads
+	// the unwrapped *os.Files' fds during StartProcess, and closing
+	// them concurrently is a data race on the fd state. The window
+	// is bounded (fork/exec, not the process lifetime), so Close
+	// only ever waits momentarily. Shared across chrooted views
+	// like files.
+	execMu *sync.RWMutex
 }
 
 func (p *fileScheme) init(
@@ -159,6 +168,9 @@ func (p *fileScheme) init(
 	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
 	if p.files == nil {
 		p.files = new(sync.Map)
+	}
+	if p.execMu == nil {
+		p.execMu = new(sync.RWMutex)
 	}
 	if cfg != nil {
 		// zdotdir is optional; ErrNotFound just means "not configured".
@@ -406,11 +418,18 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	stdcmd.Env = append(stdcmd.Env, cmd.Env...)
 	stdcmd.SysProcAttr = cmd.SysProcAttr
 
+	p.execMu.RLock()
+	if p.ctx.Err() != nil {
+		p.execMu.RUnlock()
+		cancelFn()
+		return 0, fmt.Errorf("start command: %w", p.ctx.Err())
+	}
 	stdcmd.Stdout = p.tryUnwrapFileWriter(cmd.Stdout)
 	stdcmd.Stderr = p.tryUnwrapFileWriter(cmd.Stderr)
 	stdcmd.Stdin = p.tryUnwrapFileReader(cmd.Stdin)
 
 	err = stdcmd.Start()
+	p.execMu.RUnlock()
 	if err != nil {
 		cancelFn()
 		return 0, err
@@ -459,6 +478,7 @@ func (p *fileScheme) Chroot(path string) (schemeapi.Scheme, error) {
 	child.osStat = p.osStat
 	child.lookupUser = p.lookupUser
 	child.files = p.files
+	child.execMu = p.execMu
 	child.zdotDir = p.zdotDir
 	if err := child.init(config.NopConfig(), uri); err != nil {
 		return nil, err
@@ -602,6 +622,12 @@ func (p *fileScheme) Close() (ret error) {
 		}
 		return true
 	})
+	// Exclude in-flight StartCommand fork/exec windows before
+	// force-closing the files they may be handing to the child.
+	// p.ctx is already cancelled, so late StartCommand callers fail
+	// fast instead of racing this teardown.
+	p.execMu.Lock()
+	defer p.execMu.Unlock()
 	p.files.Range(func(_ any, value any) bool {
 		if err := value.(*fileSchemeFile).Close(); err != nil {
 			ret = multierror.Append(ret, err)

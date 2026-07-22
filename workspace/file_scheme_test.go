@@ -28,13 +28,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
-
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
