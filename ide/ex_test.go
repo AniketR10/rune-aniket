@@ -63,6 +63,7 @@ import (
 	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
@@ -136,6 +137,12 @@ func (t *testFileBuffer) Close() error {
 
 type testLoader struct {
 	buf *testFileBuffer
+	// exitStartedCommands makes StartCommand's stub process exit
+	// immediately with success, mirroring the Executor contract that
+	// the watcher observes process exit. Tests that model a
+	// long-running process (e.g. plugin-wait timeouts) leave it
+	// false so the stub process never exits.
+	exitStartedCommands bool
 }
 
 func (w *testLoader) Remove(string) error {
@@ -151,6 +158,15 @@ func (w *testLoader) Close() error {
 }
 
 func (w *testLoader) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	if w.exitStartedCommands && cmd.Watcher != nil {
+		ch := cmd.Watcher.WatchProcess()
+		go debug.CapturePanicReport(func() {
+			select {
+			case ch <- nil:
+			case <-ctx.Done():
+			}
+		})
+	}
 	return 0, nil
 }
 
@@ -1273,7 +1289,10 @@ func TestShowFallbackPromptInstallsExtension(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-install")
 			require.NoError(t, err)
-			w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+			w := testWorkspaceWithURI{
+				testLoader: &testLoader{exitStartedCommands: true},
+				uri:        workspaceURI,
+			}
 			cfg := vte.DefaultConfig()
 			scheduler := newQueuedScheduler()
 			cfg.ScheduleNextTick = scheduler.ScheduleNextTick
@@ -1311,7 +1330,10 @@ func TestShowFallbackPromptInstallsFuzzySearch(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-fuzzy")
 			require.NoError(t, err)
-			w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+			w := testWorkspaceWithURI{
+				testLoader: &testLoader{exitStartedCommands: true},
+				uri:        workspaceURI,
+			}
 			cfg := vte.DefaultConfig()
 			scheduler := newQueuedScheduler()
 			cfg.ScheduleNextTick = scheduler.ScheduleNextTick
