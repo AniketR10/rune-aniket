@@ -26,6 +26,7 @@ package walkdir
 import (
 	"context"
 	"strconv"
+	"sync"
 
 	"os"
 	"path/filepath"
@@ -158,6 +159,32 @@ func TestListDirs(t *testing.T) {
 
 		it, err := walkdir.ListDirs(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{dir1, dir2}, it)
+		require.NoError(t, scheme.Close())
+	})
+
+	t.Run("returns before root Stat completes", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		dir := t.TempDir()
+		uri, err := workspaceapi.CurrentUserHostURI(dir)
+		require.NoError(t, err)
+
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "a"), 0777))
+
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+
+		gate := make(chan struct{})
+		release := sync.OnceFunc(func() { close(gate) })
+		defer release()
+
+		res := listAsync(t, walkdir.ListDirs,
+			gatedStatReader{Reader: scheme, gate: gate}, dir)
+		require.NoError(t, res.err)
+
+		release()
+		assertIteratorEqual(t, []string{"a"}, res.it)
+
 		require.NoError(t, scheme.Close())
 	})
 }

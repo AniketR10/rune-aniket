@@ -25,8 +25,11 @@ package walkdir
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
+	"sync"
+	"time"
 
 	"os"
 	"path/filepath"
@@ -60,6 +63,54 @@ func assertIteratorEqual(
 	sort.Strings(actual)
 	sort.Strings(expected)
 	assert.Equal(t, actual, expected)
+}
+
+// gatedStatReader blocks every Stat call until gate is closed,
+// emulating a wedged remote scheme where Stat is an RPC that never
+// returns.
+type gatedStatReader struct {
+	walkdir.Reader
+	gate <-chan struct{}
+}
+
+func (r gatedStatReader) Stat(path string) (os.FileInfo, error) {
+	<-r.gate
+	return r.Reader.Stat(path)
+}
+
+type errStatReader struct {
+	walkdir.Reader
+	err error
+}
+
+func (r errStatReader) Stat(string) (os.FileInfo, error) { return nil, r.err }
+
+type asyncListResult struct {
+	it  iterator.Iterator[string]
+	err error
+}
+
+// listAsync runs a walkdir constructor on its own goroutine and fails
+// the test if it does not return promptly: constructors must never
+// block on workspace I/O — the returned iterator is what blocks.
+func listAsync(
+	t *testing.T,
+	fn func(context.Context, walkdir.Reader, string) (iterator.Iterator[string], error),
+	r walkdir.Reader, root string,
+) asyncListResult {
+	t.Helper()
+	resCh := make(chan asyncListResult, 1)
+	go func() {
+		it, err := fn(context.Background(), r, root)
+		resCh <- asyncListResult{it, err}
+	}()
+	select {
+	case res := <-resCh:
+		return res
+	case <-time.After(5 * time.Second):
+		t.Fatal("constructor blocked on root Stat instead of returning the iterator")
+		return asyncListResult{}
+	}
 }
 
 func TestListFiles(t *testing.T) {
@@ -179,6 +230,89 @@ func TestListFiles(t *testing.T) {
 
 		it, err := walkdir.ListFiles(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{f1.Name(), f2.Name()}, it)
+		require.NoError(t, scheme.Close())
+	})
+
+	t.Run("returns before root Stat completes", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		dir := t.TempDir()
+		uri, err := workspaceapi.CurrentUserHostURI(dir)
+		require.NoError(t, err)
+
+		_, err = os.OpenFile(filepath.Join(dir, "a"), os.O_CREATE, 0666)
+		require.NoError(t, err)
+
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+
+		gate := make(chan struct{})
+		release := sync.OnceFunc(func() { close(gate) })
+		defer release()
+
+		res := listAsync(t, walkdir.ListFiles,
+			gatedStatReader{Reader: scheme, gate: gate}, dir)
+		require.NoError(t, res.err)
+
+		release()
+		assertIteratorEqual(t, []string{"a"}, res.it)
+
+		require.NoError(t, scheme.Close())
+	})
+
+	t.Run("Close returns while root Stat is blocked", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		dir := t.TempDir()
+		uri, err := workspaceapi.CurrentUserHostURI(dir)
+		require.NoError(t, err)
+
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+
+		gate := make(chan struct{})
+		release := sync.OnceFunc(func() { close(gate) })
+		defer release()
+
+		res := listAsync(t, walkdir.ListFiles,
+			gatedStatReader{Reader: scheme, gate: gate}, dir)
+		require.NoError(t, res.err)
+
+		closed := make(chan struct{})
+		go func() {
+			_ = res.it.Close()
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close blocked on root Stat")
+		}
+		require.ErrorIs(t, res.it.Err(), context.Canceled)
+
+		release()
+		require.NoError(t, scheme.Close())
+	})
+
+	t.Run("root Stat errors are reported via Err", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		uri, err := workspaceapi.CurrentUserHostURI(t.TempDir())
+		require.NoError(t, err)
+
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+
+		statErr := errors.New("stat boom")
+		it, err := walkdir.ListFiles(context.Background(),
+			errStatReader{Reader: scheme, err: statErr}, ".")
+		require.NoError(t, err)
+
+		_, ok := it.Next(context.Background())
+		require.False(t, ok)
+		require.ErrorContains(t, it.Err(), "stat boom")
+		require.NoError(t, it.Close())
+
 		require.NoError(t, scheme.Close())
 	})
 }

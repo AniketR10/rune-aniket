@@ -55,6 +55,12 @@ type Reader interface {
 func ListFiles(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
+	return listPaths(ctx, w, root, false)
+}
+
+func listPaths(
+	ctx context.Context, w Reader, root string, dirOnly bool,
+) (iterator.Iterator[string], error) {
 	workers := workerCountFromContext(ctx)
 	filter := filterFromContext(ctx)
 	var wg sync.WaitGroup
@@ -75,17 +81,6 @@ func ListFiles(
 	// get root as relative path to workspace
 	root = workspaceapi.RelPath(workspaceURI, rootURI)
 
-	for {
-		finfo, err := w.Stat(root)
-		if err == nil && finfo.IsDir() {
-			break
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		root = filepath.Dir(root)
-	}
-
 	iterator := &listFilesIterator{dataCh: iterCh}
 	ctx, cancel := context.WithCancel(ctx)
 	iterator.ctx = ctx
@@ -95,13 +90,10 @@ func ListFiles(
 	for i := range workers {
 		go debug.CapturePanicReport(func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-				workspaceURI.Path(), &iterator.mu, &allErrors[i], false, filter)
+				workspaceURI.Path(), &iterator.mu, &allErrors[i], dirOnly, filter)
 
 		})
 	}
-
-	wg.Add(1)
-	workerCh <- root
 
 	go debug.CapturePanicReport(func() {
 
@@ -109,9 +101,27 @@ func ListFiles(
 		defer close(iterCh)
 		defer close(workerCh)
 
+		// Root resolution stats the workspace, which on remote
+		// schemes is an RPC that can block indefinitely; it must
+		// not run on the caller's goroutine (often the UI event
+		// loop via completion) — the iterator is what blocks.
+		root, rootErr := resolveRootDir(ctx, w, root)
+		if rootErr == nil {
+			wg.Add(1)
+			select {
+			case workerCh <- root:
+			case <-ctx.Done():
+				wg.Done()
+				rootErr = ctx.Err()
+			}
+		}
+
 		wg.Wait()
 		iterator.mu.Lock()
 		defer iterator.mu.Unlock()
+		if rootErr != nil {
+			iterator.err = multierr.Append(iterator.err, rootErr)
+		}
 		for _, err := range allErrors {
 			if err != nil {
 				iterator.err = multierr.Append(iterator.err, err)
@@ -121,6 +131,38 @@ func ListFiles(
 	})
 
 	return iterator, nil
+}
+
+// resolveRootDir walks root up to its closest existing directory. Stat
+// runs on its own goroutine so that a wedged remote scheme cannot pin
+// the traversal teardown: on cancellation the resolution is abandoned
+// and the iterator's Close returns promptly.
+func resolveRootDir(ctx context.Context, w Reader, root string) (string, error) {
+	type result struct {
+		root string
+		err  error
+	}
+	resCh := make(chan result, 1)
+	go debug.CapturePanicReport(func() {
+		for {
+			finfo, err := w.Stat(root)
+			if err == nil && finfo.IsDir() {
+				resCh <- result{root: root}
+				return
+			}
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				resCh <- result{err: err}
+				return
+			}
+			root = filepath.Dir(root)
+		}
+	})
+	select {
+	case res := <-resCh:
+		return res.root, res.err
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 // defaultWorkers caps how many goroutines traverse the tree concurrently.

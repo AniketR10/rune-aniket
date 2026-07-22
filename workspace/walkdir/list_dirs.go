@@ -25,16 +25,8 @@ package walkdir
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
 
-	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/debug"
 )
 
 // ListDirs traverses the workspace directory and returns
@@ -46,70 +38,5 @@ import (
 func ListDirs(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
-	workers := workerCountFromContext(ctx)
-	filter := filterFromContext(ctx)
-	var wg sync.WaitGroup
-	iterCh := make(chan string)
-	workerCh := make(chan string)
-	closeWaitCh := make(chan struct{})
-	allErrors := make([]error, workers)
-
-	workspaceURI, err := w.URI(".")
-	if err != nil {
-		return nil, fmt.Errorf("URI: %v", err)
-	}
-	rootURI, err := w.URI(root)
-	if err != nil {
-		return nil, fmt.Errorf("URI: %v", err)
-	}
-
-	// get root as relative path to workspace
-	root = workspaceapi.RelPath(workspaceURI, rootURI)
-
-	for {
-		finfo, err := w.Stat(root)
-		if err == nil && finfo.IsDir() {
-			break
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		root = filepath.Dir(root)
-	}
-
-	iterator := &listFilesIterator{dataCh: iterCh}
-	ctx, cancel := context.WithCancel(ctx)
-	iterator.ctx = ctx
-	iterator.cancel = cancel
-	iterator.closeWaitCh = closeWaitCh
-
-	for i := range workers {
-		go debug.CapturePanicReport(func() {
-			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-				workspaceURI.Path(), &iterator.mu, &allErrors[i], true, filter)
-
-		})
-	}
-
-	wg.Add(1)
-	workerCh <- root
-
-	go debug.CapturePanicReport(func() {
-
-		defer close(closeWaitCh)
-		defer close(iterCh)
-		defer close(workerCh)
-
-		wg.Wait()
-		iterator.mu.Lock()
-		defer iterator.mu.Unlock()
-		for _, err := range allErrors {
-			if err != nil {
-				iterator.err = multierr.Append(iterator.err, err)
-			}
-		}
-
-	})
-
-	return iterator, nil
+	return listPaths(ctx, w, root, true)
 }
