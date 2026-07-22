@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -93,6 +92,8 @@ var (
 	defaultDataPath   string
 	flagDataPath      *string
 
+	flagWorkspaceServerLogFile *string
+
 	flagVersion   = flag.BoolP("version", "v", false, "Print version information and exit")
 	flagWorkspace = flag.StringP("workspace", "w", cwdURI().String(),
 		"Set the initial workspace to open in the format [scheme:][//[userinfo@]host][/]path")
@@ -103,8 +104,6 @@ var (
 	// marked hidden
 	flagWorkspaceServer = flag.StringP("workspace-server", "x", "",
 		"Run a workspace server from standard input and output")
-	flagWorkspaceServerLogFile = flag.StringP("workspace-server-log", "o", "",
-		"Log workspace server TRACE level logs to file")
 	flagWorkspaceServerInstall = flag.String("install", "",
 		"CSV manifest of `id@version` packages the workspace server should "+
 			"install into its ~/.rune to mirror the local toolchain")
@@ -140,6 +139,10 @@ func init() {
 	flagDataPath = flag.StringP("datadir", "d", defaultDataPath,
 		"Set temporary data directory")
 
+	flagWorkspaceServerLogFile = flag.StringP("workspace-server-log", "o",
+		path.Join(defaultDataPath, "server.log"),
+		"Log workspace server logs to this file")
+
 	version = fmt.Sprintf("%s (HEAD is %s)", debug.Tag, debug.Commit)
 }
 
@@ -168,40 +171,36 @@ func cwdURI() workspaceapi.URI {
 }
 
 func startWorkspaceServer() int {
-	l := log.New()
 	var logger *slog.Logger
 
 	newScheme := workspace.NewFileScheme
-	if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
-		f, err := workspace.OpenFile(serverLogs,
-			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatal(err)
-		}
-		l.SetOutput(f)
-		l.SetLevel(log.TraceLevel)
-		l.SetFormatter(logging.LogrusLogdFormatter{})
-		rpc.EnableGRPCLogging(f, f, f)
-		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-
-		defer f.Close()
-		defer func() {
-			_ = f.Sync()
-		}()
-
-		newScheme = workspace.LoggingScheme("file", newScheme)
-
-	} else {
-		logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
-		l.SetOutput(io.Discard)
-		l.SetLevel(log.PanicLevel)
-		rpc.DisableGRPCLogging()
+	// The log defaults to <default datadir>/server.log; when the datadir is
+	// overridden without an explicit --workspace-server-log, keep the log
+	// beside the rest of the server state. debug.StartPProfOnSignal writes the
+	// pprof HTTP address here on SIGUSR1.
+	serverLogs := *flagWorkspaceServerLogFile
+	if !flag.Lookup("workspace-server-log").Changed {
+		serverLogs = filepath.Join(*flagDataPath, "server.log")
 	}
+	f, err := workspace.OpenFile(serverLogs,
+		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetOutput(f)
+	log.SetLevel(log.InfoLevel)
+	log.SetFormatter(logging.LogrusLogdFormatter{})
+	rpc.EnableGRPCLogging(f, f, f)
+	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+	defer f.Close()
+	defer func() {
+		_ = f.Sync()
+	}()
 	slog.SetDefault(logger)
 
-	l.Tracef("Initialized debug logger")
+	log.Tracef("Initialized debug logger")
 
 	// log unhandled signals for debugging
 	ch := make(chan os.Signal, 1)
@@ -228,15 +227,15 @@ func startWorkspaceServer() int {
 			case sig := <-ch:
 				switch sig {
 				case syscall.SIGTERM, syscall.SIGINT:
-					l.Infof("Received %v signal: cleaning up...", sig)
+					log.Infof("Received %v signal: cleaning up...", sig)
 					return
 				case syscall.SIGKILL:
-					l.Info("Received SIGKILL signal: exiting")
+					log.Info("Received SIGKILL signal: exiting")
 					os.Exit(1)
 				case syscall.SIGURG:
 					/* received when socket urgent data is ready to be read */
 				default:
-					l.Debugf("Received unhandled signal: %#v", sig)
+					log.Debugf("Received unhandled signal: %#v", sig)
 				}
 			case <-quitch:
 				return
@@ -246,7 +245,7 @@ func startWorkspaceServer() int {
 
 	uri, err := workspaceapi.CurrentUserHostURI(*flagWorkspaceServer)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 2
 	}
 
@@ -256,7 +255,7 @@ func startWorkspaceServer() int {
 	// failures never abort the connection (they warn and continue).
 	provScheme, err := newScheme(context.Background(), config.NopConfig(), uri)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 3
 	}
 	rootCfg := provisionRemote(provScheme, uri)
@@ -264,7 +263,7 @@ func startWorkspaceServer() int {
 
 	scheme, err := newScheme(context.Background(), rootCfg, uri)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 3
 	}
 	defer scheme.Close()
@@ -276,12 +275,12 @@ func startWorkspaceServer() int {
 		_ = server.Stop()
 	}()
 
-	err = workspacessh.StartSchemeServer(l, server, grpcServer)
+	err = workspacessh.StartSchemeServer(log.StandardLogger(), server, grpcServer)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 4
 	}
-	l.Tracef("StartSchemeServer returned with no error")
+	log.Tracef("StartSchemeServer returned with no error")
 	return 0
 }
 
