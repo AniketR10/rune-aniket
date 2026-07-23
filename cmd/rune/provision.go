@@ -38,7 +38,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/gitpkg"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/multipkg"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
@@ -83,14 +85,23 @@ func installRemotePackagesTo(scheme schemeapi.Scheme, progress io.Writer) {
 	if len(entries) == 0 {
 		return
 	}
+	installRemotePackageEntries(scheme, progress, entries, newRemoteReleaseManager())
+}
 
+func newRemoteReleaseManager(gitOpts ...gitpkg.Option) release.Manager {
 	// Release downloads are unauthenticated, matching newAPIClient: the
 	// oauth transport fails client-side for logged-out users, which would
 	// break installs under the usage-based paywall.
-	releaseManager := cdnrelease.NewManager(
+	official := cdnrelease.NewManager(
 		&http.Client{},
 		idepkg.ReleasesURL(*flagHTTPAddress, idepkg.HostArch()))
+	return multipkg.New(gitpkg.New(gitOpts...), official)
+}
 
+func installRemotePackageEntries(
+	scheme schemeapi.Scheme, progress io.Writer, entries []idepkg.ProvisionEntry,
+	releaseManager release.Manager,
+) {
 	configBase := func() map[string]any {
 		tree, err := ide.DefaultConfigTree(runeDefaultConfig())
 		if err != nil {

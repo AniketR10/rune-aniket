@@ -32,13 +32,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"unstable.build/go-tui/ide/gitpkg"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -198,6 +202,49 @@ func TestInstallRemotePackagesEmitsProgress(t *testing.T) {
 		assert.Equal(t, 1, counts[phaseKey{pkg, workspacessh.ProvisionPhaseFailed}],
 			"%s must emit exactly one failed line", pkg)
 	}
+}
+
+func TestRemoteProvisioningInstallsGitPackage(t *testing.T) {
+	const pkgID = "github.com/unstablebuild/test-extension"
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "config.yaml"), []byte(
+		"extensions:\n  test:\n    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID/main.py\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "main.py"),
+		[]byte("print('test')\n"), 0o644))
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = wt.Add(".")
+	require.NoError(t, err)
+	sha, err := wt.Commit("fixture", &git.CommitOptions{Author: &object.Signature{
+		Name: "fixture", Email: "fixture@example.com", When: time.Now(),
+	}})
+	require.NoError(t, err)
+	version := sha.String()[:12]
+
+	dataDir := t.TempDir()
+	setFlagForTest(t, flagDataPath, dataDir)
+	setFlagForTest(t, flagConfigPath, filepath.Join(dataDir, "config.yaml"))
+	setFlagForTest(t, flagHTTPAddress, "http://127.0.0.1:0")
+	cwd, _ := newTestFileScheme(t, t.TempDir())
+	releaseManager := newRemoteReleaseManager(gitpkg.WithRemoteURL(func(id string) string {
+		assert.Equal(t, pkgID, id)
+		return repoDir
+	}))
+
+	var sink strings.Builder
+	installRemotePackageEntries(cwd, &sink, []idepkg.ProvisionEntry{{
+		ID: pkgID, Version: version,
+	}}, releaseManager)
+
+	libPath := filepath.Join(dataDir, "lib", filepath.FromSlash(pkgID))
+	target, err := os.Readlink(libPath)
+	require.NoError(t, err)
+	assert.Equal(t,
+		filepath.Join(dataDir, "pkg", filepath.FromSlash(pkgID), version), target)
+	assert.Contains(t, sink.String(), `"phase":"activating"`)
+	assert.NotContains(t, sink.String(), `"phase":"failed"`)
 }
 
 // TestResolveRemoteEditorMode asserts the remote provisioning server resolves
