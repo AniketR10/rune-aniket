@@ -44,7 +44,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, []string{keyPath})
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		assert.Empty(t, ui.prompts, "no prompts expected when key is configured")
@@ -65,7 +65,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil)
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		require.Len(t, ui.prompts, 1)
@@ -88,7 +88,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil)
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		require.Len(t, ui.prompts, 3, "should have retried 3 times")
@@ -109,7 +109,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil)
 		uri := uriForServer(t, srv, "hunter2")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		assert.Empty(t, ui.prompts)
@@ -134,11 +134,11 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		uri := uriForServer(t, srv, "")
 		cache := new(passwordCache)
 
-		r1, err := newStdRemote(context.Background(), cfg, uri, ui, cache)
+		r1, err := newStdRemote(context.Background(), cfg, uri, ui, cache, nil)
 		require.NoError(t, err)
 		_ = r1.Close()
 
-		r2, err := newStdRemote(context.Background(), cfg, uri, ui, cache)
+		r2, err := newStdRemote(context.Background(), cfg, uri, ui, cache, nil)
 		require.NoError(t, err, "reconnect should reuse the cached password")
 		_ = r2.Close()
 
@@ -166,7 +166,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cache := new(passwordCache)
 		cache.put("stale-wrong")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, cache)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, cache, nil)
 		require.NoError(t, err, "stale cached password must fall back to a fresh prompt")
 		_ = r.Close()
 
@@ -197,7 +197,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg.kbdInteractive = true
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		require.NotEmpty(t, ui.prompts)
@@ -216,7 +216,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil)
 		uri := uriForServer(t, srv, "")
 
-		_, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		_, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrAuthRequiredKey),
 			"expected ErrAuthRequiredKey, got %v", err)
@@ -237,7 +237,7 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("ssh://test@" + addr + "/")
 		require.NoError(t, err)
 
-		_, err = newStdRemote(context.Background(), cfg, uri, ui, nil)
+		_, err = newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrHostUnreachable),
 			"expected ErrHostUnreachable, got %v", err)
@@ -271,7 +271,7 @@ func TestStdRemoteMultiKeyRetry(t *testing.T) {
 	cfg := configForCallbackTest(t, srv, []string{wrongPath, rightPath})
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err,
 		"with MaxAuthTries=1 the server severs the first connection "+
 			"after the wrong key; the dial must retry on a fresh "+
@@ -308,7 +308,7 @@ func TestDefaultIdentityFiles(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil) // empty private_keys
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err, "default ~/.ssh/id_ed25519 should be tried automatically")
 		_ = r.Close()
 		assert.Empty(t, ui.prompts, "no prompts expected when default key exists")
@@ -332,7 +332,7 @@ func TestDefaultIdentityFiles(t *testing.T) {
 		cfg := configForCallbackTest(t, srv, nil)
 		uri := uriForServer(t, srv, "")
 
-		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+		r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 		require.NoError(t, err)
 		_ = r.Close()
 		require.Len(t, ui.prompts, 1)
@@ -359,7 +359,7 @@ func TestPasswordRetryNotifiesOnFailure(t *testing.T) {
 	cfg := configForCallbackTest(t, srv, nil)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err)
 	_ = r.Close()
 
@@ -483,7 +483,13 @@ func newServerSigner(t *testing.T) ssh.Signer {
 
 func startInProcessServer(t *testing.T, cfg *ssh.ServerConfig) *inProcessServer {
 	t.Helper()
-	hostKey := newServerSigner(t)
+	return startInProcessServerWithHostKey(t, cfg, newServerSigner(t))
+}
+
+func startInProcessServerWithHostKey(
+	t *testing.T, cfg *ssh.ServerConfig, hostKey ssh.Signer,
+) *inProcessServer {
+	t.Helper()
 	cfg.AddHostKey(hostKey)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)

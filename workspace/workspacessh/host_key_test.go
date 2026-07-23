@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package workspacessh
 
 import (
@@ -29,6 +28,7 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
 	"encoding/base64"
 	"errors"
@@ -41,6 +41,7 @@ import (
 	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -78,6 +79,15 @@ func randomPubKey(t *testing.T) ssh.PublicKey {
 	k, err := ssh.NewPublicKey(pub)
 	require.NoError(t, err)
 	return k
+}
+
+func newRSAServerSigner(t *testing.T) ssh.Signer {
+	t.Helper()
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	signer, err := ssh.NewSignerFromKey(privateKey)
+	require.NoError(t, err)
+	return signer
 }
 
 // khEntryFor formats a plain known_hosts line for host:port and key.
@@ -131,7 +141,7 @@ func TestHostKeyUnknownAcceptRecordsAndConnects(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err, "unknown host + accept must connect")
 	_ = r.Close()
 
@@ -155,7 +165,7 @@ func TestHostKeyUnknownCancelLeavesFileUnchanged(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrHostKeyUnknown),
 		"cancelling an unknown host must surface ErrHostKeyUnknown; got %v", err)
@@ -185,7 +195,7 @@ func TestHostKeyChangedAcceptReplacesStalePreservesOthers(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err, "changed key + accept must connect")
 	_ = r.Close()
 
@@ -218,7 +228,7 @@ func TestHostKeyChangedCancelLeavesFileUnchanged(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err = newStdRemote(context.Background(), cfg, uri, ui, nil)
+	_, err = newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrHostKeyMismatch),
 		"cancelling a changed key must surface ErrHostKeyMismatch; got %v", err)
@@ -240,7 +250,7 @@ func TestHostKeyUnknownTrustOnceConnectsWithoutRecording(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err, "unknown host + trust once must connect")
 	_ = r.Close()
 
@@ -267,7 +277,7 @@ func TestHostKeyChangedTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err, "changed key + trust once must connect")
 	_ = r.Close()
 
@@ -277,6 +287,171 @@ func TestHostKeyChangedTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Equal(t, content, string(b),
 		"trust once must leave the stale known_hosts entry unchanged")
+}
+
+func TestSessionHostKeyPinUsesExactHostPort(t *testing.T) {
+	key := randomPubKey(t)
+	pin := new(sessionHostKeyPin)
+	pin.put("host.example.com:22", key)
+
+	got, ok := pin.get("host.example.com:22")
+	require.True(t, ok)
+	assert.Equal(t, key.Marshal(), got.Marshal())
+	_, ok = pin.get("host.example.com:2222")
+	assert.False(t, ok)
+
+	var nilPin *sessionHostKeyPin
+	_, ok = nilPin.get("host.example.com:22")
+	assert.False(t, ok)
+	assert.NotPanics(t, func() { nilPin.put("host.example.com:22", key) })
+}
+
+func TestHostKeyChangedTrustOnceReusesSessionPin(t *testing.T) {
+	srv := anyKeyServer(t)
+	keyPath, _ := generateClientKey(t)
+	host, port, err := net.SplitHostPort(srv.addr())
+	require.NoError(t, err)
+
+	khPath := filepath.Join(t.TempDir(), "known_hosts")
+	stale := []byte(khEntryFor(host, port, randomPubKey(t)))
+	require.NoError(t, os.WriteFile(khPath, stale, 0o600))
+
+	ui := &recordingUI{choices: []int{1}}
+	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
+	uri := uriForServer(t, srv, "")
+	pin := new(sessionHostKeyPin)
+
+	for range 2 {
+		r, dialErr := newStdRemote(context.Background(), cfg, uri, ui, nil, pin)
+		require.NoError(t, dialErr)
+		_ = r.Close()
+	}
+
+	assert.Len(t, ui.prompts, 1)
+	got, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, stale, got)
+}
+
+func TestHostKeyChangedTrustOnceFreshSessionPromptsAgain(t *testing.T) {
+	srv := anyKeyServer(t)
+	keyPath, _ := generateClientKey(t)
+	host, port, err := net.SplitHostPort(srv.addr())
+	require.NoError(t, err)
+
+	khPath := filepath.Join(t.TempDir(), "known_hosts")
+	stale := []byte(khEntryFor(host, port, randomPubKey(t)))
+	require.NoError(t, os.WriteFile(khPath, stale, 0o600))
+	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
+	uri := uriForServer(t, srv, "")
+
+	firstUI := &recordingUI{choices: []int{1}}
+	r, err := newStdRemote(context.Background(), cfg, uri, firstUI, nil, new(sessionHostKeyPin))
+	require.NoError(t, err)
+	_ = r.Close()
+
+	secondUI := &recordingUI{choiceCancel: true}
+	_, err = newStdRemote(context.Background(), cfg, uri, secondUI, nil, new(sessionHostKeyPin))
+	require.ErrorIs(t, err, ErrHostKeyMismatch)
+	assert.Len(t, secondUI.prompts, 1)
+	got, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, stale, got)
+}
+
+func TestHostKeyTrustOnceEntryPathsReuseSessionPin(t *testing.T) {
+	tests := []struct {
+		name       string
+		knownHosts []byte
+		choice     int
+		strict     bool
+		prompts    int
+	}{
+		{name: "unknown host", knownHosts: []byte{}, choice: 1, strict: true, prompts: 1},
+		{name: "unparsable known hosts", knownHosts: []byte(malformedKnownHosts), strict: true, prompts: 1},
+		{name: "unparsable strict disabled", knownHosts: []byte(malformedKnownHosts)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := anyKeyServer(t)
+			keyPath, _ := generateClientKey(t)
+			khPath := filepath.Join(t.TempDir(), "known_hosts")
+			require.NoError(t, os.WriteFile(khPath, tt.knownHosts, 0o600))
+			cfg := hostKeyTestConfig(t, khPath, tt.strict, keyPath)
+			uri := uriForServer(t, srv, "")
+			ui := &recordingUI{choices: []int{tt.choice}}
+			pin := new(sessionHostKeyPin)
+
+			for range 2 {
+				r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, pin)
+				require.NoError(t, err)
+				_ = r.Close()
+			}
+
+			assert.Len(t, ui.prompts, tt.prompts)
+			got, err := os.ReadFile(khPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.knownHosts, got)
+		})
+	}
+}
+
+func TestSessionHostKeyCallbackRejectsDifferentExactKey(t *testing.T) {
+	srv := anyKeyServer(t)
+	keyPath, _ := generateClientKey(t)
+	khPath := filepath.Join(t.TempDir(), "known_hosts")
+	knownHosts := []byte("# session pin must bypass this file\n")
+	require.NoError(t, os.WriteFile(khPath, knownHosts, 0o600))
+	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
+	uri := uriForServer(t, srv, "")
+	pinned := randomPubKey(t)
+	pin := new(sessionHostKeyPin)
+	pin.put(hostPortFromURI(uri), pinned)
+	ui := &recordingUI{choiceCancel: true}
+
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil, pin)
+	require.ErrorIs(t, err, ErrHostKeyMismatch)
+	assert.Empty(t, ui.prompts)
+	gotPin, ok := pin.get(hostPortFromURI(uri))
+	require.True(t, ok)
+	assert.Equal(t, pinned.Marshal(), gotPin.Marshal())
+	gotKnownHosts, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, knownHosts, gotKnownHosts)
+}
+
+func TestSessionHostKeyRSAAlgorithms(t *testing.T) {
+	pinned := newRSAServerSigner(t).PublicKey()
+	_, algorithms, err := buildHostkeyCallback(sshConfig{}, workspaceapi.URI{}, pinned)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		ssh.KeyAlgoRSASHA512,
+		ssh.KeyAlgoRSASHA256,
+		ssh.KeyAlgoRSA,
+	}, algorithms)
+}
+
+func TestSessionHostKeyNegotiationFailureIsMismatch(t *testing.T) {
+	serverConfig := &ssh.ServerConfig{
+		PublicKeyCallback: func(_ ssh.ConnMetadata, _ ssh.PublicKey) (*ssh.Permissions, error) {
+			return nil, nil
+		},
+	}
+	srv := startInProcessServerWithHostKey(t, serverConfig, newRSAServerSigner(t))
+	keyPath, _ := generateClientKey(t)
+	khPath := filepath.Join(t.TempDir(), "known_hosts")
+	require.NoError(t, os.WriteFile(khPath, nil, 0o600))
+	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
+	uri := uriForServer(t, srv, "")
+	pin := new(sessionHostKeyPin)
+	pin.put(hostPortFromURI(uri), randomPubKey(t))
+	ui := &recordingUI{choiceCancel: true}
+
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil, pin)
+	require.ErrorIs(t, err, ErrHostKeyMismatch)
+	assert.Empty(t, ui.prompts)
 }
 
 func TestHostKeyMatchingDoesNotPrompt(t *testing.T) {
@@ -289,7 +464,7 @@ func TestHostKeyMatchingDoesNotPrompt(t *testing.T) {
 	uri := uriForServer(t, srv, "")
 
 	ui := &recordingUI{choiceCancel: true} // would fail if prompted
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err)
 	_ = r.Close()
 	assert.Empty(t, ui.prompts,
@@ -309,7 +484,7 @@ func TestHostKeyStrictDisabledRecordsWithoutPrompt(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, false, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err,
 		"strict_host_key_checking=false must auto-accept and connect")
 	_ = r.Close()
@@ -335,7 +510,7 @@ func TestHostKeyUnparsableTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err, "unparsable known_hosts + trust once must connect")
 	_ = r.Close()
 
@@ -359,7 +534,7 @@ func TestHostKeyUnparsableCancelSurfacesError(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrKnownHostsUnparsable),
 		"cancelling an unparsable known_hosts must surface "+
@@ -382,7 +557,7 @@ func TestHostKeyUnparsableStrictDisabledTrustsOnceWithoutPrompt(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, false, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil, nil)
 	require.NoError(t, err,
 		"strict=false must trust once and connect despite unparsable file")
 	_ = r.Close()
@@ -537,7 +712,7 @@ func TestTranslateDialErrorPassesThroughHostKeyError(t *testing.T) {
 		Unknown: true,
 		err:     errors.New("wrapped"),
 	}
-	got := translateDialError("h:22", false, unknown)
+	got := translateDialError("h:22", false, false, unknown)
 	var hk *HostKeyError
 	require.True(t, errors.As(got, &hk))
 	assert.Same(t, unknown, hk)

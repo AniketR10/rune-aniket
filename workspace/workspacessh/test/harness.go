@@ -433,6 +433,18 @@ s6-svc -r /run/service/svc-openssh-server
 	}
 }
 
+// TerminateRemoteRuneServer stops the workspace server without disturbing
+// sshd, forcing an established SSH workspace scheme to reconnect.
+func TerminateRemoteRuneServer(t *testing.T, id string) {
+	t.Helper()
+	out, err := exec.Command(
+		"docker", "exec", id, "sh", "-c", "pkill -f '[r]une -x'",
+	).CombinedOutput()
+	if err != nil {
+		t.Fatalf("terminate remote rune server: %v: %s", err, string(out))
+	}
+}
+
 // WriteKnownHosts writes a known_hosts file pinning hostport to all
 // the OpenSSH-format public keys in pubs. Suitable as the
 // workspace-config "known_hosts" override. Pass every algorithm the

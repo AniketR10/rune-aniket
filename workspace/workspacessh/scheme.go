@@ -48,6 +48,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -141,6 +142,8 @@ type remote interface {
 	Close() error
 }
 
+var _ workspace.RemoteScheme = (*scheme)(nil)
+
 type scheme struct {
 	cfg      sshConfig
 	hostPort string
@@ -156,6 +159,7 @@ type scheme struct {
 	ui              UI
 	provisionFn     func() string
 	passCache       *passwordCache
+	hostKeyPin      *sessionHostKeyPin
 	remoteDataDir   string
 
 	schemeapi.Scheme
@@ -182,9 +186,10 @@ func newScheme(
 	ret.getUser = user.Current
 	ret.ui = ui
 	ret.passCache = new(passwordCache)
+	ret.hostKeyPin = new(sessionHostKeyPin)
 	if cc.command == "" {
 		ret.remoteFn = func(c context.Context, sc sshConfig, u workspaceapi.URI) (remote, error) {
-			return newStdRemote(c, sc, u, ret.ui, ret.passCache)
+			return newStdRemote(c, sc, u, ret.ui, ret.passCache, ret.hostKeyPin)
 		}
 	} else {
 		ret.remoteFn = newProcRemote
@@ -794,6 +799,14 @@ func (s *scheme) Close() (ret error) {
 	}
 	s.cancelCtx()
 	return ret
+}
+
+func (s *scheme) OnDisconnect() <-chan struct{} {
+	return s.Scheme.(workspace.RemoteScheme).OnDisconnect()
+}
+
+func (s *scheme) WaitConnected(ctx context.Context) error {
+	return s.Scheme.(workspace.RemoteScheme).WaitConnected(ctx)
 }
 
 func (s *scheme) expandPath(path string) (string, error) {

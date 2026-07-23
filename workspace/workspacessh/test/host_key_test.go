@@ -7,6 +7,7 @@ package workspacetest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,8 +16,10 @@ import (
 	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/crypto/ssh"
+	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
 
@@ -368,6 +371,83 @@ func TestHostKeyRotatedTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, before, after,
 		"trust once must not modify known_hosts")
+}
+
+func TestHostKeyTrustOnceReconnectReusesSessionPin(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:     "/id_ed25519.pub",
+		InstallRuneBinary: true,
+	})
+	khPath := WriteKnownHosts(t, c.HostPort, ContainerHostPubKeys(t, c.ID)...)
+	before, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+
+	RegenerateContainerHostKeys(t, c.ID)
+	require.NoError(t, waitForSSH(c.HostPort, 30*time.Second))
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("ssh://test@%s/tmp", c.HostPort))
+	require.NoError(t, err)
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	cfg := config.MapConfig(map[string]any{
+		"private_keys":             []any{keyPath},
+		"known_hosts":              khPath,
+		"strict_host_key_checking": true,
+		"timeout":                  "20s",
+		"provision_packages":       false,
+	})
+
+	ui := &recordingUI{choices: []int{1}}
+	scheme, err := workspacessh.New(ui)(context.Background(), cfg, uri)
+	require.NoError(t, err)
+	remoteScheme, ok := scheme.(workspace.RemoteScheme)
+	require.True(t, ok)
+
+	_, err = scheme.Stat("/tmp")
+	require.NoError(t, err)
+	assert.Equal(t, 1, promptCount(ui))
+
+	disconnected := remoteScheme.OnDisconnect()
+	TerminateRemoteRuneServer(t, c.ID)
+	select {
+	case <-disconnected:
+	case <-time.After(30 * time.Second):
+		require.FailNow(t, "workspace did not report remote server disconnect")
+	}
+
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err = scheme.Stat("/tmp")
+		if err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, promptCount(ui))
+	after, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+	require.NoError(t, scheme.Close())
+
+	freshUI := &recordingUI{choices: []int{1}}
+	freshScheme, err := workspacessh.New(freshUI)(context.Background(), cfg, uri)
+	require.NoError(t, err)
+	defer freshScheme.Close()
+	_, err = freshScheme.Stat("/tmp")
+	require.NoError(t, err)
+	assert.Equal(t, 1, promptCount(freshUI))
+	after, err = os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+}
+
+func promptCount(ui *recordingUI) int {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	return len(ui.prompts)
 }
 
 // TestHostKeyUnparsableTrustOnceConnects confirms that when known_hosts

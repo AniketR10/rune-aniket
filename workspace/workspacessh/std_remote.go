@@ -33,8 +33,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"sync"
+	"syscall"
 	"time"
 
 	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
@@ -64,6 +64,13 @@ type passwordCache struct {
 	set bool
 }
 
+type sessionHostKeyPin struct {
+	mu       sync.Mutex
+	hostPort string
+	key      ssh.PublicKey
+	set      bool
+}
+
 func (c *passwordCache) get() (string, bool) {
 	if c == nil {
 		return "", false
@@ -81,6 +88,29 @@ func (c *passwordCache) put(v string) {
 	defer c.mu.Unlock()
 	c.val = v
 	c.set = true
+}
+
+func (p *sessionHostKeyPin) get(hostPort string) (ssh.PublicKey, bool) {
+	if p == nil {
+		return nil, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.set || p.hostPort != hostPort {
+		return nil, false
+	}
+	return p.key, true
+}
+
+func (p *sessionHostKeyPin) put(hostPort string, key ssh.PublicKey) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.hostPort = hostPort
+	p.key = key
+	p.set = true
 }
 
 // ErrAuthRequiredKey indicates the server requires publickey authentication
@@ -182,12 +212,15 @@ type goSshSession struct {
 
 func newStdRemote(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI, passCache *passwordCache,
+	hostKeyPin *sessionHostKeyPin,
 ) (remote, error) {
 	username, err := usernameOrCurrent(uri)
 	if err != nil {
 		return nil, err
 	}
-	r, err := dialWithKeys(ctx, cfg, uri, ui, username, nil, passCache)
+	hostPort := hostPortFromURI(uri)
+	pinnedKey, _ := hostKeyPin.get(hostPort)
+	r, err := dialWithKeys(ctx, cfg, uri, ui, username, pinnedKey, passCache)
 	if err == nil {
 		return r, nil
 	}
@@ -219,6 +252,7 @@ func newStdRemote(
 	case hostKeyReject:
 		return nil, err
 	case hostKeyTrustOnce:
+		hostKeyPin.put(hkErr.HostPort, hkErr.Presented)
 		return dialWithKeys(ctx, cfg, uri, ui, username, hkErr.Presented, passCache)
 	default:
 		if persistErr := persistKnownHostKey(hkErr); persistErr != nil {
@@ -256,7 +290,7 @@ func dialWithKeys(
 	// every other matrix scenario keep behaving exactly as before.
 	if len(keyPaths) <= 1 {
 		return dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
-			keyPaths, true /* includeFallbacks */, passCache)
+			keyPaths, true /* includeFallbacks */, passCache, pinnedKey != nil)
 	}
 
 	// Two or more keys: redial per key so that server limits like
@@ -269,7 +303,7 @@ func dialWithKeys(
 	for i, kp := range keyPaths {
 		last := i == len(keyPaths)-1
 		r, err := dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
-			[]string{kp}, last, passCache)
+			[]string{kp}, last, passCache, pinnedKey != nil)
 		if err == nil {
 			return r, nil
 		}
@@ -294,7 +328,7 @@ func dialWithKeys(
 func dialOnce(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
 	username string, hostkeyCallback ssh.HostKeyCallback, hostKeyAlgos []string,
-	keyPaths []string, includeFallbacks bool, passCache *passwordCache,
+	keyPaths []string, includeFallbacks bool, passCache *passwordCache, sessionPinned bool,
 ) (remote, error) {
 	auths, err := authMethodsFromURI(ctx, cfg, uri, ui, keyPaths, includeFallbacks, passCache)
 	if err != nil {
@@ -316,7 +350,7 @@ func dialOnce(
 	hostport := hostPortFromURI(uri)
 	conn, err := ssh.Dial("tcp", hostport, conf)
 	if err != nil {
-		return nil, translateDialError(hostport, len(cfg.privateKeys) > 0, err)
+		return nil, translateDialError(hostport, len(cfg.privateKeys) > 0, sessionPinned, err)
 	}
 	return &stdRemote{parentCtx: ctx, client: conn, quitCh: make(chan struct{})}, nil
 }
@@ -338,7 +372,14 @@ func buildHostkeyCallback(
 		// Pin the algorithm to the approved key's type so negotiation
 		// lands on it rather than another type the server also offers,
 		// which FixedHostKey would then reject as a mismatch.
-		return ssh.FixedHostKey(pinnedKey), []string{pinnedKey.Type()}, nil
+		fixed := ssh.FixedHostKey(pinnedKey)
+		callback := func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			if err := fixed(hostname, remote, key); err != nil {
+				return fmt.Errorf("%w: %v", ErrHostKeyMismatch, err)
+			}
+			return nil
+		}
+		return callback, sessionHostKeyAlgorithms(pinnedKey), nil
 	}
 	knownHostsPath, err := resolveKnownHostsPath(cfg.knownHostsPath)
 	if err != nil {
@@ -373,6 +414,17 @@ func buildHostkeyCallback(
 		return nil
 	}
 	return cb, db.HostKeyAlgorithms(hostport), nil
+}
+
+func sessionHostKeyAlgorithms(key ssh.PublicKey) []string {
+	if key.Type() == ssh.KeyAlgoRSA {
+		return []string{
+			ssh.KeyAlgoRSASHA512,
+			ssh.KeyAlgoRSASHA256,
+			ssh.KeyAlgoRSA,
+		}
+	}
+	return []string{key.Type()}
 }
 
 // unknownHostCallback returns a callback that treats every host as unknown,
@@ -737,7 +789,7 @@ func askKbd(
 // error. The Go ssh library wraps server-rejection failures in errors with
 // messages like "ssh: handshake failed: ssh: unable to authenticate, ..."
 // and includes the list of methods the server advertised.
-func translateDialError(hostport string, hasKeys bool, err error) error {
+func translateDialError(hostport string, hasKeys, sessionPinned bool, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -748,6 +800,10 @@ func translateDialError(hostport string, hasKeys bool, err error) error {
 	var hkErr *HostKeyError
 	if errors.As(err, &hkErr) {
 		return hkErr
+	}
+	var negotiationErr *ssh.AlgorithmNegotiationError
+	if sessionPinned && errors.As(err, &negotiationErr) && negotiationErr.What == "host key" {
+		return fmt.Errorf("%w: %v", ErrHostKeyMismatch, err)
 	}
 	// Network-level failures (no route, DNS, refused connection) surface as
 	// *net.OpError without an "ssh:" prefix in the message.
