@@ -84,6 +84,7 @@ type langServer struct {
 	rootURI    string
 	executor   schemeapi.Executor
 	handler    jsonrpc2.Handler
+	fileConn   func(*os.File) (net.Conn, error)
 	lspFile    *os.File
 	stdin      net.Conn
 	stdout     net.Conn
@@ -118,6 +119,19 @@ type deadlineWriter struct {
 	conn  net.Conn
 }
 
+func lspSocketpair() ([2]int, error) {
+	syscall.ForkLock.Lock()
+	defer syscall.ForkLock.Unlock()
+
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return fds, err
+	}
+	syscall.CloseOnExec(fds[0])
+	syscall.CloseOnExec(fds[1])
+	return fds, nil
+}
+
 func (w *deadlineWriter) Write(ctx context.Context, msg jsonrpc2.Message) error {
 	if deadline, ok := ctx.Deadline(); ok {
 		if err := w.conn.SetWriteDeadline(deadline); err != nil {
@@ -148,6 +162,7 @@ func newLangServer(
 		executor:   executor,
 		rootURI:    rootURI,
 		handler:    handler,
+		fileConn:   net.FileConn,
 		log: slog.With("struct", "idelsp.langServer",
 			"language", cfg.id, "workspace", rootURI),
 	}
@@ -157,7 +172,7 @@ func (s *langServer) start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	fds, err := lspSocketpair()
 	if err != nil {
 		return fmt.Errorf("create socket pair: %v", err)
 	}
@@ -193,6 +208,8 @@ func (s *langServer) start(ctx context.Context) error {
 			"start %s: %w", s.cfg.command, err,
 		)
 	}
+	s.pid = pid
+	s.watcher = watchCh
 	// Keep the LSP end of the socketpair open for the server's lifetime.
 	// The local file scheme dups the fd into the child, so closing our copy
 	// would be harmless there; but the ssh scheme streams through this
@@ -201,21 +218,21 @@ func (s *langServer) start(ctx context.Context) error {
 	// Close it in Close() instead, alongside the IDE-side pipes.
 	s.lspFile = lspFile
 
-	stdout, err := net.FileConn(ideFile)
+	stdout, err := s.fileConn(ideFile)
 	if err != nil {
 		_ = ideFile.Close()
+		_ = s.Close()
 		return fmt.Errorf("new stdout file conn: %w", err)
 	}
-	stdin, err := net.FileConn(ideFile)
+	stdin, err := s.fileConn(ideFile)
 	if err != nil {
 		_ = stdout.Close()
 		_ = ideFile.Close()
+		_ = s.Close()
 		return fmt.Errorf("new stdin file conn: %w", err)
 	}
 	// FileConn duped the fd; close our copy.
 	_ = ideFile.Close()
-	s.pid = pid
-	s.watcher = watchCh
 	framer := jsonrpc2.HeaderFramer()
 	closer := pipeCloser{r: stdout, w: stdin}
 	s.conn = jsonrpc2.NewConnection(lifecycleContext, jsonrpc2.ConnectionConfig{
@@ -238,17 +255,19 @@ func (s *langServer) start(ctx context.Context) error {
 }
 
 func (s *langServer) Close() error {
-	// Cancel s.ctx so exec.CommandContext kills the child gopls process;
-	// without this, a Close before watchServer takes over (e.g. failed
-	// initialize) leaves an orphan subprocess.
 	if s.cancel != nil {
 		s.cancel()
 	}
-	// NOTE: if we don't close this first, there's a risk that
-	// conn.Close blocks before because it's calling conn.Wait.
-	_ = s.stdin.Close()
-	_ = s.stdout.Close()
-	err := s.conn.Close()
+	if s.stdin != nil {
+		_ = s.stdin.Close()
+	}
+	if s.stdout != nil {
+		_ = s.stdout.Close()
+	}
+	var err error
+	if s.conn != nil {
+		err = s.conn.Close()
+	}
 	if s.lspFile != nil {
 		_ = s.lspFile.Close()
 	}

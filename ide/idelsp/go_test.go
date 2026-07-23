@@ -635,6 +635,7 @@ func TestE2E(t *testing.T) {
 					textcomp,
 					cfg,
 				)
+				t.Cleanup(func() { _ = mgr.Close() })
 
 				ctx := context.Background()
 
@@ -1427,6 +1428,7 @@ func Broken() {
 					textcomp,
 					cfg,
 				)
+				t.Cleanup(func() { _ = mgr.Close() })
 
 				ctx := context.Background()
 
@@ -1544,6 +1546,7 @@ func broken() {
 		opener,
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	params := autoInitParams(uri.String())
 	initOptions := []byte(`{"langID": "go", "command": "gopls serve"}`)
@@ -1646,6 +1649,7 @@ func TestE2ECallbackProgress(t *testing.T) {
 		nil, nil,
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	_, err = mgr.Initialize(ctx, params)
 	require.NoError(t, err)
@@ -1752,6 +1756,7 @@ func TestE2EWorkDoneProgress(t *testing.T) {
 			WorkDoneProgress: true,
 		},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	_, err = mgr.Initialize(ctx, params)
 	require.NoError(t, err)
@@ -1871,6 +1876,7 @@ func TestE2ECallbackApplyEdit(t *testing.T) {
 		nil, nil,
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	loaded.Add(1)
 	_, err = mgr.Initialize(ctx, params)
@@ -2059,6 +2065,7 @@ func TestE2ECallbackShowDocument(t *testing.T) {
 		nil, nil,
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	loaded.Add(1)
 	_, err = mgr.Initialize(ctx, params)
@@ -2196,6 +2203,7 @@ func main() {
 		nil, // opener
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	params := autoInitParams(uri.String())
 	initOpts, err := json.Marshal(map[string]any{
@@ -2317,6 +2325,7 @@ func main() {
 		nil, // opener
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	params := autoInitParams(uri.String())
 	initOpts, err := json.Marshal(map[string]any{
@@ -2481,6 +2490,7 @@ func Helper() {}
 		nil, // opener
 		Config{Callback: callback, MaxRetries: 1},
 	)
+	t.Cleanup(func() { _ = mgr.Close() })
 
 	params := autoInitParams(uri.String())
 	initOpts, err := json.Marshal(map[string]any{

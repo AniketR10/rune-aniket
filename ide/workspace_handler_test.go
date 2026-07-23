@@ -6316,6 +6316,47 @@ func TestCloseWorkspaceClosesExtensionPermissionsPartition(t *testing.T) {
 		openedDuringInstall, closedDuringClose, netLeak)
 }
 
+func TestBuildExtensionsFailureClosesOwnedResources(t *testing.T) {
+	dir := t.TempDir()
+	var tracker *partitionTrackingService
+	newTestStorageWrap = func(s storageapi.Service) storageapi.Service {
+		tracker = &partitionTrackingService{
+			Service: s, target: "extension-permissions",
+		}
+		return tracker
+	}
+	t.Cleanup(func() { newTestStorageWrap = nil })
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+	wantErr := errors.New("extension runner failed")
+	runner := FuncExtensionsRunner(func(
+		workspaceapi.URI,
+		map[extensionapi.Permission]extension.ResourceRegistrar,
+		string, string, browser.Notifications,
+		schemeapi.Executor, schemeapi.Executor, extension.Grantor,
+		text.Editor, ideauthorizer.PromptOpener, storageapi.Service,
+		func(func()) bool,
+	) (extension.Runner, error) {
+		return nil, wantErr
+	})
+
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NotNil(t, tracker)
+	require.Positive(t, tracker.opens.Load())
+	require.Equal(t, tracker.opens.Load(), tracker.closes.Load(),
+		"failed builds must close every resource allocated before the error")
+}
+
 // TestWorkspaceReadyCommand exercises the `workspaceready` event-loop
 // primitive that defers a command until the most-recently-issued
 // pending workspace finishes installing. This is what makes the

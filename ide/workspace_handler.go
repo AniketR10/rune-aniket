@@ -1907,14 +1907,13 @@ func (h *workspaceManagerHandler) buildExtensions(
 	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
 	parser syntaxapi.Parser, indexedSymbols bool,
 ) (
-	extension.Runner, *idelsp.Manager, *idedebug.Manager,
-	storageapi.Service, error,
+	_ extension.Runner, _ *idelsp.Manager, _ *idedebug.Manager,
+	_ storageapi.Service, retErr error,
 ) {
 	notifications := h.notifications.new(uri, ex.container)
 	ed := ex.Editor()
 	promptOpener := &ex.comp
 	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
-	var retErr error
 	defer func() {
 		if retErr != nil {
 			_ = promptStorage.Close()

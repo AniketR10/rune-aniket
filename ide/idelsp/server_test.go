@@ -42,6 +42,20 @@ import (
 	"unstable.build/go-tui/workspace/processctx"
 )
 
+func TestLSPSocketpairIsCloseOnExec(t *testing.T) {
+	fds, err := lspSocketpair()
+	require.NoError(t, err)
+	for _, fd := range fds {
+		t.Cleanup(func() { require.NoError(t, syscall.Close(fd)) })
+		flags, _, errno := syscall.Syscall(
+			syscall.SYS_FCNTL, uintptr(fd), uintptr(syscall.F_GETFD), 0,
+		)
+		require.Zero(t, errno)
+		assert.NotZero(t, flags&syscall.FD_CLOEXEC,
+			"socket fd %d would survive exec and keep the LSP transport alive", fd)
+	}
+}
+
 func TestLangServerStartCarriesProcessContext(t *testing.T) {
 	startErr := errors.New("start failed")
 	exec := &recordingStartExecutor{err: startErr}
@@ -64,6 +78,23 @@ func TestLangServerStartCarriesProcessContext(t *testing.T) {
 	assert.Equal(t, "go", extensionID)
 	assert.Equal(t, "gopls", exec.cmd.Path)
 	assert.Equal(t, []string{"serve"}, exec.cmd.Args)
+}
+
+func TestLangServerStartCancelsProcessWhenTransportSetupFails(t *testing.T) {
+	exec := &recordingStartExecutor{}
+	srv := newLangServer(
+		context.Background(),
+		langConfig{id: "go", command: "gopls", args: []string{"serve"}},
+		"gopls", exec, "file:///workspace", nil,
+		semanticapi.InitializeParams{},
+	)
+	wantErr := errors.New("file conn failed")
+	srv.fileConn = func(*os.File) (net.Conn, error) { return nil, wantErr }
+
+	err := srv.start(context.Background())
+	require.ErrorIs(t, err, wantErr)
+	require.ErrorIs(t, exec.ctx.Err(), context.Canceled,
+		"a spawned process must be canceled when transport ownership cannot be established")
 }
 
 // TestLangServerCallDoesNotKillReader exercises the regression where a
