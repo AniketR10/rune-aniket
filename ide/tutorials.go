@@ -136,7 +136,7 @@ func (i *IDE) onTutorialsInstalled(names []string) (bool, error) {
 				continue
 			}
 			if !prompted && !running {
-				i.promptRunTutorial(b.name)
+				i.promptRunTutorial(b.name, "")
 				prompted = true
 			}
 		}
@@ -156,15 +156,27 @@ func (i *IDE) notifyTutorialNotRegistered(name string) {
 	)
 }
 
-// promptRunTutorial asks the user whether to run a freshly-installed tutorial.
-// It must run on the event loop. On Yes it dispatches `tutorial start <name>`,
-// mirroring maybeStartTutorial; on No or close it does nothing.
-func (i *IDE) promptRunTutorial(name string) {
+func (i *IDE) onTutorialCompleted(name string) {
+	next, ok := i.options.nextTutorialPlaylistItem(name)
+	if !ok || !i.tutorial.has(next.Name) {
+		return
+	}
+	i.promptRunTutorial(next.Name, next.Description)
+}
+
+// promptRunTutorial asks the user whether to run a tutorial. It must run on
+// the event loop. On Yes it dispatches `tutorial start <name>`; on No or close
+// it does nothing.
+func (i *IDE) promptRunTutorial(name, description string) {
 	ex := i.workspaceHandler.focusEx()
 	if ex == nil {
 		return
 	}
 	message := fmt.Sprintf("Do you want to run the **%s** tutorial now?", name)
+	if description != "" {
+		message = fmt.Sprintf("Do you want to do the **%s** tutorial now?\n\n%s",
+			name, description)
+	}
 	var promptWindow browser.Window
 	promptWindow = ex.comp.Prompt(
 		message,

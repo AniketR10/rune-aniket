@@ -675,7 +675,7 @@ func (i *IDE) init(
 		openShaderCfg.duration = dur
 	}
 	i.tutorial.init(i.workspaceHandler, tutorials,
-		i.workspaceHandler.events.globalInterrupter())
+		i.workspaceHandler.events.globalInterrupter(), i.onTutorialCompleted)
 	commandObserver.subscribe(&i.tutorial)
 	_ = i.workspaceHandler.SubscribeEvents(
 		textapi.AllEvents(),

@@ -45,6 +45,7 @@ type tutorialRunner struct {
 	activeName    string
 	interrupter   term.Interrupter
 	width, height int
+	onCompleted   func(name string)
 }
 
 var _ commandObserver = (*tutorialRunner)(nil)
@@ -53,13 +54,18 @@ func (r *tutorialRunner) init(
 	root tui.Handler,
 	tutorials map[string]idetutorial.Tutorial,
 	interrupter term.Interrupter,
+	onCompleted func(name string),
 ) {
 	r.Handler = root
 	r.tutorials = tutorials
 	r.interrupter = interrupter
+	r.onCompleted = onCompleted
 }
 
 func (r *tutorialRunner) setActive(name string, t idetutorial.Tutorial) {
+	if r.overlay != nil {
+		r.clearActive()
+	}
 	r.overlay = idetutorial.New(r.Handler, t, r.interrupter)
 	r.activeName = name
 	if r.width > 0 && r.height > 0 {
@@ -74,6 +80,18 @@ func (r *tutorialRunner) clearActive() {
 	}
 	r.overlay = nil
 	r.activeName = ""
+}
+
+func (r *tutorialRunner) finishActive() {
+	if r.overlay == nil {
+		return
+	}
+	name := r.activeName
+	completed := r.overlay.Completed()
+	r.clearActive()
+	if completed && r.onCompleted != nil {
+		r.onCompleted(name)
+	}
 }
 
 // register adds a tutorial under name and reports whether it was added. It
@@ -125,7 +143,7 @@ func (r *tutorialRunner) Handle(ev term.Event) (bool, bool) {
 	}
 	exit, handled := r.overlay.Handle(ev)
 	if exit {
-		r.clearActive()
+		r.finishActive()
 	}
 	return false, handled
 }
@@ -166,7 +184,7 @@ func (r *tutorialRunner) observeCommand(
 	}
 	exit := r.overlay.ObserveCommand(typed, resolved, args, err)
 	if exit {
-		r.clearActive()
+		r.finishActive()
 	}
 }
 
@@ -175,7 +193,7 @@ func (r *tutorialRunner) observeEvent(eventType, uri string) {
 		return
 	}
 	if r.overlay.ObserveEvent(eventType, uri) {
-		r.clearActive()
+		r.finishActive()
 	}
 }
 

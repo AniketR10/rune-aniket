@@ -397,6 +397,7 @@ tutorial(entry=run)
 	tut, notis := newTutorial(t, src)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
+	assert.True(t, tut.Completed())
 	assert.Equal(t, 2, notis.len())
 }
 
@@ -1357,6 +1358,7 @@ tutorial(entry=run)
 	require.Equal(t, "choice", activeKindFor(tut))
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 	waitFinished(t, tut, time.Second)
+	assert.False(t, tut.Completed())
 	assert.False(t, notis.containsSubstring("unreachable"),
 		"cancel_on_dismiss must exit before the next notify runs")
 }
@@ -1394,6 +1396,7 @@ tutorial(entry=run)
 	tut, notis := newTutorial(t, src)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
+	assert.False(t, tut.Completed())
 	assert.True(t, notis.containsSubstring("before"))
 	assert.False(t, notis.containsSubstring("after"),
 		"exit() must skip the rest of the entry")
@@ -1447,6 +1450,7 @@ tutorial(entry=run)
 	case <-time.After(time.Second):
 		t.Fatal("Stop() did not return within 1s; runLoop is stuck")
 	}
+	assert.False(t, tut.Completed())
 	assert.False(t, notis.containsSubstring("never"),
 		"Stop() must skip the rest of the entry")
 }
@@ -1483,6 +1487,7 @@ tutorial(entry=run)
 	tut, notis := newTutorial(t, src)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
+	assert.False(t, tut.Completed())
 	require.Greater(t, notis.len(), 0)
 	found := false
 	for _, c := range notis.captured {
@@ -1509,6 +1514,7 @@ tutorial(entry=run)
 	tut, notis := newTutorial(t, src)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
+	assert.False(t, tut.Completed())
 	require.Greater(t, notis.len(), 0)
 	hasError := false
 	for _, c := range notis.captured {

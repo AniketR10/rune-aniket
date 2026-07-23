@@ -66,6 +66,9 @@ type tutStub struct {
 	handleCount int
 	resetCount  int
 	stopCount   int
+	completed   bool
+	commandExit bool
+	eventExit   bool
 }
 
 func (t *tutStub) Resize(_, _ int)    {}
@@ -80,11 +83,12 @@ func (t *tutStub) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 func (t *tutStub) Selection() (string, bool) { return "", false }
 func (t *tutStub) Reset()                    { t.resetCount++ }
 func (t *tutStub) Stop()                     { t.stopCount++ }
+func (t *tutStub) Completed() bool           { return t.completed }
 func (t *tutStub) ObserveCommand(_, _ string, _ []string, _ error) bool {
-	return false
+	return t.commandExit
 }
 func (t *tutStub) ObserveEvent(_, _ string) bool {
-	return false
+	return t.eventExit
 }
 func (t *tutStub) Shader() (idetutorial.Shader, bool) {
 	return idetutorial.Shader{}, false
@@ -94,14 +98,116 @@ func (t *tutStub) ComponentAt(_ term.Coordinates) (tui.Handler, bool) {
 	return nil, false
 }
 
-func newTestRunner(tutorials map[string]idetutorial.Tutorial) (
+func newTestRunner(tutorials map[string]idetutorial.Tutorial, onCompleted ...func(string)) (
 	*tutorialRunner, *rootStub,
 ) {
 	root := &rootStub{}
 	r := &tutorialRunner{}
-	r.init(root, tutorials, term.NopInterrupter())
+	var completed func(string)
+	if len(onCompleted) > 0 {
+		completed = onCompleted[0]
+	}
+	r.init(root, tutorials, term.NopInterrupter(), completed)
 	r.Resize(20, 5)
 	return r, root
+}
+
+func TestTutorialRunnerReportsSuccessfulCompletion(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		tut  *tutStub
+		exit func(*tutorialRunner)
+	}{
+		{
+			name: "input",
+			tut:  &tutStub{exitOn: 'q', completed: true},
+			exit: func(r *tutorialRunner) {
+				r.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+			},
+		},
+		{
+			name: "command observation",
+			tut:  &tutStub{completed: true, commandExit: true},
+			exit: func(r *tutorialRunner) {
+				r.observeCommand("edit", "edit", nil, nil)
+			},
+		},
+		{
+			name: "event observation",
+			tut:  &tutStub{completed: true, eventExit: true},
+			exit: func(r *tutorialRunner) {
+				r.observeEvent("open", "file:///example.go")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var r *tutorialRunner
+			var completed []string
+			clearedBeforeCallback := false
+			r, _ = newTestRunner(map[string]idetutorial.Tutorial{"basics": tt.tut},
+				func(name string) {
+					clearedBeforeCallback = r.overlay == nil && r.activeName == ""
+					completed = append(completed, name)
+				})
+			require.NoError(t, r.HandleCommand(context.Background(),
+				textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+
+			tt.exit(r)
+
+			assert.Equal(t, []string{"basics"}, completed)
+			assert.True(t, clearedBeforeCallback)
+			assert.Nil(t, r.overlay)
+		})
+	}
+}
+
+func TestTutorialRunnerDoesNotReportUnsuccessfulOrStoppedTutorial(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		tut  *tutStub
+		exit func(*tutorialRunner) error
+	}{
+		{
+			name: "unsuccessful exit",
+			tut:  &tutStub{exitOn: 'q'},
+			exit: func(r *tutorialRunner) error {
+				r.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+				return nil
+			},
+		},
+		{
+			name: "explicit stop",
+			tut:  &tutStub{completed: true},
+			exit: func(r *tutorialRunner) error {
+				return r.HandleCommand(context.Background(),
+					textapi.Command{Name: "tutorial", Args: []string{"stop"}})
+			},
+		},
+		{
+			name: "replacement",
+			tut:  &tutStub{completed: true},
+			exit: func(r *tutorialRunner) error {
+				return r.HandleCommand(context.Background(),
+					textapi.Command{Name: "tutorial", Args: []string{"start", "other"}})
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var completed []string
+			r, _ := newTestRunner(map[string]idetutorial.Tutorial{
+				"basics": tt.tut,
+				"other":  &tutStub{},
+			},
+				func(name string) { completed = append(completed, name) })
+			require.NoError(t, r.HandleCommand(context.Background(),
+				textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+			require.NoError(t, tt.exit(r))
+			assert.Empty(t, completed)
+		})
+	}
 }
 
 func TestTutorialRunnerStartsAndStopsOnExit(t *testing.T) {

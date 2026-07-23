@@ -21,43 +21,31 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package ide
 
 import (
-	_ "embed"
+	"testing"
 
-	"unstable.build/go-tui/ide"
+	"github.com/stretchr/testify/assert"
 )
 
-//go:embed tutorials/basics.star
-var basicsTutorial string
-
-//go:embed tutorials/navigation.star
-var navigationTutorial string
-
-//go:embed tutorials/agent.star
-var agentTutorial string
-
-var embeddedTutorialPlaylist = []ide.TutorialPlaylistItem{
-	{
-		Name:        "basics",
-		Description: "Learn the essential Rune workspace and window management commands and key bindings.",
-	},
-	{
-		Name:        "navigation",
-		Description: "Learn about structural navigation and how to exploit Rune's code intelligence tools.",
-	},
-	{
-		Name:        "agent",
-		Description: "Install Rune Agent, connect a model provider, start a conversation, and get help.",
-	},
-}
-
-func embeddedTutorialOptions() []ide.Option {
-	return []ide.Option{
-		ide.WithStarlarkTutorial("basics", basicsTutorial),
-		ide.WithStarlarkTutorial("navigation", navigationTutorial),
-		ide.WithStarlarkTutorial("agent", agentTutorial),
-		ide.WithTutorialPlaylist(embeddedTutorialPlaylist...),
+func TestTutorialPlaylistNextItem(t *testing.T) {
+	t.Parallel()
+	playlist := []TutorialPlaylistItem{
+		{Name: "basics", Description: "Learn the basics."},
+		{Name: "navigation", Description: "Navigate code."},
 	}
+	opts := newOptions(WithTutorialPlaylist(playlist...))
+	playlist[1].Name = "changed"
+
+	next, ok := opts.nextTutorialPlaylistItem("basics")
+	assert.True(t, ok)
+	assert.Equal(t, TutorialPlaylistItem{
+		Name: "navigation", Description: "Navigate code.",
+	}, next)
+
+	_, ok = opts.nextTutorialPlaylistItem("navigation")
+	assert.False(t, ok)
+	_, ok = opts.nextTutorialPlaylistItem("unknown")
+	assert.False(t, ok)
 }

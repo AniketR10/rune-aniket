@@ -52,6 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -2624,6 +2625,123 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 			assert.Equal(t, tc.wantActive, i.tutorial.activeName)
 		})
 	}
+}
+
+func TestIDEPlaylistPromptsForNextTutorial(t *testing.T) {
+	newIDE := func(t *testing.T, registerNavigation bool) (*IDE, *sync.Mutex) {
+		t.Helper()
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+		mu := new(sync.Mutex)
+		opts := []Option{
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(func(fn func()) bool {
+				fn()
+				return true
+			}),
+			WithoutHomePrompt(),
+			WithStarlarkTutorial("basics", `
+def run():
+    pass
+tutorial(entry=run)
+`),
+			WithTutorialPlaylist(
+				TutorialPlaylistItem{Name: "basics", Description: "Learn the basics."},
+				TutorialPlaylistItem{Name: "navigation", Description: "Navigate code."},
+			),
+		}
+		if registerNavigation {
+			opts = append(opts, WithStarlarkTutorial("navigation", minimalStarTutorial))
+		}
+		i, err := New("", configFile.Name(), dataDir, newTestStorage(t, dataDir), opts...)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		return i, mu
+	}
+
+	completeBasics := func(t *testing.T, i *IDE, mu sync.Locker) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		require.NoError(t, i.tutorial.HandleCommand(context.Background(),
+			textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+		_, _ = i.tutorial.Handle(term.Event{Type: term.EventInterrupt})
+	}
+
+	prompt := func(t *testing.T, i *IDE, mu sync.Locker) *sdkhandler.Prompt {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		var floating browser.Window
+		i.Browser().IterateWindows(func(w browser.Window) {
+			if w.IsFloating() {
+				floating = w
+			}
+		})
+		require.NotNil(t, floating)
+		content, err := floating.Content()
+		require.NoError(t, err)
+		ret, ok := content.(*sdkhandler.Prompt)
+		require.True(t, ok)
+		return ret
+	}
+
+	promptText := func(t *testing.T, p *sdkhandler.Prompt) string {
+		t.Helper()
+		width, height := p.Dimensions()
+		p.Resize(width, height)
+		w := term.NewStringWriter(width, height)
+		p.Draw(w)
+		require.NoError(t, w.Flush())
+		return w.String()
+	}
+
+	t.Run("Yes starts the configured next tutorial", func(t *testing.T) {
+		i, mu := newIDE(t, true)
+		completeBasics(t, i, mu)
+		p := prompt(t, i, mu)
+		assert.Contains(t, promptText(t, p),
+			"Do you want to do the navigation tutorial now?")
+		assert.Contains(t, promptText(t, p), "Navigate code.")
+
+		mu.Lock()
+		_, handled := p.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+		assert.True(t, handled)
+		assert.Equal(t, "navigation", i.tutorial.activeName)
+		mu.Unlock()
+	})
+
+	t.Run("No leaves no tutorial active", func(t *testing.T) {
+		i, mu := newIDE(t, true)
+		completeBasics(t, i, mu)
+		p := prompt(t, i, mu)
+
+		mu.Lock()
+		_, handled := p.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
+		assert.True(t, handled)
+		assert.Nil(t, i.tutorial.overlay)
+		assert.Empty(t, i.tutorial.activeName)
+		mu.Unlock()
+	})
+
+	t.Run("last and unavailable entries do not prompt", func(t *testing.T) {
+		i, mu := newIDE(t, true)
+		mu.Lock()
+		i.onTutorialCompleted("navigation")
+		mu.Unlock()
+		assert.Equal(t, 0, countFloatingWindows(i, mu))
+
+		i, mu = newIDE(t, false)
+		completeBasics(t, i, mu)
+		assert.Equal(t, 0, countFloatingWindows(i, mu))
+	})
 }
 
 // TestIDEHomePromptOpensOnReady verifies that landing on the home

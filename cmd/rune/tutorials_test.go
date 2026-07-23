@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 )
 
@@ -71,7 +72,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "33", tut.Version())
+	assert.Equal(t, "34", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -100,7 +101,67 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "33", tut.Version())
+	assert.Equal(t, "34", tut.Version())
+}
+
+func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
+	t.Parallel()
+
+	notis := &capturingNotis{}
+	tut, err := starlarktutorial.New(
+		"agent", agentTutorial,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(80, 24)
+	tut.Reset()
+
+	dismiss := func(key term.Event) {
+		t.Helper()
+		_, _ = tut.Handle(key)
+	}
+	wait := func(kind string) {
+		t.Helper()
+		require.True(t, tut.WaitActive(kind, time.Second),
+			"expected a %s step", kind)
+	}
+
+	// Command prompt instructions for opening the console.
+	wait("floating_window")
+	dismiss(term.Event{Type: term.EventKey, Ch: ':'})
+	wait("wait_command")
+	tut.ObserveCommand("console", "console", nil, nil)
+
+	// Installation requires the console's shell observation.
+	wait("floating_window")
+	dismiss(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	wait("wait_shell")
+	tut.ObserveCommand("console", "console", []string{"pkg", "install", "rune-agent"}, nil)
+
+	// Skipping provider configuration still reaches the standalone help step.
+	wait("choice")
+	dismiss(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	wait("floating_window")
+	dismiss(term.Event{Type: term.EventKey, Ch: ':'})
+	wait("wait_command")
+	tut.ObserveCommand("help", "help", nil, nil)
+	require.True(t, tut.WaitFinished(time.Second))
+	assert.Equal(t, []string{"Rune Agent installed.", "That is the help command."},
+		notis.successes())
+}
+
+func TestTutorialPackageInstallOwnership(t *testing.T) {
+	t.Parallel()
+	assert.Contains(t, basicsTutorial, "pkg install fuzzy-search")
+	assert.NotContains(t, basicsTutorial, "pkg install rune-agent")
+	assert.NotContains(t, agentTutorial, "console_intro_md")
+	assert.Contains(t, agentTutorial, "pkg install rune-agent")
 }
 
 // TestNavigationTutorialFlow drives the embedded navigation tutorial
@@ -457,15 +518,6 @@ func (n *capturingNotis) successes() []string {
 	return out
 }
 
-// TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded
-// tutorial option list registers at least one tutorial.
-func TestEmbeddedTutorialOptionsRegistersBasics(t *testing.T) {
-	t.Parallel()
-	opts := embeddedTutorialOptions()
-	require.NotEmpty(t, opts,
-		"embeddedTutorialOptions must register at least basics")
-}
-
 // TestNavigationTutorialParses asserts that the embedded navigation.star
 // tutorial parses through starlarktutorial.New, registers a callable
 // entry, and reports the expected id/title/version.
@@ -498,6 +550,46 @@ func TestNavigationTutorialParses(t *testing.T) {
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
 	assert.Equal(t, "8", tut.Version())
+}
+
+func TestAgentTutorialParses(t *testing.T) {
+	t.Parallel()
+
+	require.NotEmpty(t, agentTutorial, "agentTutorial embed must not be empty")
+	tut, err := starlarktutorial.New(
+		"agent", agentTutorial,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil, nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	assert.Equal(t, "agent", tut.ID())
+	assert.Equal(t, "Rune Agent", tut.Title())
+	assert.Equal(t, "1", tut.Version())
+}
+
+func TestEmbeddedTutorialPlaylist(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []ide.TutorialPlaylistItem{
+		{
+			Name:        "basics",
+			Description: "Learn the essential Rune workspace and window management commands and key bindings.",
+		},
+		{
+			Name:        "navigation",
+			Description: "Learn about structural navigation and how to exploit Rune's code intelligence tools.",
+		},
+		{
+			Name:        "agent",
+			Description: "Install Rune Agent, connect a model provider, start a conversation, and get help.",
+		},
+	}, embeddedTutorialPlaylist)
+	assert.NotEmpty(t, embeddedTutorialOptions())
 }
 
 // TestNavigationTutorialParsesModalMode asserts the embedded navigation
@@ -583,5 +675,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "33", tut.Version())
+	assert.Equal(t, "34", tut.Version())
 }

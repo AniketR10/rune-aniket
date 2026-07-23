@@ -134,15 +134,16 @@ type Tutorial struct {
 	entry *starlark.Function
 
 	// Runtime state. mu guards everything below.
-	mu       sync.Mutex
-	width    int
-	height   int
-	active   *request
-	runCtx   context.Context
-	cancel   context.CancelFunc
-	thread   *starlark.Thread
-	runDone  chan struct{}
-	finished bool
+	mu        sync.Mutex
+	width     int
+	height    int
+	active    *request
+	runCtx    context.Context
+	cancel    context.CancelFunc
+	thread    *starlark.Thread
+	runDone   chan struct{}
+	finished  bool
+	completed bool
 
 	// stepCount is the count of "visible content" requests
 	// published so far (reqFloatingWindow / reqMarkdown). Each
@@ -280,6 +281,13 @@ func (t *Tutorial) ID() string {
 // provided.
 func (t *Tutorial) Version() string { return t.version }
 
+// Completed reports whether the most recent run reached a normal return.
+func (t *Tutorial) Completed() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.completed
+}
+
 // Reset stops any in-progress run and starts a fresh Starlark thread
 // that calls the entry function on its own goroutine. Reset returns
 // after launching the goroutine; Draw/Handle observe an empty active
@@ -289,6 +297,7 @@ func (t *Tutorial) Reset() {
 	t.Stop()
 	t.mu.Lock()
 	t.finished = false
+	t.completed = false
 	t.active = nil
 	t.stepCount = 0
 	t.runCtx, t.cancel = context.WithCancel(context.Background())
@@ -333,6 +342,7 @@ func (t *Tutorial) Stop() {
 	t.thread = nil
 	t.runDone = nil
 	t.active = nil
+	t.completed = false
 	t.mu.Unlock()
 }
 
@@ -374,6 +384,7 @@ func (t *Tutorial) runLoop() {
 func (t *Tutorial) handleRunResult(err error) {
 	t.mu.Lock()
 	t.finished = true
+	t.completed = err == nil
 	t.active = nil
 	t.thread = nil
 	signal := t.firstSignal

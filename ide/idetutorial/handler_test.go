@@ -71,6 +71,7 @@ type fakeTutorial struct {
 	handleExit    bool
 	handleHandled bool
 	handleCount   int
+	completed     bool
 
 	shader  idetutorial.Shader
 	hasShdr bool
@@ -119,6 +120,8 @@ func (t *fakeTutorial) Selection() (string, bool) {
 func (t *fakeTutorial) Reset() { t.resetCount++ }
 
 func (t *fakeTutorial) Stop() { t.stopCount++ }
+
+func (t *fakeTutorial) Completed() bool { return t.completed }
 
 func (t *fakeTutorial) ObserveCommand(
 	typed, _ string, _ []string, _ error,
@@ -203,6 +206,14 @@ func TestHandlerHandleTutorialClaimsEvent(t *testing.T) {
 	assert.Equal(t, 1, tut.handleCount)
 	assert.Empty(t, root.got,
 		"root must not see events the tutorial reported handled")
+}
+
+func TestHandlerCompleted(t *testing.T) {
+	t.Parallel()
+	tut := &fakeTutorial{completed: true}
+	h := idetutorial.New(&fakeRoot{}, tut, nil)
+
+	assert.True(t, h.Completed())
 }
 
 func TestHandlerHandleFallsThroughWhenTutorialDeclines(t *testing.T) {

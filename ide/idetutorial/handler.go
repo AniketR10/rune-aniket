@@ -167,6 +167,10 @@ func (h *Handler) Reset() {
 	h.syncShader()
 }
 
+// Completed reports whether the wrapped tutorial's most recent run returned
+// normally.
+func (h *Handler) Completed() bool { return h.tut.Completed() }
+
 // Close tears down the active shader.Component. Safe to call when no
 // shader is installed. Forwards Stop to the wrapped tutorial so any
 // background work the tutorial owns is released. Always returns nil.

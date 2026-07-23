@@ -46,6 +46,9 @@ type Tutorial interface {
 	// to call multiple times and on a tutorial that never ran.
 	Stop()
 
+	// Completed reports whether the most recent run reached a normal return.
+	Completed() bool
+
 	// ObserveCommand reports a dispatched IDE command to the tutorial.
 	// typed is the user-typed name (possibly an alias), resolved is the
 	// alias-expanded target, args are positional arguments, and err is

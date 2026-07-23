@@ -422,6 +422,21 @@ func WithStarlarkTutorial(name, src string) Option {
 	}
 }
 
+// TutorialPlaylistItem identifies a tutorial and its playlist prompt copy.
+type TutorialPlaylistItem struct {
+	Name        string
+	Description string
+}
+
+// WithTutorialPlaylist configures the ordered tutorial playlist presented
+// after a tutorial finishes successfully.
+func WithTutorialPlaylist(items ...TutorialPlaylistItem) Option {
+	items = append([]TutorialPlaylistItem(nil), items...)
+	return func(opts *options) {
+		opts.tutorialPlaylist = append([]TutorialPlaylistItem(nil), items...)
+	}
+}
+
 // WithStartingTutorial schedules the named tutorial to run
 // automatically once the IDE becomes ready. The name must match a
 // tutorial registered via WithStarlarkTutorial or the user config;
@@ -474,6 +489,7 @@ type options struct {
 	openShaderDuration     time.Duration
 	zdotDir                string
 	starlarkTutorials      map[string]string
+	tutorialPlaylist       []TutorialPlaylistItem
 	startingTutorial       string
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
@@ -481,6 +497,16 @@ type options struct {
 	nagPrompt NagPromptConfig
 
 	disableHomePrompt bool
+}
+
+func (o options) nextTutorialPlaylistItem(name string) (TutorialPlaylistItem, bool) {
+	for idx, item := range o.tutorialPlaylist {
+		if item.Name != name || idx+1 == len(o.tutorialPlaylist) {
+			continue
+		}
+		return o.tutorialPlaylist[idx+1], true
+	}
+	return TutorialPlaylistItem{}, false
 }
 
 func defaultOptions() options {

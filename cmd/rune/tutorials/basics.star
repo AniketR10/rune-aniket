@@ -29,14 +29,17 @@ if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     focus_example = "`<meta-h>`"
     completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
+    modal_surface_allow_keys = ["<esc>"]
 elif mode == "emacs":
     dir_phrase = "the motion keys `<ctrl-p>` / `<ctrl-n>` or the arrow keys"
     focus_example = "`<meta-h>`"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
+    modal_surface_allow_keys = []
 else:
     dir_phrase = "the arrow keys"
     focus_example = "`<ctrl-meta-left>`"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
+    modal_surface_allow_keys = []
 
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
@@ -50,27 +53,6 @@ def keypress(cmd, *args):
     if k:
         return "press `" + k + "`"
     return "open the command prompt (`" + ck + "`) and run `" + cmd + "`"
-
-# In modal mode the console's input line captures keys while you are in
-# insert mode, so `:` types a literal colon instead of opening the
-# command prompt. The user must press <esc> to enter modal mode first.
-# These snippets are spliced into the agent steps that open the command
-# prompt while the companion console is focused.
-#
-# esc_allow_keys lets that <esc> fall through to the focused terminal or
-# console (switching it to NORMAL mode) instead of dismissing the
-# floating window. Empty in modeless mode, where <esc> is not part of
-# the instructions.
-if mode == "modal":
-    shell_esc_step = "1. Press `<esc>` to enter modal mode.\n"
-    shell_prompt_step_num = "2"
-    shell_run_step_num = "3"
-    esc_allow_keys = ["<esc>"]
-else:
-    shell_esc_step = ""
-    shell_prompt_step_num = "1"
-    shell_run_step_num = "2"
-    esc_allow_keys = []
 
 def dismiss_for(cmd, *args):
     # Keys that dismiss a teaching window. Always include the command
@@ -288,24 +270,6 @@ not a tab, so close it with `windowclose`.
 Close it now: """ + keypress("windowclose") + """.
 """
 
-console_intro_md = """\
-Next you'll meet the **Rune console**. It is not the command prompt
-you have been using, so first, the difference.
-
-The **command prompt** (`""" + ck + """`) is the one-line prompt you
-open, type one command into, and watch close again once it runs. Good
-for one-off actions like opening a file, splitting a window, or
-jumping to a definition.
-
-The **console** is a separate, durable tab with its own REPL. It is
-wired with commands that benefit from a persistent output window. For example
-checking the status of an extension, or installing a new package.
-
-The console is used to **set up** Rune, the prompt is used to **drive** it.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
 guicommands_md = """\
 You have run a lot of commands by now: `windownew`, `terminalneworsplit`, `tabnext`,
 `fexplorer`. They are all lowercase, no spaces, and read like `<category><action>`: the
@@ -340,37 +304,39 @@ you want by default.
 Press `<enter>` or `<space>` to continue.
 """
 
-agent_install_md = """\
-The **Rune Agent** is Rune's builtin AI coding assistant. It ships as a
-package you install on demand, so the first step is to install it.
+console_intro_md = """\
+The **Rune console** is not the command prompt you have been using.
+
+The **command prompt** (`""" + ck + """`) is the one-line prompt you
+open, type one command into, and watch close again once it runs. Good
+for one-off actions like opening a file, splitting a window, or
+jumping to a definition.
+
+The **console** is a separate, durable tab with its own REPL. It is
+wired with commands that benefit from a persistent output window, such
+as checking an extension's status or installing a new package.
+
+The console is used to **set up** Rune, the prompt is used to **drive** it.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
+fuzzy_search_open_md = """\
+Let's use the console to install **fuzzy-search**. This package provides
+the `searchfile` and `searchtext` commands used in the navigation
+tutorial.
 
 First, open Rune's console:
 
 1. Press `""" + ck + """` to open the command prompt.
 2. Type `console` and press Enter.
-
-Press `<enter>` or `<space>` to continue.
 """
 
-agent_pkg_install_md = """\
-You're in Rune's console now. Install the agent package:
+fuzzy_search_install_md = """\
+Install the fuzzy-search package from the console:
 
-1. Type `pkg install rune-agent`.
+1. Type `pkg install fuzzy-search`.
 2. Press Enter and wait for the install to finish.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
-agent_open_md = """\
-Start a conversation with the agent using the `agent` command.
-
-""" + shell_esc_step + shell_prompt_step_num + """. Press `""" + ck + """` to open the command prompt.
-""" + shell_run_step_num + """. Run `agent`.
-
-`agent` takes two optional arguments: a conversation name and a model.
-Run `agent <name>` to name the conversation, or `agent <name> <model>`
-to also pick the model. With no arguments, the agent starts a new
-conversation using your default provider.
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -380,17 +346,6 @@ There's a `cheatsheet` command that condenses all of this tutorial's
 learnings and more into a single cheat sheet you can pull up any time.
 
 Open it now: """ + keypress("cheatsheet") + """.
-"""
-
-help_md = """\
-You're almost done. A few tips worth remembering:
-
-- If you find yourself wondering what commands you typed on a previous session, press
-  `<meta-r>` to open the command prompt in history mode and search through your command history.
-- There's a `help` command that opens the documentation on a separate workspace
-  and fires a help agent that you can ask questions.
-
-Try it now: """ + keypress("help") + """. Happy hacking!
 """
 
 def teach_edit():
@@ -440,7 +395,7 @@ def teach_modal_surfaces():
     if mode != "modal":
         return
     floating_window(title = "Modal everywhere", text = modal_surfaces_md,
-                    allow_keys = esc_allow_keys,
+                    allow_keys = modal_surface_allow_keys,
                     dismiss_keys = [ck])
 
 
@@ -603,135 +558,6 @@ def teach_terminals():
     notify(level = success, message = "Output window closed.")
 
 
-def teach_provider(provider, label, action_tokens, run_md, success_msg):
-    title = "Connect " + label
-    floating_window(title = title, text = run_md)
-    wait_shell(
-        title    = title,
-        args     = ["models", "providers", provider] + action_tokens,
-        on_error = ("In Rune's console, run `models providers " +
-                    provider + " " + " ".join(action_tokens) + "`."),
-    )
-    notify(level = success, message = success_msg)
-
-
-def teach_agent():
-    floating_window(title = "The Rune console", text = console_intro_md)
-
-    floating_window(title = "Set up the Rune Agent", text = agent_install_md,
-                    dismiss_keys = [ck])
-    wait_command(
-        title    = "Set up the Rune Agent",
-        command  = "console",
-        on_error = ("Open Rune's console: run the `<cmd>console` " +
-                    "command."),
-    )
-
-    floating_window(title = "Install the agent package", text = agent_pkg_install_md)
-    wait_shell(
-        title    = "Install the agent package",
-        args     = ["pkg", "install", "rune-agent"],
-        on_error = "In Rune's console, run `pkg install rune-agent`.",
-    )
-    notify(level = success, message = "Rune Agent installed.")
-
-    pick = choice(
-        message = ("Which provider do you want to connect?\n\n" +
-                   "- **OpenAI** — GPT family, billed by API key.\n" +
-                   "- **Anthropic** — Claude family, billed by API key.\n" +
-                   "- **Gemini** — Gemini family, billed by API key.\n" +
-                   "- **Codex** — GPT-5 Codex family. Sign in with " +
-                   "ChatGPT (OAuth) and use your ChatGPT subscription, " +
-                   "no API key.\n" +
-                   "- **Claude** — Claude family through your Claude " +
-                   "Pro/Max subscription. Sign in with Claude (OAuth), " +
-                   "no API key."),
-        options = ["OpenAI", "Anthropic", "Gemini", "Codex", "Claude"],
-    )
-    if not pick.selected:
-        notify(level = info,
-               message = ("Configure a provider any time with the " +
-                          "`models providers` console command."))
-        return
-
-    if pick.value == "OpenAI":
-        run_md = """\
-Add your OpenAI credentials. The key is stored securely and never
-written to your config file.
-
-1. In Rune's console, run `models providers openai add default`.
-2. Paste your API key at the redacted prompt.
-
-Press `<enter>` or `<space>` to continue.
-"""
-        teach_provider("openai", "OpenAI", ["add", "default"], run_md,
-                       "OpenAI connected.")
-    elif pick.value == "Anthropic":
-        run_md = """\
-Add your Anthropic credentials. The key is stored securely and never
-written to your config file.
-
-1. In Rune's console, run `models providers anthropic add default`.
-2. Paste your API key at the redacted prompt.
-
-Press `<enter>` or `<space>` to continue.
-"""
-        teach_provider("anthropic", "Anthropic", ["add", "default"], run_md,
-                       "Anthropic connected.")
-    elif pick.value == "Gemini":
-        run_md = """\
-Add your Gemini credentials. The key is stored securely and never
-written to your config file.
-
-1. In Rune's console, run `models providers gemini add default`.
-2. Paste your API key at the redacted prompt.
-
-Press `<enter>` or `<space>` to continue.
-"""
-        teach_provider("gemini", "Gemini", ["add", "default"], run_md,
-                       "Gemini connected.")
-    elif pick.value == "Codex":
-        run_md = """\
-Codex authenticates through your browser — no API key to paste.
-
-1. In Rune's console, run `models providers codex login`.
-2. Finish the sign-in in your browser.
-
-Press `<enter>` or `<space>` to continue.
-"""
-        teach_provider("codex", "Codex", ["login"], run_md, "Codex connected.")
-    else:
-        run_md = """\
-Claude signs in through your browser with your Claude Pro or Max
-subscription. There is no API key to paste.
-
-Agent activity through this provider draws from your Claude plan's
-separate monthly Agent SDK credit, not your interactive usage limits.
-Once that credit runs out, further usage bills at standard API rates if
-you have usage credits enabled, and otherwise pauses until the credit
-refreshes. The separate `anthropic` provider bills the same models by
-API key instead.
-
-1. In Rune's console, run `models providers claude login`.
-2. Finish the sign-in in your browser.
-
-Press `<enter>` or `<space>` to continue.
-"""
-        teach_provider("claude", "Claude", ["login"], run_md, "Claude connected.")
-
-    floating_window(title = "Open the Rune Agent", text = agent_open_md,
-                    allow_keys = esc_allow_keys,
-                    dismiss_keys = [ck])
-    wait_command(
-        title    = "Open the Rune Agent",
-        command  = "agent",
-        on_error = ("Run `<cmd>agent` to start a conversation. Add an " +
-                    "optional conversation name and model: " +
-                    "`<cmd>agent <name> <model>`."),
-    )
-    notify(level = success, message = "Rune Agent is ready.")
-
-
 def teach_cheatsheet():
     floating_window(title = "Your cheatsheet", text = cheatsheet_md,
                     alignment = "top",
@@ -760,16 +586,24 @@ def teach_guicommands():
                     dismiss_keys = [ck])
 
 
-def teach_help():
-    floating_window(title = "One last thing", text = help_md,
-                    alignment = "top",
-                    dismiss_keys = dismiss_for("help"))
+def teach_console():
+    floating_window(title = "The Rune console", text = console_intro_md)
+
+    floating_window(title = "Install fuzzy search", text = fuzzy_search_open_md,
+                    dismiss_keys = [ck])
     wait_command(
-        title    = "One last thing",
-        command  = "help",
-        on_error = "Run the `<cmd>help` command to open the docs and ask the help agent.",
+        title    = "Install fuzzy search",
+        command  = "console",
+        on_error = "Open Rune's console with the `<cmd>console` command.",
     )
-    notify(level = success, message = "That is the help command.")
+
+    floating_window(title = "Install fuzzy search", text = fuzzy_search_install_md)
+    wait_shell(
+        title    = "Install fuzzy search",
+        args     = ["pkg", "install", "fuzzy-search"],
+        on_error = "In Rune's console, run `pkg install fuzzy-search`.",
+    )
+    notify(level = success, message = "Fuzzy search installed.")
 
 
 def run():
@@ -814,11 +648,9 @@ def run():
 
     teach_guicommands()
 
-    teach_agent()
-
     teach_cheatsheet()
 
-    teach_help()
+    teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "33", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "34", entry = run)
