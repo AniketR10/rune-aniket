@@ -603,12 +603,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 				return
 			// the following two are defined here in case we're not capturing them at the command level
 			case 'c':
-				_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
-				if err != nil {
-					h.log(log.ErrorLevel, "cursor copy selection: %v", err)
-				} else {
-					handled = true
-				}
+				handled = h.copySelectionOrLine()
 			case 'v':
 				paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
 				if err != nil {
@@ -765,11 +760,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		switch ev.Ch {
 		case 'c':
-			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
-			if err != nil {
-				h.log(log.ErrorLevel, "cursor copy selection: %v", err)
-			}
-			handled = true
+			handled = h.copySelectionOrLine()
 		case 'x':
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.SelectLine()
@@ -1093,6 +1084,24 @@ func (h *standardHandler) CursorAtScroll() term.Coordinates {
 
 func (h *standardHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
+}
+
+// copySelectionOrLine copies the active selection, or the current line when
+// there is no selection, matching the empty-selection copy behavior of
+// VS Code, Sublime Text, and Zed. It mirrors the empty-selection cut path so
+// the two operations stay symmetric.
+func (h *standardHandler) copySelectionOrLine() (handled bool) {
+	if _, ok := h.cursor.SelectionMode(); !ok {
+		if !h.cursor.SelectLine() {
+			return
+		}
+	}
+	_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+	if err != nil {
+		h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+		return
+	}
+	return true
 }
 
 func (h *standardHandler) moveLine(up bool) (handled bool) {

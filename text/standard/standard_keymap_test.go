@@ -176,6 +176,37 @@ func TestStandardKeymapClipboard(t *testing.T) {
 		require.True(t, handled)
 		assert.Equal(t, "Xab", buf.String())
 	})
+
+	t.Run("ctrl-c copies current line when no selection", func(t *testing.T) {
+		h, buf, clip := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+		require.True(t, handled)
+		assert.Equal(t, "one\ntwo\nthree", buf.String())
+		data, err := clip.Paste(clipboard.DefaultRegisterID)
+		require.NoError(t, err)
+		assert.Equal(t, "two\n", data.Text)
+		assert.Equal(t, text.LineSelection, data.Metadata)
+	})
+
+	t.Run("cmd-c copies current line when no selection", func(t *testing.T) {
+		h, buf, clip := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModMeta, Ch: 'c'})
+		require.True(t, handled)
+		assert.Equal(t, "one\ntwo\nthree", buf.String())
+		data, err := clip.Paste(clipboard.DefaultRegisterID)
+		require.NoError(t, err)
+		assert.Equal(t, "two\n", data.Text)
+		assert.Equal(t, text.LineSelection, data.Metadata)
+	})
+
+	t.Run("empty-selection copy pastes line-wise above the cursor line", func(t *testing.T) {
+		h, buf, _ := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+		require.True(t, handled)
+		_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'v'})
+		require.True(t, handled)
+		assert.Equal(t, "one\ntwo\ntwo\nthree", buf.String())
+	})
 }
 
 // TestStandardKeymapUndoRedo pins ctrl-z undo and ctrl-y / ctrl-shift-z redo.
