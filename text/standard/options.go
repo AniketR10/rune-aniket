@@ -59,6 +59,7 @@ type standardConfig struct {
 	macroPlayer        MacroPlayer
 	autoCenter         bool
 	autoPair           bool
+	cursorCorrections  bool
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
 	scheduleNextTick   func(fn func()) bool
@@ -98,7 +99,8 @@ func defaultConfig() standardConfig {
 			fn()
 			return true
 		},
-		notifications: nopNotifications{},
+		notifications:     nopNotifications{},
+		cursorCorrections: true,
 	}
 }
 
@@ -253,6 +255,14 @@ func WithComments(comments text.CommentConfig) Option {
 func WithWrap(wrap bool) Option {
 	return func(cfg *standardConfig) {
 		cfg.wrap = wrap
+	}
+}
+
+// WithCursorCorrections enables or disables cursor out-of-bounds corrections.
+// Corrections are enabled by default.
+func WithCursorCorrections(enabled bool) Option {
+	return func(cfg *standardConfig) {
+		cfg.cursorCorrections = enabled
 	}
 }
 

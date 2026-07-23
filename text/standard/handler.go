@@ -58,6 +58,8 @@ type standardHandler struct {
 	pasteStarted     bool
 	resource         workspaceapi.URI
 	cursor           text.Cursor
+	anchor           term.Coordinates
+	lastCursor       term.Coordinates
 	height           int
 	mouse            *mouse.Mouse
 	clipboard        clipboard.Register
@@ -104,6 +106,8 @@ func (h *standardHandler) Init(
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
+	h.anchor = h.cursor.CursorAtScroll()
+	h.lastCursor = h.anchor
 	if spec, ok := text.CommentSpecForURI(resource, h.cfg.comments); ok {
 		h.cursor.SetCommentSpec(spec)
 	}
@@ -354,6 +358,16 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		return
 	}
+	if current := h.cursor.CursorAtScroll(); current != h.lastCursor {
+		h.anchor = current
+	}
+
+	moveToBoundsPending := true
+	defer func() {
+		if moveToBoundsPending {
+			_ = h.doMoveToBounds()
+		}
+	}()
 
 	if ev.Mod == term.ModShift {
 		switch ev.Key {
@@ -471,12 +485,14 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveFirstLine()
 			return
 		case term.KeyArrowDown:
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveLastLine()
 			return
 		}
@@ -516,8 +532,10 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveEndLine()
 		case term.KeyArrowUp:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveFirstLine()
 		case term.KeyArrowDown:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveLastLine()
 		case term.KeyBackspace:
 			if h.cursor.Select() {
@@ -561,6 +579,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 				}
 			case 'l':
 				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
+					h.restoreDesiredColumn()
 					handled = h.cursor.MoveDown()
 				} else {
 					handled = h.cursor.SelectLine()
@@ -642,11 +661,13 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyHome:
 			handled = h.cursor.MoveStartLine()
 		case term.KeyPgup:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveUpLines(h.less.Scroll().SizeHeight())
 			if handled {
 				h.cursor.RepositionBottom()
 			}
 		case term.KeyPgdn:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDownLines(h.less.Scroll().SizeHeight())
 			if handled {
 				h.cursor.RepositionTop()
@@ -656,11 +677,13 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveRight()
 		case term.KeyArrowUp:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveUp()
 			if shift && !handled {
 				handled = h.cursor.MoveStartLine()
 			}
 		case term.KeyArrowDown:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDown()
 			if shift && !handled {
 				handled = h.cursor.MoveEndLine()
@@ -736,15 +759,19 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveRightEndWord()
 			return
 		case term.KeyArrowUp:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MovePrevParagraph()
 			return
 		case term.KeyArrowDown:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveNextParagraph()
 			return
 		case term.KeyHome:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveFirstLine()
 			return
 		case term.KeyEnd:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveLastLine()
 			return
 		case term.KeyBackspace:
@@ -879,24 +906,28 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MovePrevParagraph()
 			return
 		case term.KeyArrowDown:
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveNextParagraph()
 			return
 		case term.KeyHome:
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveFirstLine()
 			return
 		case term.KeyEnd:
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveLastLine()
 			return
 		}
@@ -940,12 +971,38 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 	}
 
+	cursorCorrected := h.doMoveToBounds()
+	moveToBoundsPending = false
+
 	// if moved and shift is not pressed
-	if cursorAt != h.cursor.CursorAtScroll() && !shift {
+	if (cursorAt != h.cursor.CursorAtScroll() || cursorCorrected) && !shift {
 		h.cursor.Unselect()
 		h.cursor.Search("")
 	}
 	return
+}
+
+func (h *standardHandler) restoreDesiredColumn() {
+	if h.cfg.cursorCorrections {
+		h.cursor.MoveToScroll(h.anchor)
+	}
+}
+
+func (h *standardHandler) doMoveToBounds() bool {
+	if !h.cfg.cursorCorrections {
+		return false
+	}
+	before := h.cursor.CursorAtScroll()
+	if h.cursor.CursorAtScroll().Y < h.less.Buffer().Rows() {
+		h.anchor = h.cursor.CursorAtScroll()
+	}
+	prevCoords := h.cursor.Coordinates()
+	h.cursor.MoveToBounds(1)
+	if h.cursor.Coordinates().Y != prevCoords.Y {
+		h.anchor = h.cursor.CursorAtScroll()
+	}
+	h.lastCursor = h.cursor.CursorAtScroll()
+	return before != h.lastCursor
 }
 
 // Cursor satisfies tui.Handler
@@ -1004,6 +1061,8 @@ func (h *standardHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 
 	pos = h.clampToBuffer(pos)
 	_, ok := h.cursor.MoveToScroll(pos)
+	h.anchor = h.cursor.CursorAtScroll()
+	h.lastCursor = h.anchor
 	if !ok || !h.cfg.autoCenter {
 		return ok
 	}

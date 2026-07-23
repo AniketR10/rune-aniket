@@ -362,6 +362,258 @@ func TestCursorExternalEdit(t *testing.T) {
 	})
 }
 
+func TestStandardCursorCorrections(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		keys string
+		want term.Coordinates
+	}{
+		{
+			name: "trailing null cells",
+			text: "abc\x00\x00\x00",
+			keys: "<end>",
+			want: term.Coordinates{X: 6},
+		},
+		{
+			name: "short line",
+			text: "longline\nx\nlongline",
+			keys: "<end><down>",
+			want: term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			name: "sticky desired column",
+			text: "longline\nx\nlongline",
+			keys: "<end><down><down>",
+			want: term.Coordinates{X: 8, Y: 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI("test:///cursor-corrections")
+			require.NoError(t, err)
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tt.text))
+			h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+			h.Resize(20, 10)
+
+			feedKeys(t, h, tt.keys)
+
+			assert.Equal(t, tt.want, h.CursorAtScroll())
+			pos, _, show := h.Cursor()
+			assert.True(t, show)
+			assert.Equal(t, tt.want, pos)
+		})
+	}
+}
+
+func TestStandardCursorCorrectionsDisabled(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("test:///cursor-corrections-disabled")
+	require.NoError(t, err)
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("longline\nx\nlongline"))
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0, WithCursorCorrections(false))
+	h.Resize(20, 10)
+
+	feedKeys(t, h, "<end><down>")
+
+	want := term.Coordinates{X: 8, Y: 1}
+	assert.Equal(t, want, h.CursorAtScroll())
+	pos, _, show := h.Cursor()
+	assert.True(t, show)
+	assert.Equal(t, want, pos)
+}
+
+func TestStandardMoveToBoundsReportsCorrection(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("test:///move-to-bounds-result")
+	require.NoError(t, err)
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("longline\nx"))
+	h := NewHandler(
+		buf, uri, text.IndentRuneTab, 0, WithCursorCorrections(false),
+	).(*standardHandler)
+	h.Resize(20, 10)
+	feedKeys(t, h, "<end><down>")
+	require.Equal(t, term.Coordinates{X: 8, Y: 1}, h.CursorAtScroll())
+
+	assert.False(t, h.doMoveToBounds())
+	assert.Equal(t, term.Coordinates{X: 8, Y: 1}, h.CursorAtScroll())
+
+	h.cfg.cursorCorrections = true
+	assert.True(t, h.doMoveToBounds())
+	assert.Equal(t, term.Coordinates{X: 1, Y: 1}, h.CursorAtScroll())
+	assert.False(t, h.doMoveToBounds())
+}
+
+func TestStandardMoveToBoundsBoundaryMatrix(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		at        term.Coordinates
+		wantStart term.Coordinates
+		want      term.Coordinates
+		moved     bool
+	}{
+		{name: "empty buffer origin", content: "", at: term.Coordinates{}, wantStart: term.Coordinates{}, want: term.Coordinates{}},
+		{name: "empty buffer oversized", content: "", at: term.Coordinates{X: 20, Y: 20}, wantStart: term.Coordinates{X: 20, Y: 20}, want: term.Coordinates{}, moved: true},
+		{name: "negative coordinates normalize before correction", content: "abc", at: term.Coordinates{X: -5, Y: -3}, wantStart: term.Coordinates{}, want: term.Coordinates{}},
+		{name: "valid origin", content: "abc", at: term.Coordinates{}, wantStart: term.Coordinates{}, want: term.Coordinates{}},
+		{name: "valid interior", content: "abc", at: term.Coordinates{X: 2}, wantStart: term.Coordinates{X: 2}, want: term.Coordinates{X: 2}},
+		{name: "valid end caret", content: "abc", at: term.Coordinates{X: 3}, wantStart: term.Coordinates{X: 3}, want: term.Coordinates{X: 3}},
+		{name: "one past end caret", content: "abc", at: term.Coordinates{X: 4}, wantStart: term.Coordinates{X: 4}, want: term.Coordinates{X: 3}, moved: true},
+		{name: "far past end caret", content: "abc", at: term.Coordinates{X: 40}, wantStart: term.Coordinates{X: 40}, want: term.Coordinates{X: 3}, moved: true},
+		{name: "empty line origin", content: "abc\n\ndef", at: term.Coordinates{Y: 1}, wantStart: term.Coordinates{Y: 1}, want: term.Coordinates{Y: 1}},
+		{name: "empty line virtual column", content: "abc\n\ndef", at: term.Coordinates{X: 9, Y: 1}, wantStart: term.Coordinates{X: 9, Y: 1}, want: term.Coordinates{Y: 1}, moved: true},
+		{name: "after last line", content: "abc\ndef", at: term.Coordinates{X: 2, Y: 2}, wantStart: term.Coordinates{X: 2, Y: 2}, want: term.Coordinates{X: 2, Y: 1}, moved: true},
+		{name: "many rows after last line", content: "abc\ndef", at: term.Coordinates{X: 50, Y: 20}, wantStart: term.Coordinates{X: 50, Y: 20}, want: term.Coordinates{X: 3, Y: 1}, moved: true},
+		{name: "longest line column on short row", content: "longest-line\nx", at: term.Coordinates{X: 12, Y: 1}, wantStart: term.Coordinates{X: 12, Y: 1}, want: term.Coordinates{X: 1, Y: 1}, moved: true},
+		{name: "longest line end caret", content: "longest-line\nx", at: term.Coordinates{X: 12}, wantStart: term.Coordinates{X: 12}, want: term.Coordinates{X: 12}},
+		{name: "leading null remains content", content: "\x00ab", at: term.Coordinates{}, wantStart: term.Coordinates{}, want: term.Coordinates{}},
+		{name: "interior null remains content", content: "a\x00b", at: term.Coordinates{X: 1}, wantStart: term.Coordinates{X: 1}, want: term.Coordinates{X: 1}},
+		{name: "right of interior null remains content", content: "a\x00b", at: term.Coordinates{X: 2}, wantStart: term.Coordinates{X: 2}, want: term.Coordinates{X: 2}},
+		{name: "trailing null remains content", content: "ab\x00\x00", at: term.Coordinates{X: 4}, wantStart: term.Coordinates{X: 4}, want: term.Coordinates{X: 4}},
+		{name: "past trailing nulls", content: "ab\x00\x00", at: term.Coordinates{X: 9}, wantStart: term.Coordinates{X: 9}, want: term.Coordinates{X: 4}, moved: true},
+		{name: "only null cells", content: "\x00\x00\x00", at: term.Coordinates{X: 3}, wantStart: term.Coordinates{X: 3}, want: term.Coordinates{X: 3}},
+		{name: "wide rune cell", content: "a界b", at: term.Coordinates{X: 1}, wantStart: term.Coordinates{X: 1}, want: term.Coordinates{X: 1}},
+		{name: "after wide rune", content: "a界b", at: term.Coordinates{X: 2}, wantStart: term.Coordinates{X: 2}, want: term.Coordinates{X: 2}},
+		{name: "wide line end caret", content: "a界b", at: term.Coordinates{X: 3}, wantStart: term.Coordinates{X: 3}, want: term.Coordinates{X: 3}},
+		{name: "past wide line", content: "a界b", at: term.Coordinates{X: 8}, wantStart: term.Coordinates{X: 8}, want: term.Coordinates{X: 3}, moved: true},
+		{name: "trailing newline virtual row", content: "abc\n", at: term.Coordinates{X: 7, Y: 2}, wantStart: term.Coordinates{X: 7, Y: 2}, want: term.Coordinates{Y: 1}, moved: true},
+		{name: "trailing newline empty row", content: "abc\n", at: term.Coordinates{Y: 1}, wantStart: term.Coordinates{Y: 1}, want: term.Coordinates{Y: 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI("test:///move-to-bounds-matrix")
+			require.NoError(t, err)
+			buf := cell.NewBuffer()
+			_, err = buf.ReadFrom(strings.NewReader(tt.content))
+			require.NoError(t, err)
+			h := NewHandler(buf, uri, text.IndentRuneTab, 0).(*standardHandler)
+			h.Resize(100, 100)
+			h.cursor.MoveToScroll(tt.at)
+			require.Equal(t, tt.wantStart, h.CursorAtScroll(), "constructed start")
+
+			var moved bool
+			require.NotPanics(t, func() { moved = h.doMoveToBounds() })
+			assert.Equal(t, tt.moved, moved, "movement result")
+			assert.Equal(t, tt.want, h.CursorAtScroll(), "corrected cursor")
+			assert.False(t, h.doMoveToBounds(), "correction must be idempotent")
+			assert.Equal(t, tt.want, h.CursorAtScroll(), "idempotent cursor")
+
+			pos := h.CursorAtScroll()
+			assert.GreaterOrEqual(t, pos.X, 0)
+			assert.GreaterOrEqual(t, pos.Y, 0)
+			if pos.Y < buf.Rows() {
+				assert.LessOrEqual(t, pos.X, buf.Columns(pos.Y), "insert-like end caret")
+			}
+		})
+	}
+}
+
+func TestStandardMoveToBoundsCoordinateContentSweep(t *testing.T) {
+	contents := []struct {
+		name string
+		text string
+	}{
+		{name: "empty"},
+		{name: "single cell", text: "x"},
+		{name: "single line", text: "abcdef"},
+		{name: "mixed lengths", text: "longest-line\nx\nmedium"},
+		{name: "blank rows", text: "\n\n\n"},
+		{name: "blank middle row", text: "abc\n\ndef"},
+		{name: "trailing newline", text: "abc\n"},
+		{name: "leading nulls", text: "\x00\x00abc"},
+		{name: "interior nulls", text: "a\x00b\x00c"},
+		{name: "trailing nulls", text: "abc\x00\x00\x00"},
+		{name: "only nulls", text: "\x00\x00\x00"},
+		{name: "null rows", text: "\x00\x00\nx\n\x00\x00\x00\x00"},
+		{name: "wide runes", text: "界\n界界界\na界b"},
+		{name: "emoji", text: "🙂🙂\nx🙂y"},
+		{name: "combining runes", text: "e\u0301\ne\u0301e\u0301"},
+		{name: "tabs and spaces", text: "\t\n  x\n\t\t"},
+		{name: "long row", text: strings.Repeat("x", 128)},
+		{name: "longest middle row", text: "x\n" + strings.Repeat("y", 128) + "\nz"},
+	}
+
+	for _, content := range contents {
+		t.Run(content.name, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI("test:///move-to-bounds-sweep")
+			require.NoError(t, err)
+			buf := cell.NewBuffer()
+			_, err = buf.ReadFrom(strings.NewReader(content.text))
+			require.NoError(t, err)
+			h := NewHandler(buf, uri, text.IndentRuneTab, 0).(*standardHandler)
+			h.Resize(512, 512)
+
+			xs := uniqueInts(-9, -1, 0, 1, 2, 3, buf.MaxColumns()-1,
+				buf.MaxColumns(), buf.MaxColumns()+1, buf.MaxColumns()+17, 256)
+			ys := uniqueInts(-9, -1, 0, 1, 2, buf.Rows()-1,
+				buf.Rows(), buf.Rows()+1, buf.Rows()+17, 64)
+			for _, y := range ys {
+				for _, x := range xs {
+					input := term.Coordinates{X: x, Y: y}
+					h.cursor.MoveToScroll(input)
+					start := h.CursorAtScroll()
+					want := moveToBoundsOracle(buf, start)
+
+					var moved bool
+					require.NotPanics(t, func() { moved = h.doMoveToBounds() }, "input=%v start=%v", input, start)
+					assert.Equal(t, start != want, moved, "movement input=%v start=%v", input, start)
+					assert.Equal(t, want, h.CursorAtScroll(), "cursor input=%v start=%v", input, start)
+					assert.False(t, h.doMoveToBounds(), "idempotence input=%v", input)
+					assert.Equal(t, want, h.CursorAtScroll(), "idempotent cursor input=%v", input)
+				}
+			}
+		})
+	}
+}
+
+func moveToBoundsOracle(buf *cell.Buffer, pos term.Coordinates) term.Coordinates {
+	if buf.Rows() == 0 {
+		return term.Coordinates{}
+	}
+	pos.Y = max(0, min(pos.Y, buf.Rows()-1))
+	pos.X = max(0, min(pos.X, buf.Columns(pos.Y)))
+	return pos
+}
+
+func uniqueInts(values ...int) []int {
+	seen := make(map[int]struct{}, len(values))
+	unique := make([]int, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	return unique
+}
+
+func TestStandardCursorCorrectionsAfterExternalEdit(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("test:///cursor-corrections-external-edit")
+	require.NoError(t, err)
+	buf := cell.NewBuffer()
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+	h.Resize(20, 10)
+	h.CellEditor().Edit(
+		context.Background(), term.Coordinates{}, term.Coordinates{},
+		"abcdefghi\n1234\nXXXX\nX\nX\nX\nX\nX\nX",
+	)
+	require.Equal(t, term.Coordinates{X: 1, Y: 8}, h.CursorAtScroll())
+
+	_, handled := h.Handle(term.Event{
+		Type: term.EventKey,
+		Mod:  term.ModMeta,
+		Key:  term.KeyArrowUp,
+	})
+
+	require.True(t, handled)
+	assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+}
+
 func TestLocationMessage(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"<down>",

@@ -60,6 +60,9 @@ type emacsHandler struct {
 	pasteStarted     bool
 	resource         workspaceapi.URI
 	cursor           text.Cursor
+	anchor           term.Coordinates
+	lastCursor       term.Coordinates
+	correctionChecks uint64
 	height           int
 	mouse            *mouse.Mouse
 	clipboard        clipboard.Register
@@ -122,6 +125,8 @@ func (h *emacsHandler) Init(
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
+	h.anchor = h.cursor.CursorAtScroll()
+	h.lastCursor = h.anchor
 	if spec, ok := text.CommentSpecForURI(resource, h.cfg.comments); ok {
 		h.cursor.SetCommentSpec(spec)
 	}
@@ -617,6 +622,15 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		return
 	}
+	if current := h.cursor.CursorAtScroll(); current != h.lastCursor {
+		h.anchor = current
+	}
+	correctionChecks := h.correctionChecks
+	defer func() {
+		if h.correctionChecks == correctionChecks {
+			_ = h.doMoveToBounds()
+		}
+	}()
 
 	// An active echo-area prompt (go-to-line, query-replace) owns every
 	// keystroke until it is submitted or cancelled.
@@ -783,9 +797,11 @@ func (h *emacsHandler) dispatchKey(
 				// handler as ModAlt with the shifted glyph '<' on both the
 				// GUI and terminal paths, so the shift bit never survives as
 				// ModAltShift here.
+				h.restoreDesiredColumn()
 				handled = h.cursor.MoveFirstLine()
 			case '>':
 				// M->: end-of-buffer.
+				h.restoreDesiredColumn()
 				handled = h.cursor.MoveLastLine()
 			case 'v':
 				// M-v: scroll-up (page up), symmetric with C-v.
@@ -845,9 +861,11 @@ func (h *emacsHandler) dispatchKey(
 				return
 			case '{':
 				// M-{: backward-paragraph.
+				h.restoreDesiredColumn()
 				handled = h.cursor.MovePrevParagraph()
 			case '}':
 				// M-}: forward-paragraph.
+				h.restoreDesiredColumn()
 				handled = h.cursor.MoveNextParagraph()
 			}
 		}
@@ -862,11 +880,13 @@ func (h *emacsHandler) dispatchKey(
 		case term.KeyHome:
 			handled = h.cursor.MoveStartLine()
 		case term.KeyPgup:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveUpLines(h.less.Scroll().SizeHeight())
 			if handled {
 				h.cursor.RepositionBottom()
 			}
 		case term.KeyPgdn:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDownLines(h.less.Scroll().SizeHeight())
 			if handled {
 				h.cursor.RepositionTop()
@@ -876,8 +896,10 @@ func (h *emacsHandler) dispatchKey(
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveRight()
 		case term.KeyArrowUp:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveUp()
 		case term.KeyArrowDown:
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDown()
 		case term.KeyEnter:
 			if _, ok := h.cursor.SelectionMode(); ok {
@@ -998,8 +1020,10 @@ func (h *emacsHandler) dispatchKey(
 		case 'a':
 			handled = h.cursor.MoveStartLine()
 		case 'p':
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveUp()
 		case 'n':
+			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDown()
 		case 'q':
 			if h.macroRecorder != nil {
@@ -1134,12 +1158,38 @@ func (h *emacsHandler) dispatchKey(
 		}
 	}
 
+	cursorCorrected := h.doMoveToBounds()
+
 	// if moved and shift is not pressed
-	if cursorAt != h.cursor.CursorAtScroll() && !shift {
+	if (cursorAt != h.cursor.CursorAtScroll() || cursorCorrected) && !shift {
 		h.cursor.Unselect()
 		h.cursor.Search("")
 	}
 	return
+}
+
+func (h *emacsHandler) restoreDesiredColumn() {
+	if h.cfg.cursorCorrections {
+		h.cursor.MoveToScroll(h.anchor)
+	}
+}
+
+func (h *emacsHandler) doMoveToBounds() bool {
+	h.correctionChecks++
+	if !h.cfg.cursorCorrections {
+		return false
+	}
+	current := h.cursor.CursorAtScroll()
+	if current.Y < h.less.Buffer().Rows() {
+		h.anchor = current
+	}
+	prevCoords := h.cursor.Coordinates()
+	h.cursor.MoveToBounds(1)
+	if h.cursor.Coordinates().Y != prevCoords.Y {
+		h.anchor = h.cursor.CursorAtScroll()
+	}
+	h.lastCursor = h.cursor.CursorAtScroll()
+	return current != h.lastCursor
 }
 
 // Cursor satisfies tui.Handler
@@ -1207,6 +1257,8 @@ func (h *emacsHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	}
 
 	_, ok := h.cursor.MoveToScroll(pos)
+	h.anchor = h.cursor.CursorAtScroll()
+	h.lastCursor = h.anchor
 	if !ok || !h.cfg.autoCenter {
 		return ok
 	}
