@@ -144,7 +144,8 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 		// erasing trailing /, which prevents user from editing files
 		// in folders.
 		var err error
-		if strings.Contains(last, "~") {
+		if last == "~" || last == "/~" ||
+			strings.HasPrefix(last, "~/") || strings.HasPrefix(last, "/~/") {
 			last, err = workspaceapi.ExpandPath(last, user.Current,
 				func() (string, error) {
 					// do not really expand to cwd,
@@ -165,6 +166,9 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 		cwd, err := reader.URI(".")
 		if err != nil {
 			return nil, "", err
+		}
+		if uri.Scheme() != cwd.Scheme() || uri.Host() != cwd.Host() || uri.User() != cwd.User() {
+			return iterator.Empty[string](), modifiedLast, nil
 		}
 
 		// if filter is absolute path and it happens to be the current working

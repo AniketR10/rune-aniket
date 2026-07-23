@@ -317,6 +317,18 @@ func (r *fsReader) ReadDir(p string) ([]os.DirEntry, error) {
 	return os.ReadDir(r.resolve(p))
 }
 
+type originFSReader struct {
+	*fsReader
+	origin workspaceapi.URI
+}
+
+func (r *originFSReader) URI(p string) (workspaceapi.URI, error) {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(r.origin.Path(), p)
+	}
+	return workspaceapi.WithPath(r.origin, p)
+}
+
 // completerFixture is the canonical varied fixture used by both the
 // table-driven completer tests and the benchmark. It is rooted at a
 // fresh tmp dir per call and contains a mix of plain, escaped,
@@ -586,6 +598,85 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 				assert.True(t, found,
 					"expected at least one entry containing %q, got %v",
 					sub, got)
+			}
+		})
+	}
+}
+
+func TestPathCompletersDoNotRewriteForeignURI(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+	const remote = "ssh://10.0.0.6/~/src/rune"
+
+	for _, tc := range []struct {
+		name      string
+		completer Completer
+	}{
+		{name: "files", completer: FilePathCompleter(fix.reader)},
+		{name: "directories", completer: DirsCompleter(fix.reader)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it, newLastArg, err := tc.completer.Complete(
+				t.Context(), []string{"command", remote})
+			require.NoError(t, err)
+			assert.Empty(t, newLastArg)
+			assert.Empty(t, collectAll(t, it))
+		})
+	}
+}
+
+func TestPathCompletersCompleteSameOriginURI(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+	origin, err := workspaceapi.ParseURI("ssh://alice@example.com:2222" + fix.root)
+	require.NoError(t, err)
+	target, err := workspaceapi.WithPath(origin, filepath.Join(fix.root, "src"))
+	require.NoError(t, err)
+	reader := &originFSReader{fsReader: fix.reader, origin: origin}
+
+	for _, tc := range []struct {
+		name      string
+		completer Completer
+		want      string
+	}{
+		{name: "files", completer: FilePathCompleter(reader), want: "src/cmd/file_00.go"},
+		{name: "directories", completer: DirsCompleter(reader), want: "src/cmd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it, newLastArg, err := tc.completer.Complete(
+				t.Context(), []string{"command", target.String()})
+			require.NoError(t, err)
+			assert.Empty(t, newLastArg)
+			assert.Contains(t, collectAll(t, it), tc.want)
+		})
+	}
+}
+
+func TestPathCompletersDoNotCompleteMismatchedOriginURI(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+	origin, err := workspaceapi.ParseURI("ssh://alice@example.com:2222" + fix.root)
+	require.NoError(t, err)
+	reader := &originFSReader{fsReader: fix.reader, origin: origin}
+
+	for _, tc := range []struct {
+		name   string
+		target string
+	}{
+		{name: "user", target: "ssh://bob@example.com:2222" + fix.root},
+		{name: "hostname", target: "ssh://alice@elsewhere.example:2222" + fix.root},
+		{name: "port", target: "ssh://alice@example.com:2200" + fix.root},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, completer := range []Completer{
+				FilePathCompleter(reader),
+				DirsCompleter(reader),
+			} {
+				it, newLastArg, err := completer.Complete(
+					t.Context(), []string{"command", tc.target})
+				require.NoError(t, err)
+				assert.Empty(t, newLastArg)
+				assert.Empty(t, collectAll(t, it))
 			}
 		})
 	}

@@ -782,6 +782,10 @@ func TestCommandHandlerDispatch(t *testing.T) {
 			"workspaceopen ssh://10.0.0.6/~/src/rune ^>", []string{"workspaceopen"},
 			completeNormalizing("ssh://10.0.0.6/~/src/rune"),
 			expectDispatch("workspaceopen", "ssh://10.0.0.6/~/src/rune")},
+		{"keeps preceding argument when deleting trailing space after normalized later argument",
+			"command fixed normalized ^>", []string{"command"},
+			completeNormalizing("normalized"),
+			expectDispatch("command", "fixed", "normalized")},
 		{"dispatches command with args with auto-complete delete and re-typed all",
 			"ro my# ^^^^^^^^^^^^ro my# a>", []string{"lane", "lorelai", "rori"},
 			completeWith("myArg"), expectDispatch("rori", "myArg", "a")},
@@ -870,6 +874,37 @@ func TestCommandHandlerDispatch(t *testing.T) {
 					b.Handle(term.Event{Type: term.EventKey, Ch: ch})
 				}
 			}
+		})
+	}
+}
+
+func TestCommandHandlerBackspacePreservesRemoteWorkspaceURI(t *testing.T) {
+	cfg := testDefaultConfig()
+	cfg.ShowManual = false
+	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+	cfg.Sync = true
+
+	const remote = "ssh://10.0.0.6/~/src/rune"
+	dispatchFn, cleanup := expectDispatch("workspaceopen", remote)()
+	defer cleanup(t)
+
+	b := NewPrompt(
+		storagestub.NewInMemoryService(),
+		DirsCompleter(newFSReader(t.TempDir())),
+		FuncDispatcher(dispatchFn), term.NopInterrupter(),
+		testNoManualCommands([]string{"workspaceopen"}), cfg,
+	)
+	defer b.Close()
+
+	keys, err := term.ParseKeys(
+		"workspaceopen<space>" + remote + "<space><backspace><enter>")
+	require.NoError(t, err)
+	for _, key := range keys {
+		testCommandHandler{b}.Handle(term.Event{
+			Type: term.EventKey,
+			Ch:   key.Ch,
+			Mod:  key.Mod,
+			Key:  key.Key,
 		})
 	}
 }
