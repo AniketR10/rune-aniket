@@ -2345,6 +2345,18 @@ func (c ideConfig) editorMode() (ret string) {
 	return
 }
 
+// EditorMode resolves the canonical editor mode from cfg. The deprecated
+// "modeless" mode maps to "standard", and a missing or unreadable editor.mode
+// defaults to "modal".
+func EditorMode(cfg config.Config) string {
+	var raw map[string]any
+	if editor, err := cfg.GetMap("editor"); err == nil {
+		raw = map[string]any{"editor": editor}
+	}
+	c := ideConfig{cfg: raw, errors: map[string]error{}}
+	return c.editorMode()
+}
+
 // pkgEditorMode returns the editor mode exposed to package config.star
 // scripts. exo substitutes the configured exo.fallback so packages get a
 // concrete modal/modeless mode instead of the meta value "exo".

@@ -71,6 +71,7 @@ type telemetry struct {
 	sessionID  string
 	sysinfo    sysinfo
 	version    string
+	editorMode string
 
 	opened  atomic.Int32
 	closed  atomic.Int32
@@ -83,6 +84,7 @@ func newTelemetry(
 	url *url.URL,
 	period time.Duration,
 	version string,
+	editorMode string,
 	store storageapi.Service,
 	installBackupDir string,
 ) *telemetry {
@@ -99,6 +101,7 @@ func newTelemetry(
 	ret.sessionID = uuid.New().String()
 	ret.sysinfo, _ = uname()
 	ret.version = version
+	ret.editorMode = editorMode
 	ret.period = period
 
 	ret.quitCtx, ret.cancelCtx = context.WithCancel(context.Background())
@@ -155,6 +158,7 @@ func (t *telemetry) getUsage() telemetryUsagePayload {
 	data.Edited = int(t.edited.Load())
 	data.SID = t.sessionID
 	data.Type = "ClientUsage"
+	data.EditorMode = t.editorMode
 	return data
 }
 
@@ -171,6 +175,7 @@ func (t *telemetry) getSystemData() telemetrySystemPayload {
 	data.SystemRelease = t.sysinfo.Release
 	data.SystemVersion = t.sysinfo.Version
 	data.Version = t.version
+	data.EditorMode = t.editorMode
 	return data
 }
 
@@ -243,12 +248,13 @@ func (t *telemetry) flushFinalUsage() {
 }
 
 type telemetryUsagePayload struct {
-	Type    string
-	SID     string
-	Opened  int
-	Closed  int
-	Edited  int
-	Flushed int
+	Type       string
+	SID        string
+	EditorMode string
+	Opened     int
+	Closed     int
+	Edited     int
+	Flushed    int
 }
 
 type telemetrySystemPayload struct {
@@ -258,6 +264,7 @@ type telemetrySystemPayload struct {
 	InstallIDErr       string
 	SID                string
 	Version            string
+	EditorMode         string
 	SystemArquitecture string
 	SystemOS           string
 	SystemName         string

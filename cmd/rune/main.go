@@ -577,7 +577,12 @@ func runTUI(
 	}
 
 	storage := newRuneStorage(*flagDataPath)
-	client, releaseManager := newAPIClient(storage, os.TempDir())
+	rootCfg, err := ide.Config(*flagConfigPath, runeDefaultConfig())
+	if err != nil {
+		fmt.Printf("%s", err)
+		return 1
+	}
+	client, releaseManager := newAPIClient(storage, os.TempDir(), rootCfg)
 	defer client.Close()
 
 	opts = append(opts,
@@ -697,7 +702,7 @@ func runGUI(
 		*flagWorkspace, *flagZdotDir, filenames,
 		launchCmd, runner, mu, publishEvent,
 		func(u *url.URL) error { return extbrowser.Browse(u) },
-		text.NewSystemClipboard(), os.TempDir(),
+		text.NewSystemClipboard(), os.TempDir(), rootCfg,
 	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
@@ -845,7 +850,7 @@ func waitLoginShellPATH(pathDone <-chan error) error {
 // IDE → apiclient → IDE cycle. installBackupDir hosts the install-ID
 // tamper-detection backup (the OS temp dir in production).
 func newAPIClient(
-	storage storageapi.Service, installBackupDir string,
+	storage storageapi.Service, installBackupDir string, cfg config.Config,
 ) (*apiclient.Client, release.Manager) {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
@@ -856,6 +861,7 @@ func newAPIClient(
 	apicfg.EnableTelemetry = true
 	apicfg.TelemetryPeriod = telemetryPeriod
 	apicfg.InstallBackupDir = installBackupDir
+	apicfg.EditorMode = ide.EditorMode(cfg)
 	client := apiclient.New(storage, apicfg, *flagDataPath)
 	// Release downloads are unauthenticated: the oauth transport
 	// fails client-side with auth.ErrNotAuthenticated when no token

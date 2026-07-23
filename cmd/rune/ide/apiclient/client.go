@@ -102,7 +102,7 @@ func New(
 		telemetryStorage := storageapi.WithPartition(storage, "telemetry")
 		ret.telemetry = newTelemetry(ret.telemetryTokenSource,
 			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag,
-			telemetryStorage, ret.config.InstallBackupDir)
+			ret.config.EditorMode, telemetryStorage, ret.config.InstallBackupDir)
 		ret.telemetry.start()
 	}
 

@@ -108,6 +108,8 @@ type Config struct {
 	// EnableTelemetry controls whether telemetry is active. When false,
 	// no telemetry data is collected or sent.
 	EnableTelemetry bool
+	// EditorMode is the canonical editor mode included with telemetry.
+	EditorMode string
 	// InstallBackupDir is the directory holding the obscure install-ID
 	// backup file used for tamper detection. Must be non-empty when
 	// EnableTelemetry is true; empty panics. Production passes the OS

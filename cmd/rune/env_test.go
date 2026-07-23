@@ -435,13 +435,15 @@ func newConfiguredBootstrapForEnvTest(
 	mu := new(sync.Mutex)
 	publishEvent, stopPump := newBootstrapPublishPump(mu)
 	t.Cleanup(stopPump)
+	rootCfg, err := ide.Config(configPath, runeDefaultConfig())
+	require.NoError(t, err)
 
 	b, err := newBootstrapHandler(
 		dataDir, configPath, "" /* workspace */, "" /* zdotDir */, nil, /* filenames */
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
-		installBackupDir,
+		installBackupDir, rootCfg,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b.realIDE, "config.yaml in dataDir must build the configured IDE directly")

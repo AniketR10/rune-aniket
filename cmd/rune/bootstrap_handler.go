@@ -93,6 +93,7 @@ func newBootstrapHandler(
 	openBrowser func(*url.URL) error,
 	clip clipboard.Register,
 	installBackupDir string,
+	rootCfg config.Config,
 ) (*bootstrapHandler, error) {
 	bh := &bootstrapHandler{
 		dataDir:          dataDir,
@@ -111,7 +112,7 @@ func newBootstrapHandler(
 	}
 
 	if isBootstrapped(dataDir) {
-		client, releaseManager := newAPIClient(bh.storage, installBackupDir)
+		client, releaseManager := newAPIClient(bh.storage, installBackupDir, rootCfg)
 		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
@@ -423,7 +424,10 @@ func (b *bootstrapHandler) performSwap() error {
 	b.mu.Unlock()
 	defer b.mu.Lock()
 
-	client, releaseManager := newAPIClient(b.storage, b.installBackupDir)
+	rootCfg := config.MapConfig(map[string]any{
+		"editor": map[string]any{"mode": b.chosenEditor},
+	})
+	client, releaseManager := newAPIClient(b.storage, b.installBackupDir, rootCfg)
 	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()

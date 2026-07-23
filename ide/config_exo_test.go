@@ -89,6 +89,33 @@ func TestPkgEditorMode(t *testing.T) {
 	}
 }
 
+func TestEditorMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  config.Config
+		want string
+	}{
+		{"missing editor defaults to modal", config.MapConfig(map[string]any{}), "modal"},
+		{
+			"modeless maps to standard",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "modeless"}}),
+			"standard",
+		},
+		{
+			"exo is preserved",
+			config.MapConfig(map[string]any{"editor": map[string]any{
+				"mode": "exo",
+				"exo":  map[string]any{"fallback": "modal"},
+			}}),
+			"exo",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, EditorMode(tc.cfg))
+		})
+	}
+}
+
 // TestNewPromptEditorExo asserts that the in-memory prompt editor, which
 // exo cannot host, follows the configured exo.fallback rather than
 // hardwiring vi. The default fallback is standard.
