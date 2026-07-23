@@ -55,6 +55,7 @@ import (
 func TestIntegrationTerminalShell(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
+	t.Parallel()
 
 	c := StartContainer(t, SSHDScenario{
 		PublicKeyFile:     "/id_ed25519.pub",
@@ -335,6 +336,7 @@ func chshUser(t *testing.T, id, user, shell string) {
 func TestIntegrationTerminalSurvivesKeepaliveIdle(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
+	t.Parallel()
 
 	c := StartContainer(t, SSHDScenario{
 		PublicKeyFile:     "/id_ed25519.pub",

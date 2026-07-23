@@ -66,6 +66,8 @@ func TestWorkspaceSchemeExecutor(
 	schemeFn func(t *testing.T) schemeapi.Scheme,
 ) {
 	t.Run("command should run command and collect stdout", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -87,6 +89,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("command should run command and collect stderr", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -108,6 +112,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("command should run command and feed stdin data", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -129,6 +135,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("should return error if command doesn't exist", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -145,6 +153,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("should return error if command errors ", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -166,6 +176,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("pass env variables", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -188,6 +200,8 @@ func TestWorkspaceSchemeExecutor(
 	})
 
 	t.Run("should cancel command if context cancels", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -224,48 +238,76 @@ func TestWorkspaceSchemeFiles(
 	schemeFn func(t *testing.T) schemeapi.Scheme,
 ) {
 	t.Run("Open", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile,
 			io.ReadAll, (workspaceapi.File).Write, true)
 	})
 	t.Run("NewFile", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeNewFile(t, schemeFn, defaultCreateTestFile,
 			io.ReadAll, (workspaceapi.File).Write)
 	})
 	t.Run("Remove", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeRemove(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Rename", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeRename(t, schemeFn, defaultCreateTestFile, io.ReadAll)
 	})
 	t.Run("Stat", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeStat(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Lstat", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeLstat(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Readlink", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeReadLink(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Symlink", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeSymlink(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("ReadDir", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeReadDir(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("MkdirAll", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeMkdirAll(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Watch", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeWatch(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("workspace.ListFiles integration", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeListFilesIntegration(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("workspace.Load integration", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceLoadIntegration(t, schemeFn, defaultCreateTestFile,
 			readAllExceptLastEOL, (*cell.Buffer).Write)
 	})
 	t.Run("Chroot/Open", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeOpen(t, func(t *testing.T) schemeapi.Scheme {
 			scheme := schemeFn(t)
 			err := scheme.MkdirAll("./abc", 0777)
@@ -277,6 +319,8 @@ func TestWorkspaceSchemeFiles(
 			io.ReadAll, (workspaceapi.File).Write, true)
 	})
 	t.Run("Chroot/Stat", func(t *testing.T) {
+		t.Parallel()
+
 		TestWorkspaceSchemeStat(t, func(t *testing.T) schemeapi.Scheme {
 			scheme := schemeFn(t)
 			err := scheme.MkdirAll("./abc", 0777)
@@ -287,6 +331,8 @@ func TestWorkspaceSchemeFiles(
 		}, defaultCreateTestFile)
 	})
 	t.Run("Root", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("chroot", func(t *testing.T) {
 			scheme := schemeFn(t)
 			err := scheme.MkdirAll("./abc", 0777)
@@ -308,6 +354,8 @@ func TestWorkspaceSchemeFiles(
 
 	})
 	t.Run("TempFile", func(t *testing.T) {
+		t.Parallel()
+
 		scheme := schemeFn(t)
 		// Many files (200) so collisions are likely if TempFile's
 		// suffix expansion is broken. The previous value of 1000
@@ -790,9 +838,16 @@ func TestWorkspaceSchemeOpen(
 		t.Run("if an absolute path is passed then it should access even outside of cwd", func(t *testing.T) {
 			scheme := schemeFn(t)
 			defer scheme.Close()
-			f, err := scheme.OpenFile("/tmp/file", os.O_CREATE, 0644)
+
+			absolutePath := filepath.Join(filepath.Dir(scheme.Root()),
+				filepath.Base(scheme.Root())+"_absolute_file")
+			f, err := scheme.OpenFile(absolutePath, os.O_CREATE, 0644)
 			require.NoError(t, err)
-			assert.Equal(t, "/tmp/file", f.Name())
+			defer func() {
+				require.NoError(t, f.Close())
+				require.NoError(t, scheme.Remove(absolutePath))
+			}()
+			assert.Equal(t, absolutePath, f.Name())
 		})
 	}
 

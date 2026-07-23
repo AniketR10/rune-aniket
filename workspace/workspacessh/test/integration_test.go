@@ -52,6 +52,8 @@ import (
 func TestIntegrationScheme(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
+	t.Parallel()
+
 	c := StartContainer(t, SSHDScenario{
 		PublicKeyFile:     "/id_ed25519.pub",
 		InstallRuneBinary: true,
@@ -75,6 +77,8 @@ func TestIntegrationScheme(t *testing.T) {
 	}
 	for desc, cfg := range cfgs {
 		t.Run(desc, func(t *testing.T) {
+			t.Parallel()
+
 			workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, c.HostPort, cfg)
 			})

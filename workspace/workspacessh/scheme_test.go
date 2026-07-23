@@ -38,7 +38,6 @@ import (
 	"testing"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -611,7 +610,6 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 }
 
 func TestSSHScheme(t *testing.T) {
-	var cleanup []func() error
 	t.Run("with memory scheme remote", func(t *testing.T) {
 		workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("ssh://test@host.com/")
@@ -629,7 +627,9 @@ func TestSSHScheme(t *testing.T) {
 					return memScheme, nil
 				})
 			require.NoError(t, err)
-			cleanup = append(cleanup, s.Close)
+			t.Cleanup(func() {
+				_ = s.Close()
+			})
 			return s
 		})
 	})
@@ -655,21 +655,13 @@ func TestSSHScheme(t *testing.T) {
 					return fileScheme, nil
 				})
 			require.NoError(t, err)
-			cleanup = append(cleanup, func() (ret error) {
-				if err := s.Close(); err != nil {
-					ret = multierr.Append(ret, err)
-				}
-				if err := os.RemoveAll(dir); err != nil {
-					ret = multierr.Append(ret, err)
-				}
-				return ret
+			t.Cleanup(func() {
+				_ = s.Close()
+				_ = os.RemoveAll(dir)
 			})
 			return s
 		})
 	})
-	for _, clean := range cleanup {
-		_ = clean()
-	}
 }
 
 type nopExecutor struct {
