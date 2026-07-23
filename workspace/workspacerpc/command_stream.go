@@ -267,12 +267,14 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 	if err != nil {
 		return fmt.Errorf("send msg started: %v", err)
 	}
+	stdoutCh := s.stdoutCh
+	stderrCh := s.stderrCh
 	for {
 		var err error
 		select {
 		case <-s.ctx.Done():
 			err = s.ctx.Err()
-		case res, ok := <-s.stdoutCh:
+		case res, ok := <-stdoutCh:
 			if s.stdoutFd != 0 {
 				s.log(log.ErrorLevel, "read from stdout but using file mode: ok=%v, err=%v, data=%d",
 					ok, res.Error, len(res.Data))
@@ -281,10 +283,11 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			s.log(log.TraceLevel, "read from stdout: ok=%v, err=%v, data=%d",
 				ok, res.Error, len(res.Data))
 			if !ok {
-				return nil
+				stdoutCh = nil
+				continue
 			}
 			err = s.streamReadResult(res, workspacerpc.CommandPayload_IO_TypeStdout)
-		case res, ok := <-s.stderrCh:
+		case res, ok := <-stderrCh:
 			if s.stderrFd != 0 {
 				s.log(log.ErrorLevel, "read from stderr but using file mode: ok=%v, err=%v, data=%d",
 					ok, res.Error, len(res.Data))
@@ -293,7 +296,8 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			s.log(log.TraceLevel, "read from stderr: ok=%v, err=%v, data=%d",
 				ok, res.Error, len(res.Data))
 			if !ok {
-				return nil
+				stderrCh = nil
+				continue
 			}
 			err = s.streamReadResult(res, workspacerpc.CommandPayload_IO_TypeStderr)
 		case doneErr := <-s.doneCh:
