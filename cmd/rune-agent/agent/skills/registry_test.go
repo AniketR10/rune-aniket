@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -122,6 +123,15 @@ alpha body`)
 			_, ok := r.Get(name)
 			assert.True(t, ok, "builtin %s must be present", name)
 		}
+	})
+
+	t.Run("explore cannot recursively invoke skills", func(t *testing.T) {
+		r := NewRegistry(osFileSystem{}, dirURI(""), nil, nil)
+		explore, ok := r.Get("explore")
+		require.True(t, ok)
+
+		assert.NotContains(t, strings.Fields(explore.AllowedTools), "skill")
+		assert.Contains(t, explore.Body, "invoke the explore skill")
 	})
 
 	t.Run("deduplicates skills across dirs", func(t *testing.T) {
