@@ -226,11 +226,17 @@ type openFileTarget struct {
 }
 
 type pendingWorkspace struct {
-	uri       workspaceapi.URI
-	slot      int
-	cancelCtx func()
-	canceled  atomic.Bool
-	onReady   [][]string
+	uri               workspaceapi.URI
+	slot              int
+	cancelCtx         func()
+	canceled          atomic.Bool
+	onReady           [][]string
+	cwd               workspace.Workspace
+	teardownBegin     sync.Once
+	teardownFinish    sync.Once
+	detachedWorkspace workspace.Workspace
+	closeGate         chan struct{}
+	ownsCloseGate     bool
 }
 
 type visibleWorkspaceManager struct {
@@ -1393,6 +1399,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 			cancel()
 			return err
 		}
+		pending.cwd = cwd
 		h.shaderRunner.startLoading()
 		h.pendingWG.Add(1)
 		h.launchBuild(pending, uri, cwd, ctx, cancel, shouldRestore, promptRecommended)
@@ -1408,10 +1415,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 	go debug.CapturePanicReport(func() {
 		<-done
 		if pending.canceled.Load() {
-			h.abortPendingBuild(pending, uri, nil, nil, cancel)
+			h.abortPendingBuild(pending, nil, cancel)
 			return
 		}
 		scheduled := h.scheduleNextTick(func() {
+			if pending.canceled.Load() || h.pending[uri.String()] != pending {
+				h.shaderRunner.stopLoading()
+				cancel()
+				h.pendingWG.Done()
+				return
+			}
 			cwd, err := h.createWorkspaceScheme(uri)
 			if err != nil {
 				delete(h.pending, uri.String())
@@ -1426,11 +1439,12 @@ func (h *workspaceManagerHandler) addWorkspace(
 				h.pendingWG.Done()
 				return
 			}
+			pending.cwd = cwd
 			h.launchBuild(pending, uri, cwd, ctx, cancel,
 				shouldRestore, promptRecommended)
 		})
 		if !scheduled {
-			h.abortPendingBuild(pending, uri, nil, nil, cancel)
+			h.abortPendingBuild(pending, nil, cancel)
 		}
 	})
 	return nil
@@ -1447,7 +1461,7 @@ func (h *workspaceManagerHandler) launchBuild(
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
 		if pending.canceled.Load() {
-			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
+			h.abortPendingBuild(pending, built, cancel)
 			return
 		}
 		scheduled := h.scheduleNextTick(func() {
@@ -1456,26 +1470,78 @@ func (h *workspaceManagerHandler) launchBuild(
 				cwd, built, buildErr, shouldRestore, promptRecommended)
 		})
 		if !scheduled {
-			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
+			h.abortPendingBuild(pending, built, cancel)
 		}
 	})
 }
 
 func (h *workspaceManagerHandler) abortPendingBuild(
-	pending *pendingWorkspace, uri workspaceapi.URI,
-	built *builtWorkspace, buildErr error, cancel context.CancelFunc,
+	pending *pendingWorkspace, built *builtWorkspace, cancel context.CancelFunc,
 ) {
 	h.mu.Lock()
-	delete(h.pending, uri.String())
-	if h.lastReservedPending == pending {
-		h.lastReservedPending = nil
-	}
+	h.beginPendingWorkspaceTeardown(pending)
+	h.shaderRunner.stopLoading()
 	h.mu.Unlock()
-	if buildErr == nil {
+	if built != nil {
 		h.discardBuiltWorkspace(built)
 	}
+	h.finishPendingWorkspaceTeardown(pending)
 	cancel()
 	h.pendingWG.Done()
+}
+
+// beginPendingWorkspaceTeardown transfers manager and close-gate ownership
+// while the event-loop lock prevents a same-URI successor from being created.
+func (h *workspaceManagerHandler) beginPendingWorkspaceTeardown(pending *pendingWorkspace) {
+	pending.teardownBegin.Do(func() {
+		key := pending.uri.String()
+		if h.pending[key] != pending {
+			return
+		}
+		delete(h.pending, key)
+		if h.lastReservedPending == pending {
+			h.lastReservedPending = nil
+		}
+		if pending.cwd == nil {
+			return
+		}
+
+		detached, ok := h.workspace.RemoveWorkspace(pending.uri)
+		if !ok {
+			return
+		}
+		pending.detachedWorkspace = detached
+		pending.closeGate = h.closing[key]
+		if pending.closeGate == nil {
+			pending.closeGate = make(chan struct{})
+			pending.ownsCloseGate = true
+			h.closing[key] = pending.closeGate
+		}
+		h.closeWG.Add(1)
+	})
+}
+
+func (h *workspaceManagerHandler) finishPendingWorkspaceTeardown(pending *pendingWorkspace) {
+	pending.teardownFinish.Do(func() {
+		if pending.detachedWorkspace == nil {
+			return
+		}
+		go debug.CapturePanicReport(func() {
+			defer h.closeWG.Done()
+			if err := pending.detachedWorkspace.Close(); err != nil {
+				log.Errorf("close failed pending workspace %s: %v", pending.uri.String(), err)
+			}
+			if !pending.ownsCloseGate {
+				return
+			}
+			h.mu.Lock()
+			if h.closing[pending.uri.String()] == pending.closeGate {
+				delete(h.closing, pending.uri.String())
+			}
+			h.mu.Unlock()
+			close(pending.closeGate)
+		})
+	})
 }
 
 func (h *workspaceManagerHandler) findInstalledSlot(uri workspaceapi.URI) (int, bool) {
@@ -1709,48 +1775,50 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	buildErr error,
 	shouldRestore, promptRecommended bool,
 ) {
-	delete(h.pending, uri.String())
-	if h.lastReservedPending == pending {
-		h.lastReservedPending = nil
-	}
-
 	defer h.shaderRunner.stopLoading()
 
 	if pending.canceled.Load() {
-		if built != nil {
-			h.discardBuiltWorkspace(built)
-		}
+		h.beginPendingWorkspaceTeardown(pending)
+		h.discardBuiltWorkspace(built)
+		h.finishPendingWorkspaceTeardown(pending)
 		cancel()
 		return
 	}
 
 	if buildErr != nil {
+		h.beginPendingWorkspaceTeardown(pending)
 		log.Errorf("load workspace %s: %v", uri.String(), buildErr)
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Failed to load workspace %s: %v", uri.String(), buildErr)
+		h.discardBuiltWorkspace(built)
+		h.finishPendingWorkspaceTeardown(pending)
 		cancel()
 		return
 	}
 
 	if err := h.subscribeAllCommands(built.ex); err != nil {
-		_ = built.cursorHistoryCloser.Close()
-		if built.symbolDBCloser != nil {
-			_ = built.symbolDBCloser.Close()
-		}
+		h.beginPendingWorkspaceTeardown(pending)
+		h.discardBuiltWorkspace(built)
+		h.finishPendingWorkspaceTeardown(pending)
 		cancel()
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"subscribe workspace commands: %v", err)
 		return
 	}
 	if err := h.subscribeAllEvents(built.cfg, built.ex); err != nil {
-		_ = built.cursorHistoryCloser.Close()
-		if built.symbolDBCloser != nil {
-			_ = built.symbolDBCloser.Close()
-		}
+		h.beginPendingWorkspaceTeardown(pending)
+		h.discardBuiltWorkspace(built)
+		h.finishPendingWorkspaceTeardown(pending)
 		cancel()
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"subscribe workspace events: %v", err)
 		return
+	}
+	if h.pending[uri.String()] == pending {
+		delete(h.pending, uri.String())
+	}
+	if h.lastReservedPending == pending {
+		h.lastReservedPending = nil
 	}
 
 	ex := built.ex
@@ -2523,10 +2591,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (
 		uri := pending.uri
 		pending.canceled.Store(true)
 		pending.cancelCtx()
-		delete(h.pending, uri.String())
-		if h.lastReservedPending == pending {
-			h.lastReservedPending = nil
-		}
+		h.beginPendingWorkspaceTeardown(pending)
 		if err := h.state.ClearWorkspaceState(
 			context.Background(), uri); err != nil {
 			log.Warnf("clear workspace state %s: %v", uri.String(), err)
@@ -2661,10 +2726,10 @@ func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {
-	for k, p := range h.pending {
+	for _, p := range h.pending {
 		p.canceled.Store(true)
 		p.cancelCtx()
-		delete(h.pending, k)
+		h.beginPendingWorkspaceTeardown(p)
 	}
 	h.mu.Unlock()
 	h.pendingWG.Wait()

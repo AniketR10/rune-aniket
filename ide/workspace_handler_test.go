@@ -5962,6 +5962,221 @@ func TestGatedReopenAbortsWhenSchedulerRejects(t *testing.T) {
 		"rejected gated reopen must not install a workspace")
 }
 
+type pendingTeardownWorkspace struct {
+	workspace.Workspace
+	closeCalls   atomic.Int32
+	closeStarted chan struct{}
+	closeRelease <-chan struct{}
+	startOnce    sync.Once
+}
+
+func (w *pendingTeardownWorkspace) Close() error {
+	w.closeCalls.Add(1)
+	w.startOnce.Do(func() { close(w.closeStarted) })
+	if w.closeRelease != nil {
+		<-w.closeRelease
+	}
+	return w.Workspace.Close()
+}
+
+type pendingTeardownTracker struct {
+	target       workspaceapi.URI
+	firstRelease <-chan struct{}
+	mu           sync.Mutex
+	workspaces   []*pendingTeardownWorkspace
+}
+
+func (t *pendingTeardownTracker) wrap(
+	uri workspaceapi.URI, scheme schemeapi.Scheme, scheduleNextTick func(func()) bool,
+) workspace.Workspace {
+	base := workspace.NewSchemeWorkspace(uri, scheme, scheduleNextTick)
+	if !uri.Equal(t.target) {
+		return base
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	w := &pendingTeardownWorkspace{
+		Workspace:    base,
+		closeStarted: make(chan struct{}),
+	}
+	if len(t.workspaces) == 0 {
+		w.closeRelease = t.firstRelease
+	}
+	t.workspaces = append(t.workspaces, w)
+	return w
+}
+
+func (t *pendingTeardownTracker) snapshot() []*pendingTeardownWorkspace {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]*pendingTeardownWorkspace(nil), t.workspaces...)
+}
+
+func newPendingTeardownTestHandler(
+	t *testing.T, firstRelease <-chan struct{},
+) (*testWorkspaceManagerHandler, *workspace.Manager, workspaceapi.URI, *pendingTeardownTracker) {
+	t.Helper()
+	cfg := defaultCfg()
+	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(&cfg)
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", t.TempDir()))
+	require.NoError(t, err)
+	tracker := &pendingTeardownTracker{target: uri, firstRelease: firstRelease}
+	manager := workspace.NewManagerWithWorkspaceFunc(
+		config.NopConfig(), scheduleNextTick, tracker.wrap,
+	)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme))
+	m := newTestWorkspaceManagerHandlerWithManagerMu(
+		t, manager, mu, drain, nil, cfg, FuncExtensionsRunner(testRunnerFn), nil,
+		t.TempDir(), nil, nopShutdownShaderConfig(),
+	)
+	t.Cleanup(func() { _ = m.Close() })
+	return m, manager, uri, tracker
+}
+
+func TestPendingWorkspaceBuildFailureEvictsAndReopensFresh(t *testing.T) {
+	releaseClose := make(chan struct{})
+	var releaseCloseOnce sync.Once
+	release := func() { releaseCloseOnce.Do(func() { close(releaseClose) }) }
+	m, manager, uri, tracker := newPendingTeardownTestHandler(t, releaseClose)
+	t.Cleanup(release)
+
+	m.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	pending, err := m.reservePendingSlot(uri, -1, cancel)
+	require.NoError(t, err)
+	cwd, err := m.createWorkspaceScheme(uri)
+	require.NoError(t, err)
+	pending.cwd = cwd
+	m.shaderRunner.startLoading()
+	m.installPendingWorkspace(
+		pending, uri, ctx, cancel, cwd, nil, errors.New("build failed"), false, false,
+	)
+	m.mu.Unlock()
+
+	first := tracker.snapshot()[0]
+	select {
+	case <-first.closeStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("failed pending workspace was not closed")
+	}
+	require.False(t, manager.HasWorkspace(uri))
+	require.Equal(t, int32(1), first.closeCalls.Load())
+
+	m.mu.Lock()
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	m.mu.Unlock()
+	require.Len(t, tracker.snapshot(), 1,
+		"same-URI reopen must wait until failed workspace teardown completes")
+
+	release()
+	m.drainPendingWorkspaces()
+	m.waitForWorkspace(t, uri)
+	require.Len(t, tracker.snapshot(), 2)
+	require.True(t, manager.HasWorkspace(uri))
+	require.Equal(t, int32(1), first.closeCalls.Load())
+
+	m.mu.Lock()
+	m.beginPendingWorkspaceTeardown(pending)
+	m.mu.Unlock()
+	m.finishPendingWorkspaceTeardown(pending)
+	m.waitClosing()
+	require.True(t, manager.HasWorkspace(uri),
+		"late teardown from the failed pending build must not remove its successor")
+	require.Equal(t, int32(1), first.closeCalls.Load())
+
+	stale := &pendingWorkspace{uri: uri, cwd: cwd}
+	m.mu.Lock()
+	m.beginPendingWorkspaceTeardown(stale)
+	m.mu.Unlock()
+	m.finishPendingWorkspaceTeardown(stale)
+	require.True(t, manager.HasWorkspace(uri),
+		"teardown without exact pending identity must not detach the successor")
+	require.Equal(t, int32(1), first.closeCalls.Load())
+}
+
+func TestPendingWorkspaceCancellationWaitsForBuildOwnership(t *testing.T) {
+	releaseClose := make(chan struct{})
+	var releaseCloseOnce sync.Once
+	release := func() { releaseCloseOnce.Do(func() { close(releaseClose) }) }
+	m, manager, uri, tracker := newPendingTeardownTestHandler(t, releaseClose)
+	t.Cleanup(release)
+	releaseBuild := make(chan struct{})
+
+	m.mu.Lock()
+	_, cancel := context.WithCancel(context.Background())
+	pending, err := m.reservePendingSlot(uri, -1, cancel)
+	require.NoError(t, err)
+	cwd, err := m.createWorkspaceScheme(uri)
+	require.NoError(t, err)
+	pending.cwd = cwd
+	m.shaderRunner.startLoading()
+	m.pendingWG.Add(1)
+	go debug.CapturePanicReport(func() {
+		<-releaseBuild
+		m.abortPendingBuild(pending, nil, cancel)
+	})
+	m.focus = pending.slot
+	_, _, err = m.closeWorkspace()
+	require.NoError(t, err)
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	m.mu.Unlock()
+
+	first := tracker.snapshot()[0]
+	require.False(t, manager.HasWorkspace(uri))
+	select {
+	case <-first.closeStarted:
+		t.Fatal("detached workspace closed while Phase B still owned it")
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.Len(t, tracker.snapshot(), 1)
+
+	close(releaseBuild)
+	select {
+	case <-first.closeStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("workspace close did not begin after Phase B released ownership")
+	}
+	require.Len(t, tracker.snapshot(), 1,
+		"queued reopen must remain gated while detached close is blocked")
+	release()
+	m.drainPendingWorkspaces()
+	m.waitForWorkspace(t, uri)
+	require.Len(t, tracker.snapshot(), 2)
+	require.Equal(t, int32(1), first.closeCalls.Load())
+}
+
+func TestPendingWorkspaceScheduleRejectTearsDown(t *testing.T) {
+	m, manager, uri, tracker := newPendingTeardownTestHandler(t, nil)
+
+	m.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	pending, err := m.reservePendingSlot(uri, -1, cancel)
+	require.NoError(t, err)
+	cwd, err := m.createWorkspaceScheme(uri)
+	require.NoError(t, err)
+	pending.cwd = cwd
+	m.shaderRunner.startLoading()
+	m.pendingWG.Add(1)
+	originalSchedule := m.scheduleNextTick
+	m.scheduleNextTick = func(func()) bool { return false }
+	m.launchBuild(pending, uri, cwd, ctx, cancel, false, false)
+	m.mu.Unlock()
+
+	m.pendingWG.Wait()
+	m.waitClosing()
+	m.mu.Lock()
+	m.scheduleNextTick = originalSchedule
+	_, stillPending := m.pending[uri.String()]
+	m.mu.Unlock()
+
+	require.False(t, stillPending)
+	require.False(t, manager.HasWorkspace(uri))
+	created := tracker.snapshot()
+	require.Len(t, created, 1)
+	require.Equal(t, int32(1), created[0].closeCalls.Load())
+}
+
 // blockingPtyScheme wraps a scheme so NewPty wedges until the scheme
 // is closed, ignoring the spawn ctx. This models the live deadlock
 // where a VTE warm-up goroutine is stuck in an unbounded remote RPC

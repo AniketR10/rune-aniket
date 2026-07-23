@@ -7,6 +7,7 @@ package ide
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -19,6 +20,61 @@ import (
 type promptResult struct {
 	text string
 	err  error
+}
+
+type promptChoiceOutcome struct {
+	index    int
+	selected bool
+}
+
+type promptChoiceCompletion struct {
+	once    sync.Once
+	outcome chan promptChoiceOutcome
+}
+
+func newPromptChoiceCompletion() *promptChoiceCompletion {
+	return &promptChoiceCompletion{outcome: make(chan promptChoiceOutcome, 1)}
+}
+
+func (c *promptChoiceCompletion) selectIndex(index int) {
+	c.complete(promptChoiceOutcome{index: index, selected: true})
+}
+
+func (c *promptChoiceCompletion) dismiss() {
+	c.complete(promptChoiceOutcome{})
+}
+
+func (c *promptChoiceCompletion) complete(outcome promptChoiceOutcome) {
+	c.once.Do(func() {
+		c.outcome <- outcome
+	})
+}
+
+func (c *promptChoiceCompletion) wait(ctx context.Context) (int, error) {
+	select {
+	case outcome := <-c.outcome:
+		return promptChoiceResult(outcome)
+	default:
+	}
+
+	select {
+	case outcome := <-c.outcome:
+		return promptChoiceResult(outcome)
+	case <-ctx.Done():
+		select {
+		case outcome := <-c.outcome:
+			return promptChoiceResult(outcome)
+		default:
+			return -1, ctx.Err()
+		}
+	}
+}
+
+func promptChoiceResult(outcome promptChoiceOutcome) (int, error) {
+	if outcome.selected {
+		return outcome.index, nil
+	}
+	return -1, context.Canceled
 }
 
 // workspaceWindowManagerUI is the IDE-side implementation of
@@ -48,18 +104,16 @@ func (u *workspaceWindowManagerUI) PromptChoice(
 	if len(options) == 0 {
 		return -1, fmt.Errorf("PromptChoice: at least one option is required")
 	}
-	result := make(chan int, 1)
-	closed := make(chan struct{})
+	completion := newPromptChoiceCompletion()
 	scheduled := u.ide.scheduleFn(func() {
 		_ = u.ide.Prompt(message, options, nil, handler.FuncPromptHandler(
 			func(i int, _ string) {
-				select {
-				case result <- i:
-				default:
-				}
+				completion.selectIndex(i)
 			},
 			func() error {
-				close(closed)
+				// Selection precedes the prompt lifecycle's trailing close, so
+				// only the first completion can determine the caller's result.
+				completion.dismiss()
 				return nil
 			},
 		))
@@ -67,14 +121,7 @@ func (u *workspaceWindowManagerUI) PromptChoice(
 	if !scheduled {
 		return -1, context.Canceled
 	}
-	select {
-	case <-ctx.Done():
-		return -1, ctx.Err()
-	case <-closed:
-		return -1, context.Canceled
-	case i := <-result:
-		return i, nil
-	}
+	return completion.wait(ctx)
 }
 
 func (u *workspaceWindowManagerUI) Notify(level workspacessh.NotificationLevel, msg string) string {
