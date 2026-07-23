@@ -26,7 +26,9 @@ package texttest
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
@@ -422,6 +424,226 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
 	mu.Unlock()
+}
+
+func TestAuxBarGitEventSubscriptions(t *testing.T) {
+	fixture := newAuxBarEventFixture(t)
+	defer fixture.close(t)
+
+	require.ElementsMatch(t, []textapi.EventType{
+		textapi.EventTypeFocus,
+		textapi.EventTypeChange,
+		textapi.EventTypeRename,
+		textapi.EventTypeCreate,
+		textapi.EventTypeFlush,
+	}, fixture.publisher.events)
+}
+
+func TestAuxBarGitEventInvalidation(t *testing.T) {
+	fixture := newAuxBarEventFixture(t)
+	defer fixture.close(t)
+
+	fixture.publisher.dispatch(textapi.Event{
+		Type: textapi.EventTypeFocus,
+		URI:  fixture.uri,
+	})
+	fixture.awaitScheduled(t)
+	require.EqualValues(t, 1, fixture.differ.calls.Load())
+	requireNoDiffCall(t, fixture.differ.called)
+
+	for _, eventType := range []textapi.EventType{
+		textapi.EventTypeChange,
+		textapi.EventTypeRename,
+		textapi.EventTypeCreate,
+	} {
+		fixture.publisher.dispatch(textapi.Event{
+			Type: eventType,
+			URI:  fixture.uri,
+		})
+		require.EqualValues(t, 1, fixture.differ.calls.Load())
+	}
+	fixture.requireQuiet(t)
+
+	fixture.publisher.dispatch(textapi.Event{
+		Type: textapi.EventTypeFocus,
+		URI:  fixture.uri,
+	})
+	fixture.awaitDiffCall(t, 2)
+	fixture.awaitScheduled(t)
+
+	fixture.publisher.dispatch(textapi.Event{
+		Type: textapi.EventTypeFlush,
+		URI:  fixture.uri,
+	})
+	fixture.awaitDiffCall(t, 3)
+	fixture.awaitScheduled(t)
+
+	otherURI, err := workspaceapi.ParseURI("file:///workspace/other.go")
+	require.NoError(t, err)
+	fixture.publisher.dispatch(textapi.Event{
+		Type: textapi.EventTypeChange,
+		URI:  otherURI,
+	})
+	require.EqualValues(t, 3, fixture.differ.calls.Load())
+	fixture.requireQuiet(t)
+}
+
+type auxBarEventFixture struct {
+	uri       workspaceapi.URI
+	bar       text.Handler
+	publisher *auxBarEventPublisher
+	differ    *eventDiffer
+	scheduled chan struct{}
+}
+
+func newAuxBarEventFixture(t *testing.T) *auxBarEventFixture {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file:///workspace/file.go")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	h.URI = uri
+	fixture := &auxBarEventFixture{
+		uri:       uri,
+		publisher: new(auxBarEventPublisher),
+		differ:    newEventDiffer(),
+		scheduled: make(chan struct{}, 8),
+	}
+	fixture.bar = text.WithAuxBar(h, buf, scroll, text.AuxBarConfig{
+		GitEnabled:       true,
+		LinesEnabled:     true,
+		ScheduleNextTick: fixture.scheduleNextTick,
+		Publisher:        fixture.publisher,
+		CommandRegistry:  auxBarCommandRegistry{},
+		Service:          fixture.differ,
+	})
+	fixture.awaitDiffCall(t, 1)
+	fixture.awaitScheduled(t)
+	return fixture
+}
+
+func (f *auxBarEventFixture) scheduleNextTick(fn func()) bool {
+	fn()
+	f.scheduled <- struct{}{}
+	return true
+}
+
+func (f *auxBarEventFixture) awaitDiffCall(t *testing.T, want int32) {
+	t.Helper()
+	select {
+	case got := <-f.differ.called:
+		require.Equal(t, want, got)
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for diff call %d", want)
+	}
+}
+
+func (f *auxBarEventFixture) awaitScheduled(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.scheduled:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for aux-bar rebuild")
+	}
+}
+
+func (f *auxBarEventFixture) requireQuiet(t *testing.T) {
+	t.Helper()
+	select {
+	case call := <-f.differ.called:
+		t.Fatalf("unexpected diff call %d", call)
+	case <-f.scheduled:
+		t.Fatal("unexpected aux-bar rebuild")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func (f *auxBarEventFixture) close(t *testing.T) {
+	t.Helper()
+	require.NoError(t, f.bar.Close())
+}
+
+type auxBarEventPublisher struct {
+	events  []textapi.EventType
+	handler text.EventHandler
+}
+
+func (p *auxBarEventPublisher) SubscribeEvents(
+	events []textapi.EventType, handler text.EventHandler,
+) error {
+	p.events = append([]textapi.EventType(nil), events...)
+	p.handler = handler
+	return nil
+}
+
+func (p *auxBarEventPublisher) UnsubscribeEvents(text.EventHandler) (bool, error) {
+	p.handler = nil
+	return true, nil
+}
+
+func (p *auxBarEventPublisher) dispatch(event textapi.Event) {
+	p.handler.Handle(context.Background(), event)
+}
+
+type auxBarCommandRegistry struct{}
+
+func (auxBarCommandRegistry) SubscribeCommandForFile(
+	workspaceapi.URI, textapi.CommandManual, text.CommandHandler,
+) error {
+	return nil
+}
+
+func (auxBarCommandRegistry) UnsubscribeCommandForFile(workspaceapi.URI, string) error {
+	return nil
+}
+
+type eventDiffer struct {
+	calls  atomic.Int32
+	called chan int32
+}
+
+func newEventDiffer() *eventDiffer {
+	return &eventDiffer{called: make(chan int32, 8)}
+}
+
+func (d *eventDiffer) Diff(context.Context, workspaceapi.URI) (vctrl.FileDiff, error) {
+	call := d.calls.Add(1)
+	d.called <- call
+	return vctrl.FileDiff{}, nil
+}
+
+func (d *eventDiffer) ListRemotes(context.Context, workspaceapi.URI) ([]string, error) {
+	return nil, nil
+}
+
+func (d *eventDiffer) ShortRef(context.Context, workspaceapi.URI) (string, error) {
+	return "", nil
+}
+
+func (d *eventDiffer) CurrentCommit(context.Context, workspaceapi.URI) (string, error) {
+	return "", nil
+}
+
+func (d *eventDiffer) RemoteURL(
+	context.Context, workspaceapi.URI, string,
+) (string, error) {
+	return "", nil
+}
+
+func (d *eventDiffer) RelPath(context.Context, string) (string, error) {
+	return "", nil
+}
+
+func requireNoDiffCall(t *testing.T, called <-chan int32) {
+	t.Helper()
+	select {
+	case call := <-called:
+		t.Fatalf("unexpected diff call %d", call)
+	default:
+	}
 }
 
 func BenchmarkAuxBarAbsoluteSmall(b *testing.B) {

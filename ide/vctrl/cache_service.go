@@ -37,12 +37,18 @@ var _ Service = (*Cache)(nil)
 type Cache struct {
 	mu       sync.Mutex
 	root     Service
-	diffs    map[workspaceapi.URI]FileDiff
+	diffs    map[workspaceapi.URI]diffResponse
+	diffGen  uint64
 	commits  map[workspaceapi.URI]string
 	refs     map[workspaceapi.URI]string
 	urls     map[string]string
 	remotes  map[workspaceapi.URI][]string
 	relpaths map[string]string
+}
+
+type diffResponse struct {
+	diff FileDiff
+	err  error
 }
 
 // NewCache allocates storage for a new Service Cache
@@ -56,7 +62,8 @@ func NewCache(root Service) *Cache {
 // Init initializes this cache with the given service.
 func (c *Cache) Init(root Service) {
 	c.root = root
-	c.diffs = make(map[workspaceapi.URI]FileDiff)
+	c.diffs = make(map[workspaceapi.URI]diffResponse)
+	c.diffGen = 0
 	c.commits = make(map[workspaceapi.URI]string)
 	c.refs = make(map[workspaceapi.URI]string)
 	c.urls = make(map[string]string)
@@ -68,6 +75,7 @@ func (c *Cache) Init(root Service) {
 func (c *Cache) Purge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.diffGen++
 	clear(c.diffs)
 	clear(c.commits)
 	clear(c.refs)
@@ -79,13 +87,22 @@ func (c *Cache) Purge() {
 // Diff returns the differences between the given file in the worktree and HEAD.
 func (c *Cache) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	diff, ok := c.diffs[file]
+	response, ok := c.diffs[file]
 	if ok {
-		return diff, nil
+		c.mu.Unlock()
+		return response.diff, response.err
 	}
+	generation := c.diffGen
+	c.mu.Unlock()
+
+	// do not lock while we're running expensive computations
 	diff, err := c.root.Diff(ctx, file)
-	c.diffs[file] = diff
+
+	c.mu.Lock()
+	if generation == c.diffGen {
+		c.diffs[file] = diffResponse{diff: diff, err: err}
+	}
+	c.mu.Unlock()
 	return diff, err
 }
 

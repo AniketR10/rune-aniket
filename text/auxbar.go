@@ -60,7 +60,7 @@ type AuxBarConfig struct {
 	AddOverlayAttr      term.Attributes
 	HighlightCursorAttr term.Attributes
 	LineNumberAttr      term.Attributes
-	// Publisher is used to subscribe to EventTypeFlush events.
+	// Publisher is used to subscribe to events that refresh the Git diff.
 	// It's optional if git is disabled by setting GitEnabled to false.
 	Publisher EventPublisher
 	// CommandRegistry is used to register commands to the parent workspace.
@@ -145,7 +145,13 @@ func WithAuxBar(
 	// set before in case SubsribeEvents calls Handle
 	ret.cancelBuild = func() {}
 	ret.dirty = true
-	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
+	evs := []textapi.EventType{
+		textapi.EventTypeFocus,
+		textapi.EventTypeChange,
+		textapi.EventTypeRename,
+		textapi.EventTypeCreate,
+		textapi.EventTypeFlush,
+	}
 	if ret.linesEnabled && ret.gitEnabled {
 		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
 		for _, cmd := range gitCommands {
@@ -375,11 +381,21 @@ func (b *auxBar) MoveToPrevLocation(ID string) bool {
 type auxBarSubscriber auxBar
 
 func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
-	if !ev.URI.Equal(b.file) || (ev.Type != textapi.EventTypeFlush &&
-		ev.Type != textapi.EventTypeFocus) {
+	if !ev.URI.Equal(b.file) {
 		return false
 	}
-	b.svc.Purge()
+	switch ev.Type {
+	case textapi.EventTypeFocus:
+	case textapi.EventTypeChange, textapi.EventTypeRename,
+		textapi.EventTypeCreate:
+		b.svc.Purge()
+		(*auxBar)(b).log(log.TraceLevel, "invalidated by event: %s", ev.Type.String())
+		return false
+	case textapi.EventTypeFlush:
+		b.svc.Purge()
+	default:
+		return false
+	}
 	(*auxBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
 	(*auxBar)(b).rebuildBar(ctx)
 	return false
