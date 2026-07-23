@@ -859,7 +859,7 @@ func (h *Prompt) decArgsCompleteMode(sync bool) bool {
 	h.log(log.TraceLevel, "decrement args complete mode (sync=%v): %+v",
 		sync, h.commandAndArgs)
 
-	h.setCompletionList(true, sync, h.commandAndArgs[0], h.commandAndArgs[1:]...)
+	h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
 	return true
 }
 

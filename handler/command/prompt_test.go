@@ -778,6 +778,10 @@ func TestCommandHandlerDispatch(t *testing.T) {
 		{"dispatches command with args with auto-complete space that's removed",
 			"ro my# ^>", []string{"lane", "lorelai", "rori"},
 			completeRespectively([]string{"myArg", "myArg"}), expectDispatch("rori", "myArg")},
+		{"keeps command when deleting trailing space after normalized first argument",
+			"workspaceopen ssh://10.0.0.6/~/src/rune ^>", []string{"workspaceopen"},
+			completeNormalizing("ssh://10.0.0.6/~/src/rune"),
+			expectDispatch("workspaceopen", "ssh://10.0.0.6/~/src/rune")},
 		{"dispatches command with args with auto-complete delete and re-typed all",
 			"ro my# ^^^^^^^^^^^^ro my# a>", []string{"lane", "lorelai", "rori"},
 			completeWith("myArg"), expectDispatch("rori", "myArg", "a")},
@@ -2597,6 +2601,19 @@ func completeRespectively(data []string) func() (
 			}
 			completing := []string{data[len(args)-1]}
 			return iterator.FromSlice(completing), "", nil
+		}, func(*testing.T) {}
+	}
+}
+
+func completeNormalizing(arg string) func() (
+	func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T),
+) {
+	return func() (func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T)) {
+		return func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			if len(args) > 1 && args[len(args)-1] == arg {
+				return iterator.FromSlice[string](nil), arg, nil
+			}
+			return iterator.FromSlice[string](nil), "", nil
 		}, func(*testing.T) {}
 	}
 }
