@@ -221,7 +221,7 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 			ev.MouseY -= pos.Y
 			ev.MouseX -= pos.X
-			return s.comp.Input().Handle(ev)
+			return s.comp.box.Handle(ev)
 		}
 		if s.inputFocused {
 			s.inputFocused = false

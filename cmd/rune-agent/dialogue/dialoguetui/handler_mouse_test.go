@@ -32,9 +32,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/text/standard"
 )
 
 // mouseEv builds a mouse term.Event for the given position and key.
@@ -53,6 +55,28 @@ func tripleClick(x, y int) []term.Event {
 		mouseEv(x, y, term.MouseLeft),
 		mouseEv(x, y, term.MouseRelease),
 	}
+}
+
+func TestHandlerComposeEditorClickUsesFrameContentCoordinates(t *testing.T) {
+	comp := NewComponent(ComponentConfig{
+		Editor: standard.Editor(standard.WithClipboard(clipboard.NewInMemory())),
+	})
+	comp.Input().SetText("first line\nsecond line")
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	content := comp.box.ContentPosition()
+	click := term.CoordinatesSum(comp.InputPosition(), content)
+	click.X += 3
+	_, handled := h.Handle(mouseEv(click.X, click.Y, term.MouseLeft))
+	require.True(t, handled)
+
+	cursor, _, visible := h.Cursor()
+	require.True(t, visible)
+	assert.Equal(t, click, cursor)
 }
 
 type scrollDir int
