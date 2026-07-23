@@ -710,15 +710,14 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<a-c>": "lsp declaration",
 		"<a-y>": "lsp type-definition",
 		"<a-g>": "lsp signature-help",
-
-		"<m-f>": "searchtext",
 	}
 	for key, cmd := range wantLayout {
 		wantBound[key] = cmd
 	}
 
 	for _, file := range []string{
-		"override_standard.yaml",
+		"override_standard_darwin.yaml",
+		"override_standard_linux.yaml",
 	} {
 		t.Run(file, func(t *testing.T) {
 			base, err := decodeDefaultConfig(DefaultConfig{
@@ -765,6 +764,69 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 	}
 }
 
+func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
+	runeStar := readRuneStar(t)
+
+	for _, tc := range []struct {
+		name       string
+		file       string
+		commandKey string
+		bound      map[string]string
+	}{
+		{
+			name:       "darwin",
+			file:       "override_standard_darwin.yaml",
+			commandKey: "<s-m-p>",
+			bound: map[string]string{
+				"<m-s>":   "write",
+				"<m-o>":   "searchfile",
+				"<m-n>":   "tabnew",
+				"<m-w>":   "tabclose",
+				"<s-m-f>": "searchtext",
+			},
+		},
+		{
+			name:       "linux",
+			file:       "override_standard_linux.yaml",
+			commandKey: "<c-s-p>",
+			bound: map[string]string{
+				"<c-s>":   "write",
+				"<c-s-s>": "writeall",
+				"<c-o>":   "searchfile",
+				"<c-n>":   "tabnew",
+				"<c-f4>":  "tabclose",
+				"<c-f>":   "echo <m-f>",
+				"<c-s-f>": "searchtext",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base, err := decodeDefaultConfig(DefaultConfig{
+				src: string(runeStar), modal: true, tui: false,
+			})
+			require.NoError(t, err)
+
+			overlay, err := os.ReadFile(filepath.Join("../cmd/rune", tc.file))
+			require.NoError(t, err)
+			cfg, err := decodeOverlayConfigFile(
+				bytes.NewReader(overlay), tc.file, base)
+			require.NoError(t, err)
+
+			c := &ideConfig{cfg: cfg, errors: map[string]error{}}
+			require.Equal(t, mustParseBindingKey(t, tc.commandKey).First,
+				c.commandKey())
+			mappings := c.commandKeyMappings()
+			for key, wantCmd := range tc.bound {
+				seq := mustParseBindingKey(t, key)
+				got, ok := mappings[seq]
+				require.Truef(t, ok, "%s must be bound", key)
+				require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
+					got, "%s must run %q", key, wantCmd)
+			}
+		})
+	}
+}
+
 // TestModelessPresetUnbindsStaleModalChords guards against the modeless
 // preset leaving the modal home-row window/tab chords bound after
 // re-homing the same commands onto the arrow layout. When both the stale
@@ -780,10 +842,10 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	overlay, err := os.ReadFile("../cmd/rune/override_standard.yaml")
+	overlay, err := os.ReadFile("../cmd/rune/override_standard_darwin.yaml")
 	require.NoError(t, err)
 	cfg, err := decodeOverlayConfigFile(
-		bytes.NewReader(overlay), "override_standard.yaml", base)
+		bytes.NewReader(overlay), "override_standard_darwin.yaml", base)
 	require.NoError(t, err)
 
 	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
