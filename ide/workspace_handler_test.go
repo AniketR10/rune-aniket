@@ -5966,8 +5966,10 @@ type pendingTeardownWorkspace struct {
 	workspace.Workspace
 	closeCalls   atomic.Int32
 	closeStarted chan struct{}
+	closeDone    chan struct{}
 	closeRelease <-chan struct{}
 	startOnce    sync.Once
+	doneOnce     sync.Once
 }
 
 func (w *pendingTeardownWorkspace) Close() error {
@@ -5976,7 +5978,9 @@ func (w *pendingTeardownWorkspace) Close() error {
 	if w.closeRelease != nil {
 		<-w.closeRelease
 	}
-	return w.Workspace.Close()
+	err := w.Workspace.Close()
+	w.doneOnce.Do(func() { close(w.closeDone) })
+	return err
 }
 
 type pendingTeardownTracker struct {
@@ -5999,6 +6003,7 @@ func (t *pendingTeardownTracker) wrap(
 	w := &pendingTeardownWorkspace{
 		Workspace:    base,
 		closeStarted: make(chan struct{}),
+		closeDone:    make(chan struct{}),
 	}
 	if len(t.workspaces) == 0 {
 		w.closeRelease = t.firstRelease
@@ -6095,7 +6100,103 @@ func TestPendingWorkspaceBuildFailureEvictsAndReopensFresh(t *testing.T) {
 	require.Equal(t, int32(1), first.closeCalls.Load())
 }
 
-func TestPendingWorkspaceCancellationWaitsForBuildOwnership(t *testing.T) {
+type closeUnblocksOpenScheme struct {
+	schemeapi.Scheme
+	openStarted chan struct{}
+	closed      chan struct{}
+	openOnce    sync.Once
+	closeOnce   sync.Once
+}
+
+func (s *closeUnblocksOpenScheme) OpenFile(
+	path string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	if path != ".sixrc" {
+		return s.Scheme.OpenFile(path, flag, perm)
+	}
+	s.openOnce.Do(func() { close(s.openStarted) })
+	<-s.closed
+	return nil, errors.New("scheme closed")
+}
+
+func (s *closeUnblocksOpenScheme) Close() error {
+	s.closeOnce.Do(func() { close(s.closed) })
+	return s.Scheme.Close()
+}
+
+func TestPendingWorkspaceCancellationClosesSchemeToAbortBuild(t *testing.T) {
+	cfg := defaultCfg()
+	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(&cfg)
+	manager := workspace.NewManager(config.NopConfig(), scheduleNextTick)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	const schemeName = "closeabort"
+	var blocked *closeUnblocksOpenScheme
+	require.NoError(t, manager.RegisterScheme(schemeName,
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+			schemeapi.Scheme, error,
+		) {
+			inner, err := workspace.NewInMemorySchemeFunc(schemeName)(ctx, cfg, uri)
+			if err != nil {
+				return nil, err
+			}
+			blocked = &closeUnblocksOpenScheme{
+				Scheme:      inner,
+				openStarted: make(chan struct{}),
+				closed:      make(chan struct{}),
+			}
+			return blocked, nil
+		}))
+
+	m := newTestWorkspaceManagerHandlerWithManagerMu(
+		t, manager, mu, drain, nil, cfg, FuncExtensionsRunner(testRunnerFn), nil,
+		t.TempDir(), nil, nopShutdownShaderConfig(),
+	)
+	t.Cleanup(func() { _ = m.Close() })
+	uri, err := workspaceapi.ParseURI(schemeName + ":///workspace")
+	require.NoError(t, err)
+
+	m.mu.Lock()
+	require.NoError(t, m.addWorkspace(uri, false, false, -1))
+	pending := m.pending[uri.String()]
+	m.mu.Unlock()
+	require.NotNil(t, pending)
+
+	select {
+	case <-blocked.openStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("workspace build did not reach the blocking scheme call")
+	}
+
+	m.mu.Lock()
+	m.focus = pending.slot
+	_, _, err = m.closeWorkspace()
+	m.mu.Unlock()
+	require.NoError(t, err)
+
+	drained := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		m.pendingWG.Wait()
+		close(drained)
+	})
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		_ = blocked.Close()
+		select {
+		case <-drained:
+		case <-time.After(10 * time.Second):
+			t.Fatal("pending build remained blocked after forced scheme close")
+		}
+		t.Fatal("canceling a pending build did not close the scheme to abort its workspace call")
+	}
+
+	m.waitClosing()
+	require.False(t, manager.HasWorkspace(uri))
+}
+
+func TestPendingWorkspaceCancellationKeepsReopenGatedUntilBuildReleases(t *testing.T) {
 	releaseClose := make(chan struct{})
 	var releaseCloseOnce sync.Once
 	release := func() { releaseCloseOnce.Do(func() { close(releaseClose) }) }
@@ -6126,20 +6227,20 @@ func TestPendingWorkspaceCancellationWaitsForBuildOwnership(t *testing.T) {
 	require.False(t, manager.HasWorkspace(uri))
 	select {
 	case <-first.closeStarted:
-		t.Fatal("detached workspace closed while Phase B still owned it")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(10 * time.Second):
+		t.Fatal("pending cancellation did not start the workspace close")
 	}
 	require.Len(t, tracker.snapshot(), 1)
 
-	close(releaseBuild)
+	release()
 	select {
-	case <-first.closeStarted:
+	case <-first.closeDone:
 	case <-time.After(10 * time.Second):
-		t.Fatal("workspace close did not begin after Phase B released ownership")
+		t.Fatal("pending workspace close did not complete")
 	}
 	require.Len(t, tracker.snapshot(), 1,
-		"queued reopen must remain gated while detached close is blocked")
-	release()
+		"queued reopen must remain gated until Phase B releases ownership")
+	close(releaseBuild)
 	m.drainPendingWorkspaces()
 	m.waitForWorkspace(t, uri)
 	require.Len(t, tracker.snapshot(), 2)

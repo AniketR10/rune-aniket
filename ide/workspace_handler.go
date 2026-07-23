@@ -225,16 +225,25 @@ type openFileTarget struct {
 	tab          *browser.Tab
 }
 
+const (
+	pendingBuildActive uint32 = iota
+	pendingBuildReturned
+	pendingBuildCancelClosing
+)
+
 type pendingWorkspace struct {
 	uri               workspaceapi.URI
 	slot              int
 	cancelCtx         func()
 	canceled          atomic.Bool
+	buildPhase        atomic.Uint32
 	onReady           [][]string
 	cwd               workspace.Workspace
 	teardownBegin     sync.Once
+	teardownStart     sync.Once
 	teardownFinish    sync.Once
 	detachedWorkspace workspace.Workspace
+	buildReleased     chan struct{}
 	closeGate         chan struct{}
 	ownsCloseGate     bool
 }
@@ -1460,6 +1469,7 @@ func (h *workspaceManagerHandler) launchBuild(
 ) {
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
+		pending.buildPhase.CompareAndSwap(pendingBuildActive, pendingBuildReturned)
 		if pending.canceled.Load() {
 			h.abortPendingBuild(pending, built, cancel)
 			return
@@ -1517,20 +1527,34 @@ func (h *workspaceManagerHandler) beginPendingWorkspaceTeardown(pending *pending
 			pending.ownsCloseGate = true
 			h.closing[key] = pending.closeGate
 		}
+		pending.buildReleased = make(chan struct{})
 		h.closeWG.Add(1)
 	})
 }
 
-func (h *workspaceManagerHandler) finishPendingWorkspaceTeardown(pending *pendingWorkspace) {
-	pending.teardownFinish.Do(func() {
-		if pending.detachedWorkspace == nil {
-			return
-		}
+func (h *workspaceManagerHandler) abortPendingWorkspaceBuild(pending *pendingWorkspace) {
+	// Only an active Phase B needs Close as an interrupt. Once Phase B
+	// returns, normal cleanup keeps built-resource disposal ahead of Close.
+	if pending.buildPhase.CompareAndSwap(
+		pendingBuildActive, pendingBuildCancelClosing,
+	) {
+		h.startPendingWorkspaceTeardown(pending)
+	}
+}
+
+func (h *workspaceManagerHandler) startPendingWorkspaceTeardown(pending *pendingWorkspace) {
+	if pending.detachedWorkspace == nil {
+		return
+	}
+	pending.teardownStart.Do(func() {
 		go debug.CapturePanicReport(func() {
 			defer h.closeWG.Done()
 			if err := pending.detachedWorkspace.Close(); err != nil {
 				log.Errorf("close failed pending workspace %s: %v", pending.uri.String(), err)
 			}
+			// Same-URI recreation must wait for both the aborting close and
+			// Phase B cleanup, regardless of which side finishes first.
+			<-pending.buildReleased
 			if !pending.ownsCloseGate {
 				return
 			}
@@ -1541,6 +1565,16 @@ func (h *workspaceManagerHandler) finishPendingWorkspaceTeardown(pending *pendin
 			h.mu.Unlock()
 			close(pending.closeGate)
 		})
+	})
+}
+
+func (h *workspaceManagerHandler) finishPendingWorkspaceTeardown(pending *pendingWorkspace) {
+	pending.teardownFinish.Do(func() {
+		if pending.detachedWorkspace == nil {
+			return
+		}
+		h.startPendingWorkspaceTeardown(pending)
+		close(pending.buildReleased)
 	})
 }
 
@@ -2592,6 +2626,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (
 		pending.canceled.Store(true)
 		pending.cancelCtx()
 		h.beginPendingWorkspaceTeardown(pending)
+		h.abortPendingWorkspaceBuild(pending)
 		if err := h.state.ClearWorkspaceState(
 			context.Background(), uri); err != nil {
 			log.Warnf("clear workspace state %s: %v", uri.String(), err)
@@ -2730,6 +2765,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		p.canceled.Store(true)
 		p.cancelCtx()
 		h.beginPendingWorkspaceTeardown(p)
+		h.abortPendingWorkspaceBuild(p)
 	}
 	h.mu.Unlock()
 	h.pendingWG.Wait()
