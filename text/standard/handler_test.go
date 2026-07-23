@@ -551,7 +551,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Expand selection to indentation level", "<shift-meta-j><m-c>", nil, term.Coordinates{}, spAll("\n")},
 
 		// Navigation and movement
-		{"Move to beginning of text on line", "<space><right><meta-left>", nil, term.Coordinates{Y: 0, X: 1}, nil},
+		{"Move to start of line", "<space><right><meta-left>", nil, term.Coordinates{Y: 0, X: 0}, nil},
 		{"Move to end of line", "<meta-right>", nil, term.Coordinates{Y: 0, X: 1}, nil},
 		{"Jump to matching bracket", "{}<left><left><ctrl-m>", nil, term.Coordinates{X: 1}, nil},
 		{"Move to start of file", "<down><down><meta-up>", nil, term.Coordinates{Y: 0, X: 0}, nil},

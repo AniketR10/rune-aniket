@@ -84,6 +84,13 @@ func TestStandardKeymapMotion(t *testing.T) {
 			wantAt:  term.Coordinates{X: 4},
 		},
 		{
+			name:    "cmd-left moves to start of indented line",
+			content: "    hello",
+			at:      term.Coordinates{X: 9},
+			ev:      term.Event{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeyArrowLeft},
+			wantAt:  term.Coordinates{},
+		},
+		{
 			name:    "ctrl-home moves to first line",
 			content: "a\nb\nc",
 			at:      term.Coordinates{Y: 2},
@@ -494,14 +501,15 @@ func TestStandardKeymapLineDocSelect(t *testing.T) {
 		assert.Equal(t, "hello world", sel)
 	})
 
-	t.Run("cmd-shift-left selects to start of line", func(t *testing.T) {
-		h, _, _ := newStandardKeymapHandler(t, "hello world", term.Coordinates{X: 11})
+	t.Run("cmd-shift-left selects to start of indented line", func(t *testing.T) {
+		h, _, _ := newStandardKeymapHandler(t, "    hello world", term.Coordinates{X: 15})
 		_, handled := h.Handle(term.Event{
 			Type: term.EventKey, Mod: term.ModShift | term.ModMeta, Key: term.KeyArrowLeft,
 		})
 		require.True(t, handled)
-		_, ok := h.Selection()
-		assert.True(t, ok, "cmd-shift-left must create a selection")
+		sel, ok := h.Selection()
+		require.True(t, ok, "cmd-shift-left must create a selection")
+		assert.Equal(t, "    hello world", sel)
 		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
 	})
 

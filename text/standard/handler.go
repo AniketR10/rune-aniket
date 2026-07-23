@@ -463,7 +463,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
-			handled = h.cursor.MoveStartLineNonBlank()
+			handled = h.cursor.MoveStartLine()
 			return
 		case term.KeyArrowRight:
 			if _, ok := h.cursor.SelectionMode(); !ok {
@@ -516,7 +516,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.ModMeta:
 		switch ev.Key {
 		case term.KeyArrowLeft:
-			handled = h.cursor.MoveStartLineNonBlank()
+			handled = h.cursor.MoveStartLine()
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveEndLine()
 		case term.KeyArrowUp:
