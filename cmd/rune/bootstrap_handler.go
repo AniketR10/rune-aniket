@@ -349,6 +349,13 @@ func (b *bootstrapHandler) setupConfiguredIDE(
 		errs = append(errs, fmt.Errorf("subscribe to GUI commands: %w", err))
 	}
 
+	if client.TelemetryEnabled() {
+		err := i.SubscribeEvents(apiclient.TelemetryEvents(), client)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("subscribe telemetry events: %w", err))
+		}
+	}
+
 	openFiles(i, b.filenames)
 
 	upgradeCtx, upgradeCancel := context.WithCancel(context.Background())

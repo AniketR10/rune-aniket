@@ -598,7 +598,8 @@ func runTUI(
 	}
 
 	if client.TelemetryEnabled() {
-		if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
+		err := i.SubscribeEvents(apiclient.TelemetryEvents(), client)
+		if err != nil {
 			log.Errorf("subscribe telemetry events: %v", err)
 		}
 	}
