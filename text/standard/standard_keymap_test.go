@@ -567,6 +567,30 @@ func TestStandardKeymapLineDocSelect(t *testing.T) {
 		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
 	})
 
+	t.Run("shift-up selects first line to start", func(t *testing.T) {
+		h, _, _ := newStandardKeymapHandler(t, "first\nmiddle\nlast", term.Coordinates{X: 5})
+		_, handled := h.Handle(term.Event{
+			Type: term.EventKey, Mod: term.ModShift, Key: term.KeyArrowUp,
+		})
+		require.True(t, handled)
+		sel, ok := h.Selection()
+		require.True(t, ok, "shift-up must create a selection")
+		assert.Equal(t, "first", sel)
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("shift-down selects last line to end", func(t *testing.T) {
+		h, _, _ := newStandardKeymapHandler(t, "first\nmiddle\nlast", term.Coordinates{Y: 2})
+		_, handled := h.Handle(term.Event{
+			Type: term.EventKey, Mod: term.ModShift, Key: term.KeyArrowDown,
+		})
+		require.True(t, handled)
+		sel, ok := h.Selection()
+		require.True(t, ok, "shift-down must create a selection")
+		assert.Equal(t, "last", sel)
+		assert.Equal(t, term.Coordinates{X: 4, Y: 2}, h.CursorAtScroll())
+	})
+
 	t.Run("shift-end selects to end of line", func(t *testing.T) {
 		h, _, _ := newStandardKeymapHandler(t, "hello world", term.Coordinates{})
 		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyEnd})

@@ -662,8 +662,14 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveRight()
 		case term.KeyArrowUp:
 			handled = h.cursor.MoveUp()
+			if shift && !handled {
+				handled = h.cursor.MoveStartLine()
+			}
 		case term.KeyArrowDown:
 			handled = h.cursor.MoveDown()
+			if shift && !handled {
+				handled = h.cursor.MoveEndLine()
+			}
 		case term.KeyEnter:
 			if _, ok := h.cursor.SelectionMode(); ok {
 				h.cursor.DeleteSelection()
