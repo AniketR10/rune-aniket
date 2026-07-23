@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "32", tut.Version())
+	assert.Equal(t, "33", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -100,7 +100,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "32", tut.Version())
+	assert.Equal(t, "33", tut.Version())
 }
 
 // TestNavigationTutorialFlow drives the embedded navigation tutorial
@@ -583,5 +583,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "32", tut.Version())
+	assert.Equal(t, "33", tut.Version())
 }

@@ -444,10 +444,6 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 	case term.ModCtrlMeta:
 		switch ev.Key {
-		case term.KeyArrowDown:
-			handled = h.moveLine(false /* down */)
-		case term.KeyArrowUp:
-			handled = h.moveLine(true /* up */)
 		case 0:
 			switch ev.Ch {
 			case 'd':

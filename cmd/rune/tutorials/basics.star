@@ -16,10 +16,9 @@
 ck = command_key()
 mode = editor_mode()
 
-# Direction keys differ by editor mode. The <meta> window/workspace layer
-# follows the preset: modal and emacs both point with the home row, the
-# standard editor points with the arrow keys, so focus_example adapts to
-# whichever the user is running.
+# Direction keys differ by editor mode. Modal and emacs point with the home
+# row; the standard editor uses Ctrl+Meta+Arrow, so focus_example adapts to
+# whichever preset the user is running.
 #
 # dir_phrase is different: it describes moving the cursor inside a buffer
 # (the file explorer), which each editor mode owns directly rather than
@@ -36,7 +35,7 @@ elif mode == "emacs":
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
 else:
     dir_phrase = "the arrow keys"
-    focus_example = "`<meta-left>`"
+    focus_example = "`<ctrl-meta-left>`"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
 
 def keyhint(cmd, *args):
@@ -134,9 +133,9 @@ they follow one small, standardized system.
 
 ## The three layers
 
-- **`<meta>` is the window and workspace layer.** Anything that
-  focuses, moves, or splits a window, or switches a workspace, is a
-  `<meta>` chord.
+- **Window and workspace commands live on layout chords.** Modal mode uses
+  `<meta>` plus a direction. Standard mode keeps native text movement free and
+  uses `<ctrl-meta>` plus an arrow for window directions.
 - **`<alt>` is the tab layer.** Switching or reordering the tabs
   inside a window lives on `<alt>`.
 - **`<shift>` means "move" instead of "go to".** `<meta>` plus a
@@ -189,9 +188,8 @@ Open another terminal split: """ + keypress("terminalneworsplit") + """.
 """
 
 focus_window_md = """\
-The screen is split into several windows now. `<meta>` plus a direction
-moves focus across the splits, so you can hop between them without the
-mouse.
+The screen is split into several windows now. Directional layout commands
+move focus across the splits, so you can hop between them without the mouse.
 
 - `windowfocus left` focuses the window to the left.""" + keyhint("windowfocus", "left") + """
 - `windowfocus right` focuses the window to the right.""" + keyhint("windowfocus", "right") + """
@@ -201,9 +199,8 @@ then the window on the right (""" + keypress("windowfocus", "right") + """).
 """
 
 move_window_md = """\
-`<shift>` turns "go to" into "move". So `<meta>` plus a direction
-focuses a window, and adding `<shift>` *moves* the focused window's
-content that way instead, swapping it with the neighbor.
+`<shift>` turns "go to" into "move". Add it to the focus direction and the
+focused window's content swaps with its neighbor.
 
 - `windowmove left` moves the focused window to the left.""" + keyhint("windowmove", "left") + """
 - `windowmove right` moves it to the right.""" + keyhint("windowmove", "right") + """
@@ -824,4 +821,4 @@ def run():
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "32", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "33", entry = run)

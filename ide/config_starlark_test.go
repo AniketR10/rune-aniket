@@ -676,30 +676,32 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestModelessPresetsUseArrowLayoutBindings pins the modeless window/tab
-// layout shared by the modeless and exo-modeless presets, once overlaid
-// on the embedded rune.star defaults:
-//
-//   - windowfocus on <meta>+arrows
-//   - windowmove on <shift-meta>+arrows (the "shift means move" rule)
-//   - windowresize on <ctrl-shift-meta>+arrows (kept off the move chord)
-//   - tabmove on <alt-shift>+arrows
-func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
+func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 	runeStar := readRuneStar(t)
 
+	wantLayout := map[string]string{
+		"<ctrl-meta-left>":  "windowfocus left",
+		"<ctrl-meta-right>": "windowfocus right",
+		"<ctrl-meta-down>":  "windowfocus down",
+		"<ctrl-meta-up>":    "windowfocus up",
+
+		"<ctrl-shift-meta-left>":  "windowmove left",
+		"<ctrl-shift-meta-right>": "windowmove right",
+		"<ctrl-shift-meta-down>":  "windowmove down",
+		"<ctrl-shift-meta-up>":    "windowmove up",
+
+		"<ctrl-alt-meta-left>":  "windowresize decrease width",
+		"<ctrl-alt-meta-right>": "windowresize increase width",
+		"<ctrl-alt-meta-down>":  "windowresize decrease height",
+		"<ctrl-alt-meta-up>":    "windowresize increase height",
+
+		"<ctrl-meta-h>": "windowdefaultsplit h",
+		"<ctrl-meta-v>": "windowdefaultsplit v",
+
+		"<alt-shift-meta-left>":  "tabmove left",
+		"<alt-shift-meta-right>": "tabmove right",
+	}
 	wantBound := map[string]string{
-		"<m-left>":  "windowfocus left",
-		"<m-right>": "windowfocus right",
-		"<m-down>":  "windowfocus down",
-		"<m-up>":    "windowfocus up",
-
-		"<a-s-m-left>":  "windowmove left",
-		"<a-s-m-right>": "windowmove right",
-		"<a-s-m-down>":  "windowmove down",
-		"<a-s-m-up>":    "windowmove up",
-
-		"<a-s-left>":  "tabmove left",
-		"<a-s-right>": "tabmove right",
 
 		"<a-d>": "lsp definition",
 		"<a-r>": "lsp references",
@@ -710,6 +712,9 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 		"<a-g>": "lsp signature-help",
 
 		"<m-f>": "searchtext",
+	}
+	for key, cmd := range wantLayout {
+		wantBound[key] = cmd
 	}
 
 	for _, file := range []string{
@@ -736,6 +741,25 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 				require.Truef(t, ok, "%s must be bound", key)
 				require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
 					got, "%s must run %q", key, wantCmd)
+			}
+
+			lookup := c.commandKeyBindingLookup()
+			for wantKey, wantCmd := range wantLayout {
+				cmd := strings.Split(wantCmd, " ")
+				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
+					"%q must resolve to %s", wantCmd, wantKey)
+			}
+
+			for _, key := range []string{
+				"<m-left>", "<m-right>", "<m-down>", "<m-up>",
+				"<s-m-left>", "<s-m-right>", "<s-m-down>", "<s-m-up>",
+				"<a-s-left>", "<a-s-right>",
+			} {
+				seq := mustParseBindingKey(t, key)
+				if got, ok := mappings[seq]; ok {
+					require.Equalf(t, [][]string{{""}}, got,
+						"%s is an editor chord and must not carry a layout command", key)
+				}
 			}
 		})
 	}
@@ -779,8 +803,6 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		"<a-s-l>": "tabmove right",
 		"<a-l>":   "tabnext",
 		"<a-h>":   "tabprevious",
-		"<c-m-h>": "windowdefaultsplit h",
-		"<c-m-v>": "windowdefaultsplit v",
 		"<c-o>":   "cursorhistory prev",
 		"<c-i>":   "cursorhistory next",
 	}
@@ -792,16 +814,18 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		}
 	}
 
-	// The reverse lookup must resolve to the standard arrow chords.
+	// The reverse lookup must resolve to one deterministic standard chord.
 	lookup := c.commandKeyBindingLookup()
 	wantResolved := map[string][]string{
-		"<alt-shift-meta-left>": {"windowmove", "left"},
-		"<meta-left>":           {"windowfocus", "left"},
-		"<alt-shift-left>":      {"tabmove", "left"},
-		"<alt-meta-right>":      {"tabnext"},
-		"<alt-meta-left>":       {"tabprevious"},
-		"<ctrl-shift-->":        {"cursorhistory", "next"},
-		"<ctrl-->":              {"cursorhistory", "prev"},
+		"<ctrl-shift-meta-left>": {"windowmove", "left"},
+		"<ctrl-meta-left>":       {"windowfocus", "left"},
+		"<ctrl-alt-meta-left>":   {"windowresize", "decrease", "width"},
+		"<ctrl-meta-h>":          {"windowdefaultsplit", "h"},
+		"<alt-shift-meta-left>":  {"tabmove", "left"},
+		"<alt-meta-right>":       {"tabnext"},
+		"<alt-meta-left>":        {"tabprevious"},
+		"<ctrl-shift-->":         {"cursorhistory", "next"},
+		"<ctrl-->":               {"cursorhistory", "prev"},
 	}
 	for wantKey, cmd := range wantResolved {
 		got := lookup(cmd[0], cmd[1:])

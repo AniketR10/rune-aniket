@@ -2360,6 +2360,50 @@ func TestExSequencerModifierVsBarePrefix(t *testing.T) {
 	}
 }
 
+func TestExStandardNavigationPrecedesLayoutBindings(t *testing.T) {
+	metaLeft := term.KeyComb{Key: term.KeyArrowLeft, Mod: term.ModMeta}
+	shiftMetaRight := term.KeyComb{Key: term.KeyArrowRight, Mod: term.ModShiftMeta}
+	layoutUp := term.KeyComb{Key: term.KeyArrowUp, Mod: term.ModCtrlMeta}
+
+	h := newExSequencerHarness(t, nil,
+		map[term.KeyComb][][]string{
+			metaLeft:       {{"conflictingfocus"}},
+			shiftMetaRight: {{"conflictingmove"}},
+			layoutUp:       {{"layoutfocus"}},
+		}, nil, 20*time.Millisecond)
+
+	resource, err := workspaceapi.ParseURI("file:///standard-navigation.go")
+	require.NoError(t, err)
+	buf := new(cell.Buffer)
+	buf.Init()
+	buf.WriteString("  first line\nlast line")
+	ed := standard.NewHandler(buf, resource, text.IndentRuneTab, 0)
+	ed.Resize(40, 10)
+	require.True(t, ed.SetCursorAtScroll(term.Coordinates{X: 7}))
+	require.NoError(t, h.ex.invokeWindow().SetContent(ed))
+
+	_, handled := h.ex.Handle(term.Event{
+		Type: term.EventKey, Key: metaLeft.Key, Mod: metaLeft.Mod,
+	})
+	require.True(t, handled)
+	require.Equal(t, term.Coordinates{}, ed.CursorAtScroll())
+	require.Empty(t, h.firedCommands())
+
+	_, handled = h.ex.Handle(term.Event{
+		Type: term.EventKey, Key: shiftMetaRight.Key, Mod: shiftMetaRight.Mod,
+	})
+	require.True(t, handled)
+	selection, ok := ed.Selection()
+	require.True(t, ok)
+	require.Equal(t, "  first line", selection)
+	require.Empty(t, h.firedCommands())
+
+	_, _ = h.ex.Handle(term.Event{
+		Type: term.EventKey, Key: layoutUp.Key, Mod: layoutUp.Mod,
+	})
+	require.Equal(t, []string{"layoutfocus"}, h.firedCommands())
+}
+
 func nonEmpty(s []string) []string {
 	if len(s) == 0 {
 		return nil
