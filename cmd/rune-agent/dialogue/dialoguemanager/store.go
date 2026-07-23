@@ -95,17 +95,18 @@ type Dialogue struct {
 }
 
 type storedDialogue struct {
-	ID           string
-	AgentID      string
-	Model        string
-	WorkspaceURI string
-	ApprovedPlan *ApprovedPlan
-	SubAgent     bool
-	Version      int64
-	MessageCount int
-	MessagesPath string
-	Usage        llmapi.DialogueUsage
-	UpdatedAt    time.Time
+	ID                string
+	AgentID           string
+	Model             string
+	WorkspaceURI      string
+	ApprovedPlan      *ApprovedPlan
+	SubAgent          bool
+	Version           int64
+	MessageCount      int
+	MessagesPath      string
+	Usage             llmapi.DialogueUsage
+	DialogueUpdatedAt time.Time
+	UpdatedAt         time.Time
 }
 
 // DialogueHeader holds the metadata of a dialogue without the full message
@@ -184,6 +185,27 @@ func (d Dialogue) Header() DialogueHeader {
 
 func storedDialogueFromDialogue(d Dialogue) storedDialogue {
 	return storedDialogue{
+		ID:                d.ID,
+		AgentID:           d.AgentID,
+		Model:             d.Model,
+		WorkspaceURI:      d.WorkspaceURI,
+		ApprovedPlan:      d.ApprovedPlan,
+		SubAgent:          d.SubAgent,
+		Version:           d.Version,
+		MessageCount:      d.MessageCount,
+		MessagesPath:      d.MessagesPath,
+		Usage:             d.Usage,
+		DialogueUpdatedAt: d.UpdatedAt,
+		UpdatedAt:         d.UpdatedAt,
+	}
+}
+
+func dialogueFromStoredDialogue(d storedDialogue) Dialogue {
+	updatedAt := d.DialogueUpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = d.UpdatedAt
+	}
+	return Dialogue{
 		ID:           d.ID,
 		AgentID:      d.AgentID,
 		Model:        d.Model,
@@ -194,7 +216,7 @@ func storedDialogueFromDialogue(d Dialogue) storedDialogue {
 		MessageCount: d.MessageCount,
 		MessagesPath: d.MessagesPath,
 		Usage:        d.Usage,
-		UpdatedAt:    d.UpdatedAt,
+		UpdatedAt:    updatedAt,
 	}
 }
 
@@ -260,11 +282,12 @@ func (s store) writeMessages(path string, msgs []llmapi.Message) error {
 func (s store) getStoredDialogue(
 	ctx context.Context, id string,
 ) (Dialogue, error) {
-	var doc Dialogue
-	err := s.backend.Get(ctx, id, &doc)
+	var stored storedDialogue
+	err := s.backend.Get(ctx, id, &stored)
 	if err != nil {
 		return Dialogue{}, fmt.Errorf("document service get: %w", err)
 	}
+	doc := dialogueFromStoredDialogue(stored)
 	if doc.Version == 0 {
 		doc.Version = 1
 	}
@@ -346,12 +369,13 @@ func (s store) loadLegacyHeaders(ctx context.Context) (map[string]DialogueHeader
 	if err != nil {
 		return nil, fmt.Errorf("document service list legacy dialogues: %w", err)
 	}
-	all, err := iterator.ToSlice(ctx, iterator.FromDocumentIterator[Dialogue](it))
+	stored, err := iterator.ToSlice(ctx, iterator.FromDocumentIterator[storedDialogue](it))
 	if err != nil {
 		return nil, fmt.Errorf("collect legacy dialogues: %w", err)
 	}
 	headers := make(map[string]DialogueHeader)
-	for _, d := range all {
+	for _, record := range stored {
+		d := dialogueFromStoredDialogue(record)
 		if !isLegacyDialogue(d) || d.ID == storeIndexRecordID {
 			continue
 		}
@@ -531,9 +555,6 @@ func (s store) ArchiveAndReplace(ctx context.Context, p ArchiveAndReplaceParams)
 		_ = s.backend.Delete(ctx, archived.ID)
 		_ = os.Remove(archived.MessagesPath)
 		return fmt.Errorf("archive-and-replace replace: document service set: %w", err)
-	}
-	if err != nil {
-		return err
 	}
 	return s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
 		idx.Headers[archived.ID] = archived.Header()

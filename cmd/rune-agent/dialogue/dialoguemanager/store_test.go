@@ -654,6 +654,7 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, len(orig.Messages))
 	require.True(t, orig.Version > 1, "should have version > 1 after append")
+	orig.UpdatedAt = time.Date(2020, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 	// Perform ArchiveAndReplace.
 	compactedMsgs := []llmapi.Message{
@@ -681,7 +682,7 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 			assert.Equal(t, m.Content, archived.Messages[i].Content, "Archived Message[%d] content", i)
 		}
 		assert.Equal(t, len(orig.Messages), archived.MessageCount, "MessageCount must match archived messages")
-		assert.WithinDuration(t, orig.UpdatedAt, archived.UpdatedAt, time.Millisecond,
+		assert.WithinDuration(t, orig.UpdatedAt, archived.UpdatedAt, 0,
 			"UpdatedAt must be the original's timestamp")
 	})
 
