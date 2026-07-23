@@ -715,6 +715,8 @@ func getModifierStr(mod term.Modifier) string {
 		return "1;14"
 	case term.ModCtrlAltMeta:
 		return "1;15"
+	case term.ModCtrlShiftAlt | term.ModMeta:
+		return "1;16"
 	default:
 		panic(fmt.Sprintf("unknown modifier: %d", mod))
 	}
@@ -752,6 +754,8 @@ func getModifierStr2(mod term.Modifier) string {
 		return ";14"
 	case term.ModCtrlAltMeta:
 		return ";15"
+	case term.ModCtrlShiftAlt | term.ModMeta:
+		return ";16"
 	default:
 		panic(fmt.Sprintf("unknown modifier: %d", mod))
 	}

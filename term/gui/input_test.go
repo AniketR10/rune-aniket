@@ -205,6 +205,22 @@ func TestInputFireOnce(t *testing.T) {
 				Key: term.KeyF1, Raw: []byte("\x1b[1;15P")}},
 		},
 		{
+			description: "dispatches a single key ctrl + shift + alt + meta + key",
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyArrowRight, ebiten.KeyModControl,
+				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey,
+				Mod: term.ModCtrlShiftAlt | term.ModMeta,
+				Key: term.KeyArrowRight, Raw: []byte("\x1b[1;16C")}},
+		},
+		{
+			description: "dispatches a tilde key with ctrl + shift + alt + meta",
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyDelete, ebiten.KeyModControl,
+				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey,
+				Mod: term.ModCtrlShiftAlt | term.ModMeta,
+				Key: term.KeyDelete, Raw: []byte("\x1b[3;16~")}},
+		},
+		{
 			description: "dispatches a single key shift + meta + key",
 			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModShift, ebiten.KeyModSuper)},
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModShiftMeta,
