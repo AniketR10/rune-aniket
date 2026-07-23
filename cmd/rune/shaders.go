@@ -48,13 +48,13 @@ const (
 	// past the fade until [ide.WithLoadingShader]'s consumer swaps in the
 	// open shader. 10s is an upper bound on plausible addWorkspace
 	// latency; the shader is cancelled cleanly when the load completes.
-	loadingShaderDuration = 10 * time.Second
+	loadingShaderDuration = 30 * time.Second
 
 	shutdownShaderDuration = 30 * time.Second
 
 	// openShaderFPS is the cadence at which the shader played when a
 	// workspace finishes loading is animated.
-	openShaderFPS = 60
+	openShaderFPS = 30
 
 	// openShaderDuration is the lifetime of the open shader's
 	// [shader.Component]. The first portion runs the burn sweep at
