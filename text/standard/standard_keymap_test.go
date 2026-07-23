@@ -209,8 +209,8 @@ func TestStandardKeymapUndoRedo(t *testing.T) {
 	})
 }
 
-// TestStandardKeymapDeletion pins ctrl-backspace/ctrl-delete word delete
-// and ctrl-shift-k line delete.
+// TestStandardKeymapDeletion pins ctrl/alt-backspace and ctrl/alt-delete word
+// delete, and ctrl-shift-k line delete.
 func TestStandardKeymapDeletion(t *testing.T) {
 	t.Run("ctrl-backspace deletes word to the left", func(t *testing.T) {
 		h, buf, _ := newStandardKeymapHandler(t, "foo bar", term.Coordinates{X: 7})
@@ -224,6 +224,38 @@ func TestStandardKeymapDeletion(t *testing.T) {
 		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Key: term.KeyDelete})
 		require.True(t, handled)
 		assert.Equal(t, "bar", buf.String())
+	})
+
+	t.Run("alt-backspace deletes word to the left", func(t *testing.T) {
+		h, buf, _ := newStandardKeymapHandler(t, "left middle right", term.Coordinates{X: 11})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyBackspace})
+		require.True(t, handled)
+		assert.Equal(t, "left  right", buf.String())
+	})
+
+	t.Run("alt-delete deletes word to the right", func(t *testing.T) {
+		h, buf, _ := newStandardKeymapHandler(t, "left middle right", term.Coordinates{X: 5})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyDelete})
+		require.True(t, handled)
+		assert.Equal(t, "left right", buf.String())
+	})
+
+	t.Run("alt-backspace at buffer start leaves no selection", func(t *testing.T) {
+		h, buf, _ := newStandardKeymapHandler(t, "foo", term.Coordinates{})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyBackspace})
+		assert.False(t, handled)
+		assert.Equal(t, "foo", buf.String())
+		_, selected := h.Selection()
+		assert.False(t, selected)
+	})
+
+	t.Run("alt-delete at buffer end leaves no selection", func(t *testing.T) {
+		h, buf, _ := newStandardKeymapHandler(t, "foo", term.Coordinates{X: 3})
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyDelete})
+		assert.False(t, handled)
+		assert.Equal(t, "foo", buf.String())
+		_, selected := h.Selection()
+		assert.False(t, selected)
 	})
 
 	t.Run("ctrl-shift-k deletes the line", func(t *testing.T) {

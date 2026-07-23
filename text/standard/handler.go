@@ -496,12 +496,12 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveRightEndWord()
 		case term.KeyBackspace:
 			h.cursor.Select()
-			h.cursor.MoveRightStartWord()
-			h.cursor.DeleteSelection()
+			h.cursor.MoveLeftStartWord()
+			handled = h.cursor.DeleteSelection()
 		case term.KeyDelete:
 			h.cursor.Select()
-			h.cursor.MoveLeftStartWord()
-			h.cursor.DeleteSelection()
+			h.cursor.MoveRightStartWord()
+			handled = h.cursor.DeleteSelection()
 		case 0:
 			switch ev.Ch {
 			case '{':
