@@ -400,9 +400,25 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(pyProj, "src"), 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(pyProj, "pyproject.toml"), []byte("[project]\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pyProj, "uv.lock"), []byte("version = 1\n"), 0o644))
 	pyMain := filepath.Join(pyProj, "src", "main.py")
 	require.NoError(t, os.WriteFile(pyMain, []byte("print()\n"), 0o644))
+	pyProj, err = filepath.EvalSymlinks(pyProj)
+	require.NoError(t, err)
+	pyMain, err = filepath.EvalSymlinks(pyMain)
+	require.NoError(t, err)
+	pyDevProj := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pyDevProj, "pyproject.toml"), []byte("[project]\n"), 0o644))
+	pyDevMain := filepath.Join(pyDevProj, "main.py")
+	require.NoError(t, os.WriteFile(pyDevMain, []byte("print()\n"), 0o644))
+	pyDevProj, err = filepath.EvalSymlinks(pyDevProj)
+	require.NoError(t, err)
+	pyDevMain, err = filepath.EvalSymlinks(pyDevMain)
+	require.NoError(t, err)
 	orphanPy := filepath.Join(t.TempDir(), "main.py")
+	require.NoError(t, os.WriteFile(orphanPy, []byte("print()\n"), 0o644))
 
 	rustProj := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(rustProj, "src"), 0o755))
@@ -435,8 +451,14 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 			cmdAndArgs: pyMain + " --flag",
 			bin:        "uv",
 			wantArgs: []string{
-				"run", "--project", pyProj, pyMain, "--flag",
+				"run", "--locked", "--project", pyProj, pyMain, "--flag",
 			},
+		},
+		{
+			name:       "python project without lock remains mutable",
+			cmdAndArgs: pyDevMain,
+			bin:        "uv",
+			wantArgs:   []string{"run", "--project", pyDevProj, pyDevMain},
 		},
 		{
 			name:       "python entrypoint without pyproject errors",
@@ -560,6 +582,60 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 			assert.Equal(t, tt.wantArgs, cmd.Args)
 		})
 	}
+}
+
+func TestWorkspaceRunnerPythonEntrypointResolvesPackageSymlink(t *testing.T) {
+	t.Parallel()
+
+	versionDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(versionDir, "pyproject.toml"), []byte("[project]\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(versionDir, "uv.lock"), []byte("version = 1\n"), 0o644))
+	versionMain := filepath.Join(versionDir, "main.py")
+	require.NoError(t, os.WriteFile(versionMain, []byte("print()\n"), 0o644))
+	versionDir, err := filepath.EvalSymlinks(versionDir)
+	require.NoError(t, err)
+	versionMain, err = filepath.EvalSymlinks(versionMain)
+	require.NoError(t, err)
+
+	libRoot := t.TempDir()
+	libDir := filepath.Join(libRoot, "themebuilder")
+	require.NoError(t, os.Symlink(versionDir, libDir))
+	libMain := filepath.Join(libDir, "main.py")
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+	dataDir := t.TempDir()
+	binDir := filepath.Join(dataDir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(binDir, "uv"), []byte("#!/bin/sh\n"), 0o755))
+
+	exec := &recordingExecutor{}
+	runner := newWorkspaceRunner(
+		exec, exec, nil, uri,
+		"/tmp/ext.sock", dataDir, "/tmp/ext-install", []byte("cert"), keys,
+	)
+	require.NoError(t, runner.Run("src-ext", libMain, config.NopConfig()))
+
+	nextVersionDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(nextVersionDir, "pyproject.toml"), []byte("[project]\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(nextVersionDir, "uv.lock"), []byte("version = 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(nextVersionDir, "main.py"), []byte("print('next')\n"), 0o644))
+	require.NoError(t, os.Remove(libDir))
+	require.NoError(t, os.Symlink(nextVersionDir, libDir))
+
+	cmd := exec.snapshotCmd()
+	assert.Equal(t, filepath.Join(dataDir, "bin", "uv"), cmd.Path)
+	assert.Equal(t, []string{
+		"run", "--locked", "--project", versionDir, versionMain,
+	}, cmd.Args)
 }
 
 // TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor pins down

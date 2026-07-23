@@ -405,16 +405,45 @@ func (m *workspaceRunner) sourceEntrypointArgv(
 	var run []string
 	switch pkg {
 	case "python":
-		// --project pins uv to the extension's own project so the
-		// environment comes from its pyproject.toml, not from
-		// whatever project the cwd happens to be in.
+		// Resolve the project root before uv records either path. The
+		// stable lib/<pkg> symlink can move to another immutable package
+		// version while an extension is running; retaining it in sys.path
+		// or the venv path lets lazy imports mix files from two releases.
 		project, ok := findFileUp(filepath.Dir(script), "pyproject.toml")
 		if !ok {
 			return nil, fmt.Errorf(
 				"extension %s: no pyproject.toml found in any directory above %s",
 				extensionID, script)
 		}
-		run = []string{"uv", "run", "--project", filepath.Dir(project), script}
+		logicalProjectDir := filepath.Dir(project)
+		resolvedProject, err := filepath.EvalSymlinks(project)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"extension %s: resolve Python project %s: %w",
+				extensionID, project, err)
+		}
+		projectDir := filepath.Dir(resolvedProject)
+		scriptRel, err := filepath.Rel(logicalProjectDir, script)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"extension %s: locate Python entrypoint in project: %w",
+				extensionID, err)
+		}
+		resolvedScript, err := filepath.EvalSymlinks(filepath.Join(projectDir, scriptRel))
+		if err != nil {
+			return nil, fmt.Errorf(
+				"extension %s: resolve Python entrypoint %s: %w",
+				extensionID, script, err)
+		}
+		script = resolvedScript
+		run = []string{"uv", "run"}
+		if _, err := os.Stat(filepath.Join(projectDir, "uv.lock")); err == nil {
+			run = append(run, "--locked")
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf(
+				"extension %s: stat Python lockfile: %w", extensionID, err)
+		}
+		run = append(run, "--project", projectDir, script)
 	case "go":
 		dir := goPackageDir
 		if dir == "" {
