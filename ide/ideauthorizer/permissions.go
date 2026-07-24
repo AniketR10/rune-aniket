@@ -672,6 +672,10 @@ func walkArgumentWordPartsCommands(parts []syntax.WordPart, out map[string]struc
 			if !walkStmtsCommands(p.Stmts, out) {
 				return false
 			}
+		case *syntax.ProcSubst:
+			if !walkStmtsCommands(p.Stmts, out) {
+				return false
+			}
 		case *syntax.ExtGlob:
 			// Extended glob patterns don't invoke commands.
 		default:

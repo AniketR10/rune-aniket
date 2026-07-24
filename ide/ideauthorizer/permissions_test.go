@@ -153,6 +153,15 @@ func TestPluginPermissionEffectiveCommands(t *testing.T) {
 			want: []string{"find", "gofmt", "head"}, wantOK: true,
 		},
 		{
+			name: "process substitutions recurse into inner commands",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c",
+					"gpg --show-keys key.asc | awk -F: '$1==\"fpr\"{print $10}'; diff <(gpg --show-keys package.asc | awk -F: '$1==\"fpr\"{print $10}') <(gpg --show-keys trusted.asc | awk -F: '$1==\"fpr\"{print $10}') && echo KEYRINGS-MATCH"},
+			},
+			want: []string{"awk", "diff", "echo", "gpg"}, wantOK: true,
+		},
+		{
 			name: "variable expansion in command word is opaque",
 			command: pluginPermissionCommandDetail{
 				Path: "/bin/bash", Args: []string{"-c", "$CMD args"},
