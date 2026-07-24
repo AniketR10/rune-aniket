@@ -131,11 +131,23 @@ func (c CommandHandler) completeJumpToSyntax(ctx context.Context, cmd textapi.Co
 		if err != nil {
 			return nil, "", err
 		}
-		return iterator.Map(matches, func(s Match) string {
-			return s.LineString
+		seen := make(map[string]struct{})
+		lines := iterator.Map(matches, func(s Match) string {
+			return jumpToSyntaxLineString(s.LineString)
+		})
+		return iterator.Filter(lines, func(line string) bool {
+			if _, ok := seen[line]; ok {
+				return false
+			}
+			seen[line] = struct{}{}
+			return true
 		}), "", nil
 	}
 	return iterator.Empty[string](), "", nil
+}
+
+func jumpToSyntaxLineString(line string) string {
+	return strings.TrimLeft(line, " \t")
 }
 
 func (c CommandHandler) handleJumpToSyntax(
@@ -159,7 +171,7 @@ func (c CommandHandler) handleJumpToSyntax(
 			err = fmt.Errorf("could not find matching node")
 			break
 		}
-		if match.LineString == lineString {
+		if jumpToSyntaxLineString(match.LineString) == jumpToSyntaxLineString(lineString) {
 			c.handler.SetCursorAtScroll(term.Coordinates{Y: match.Line})
 			break
 		}

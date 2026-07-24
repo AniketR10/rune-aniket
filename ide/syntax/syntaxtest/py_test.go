@@ -32,9 +32,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/text"
@@ -177,6 +179,42 @@ func TestPythonTreeQueryIntegration(t *testing.T) {
 		require.NoError(t, tree.Close())
 		cleanup()
 	})
+}
+
+func TestPythonJumpToSyntaxMethodIntegration(t *testing.T) {
+	_, tree, cleanup := newPythonTreeWithContent(t, newInstalledPythonPkgManager(t), pyFileContent)
+	defer cleanup()
+
+	cursor := new(syntaxCommandCursor)
+	_, handler := syntax.Commands(cursor, tree)
+	cmd := textapi.Command{
+		Name: "jumptoast",
+		Args: []string{
+			"locals.scm",
+			"local.definition.method|local.definition.function",
+			"",
+		},
+	}
+	it, _, err := handler.Complete(context.Background(), cmd)
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+
+	const method = "def __init__(self, prefix):"
+	require.Equal(t, []string{"def greet(name):", method}, items)
+
+	cmd.Args = append(cmd.Args[:2], command.SplitCommandLine(method)...)
+	require.NoError(t, handler.HandleCommand(context.Background(), cmd))
+	assert.Equal(t, term.Coordinates{Y: 13}, cursor.at)
+}
+
+type syntaxCommandCursor struct {
+	at term.Coordinates
+}
+
+func (c *syntaxCommandCursor) SetCursorAtScroll(at term.Coordinates) bool {
+	c.at = at
+	return true
 }
 
 func TestPythonTreeCommentCoverageIntegration(t *testing.T) {
