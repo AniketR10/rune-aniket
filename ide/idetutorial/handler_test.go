@@ -181,7 +181,7 @@ func TestHandlerDrawOrderRootFirstTutorialOnTop(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{}
 	tut := &fakeTutorial{}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 
 	w := term.NewStringWriter(10, 3)
@@ -197,7 +197,7 @@ func TestHandlerHandleTutorialClaimsEvent(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{handled: true}
 	tut := &fakeTutorial{handleHandled: true}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 
 	exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
@@ -211,7 +211,7 @@ func TestHandlerHandleTutorialClaimsEvent(t *testing.T) {
 func TestHandlerCompleted(t *testing.T) {
 	t.Parallel()
 	tut := &fakeTutorial{completed: true}
-	h := idetutorial.New(&fakeRoot{}, tut, nil)
+	h := idetutorial.New(&fakeRoot{}, tut, nil, nil)
 
 	assert.True(t, h.Completed())
 }
@@ -220,7 +220,7 @@ func TestHandlerHandleFallsThroughWhenTutorialDeclines(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{handled: true}
 	tut := &fakeTutorial{handleHandled: false}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 
 	exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
@@ -233,7 +233,7 @@ func TestHandlerHandlePropagatesExit(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{}
 	tut := &fakeTutorial{handleExit: true, handleHandled: true}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 
 	exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
@@ -258,7 +258,7 @@ func TestHandlerCursor(t *testing.T) {
 		t.Parallel()
 		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
 		tut := &fakeTutorial{}
-		h := idetutorial.New(root, tut, nil)
+		h := idetutorial.New(root, tut, nil, nil)
 
 		c, _, show := h.Cursor()
 		assert.True(t, show)
@@ -270,7 +270,7 @@ func TestHandlerCursor(t *testing.T) {
 		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
 		tut := &fakeTutorial{}
 		tut.componentAt = coversRow1(tut)
-		h := idetutorial.New(root, tut, nil)
+		h := idetutorial.New(root, tut, nil, nil)
 
 		_, _, show := h.Cursor()
 		assert.False(t, show,
@@ -282,7 +282,7 @@ func TestHandlerCursor(t *testing.T) {
 		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 5}}
 		tut := &fakeTutorial{}
 		tut.componentAt = coversRow1(tut)
-		h := idetutorial.New(root, tut, nil)
+		h := idetutorial.New(root, tut, nil, nil)
 
 		c, _, show := h.Cursor()
 		assert.True(t, show,
@@ -295,7 +295,7 @@ func TestHandlerCursor(t *testing.T) {
 		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
 		tut := &fakeTutorial{cursor: true}
 		tut.componentAt = coversRow1(tut)
-		h := idetutorial.New(root, tut, nil)
+		h := idetutorial.New(root, tut, nil, nil)
 
 		c, _, show := h.Cursor()
 		assert.True(t, show)
@@ -307,7 +307,7 @@ func TestHandlerSelectionAlwaysFromRoot(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{selection: "root-sel"}
 	tut := &fakeTutorial{selection: "tut-sel"}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 
 	sel, ok := h.Selection()
 	assert.True(t, ok)
@@ -322,7 +322,7 @@ func TestHandlerInstallsShaderWhenTutorialDeclaresOne(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(track),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 
@@ -342,7 +342,7 @@ func TestHandlerTearsDownShaderWhenTutorialStopsDeclaringOne(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(track),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 
@@ -377,7 +377,7 @@ func TestHandlerSwapsShaderWhenSpecChanges(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(first),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 
@@ -405,7 +405,7 @@ func TestHandlerResetTearsDownShaderAndForwardsToTutorial(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(track),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	h.Reset()
 	h.Draw(term.NewStringWriter(10, 3))
@@ -426,7 +426,7 @@ func TestHandlerObserveCommandForwardsToTutorial(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{}
 	tut := &fakeTutorial{}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 
 	_ = h.ObserveCommand("e", "edit", []string{"f.go"}, nil)
 	assert.Equal(t, []string{"e"}, tut.observed)
@@ -436,7 +436,7 @@ func TestHandlerObserveEventForwardsToTutorial(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{}
 	tut := &fakeTutorial{}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 
 	_ = h.ObserveEvent("open", "file:///f.go")
 	assert.Equal(t, []string{"open"}, tut.observedEvents)
@@ -449,7 +449,7 @@ func TestHandlerCloseForwardsStopToTutorial(t *testing.T) {
 	t.Parallel()
 	root := &fakeRoot{}
 	tut := &fakeTutorial{}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 
 	require := assert.New(t)
 	require.Equal(0, tut.stopCount)
@@ -474,7 +474,7 @@ func TestHandlerShaderWrapsRootAndTutorialOverlay(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(&taggingShader{tag: sentinel}),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 
@@ -506,7 +506,7 @@ func TestHandlerShaderUnderOuterShaderComponentReachesWriter(t *testing.T) {
 		hasShdr: true,
 		shader:  newSpec(&taggingShader{tag: sentinel}),
 	}
-	h := idetutorial.New(root, tut, nil)
+	h := idetutorial.New(root, tut, nil, nil)
 	h.Resize(10, 3)
 	_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 

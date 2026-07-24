@@ -29,6 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 )
 
@@ -62,6 +63,7 @@ type Shader struct {
 type Handler struct {
 	root        tui.Handler
 	tut         Tutorial
+	overlay     *OverlayBrowser
 	interrupter term.Interrupter
 
 	width, height int
@@ -73,18 +75,29 @@ type Handler struct {
 	composite *rootTutorialComposite
 }
 
-// New returns a Handler that wraps root with tut. interrupter is passed
-// to [shader.New] when the tutorial requests a background shader; if
+// New returns a Handler that wraps root with tut. overlay hosts the
+// tutorial's floating windows above root; if nil, a fresh default
+// overlay browser is substituted. interrupter is passed to
+// [shader.New] when the tutorial requests a background shader; if
 // nil, [term.NopInterrupter] is substituted.
-func New(root tui.Handler, tut Tutorial, interrupter term.Interrupter) *Handler {
+func New(
+	root tui.Handler, tut Tutorial, overlay *OverlayBrowser,
+	interrupter term.Interrupter,
+) *Handler {
 	if interrupter == nil {
 		interrupter = term.NopInterrupter()
+	}
+	if overlay == nil {
+		overlay = NewOverlayBrowser(browser.NewComponent(browser.DefaultConfig()))
 	}
 	return &Handler{
 		root:        root,
 		tut:         tut,
+		overlay:     overlay,
 		interrupter: interrupter,
-		composite:   &rootTutorialComposite{root: root, tut: tut},
+		composite: &rootTutorialComposite{
+			root: root, tut: tut, overlay: overlay,
+		},
 	}
 }
 
@@ -100,10 +113,12 @@ func (h *Handler) Resize(width, height int) {
 	}
 	h.root.Resize(width, height)
 	h.tut.Resize(width, height)
+	h.overlay.Resize(width, height)
 }
 
-// Draw paints the root and tutorial overlay. When a shader is active
-// both are drawn through the wrapping [shader.Component].
+// Draw paints the root, the tutorial overlay, and any overlay browser
+// windows. When a shader is active all are drawn through the wrapping
+// [shader.Component].
 func (h *Handler) Draw(w term.Writer) {
 	if h.shaderComp != nil {
 		h.shaderComp.Draw(w)
@@ -111,13 +126,21 @@ func (h *Handler) Draw(w term.Writer) {
 	}
 	h.root.Draw(w)
 	h.tut.Draw(w)
+	h.overlay.Draw(w)
 }
 
-// Handle dispatches ev to the tutorial first; unhandled events fall
-// through to the root. exit is the tutorial's exit value; handled is
-// true when either reported it. After dispatch the active background
-// shader is reconciled against [Tutorial.Shader].
+// Handle routes mouse events over an overlay browser window to the
+// browser so window-bar interactions (drag, close, maximize) and
+// content scrolling work. Every other event goes to the tutorial
+// first; unhandled events fall through to the root. exit is the
+// tutorial's exit value; handled is true when any layer reported it.
+// After dispatch the active background shader is reconciled against
+// [Tutorial.Shader].
 func (h *Handler) Handle(ev term.Event) (bool, bool) {
+	if _, routed := h.overlay.HandleMouse(ev); routed {
+		h.syncShader()
+		return false, true
+	}
 	exit, handled := h.tut.Handle(ev)
 	if !handled {
 		_, rootHandled := h.root.Handle(ev)
@@ -128,8 +151,9 @@ func (h *Handler) Handle(ev term.Event) (bool, bool) {
 }
 
 // Cursor prefers the tutorial's own cursor; the root's cursor is
-// hidden when a tutorial overlay component covers it so it does not
-// bleed through, and shown unchanged otherwise.
+// hidden when a tutorial overlay component or an overlay browser
+// window covers it so it does not bleed through, and shown unchanged
+// otherwise.
 func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if c, style, show := h.tut.Cursor(); show {
 		return c, style, true
@@ -137,6 +161,9 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	c, style, show := h.root.Cursor()
 	if show {
 		if _, covered := h.tut.ComponentAt(c); covered {
+			return term.Coordinates{}, term.CursorStyleDefault, false
+		}
+		if h.overlay.Covers(c) {
 			return term.Coordinates{}, term.CursorStyleDefault, false
 		}
 	}
@@ -173,10 +200,12 @@ func (h *Handler) Completed() bool { return h.tut.Completed() }
 
 // Close tears down the active shader.Component. Safe to call when no
 // shader is installed. Forwards Stop to the wrapped tutorial so any
-// background work the tutorial owns is released. Always returns nil.
+// background work the tutorial owns is released, then closes any
+// overlay browser windows left behind. Always returns nil.
 func (h *Handler) Close() error {
 	h.clearShader()
 	h.tut.Stop()
+	h.overlay.CloseAll()
 	return nil
 }
 
@@ -220,16 +249,19 @@ func (h *Handler) clearShader() {
 }
 
 type rootTutorialComposite struct {
-	root tui.Handler
-	tut  Tutorial
+	root    tui.Handler
+	tut     Tutorial
+	overlay *OverlayBrowser
 }
 
 func (c *rootTutorialComposite) Resize(width, height int) {
 	c.root.Resize(width, height)
 	c.tut.Resize(width, height)
+	c.overlay.Resize(width, height)
 }
 
 func (c *rootTutorialComposite) Draw(w term.Writer) {
 	c.root.Draw(w)
 	c.tut.Draw(w)
+	c.overlay.Draw(w)
 }

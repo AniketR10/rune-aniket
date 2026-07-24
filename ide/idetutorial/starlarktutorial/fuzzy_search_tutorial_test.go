@@ -30,10 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-
-	"unstable.build/go-tui/browser"
 )
 
 // fuzzySearchTutorialPath is the shipped tutorial the fuzzy-search
@@ -48,7 +45,7 @@ func newFuzzySearchTutorial(t *testing.T) (*Tutorial, *fakeNotis) {
 	tut, err := New(
 		"fuzzy_search", string(src),
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,

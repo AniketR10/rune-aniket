@@ -30,7 +30,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
@@ -199,13 +198,11 @@ func (i *IDE) promptRunTutorial(name, description string) {
 // once during IDE init and reused when packages install new tutorials.
 type tutorialsConfig struct {
 	partition        storageapi.Service
-	br               currentBrowser
+	overlay          *idetutorial.OverlayBrowser
 	ed               currentEditor
 	parser           currentParser
 	notifications    browserapi.Notifications
 	defaultAttr      term.Attributes
-	frameCharSet     component.FrameCharSet
-	promptConfig     browser.PromptConfig
 	scheduleNextTick func(func()) bool
 	commandKey       term.KeyComb
 	editorMode       string
@@ -223,13 +220,11 @@ func newTutorialsConfig(i *IDE) tutorialsConfig {
 	rawKeyFor := i.ideConfig.commandKeyBindingLookup()
 	return tutorialsConfig{
 		partition:        partition,
-		br:               currentBrowser{root: i.workspaceHandler},
+		overlay:          newTutorialOverlayBrowser(i),
 		ed:               currentEditor{root: i.workspaceHandler},
 		parser:           currentParser{root: i.workspaceHandler},
 		notifications:    i.workspaceHandler.notifications.current(),
 		defaultAttr:      i.ideConfig.defaultAttr(),
-		frameCharSet:     i.ideConfig.windowFrameCharset(),
-		promptConfig:     i.ideConfig.promptConfig(),
 		scheduleNextTick: i.options.scheduleFn,
 		commandKey:       i.ideConfig.commandKey(),
 		editorMode:       i.ideConfig.pkgEditorMode(),
@@ -247,14 +242,26 @@ func newTutorialsConfig(i *IDE) tutorialsConfig {
 	}
 }
 
+// newTutorialOverlayBrowser builds the dedicated floating-only browser
+// component that hosts tutorial step windows above the whole IDE root,
+// mirroring the command-prompt browser precedent in (*ex).init, with
+// the user's window-manager and prompt styling applied.
+func newTutorialOverlayBrowser(i *IDE) *idetutorial.OverlayBrowser {
+	cfg := idetutorial.DefaultOverlayBrowserConfig()
+	cfg.WindowManagerConfig = i.ideConfig.windowManagerConfig()
+	cfg.FrameUnionCharSet = i.ideConfig.frameUnionCharset()
+	cfg.PromptConfig = i.ideConfig.promptConfig()
+	return idetutorial.NewOverlayBrowser(browser.NewComponent(cfg))
+}
+
 // build constructs a single tutorial from its starlark source.
 func (c tutorialsConfig) build(
 	name, src string,
 ) (idetutorial.Tutorial, error) {
 	return starlarktutorial.New(
 		name, src,
-		c.br, c.ed, c.notifications, c.parser,
-		c.defaultAttr, c.frameCharSet, c.promptConfig,
+		c.overlay, c.ed, c.notifications, c.parser,
+		c.defaultAttr,
 		c.scheduleNextTick, c.partition, c.commandKey,
 		c.editorMode, c.keyForCommand, c.manualLookup,
 		c.workspaceOpen,

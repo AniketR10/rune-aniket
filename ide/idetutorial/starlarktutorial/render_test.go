@@ -34,10 +34,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	tuicomp "unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/idetutorial"
 )
 
 // attrGridWriter captures both runes and term.Attributes per cell so
@@ -93,7 +97,7 @@ func (g *attrGridWriter) rowAttrs(y int) []term.Attributes {
 
 // drawProbe builds a Tutorial that publishes a single floating_window
 // with the given title/text, advances to the active request, and
-// renders it into g.
+// renders it into g through the overlay browser.
 func drawProbe(t *testing.T, title, text string, w, h int) (*Tutorial, *attrGridWriter) {
 	t.Helper()
 	titleArg := ""
@@ -108,7 +112,94 @@ func drawProbe(t *testing.T, title, text string, w, h int) (*Tutorial, *attrGrid
 	resetAndWait(t, tut, time.Second)
 	g := newAttrGridWriter(w, h)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	return tut, g
+}
+
+func TestFloatingWindowContentPadding(t *testing.T) {
+	t.Parallel()
+	md, ok := newHintMarkdown("body")
+	require.True(t, ok)
+	content := newFloatingWindowContent(md, 80, 24, nil)
+
+	w := term.NewStringWriter(12, 5)
+	comptest.TestComponent(t, content, w, []comptest.TestCase{
+		{
+			Action: func() { content.Resize(12, 5) },
+			Expected: "            \n" +
+				" body       \n" +
+				"            \n" +
+				"            \n" +
+				"            ",
+		},
+	})
+}
+
+func TestFloatingWindowContentHandlerSequence(t *testing.T) {
+	t.Parallel()
+	md, ok := newHintMarkdown("Line1\n\nLine2\n\nLine3\n\nLine4")
+	require.True(t, ok)
+	content := newFloatingWindowContent(md, 80, 24, nil)
+
+	cases := []handlertest.SingleTestCase{
+		{
+			Event: term.Event{Type: term.EventKey, Ch: 'k'},
+			Expected: "            \n" +
+				" Line1      \n" +
+				"            \n" +
+				" Line2      \n" +
+				"            ",
+		},
+		{
+			Event: term.Event{Type: term.EventKey, Ch: 'j'},
+			Expected: "            \n" +
+				"            \n" +
+				" Line2      \n" +
+				"            \n" +
+				" Line3      ",
+		},
+		{
+			Event: term.Event{Type: term.EventKey, Key: term.KeyArrowDown},
+			Expected: "            \n" +
+				" Line2      \n" +
+				"            \n" +
+				" Line3      \n" +
+				"            ",
+		},
+		{
+			Event: term.Event{Type: term.EventKey, Ch: 'k'},
+			Expected: "            \n" +
+				"            \n" +
+				" Line2      \n" +
+				"            \n" +
+				" Line3      ",
+		},
+	}
+
+	sequence := make([]handlertest.SequenceTestCase, 0, len(cases))
+	for _, tc := range cases {
+		sequence = append(sequence, handlertest.SequenceTestCase{
+			InputSequence: (term.KeyComb{
+				Ch: tc.Event.Ch, Mod: tc.Event.Mod, Key: tc.Event.Key,
+			}).String(),
+			Expected: tc.Expected,
+		})
+	}
+
+	handlertest.RunHandlerSequence(t, content, 12, 5, sequence)
+}
+
+// activeWindowRect returns the screen-space rectangle of the active
+// request's overlay window.
+func activeWindowRect(t *testing.T, tut *Tutorial) (term.Coordinates, int, int) {
+	t.Helper()
+	tut.mu.Lock()
+	r := tut.active
+	tut.mu.Unlock()
+	require.NotNil(t, r, "expected an active request")
+	pos, w, h, ok := tut.winOverlay.WindowRect(r.win)
+	require.True(t, ok, "active request must have a live window")
+	return pos, w, h
 }
 
 // findTopLeftFrame finds the first row that starts with a vertical
@@ -127,10 +218,11 @@ func findFrameSideX(g *attrGridWriter) (int, int) {
 	return -1, -1
 }
 
-// TestComponentAtMatchesDrawnOverlay asserts that ComponentAt reports
-// a component exactly for coordinates covered by the drawn overlay
-// box, so the host hides the root cursor only when the overlay
-// actually covers it, and reports nothing once the tutorial finishes.
+// TestComponentAtMatchesDrawnOverlay asserts that the overlay browser
+// reports coverage exactly for coordinates inside the step window, so
+// the host hides the root cursor only when the window actually covers
+// it, and reports nothing once the tutorial finishes (the window is
+// closed on resolve).
 func TestComponentAtMatchesDrawnOverlay(t *testing.T) {
 	t.Parallel()
 	tut, g := drawProbe(t, "Welcome", "body line", 80, 24)
@@ -139,30 +231,31 @@ func TestComponentAtMatchesDrawnOverlay(t *testing.T) {
 	sideX, sideY := findFrameSideX(g)
 	require.NotEqual(t, -1, sideX,
 		"expected a left frame edge somewhere in the rendered grid")
-	c, ok := tut.ComponentAt(term.Coordinates{X: sideX, Y: sideY})
-	assert.True(t, ok, "frame edge must report the overlay component")
-	assert.Same(t, tut, c,
-		"a floating window is handled by the tutorial itself")
-	_, ok = tut.ComponentAt(term.Coordinates{X: sideX + 5, Y: sideY})
-	assert.True(t, ok, "overlay interior must report the overlay component")
-	_, ok = tut.ComponentAt(term.Coordinates{X: sideX - 1, Y: sideY})
-	assert.False(t, ok,
-		"cell left of the overlay must report no component")
-	_, ok = tut.ComponentAt(term.Coordinates{X: 0, Y: 23})
-	assert.False(t, ok,
-		"cell below the overlay must report no component")
-
+	assert.True(t, tut.winOverlay.Covers(term.Coordinates{X: sideX, Y: sideY}),
+		"frame edge must be covered by the overlay window")
 	inside := term.Coordinates{X: sideX + 5, Y: sideY}
+	assert.True(t, tut.winOverlay.Covers(inside),
+		"window interior must be covered by the overlay window")
+	assert.False(t, tut.winOverlay.Covers(term.Coordinates{X: sideX - 1, Y: sideY}),
+		"cell left of the window must not be covered")
+	assert.False(t, tut.winOverlay.Covers(term.Coordinates{X: 0, Y: 23}),
+		"cell below the window must not be covered")
+	_, ok := tut.ComponentAt(term.Coordinates{X: sideX, Y: sideY})
+	assert.False(t, ok,
+		"floating windows are hosted by the browser, not the bespoke overlay")
+
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitFinished(t, tut, time.Second)
-	_, ok = tut.ComponentAt(inside)
-	assert.False(t, ok,
-		"a finished tutorial must not report any component")
+	assert.False(t, tut.winOverlay.Covers(inside),
+		"a finished tutorial must leave no overlay window behind")
+	assert.Zero(t, tut.winOverlay.Windows(),
+		"resolving the last step must close its window")
 }
 
-// TestComponentAtReturnsPromptForChoiceOverlay asserts that the
-// handler reported under a confirm/choice overlay is the prompt
-// itself, not the tutorial.
+// TestComponentAtReturnsPromptForChoiceOverlay asserts that a
+// confirm/choice step opens a prompt window on the overlay browser
+// covering the centre of the screen, and that the bespoke overlay
+// reports nothing there.
 func TestComponentAtReturnsPromptForChoiceOverlay(t *testing.T) {
 	t.Parallel()
 	src := `
@@ -175,130 +268,65 @@ tutorial(entry=run)
 	resetAndWait(t, tut, time.Second)
 	defer tut.Stop()
 	require.Equal(t, "choice", activeKindFor(tut))
-	g := newAttrGridWriter(80, 24)
-	tut.Draw(g)
 
-	// The prompt overlay is centered on the screen.
-	c, ok := tut.ComponentAt(term.Coordinates{X: 40, Y: 12})
-	require.True(t, ok, "the centered prompt overlay must cover 40x12")
-	assert.Same(t, tut.active.promptVirtual, c,
-		"a choice overlay is handled by its prompt")
+	require.Equal(t, 1, tut.winOverlay.Windows(),
+		"a choice step must open exactly one prompt window")
+	center := term.Coordinates{X: 40, Y: 12}
+	assert.True(t, tut.winOverlay.Covers(center),
+		"the centered prompt window must cover 40x12")
+	_, ok := tut.ComponentAt(center)
+	assert.False(t, ok,
+		"prompt windows are hosted by the browser, not the bespoke overlay")
 }
 
-// TestFloatingWindowTitleBarPresent asserts the title bar replaces
-// the top frame edge: row y0 has the title left-aligned and "Step 1"
-// right-aligned, both with AttrReverse.
+// TestFloatingWindowTitleBarPresent asserts the window bar carries
+// the composed "Step N — title" caption and the close icon.
 func TestFloatingWindowTitleBarPresent(t *testing.T) {
 	t.Parallel()
 	tut, g := drawProbe(t, "Welcome", "body line", 80, 24)
 	defer tut.Stop()
 
-	sideX, sideY := findFrameSideX(g)
-	require.NotEqual(t, -1, sideX,
-		"expected a left frame edge somewhere in the rendered grid")
-	// The title bar occupies the row immediately above the first
-	// observed left edge.
-	titleY := sideY - 1
-	require.GreaterOrEqual(t, titleY, 0)
-
-	row := g.rowRunes(titleY)
-	assert.Contains(t, row, "Welcome",
-		"title bar must contain the title left-aligned, got %q", row)
-	assert.Contains(t, row, "Step 1",
-		"title bar must contain the step counter right-aligned, got %q",
-		row)
-
-	// The title bar must run under inverse video: every cell from the
-	// frame's left edge column to its right edge column on titleY
-	// must carry the AttrReverse attribute.
-	attrs := g.rowAttrs(titleY)
-	attrReverseSeen := 0
-	for x := sideX; x < sideX+10; x++ {
-		if attrs[x].Attrs&term.AttrReverse != 0 {
-			attrReverseSeen++
-		}
-	}
-	assert.Greater(t, attrReverseSeen, 0,
-		"title bar cells must merge AttrReverse")
+	pos, _, _ := activeWindowRect(t, tut)
+	row := g.rowRunes(pos.Y)
+	assert.Contains(t, row, "Step 1 — Welcome",
+		"window bar must carry the composed step caption, got %q", row)
+	assert.Contains(t, row, "●",
+		"window bar must render the close icon, got %q", row)
 }
 
-// TestFloatingWindowTitleBarHasTopPadding asserts a blank content row
-// separates the title bar from the first body line, so the body does
-// not butt directly against the inverse-video title row.
-func TestFloatingWindowTitleBarHasTopPadding(t *testing.T) {
-	t.Parallel()
-	tut, g := drawProbe(t, "Welcome", "body line", 80, 24)
-	defer tut.Stop()
-
-	_, sideY := findFrameSideX(g)
-	titleY := sideY - 1
-	require.GreaterOrEqual(t, titleY, 0)
-	require.Contains(t, g.rowRunes(titleY), "Welcome")
-
-	// The row immediately below the title bar must be blank padding;
-	// the body text appears one row further down.
-	assert.NotContains(t, g.rowRunes(titleY+1), "body line",
-		"body must not butt against the title bar")
-	assert.Contains(t, g.rowRunes(titleY+2), "body line",
-		"body must render one padded row below the title bar")
-}
-
-// TestFloatingWindowNoTitleKeepsTopEdge asserts that without a title
-// the floating_window still renders the standard top frame edge with
-// corner glyphs.
-func TestFloatingWindowNoTitleKeepsTopEdge(t *testing.T) {
+// TestFloatingWindowNoTitleShowsStepCaption asserts that without a
+// title the window bar still identifies the step.
+func TestFloatingWindowNoTitleShowsStepCaption(t *testing.T) {
 	t.Parallel()
 	tut, g := drawProbe(t, "", "body line", 80, 24)
 	defer tut.Stop()
 
-	fcs := component.FrameCharSetDefault()
-	// Find first row that contains the top-left corner glyph.
-	var foundY int = -1
-	for y := range g.h {
-		if strings.ContainsRune(g.rowRunes(y), fcs.TopLeft) {
-			foundY = y
-			break
-		}
-	}
-	require.NotEqual(t, -1, foundY,
-		"no-title floating_window must paint the top-left corner")
-	row := g.rowRunes(foundY)
-	assert.Contains(t, row, string(fcs.TopRight),
-		"no-title floating_window must paint the top-right corner")
-	assert.Contains(t, row, string(fcs.HorizontalTop),
-		"no-title floating_window must paint the horizontal top edge")
+	pos, _, _ := activeWindowRect(t, tut)
+	row := g.rowRunes(pos.Y)
+	assert.Contains(t, row, "Step 1",
+		"untitled window bar must still show the step number, got %q", row)
 }
 
-// TestFloatingWindowTitleBarTruncatesOnNarrow asserts that when the
-// title and the step counter cannot both fit, the right zone is
-// dropped first; if the title alone still overflows it gets
-// truncated with an ellipsis.
+// TestFloatingWindowTitleBarTruncatesOnNarrow asserts that an
+// overlong caption is truncated to the bar's interior instead of
+// overflowing the window.
 func TestFloatingWindowTitleBarTruncatesOnNarrow(t *testing.T) {
 	t.Parallel()
-	// The frame's innerW is 6*W/10 clamped to [20, W-2]. Pick a width
-	// where the title (24 chars) cannot fit alongside "Step 1".
 	tut, g := drawProbe(t, "A very lengthy title text",
 		"body", 36, 12)
 	defer tut.Stop()
 
-	sideX, sideY := findFrameSideX(g)
-	require.NotEqual(t, -1, sideX)
-	titleY := sideY - 1
-	require.GreaterOrEqual(t, titleY, 0)
-
-	row := g.rowRunes(titleY)
-	if strings.Contains(row, "Step 1") {
-		t.Fatalf("right zone must be dropped before truncating the "+
-			"title, got %q", row)
-	}
-	assert.Contains(t, row, "…",
-		"truncated title bar must carry an ellipsis, got %q", row)
+	pos, _, _ := activeWindowRect(t, tut)
+	row := g.rowRunes(pos.Y)
+	assert.NotContains(t, row, "A very lengthy title text",
+		"overlong caption must be truncated, got %q", row)
+	assert.Contains(t, row, "Step 1",
+		"truncated caption must keep the step prefix, got %q", row)
 }
 
-// TestWaitCommandHintTitleBarPresent asserts that a wait_command with a
-// title renders a status-bar style title row on its hint window, matching
-// the floating_window title treatment (inverse video, "Step N" carried
-// over from the preceding visible step).
+// TestWaitCommandHintTitleBarPresent asserts that a wait_command with
+// a title renders it on the hint window's bar, with the step number
+// carried over from the preceding visible step.
 func TestWaitCommandHintTitleBarPresent(t *testing.T) {
 	t.Parallel()
 	src := "def run():\n" +
@@ -321,26 +349,12 @@ func TestWaitCommandHintTitleBarPresent(t *testing.T) {
 
 	g := newAttrGridWriter(w, h)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 
-	sideX, sideY := findFrameSideX(g)
-	require.NotEqual(t, -1, sideX,
-		"expected a frame edge in the rendered hint window")
-	titleY := sideY - 1
-	require.GreaterOrEqual(t, titleY, 0)
-
-	row := g.rowRunes(titleY)
-	assert.Contains(t, row, "Manage windows",
-		"wait_command hint must show its title left-aligned, got %q", row)
-
-	attrs := g.rowAttrs(titleY)
-	reverseSeen := 0
-	for x := sideX; x < sideX+10 && x < len(attrs); x++ {
-		if attrs[x].Attrs&term.AttrReverse != 0 {
-			reverseSeen++
-		}
-	}
-	assert.Greater(t, reverseSeen, 0,
-		"wait_command title bar cells must merge AttrReverse")
+	pos, _, _ := activeWindowRect(t, tut)
+	row := g.rowRunes(pos.Y)
+	assert.Contains(t, row, "Step 1 — Manage windows",
+		"wait_command hint bar must carry the step caption, got %q", row)
 }
 
 // TestFloatingWindowStepCounterIncrements asserts that consecutive
@@ -424,7 +438,7 @@ tutorial(entry=run)
 }
 
 // TestWaitCommandHintRendersAsFramedBox asserts that the
-// wait_command hint renders as a framed window near the top of the
+// wait_command hint renders as a browser window near the top of the
 // screen with markdown body. The prefix line ("Waiting for you …")
 // must be present and the configured command key must be expanded
 // in place of the `<cmd>` token.
@@ -443,20 +457,21 @@ tutorial(entry=run)
 
 	g := newAttrGridWriter(screenW, screenH)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 
-	// The framed hint window paints its top-left corner one row
-	// below the top edge (hintBoxTopOffset). Find any corner glyph
-	// to assert the box is present.
+	pos, _, _ := activeWindowRect(t, tut)
+	assert.Equal(t, 1, pos.Y,
+		"hint window must sit just below the top of the screen")
 	fcs := component.FrameCharSetDefault()
-	cornerFound := false
+	bottomFound := false
 	for y := range screenH {
-		if strings.ContainsRune(g.rowRunes(y), fcs.TopLeft) {
-			cornerFound = true
+		if strings.ContainsRune(g.rowRunes(y), fcs.BottomLeft) {
+			bottomFound = true
 			break
 		}
 	}
-	require.True(t, cornerFound,
-		"wait_command hint must render a framed window with a top-left corner")
+	require.True(t, bottomFound,
+		"wait_command hint must render a framed window")
 
 	// The body must include the prefix line with the expanded
 	// command key and the bare command name, and must not leak the
@@ -504,10 +519,12 @@ def run():
     wait_command(command="wopen")
 tutorial(entry=run)
 `
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := New(
 		"manual-test", src,
-		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		overlay, nil, nil, nil,
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		lookup,
@@ -525,6 +542,7 @@ tutorial(entry=run)
 
 	g := newAttrGridWriter(screenW, screenH)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	body := gridText(g)
 
 	assert.Contains(t, body, "Usage",
@@ -551,10 +569,12 @@ def run():
     wait_command(command="windownew")
 tutorial(entry=run)
 `
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := New(
 		"boundkey-test", src,
-		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		overlay, nil, nil, nil,
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", keyFor,
 		nil,
@@ -570,6 +590,7 @@ tutorial(entry=run)
 
 	g := newAttrGridWriter(screenW, screenH)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	body := gridText(g)
 
 	assert.Contains(t, body, "windownew",
@@ -602,6 +623,7 @@ tutorial(entry=run)
 
 	g := newAttrGridWriter(screenW, screenH)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 
 	fcs := component.FrameCharSetDefault()
 	bottomY := -1
@@ -620,9 +642,9 @@ tutorial(entry=run)
 }
 
 // TestConfirmOverlayMeetsMinimumSize asserts that even with a very
-// short confirm message the rendered overlay is at least
-// promptMinInnerW columns wide and promptMinInnerH rows tall (its
-// natural dimensions plus a frame).
+// short confirm message the prompt window honours the overlay
+// browser's configured minimum prompt width and is tall enough for
+// the message and options.
 func TestConfirmOverlayMeetsMinimumSize(t *testing.T) {
 	t.Parallel()
 	src := `
@@ -636,48 +658,81 @@ tutorial(entry=run)
 	resetAndWait(t, tut, time.Second)
 	defer tut.Stop()
 
-	g := newAttrGridWriter(screenW, screenH)
-	tut.Draw(g)
+	minWidth := idetutorial.DefaultOverlayBrowserConfig().PromptConfig.MinWidth
+	_, w, h := activeWindowRect(t, tut)
+	assert.GreaterOrEqual(t, w, minWidth,
+		"confirm window must honour the configured minimum prompt width")
+	assert.GreaterOrEqual(t, h, 5,
+		"confirm window must fit the message and options")
+}
 
-	fcs := component.FrameCharSetDefault()
-	// Find the inner width/height of the rendered frame by locating
-	// the top-left and bottom-right corner glyphs.
-	tlX, tlY := -1, -1
-	for y := range screenH {
-		for x, r := range g.rowRunes(y) {
-			if r == fcs.TopLeft {
-				tlX, tlY = x, y
-				break
-			}
-		}
-		if tlX != -1 {
-			break
-		}
-	}
-	require.NotEqual(t, -1, tlX, "no top-left corner found")
+// mouseEvent builds a mouse event at screen coordinates (x, y).
+func mouseEvent(key term.Key, x, y int) term.Event {
+	return term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y}
+}
 
-	// Walk right on row tlY until we hit TopRight; that distance +1
-	// is innerW.
-	innerW := 0
-	topRow := []rune(g.rowRunes(tlY))
-	for x := tlX + 1; x < screenW; x++ {
-		if topRow[x] == fcs.TopRight {
-			innerW = x - tlX + 1
-			break
-		}
-	}
-	innerH := 0
-	for y := tlY + 1; y < screenH; y++ {
-		row := []rune(g.rowRunes(y))
-		if row[tlX] == fcs.BottomLeft {
-			innerH = y - tlY + 1
-			break
-		}
-	}
-	assert.GreaterOrEqual(t, innerW, promptMinInnerW,
-		"confirm overlay must be at least %d cells wide",
-		promptMinInnerW)
-	assert.GreaterOrEqual(t, innerH, promptMinInnerH,
-		"confirm overlay must be at least %d rows tall",
-		promptMinInnerH)
+// TestFloatingWindowCloseIconClickResolves asserts that clicking the
+// window bar's ✕ icon closes the step window through the browser's
+// bookkeeping path and that the next event reaps the closed window,
+// resolving the floating_window step like Esc would.
+func TestFloatingWindowCloseIconClickResolves(t *testing.T) {
+	t.Parallel()
+	tut, _ := drawProbe(t, "Welcome", "body line", 80, 24)
+	defer tut.Stop()
+	pos, _, _ := activeWindowRect(t, tut)
+
+	handled, routed := tut.winOverlay.HandleMouse(mouseEvent(
+		term.MouseLeft, pos.X+tuicomp.WindowBarCloseIconX, pos.Y))
+	require.True(t, routed, "a press on the window bar must route to the browser")
+	require.True(t, handled, "the close-icon press must be consumed")
+	_, _ = tut.winOverlay.HandleMouse(mouseEvent(
+		term.MouseRelease, pos.X+tuicomp.WindowBarCloseIconX, pos.Y))
+
+	assert.Zero(t, tut.winOverlay.Windows(),
+		"the ✕ click must close the window through the browser path")
+
+	exit, handled := tut.Handle(mouseEvent(term.MouseRelease, 0, 0))
+	assert.True(t, handled, "the reaping event must be consumed")
+	assert.True(t, exit, "closing the only step must finish the tutorial")
+	waitFinished(t, tut, time.Second)
+	assert.Zero(t, tut.winOverlay.Windows(),
+		"a finished tutorial must leave no overlay window behind")
+}
+
+// TestFloatingWindowDragMovesShaderGeometry asserts that dragging the
+// step window by its bar moves the armed hint-pulse geometry with it:
+// Shader() derives its spec from the live window rectangle, so the
+// composing handler's value comparison restages the pulse after a
+// move.
+func TestFloatingWindowDragMovesShaderGeometry(t *testing.T) {
+	t.Parallel()
+	tut, _ := drawProbe(t, "Welcome", "body line", 80, 24)
+	defer tut.Stop()
+
+	// Arm the pulse with a stray key, then capture the spec.
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	spec1, ok := tut.Shader()
+	require.True(t, ok, "a stray key must arm the hint pulse")
+
+	pos, w, _ := activeWindowRect(t, tut)
+	require.Greater(t, w, 8, "window too narrow to grab the bar")
+	const dx, dy = 3, 2
+	grabX, grabY := pos.X+5, pos.Y
+	_, routed := tut.winOverlay.HandleMouse(mouseEvent(term.MouseLeft, grabX, grabY))
+	require.True(t, routed, "the bar press must route to the browser")
+	_, _ = tut.winOverlay.HandleMouse(mouseEvent(term.MouseLeft, grabX+dx, grabY+dy))
+	_, _ = tut.winOverlay.HandleMouse(mouseEvent(term.MouseRelease, grabX+dx, grabY+dy))
+
+	newPos, _, _ := activeWindowRect(t, tut)
+	require.Equal(t, term.Coordinates{X: pos.X + dx, Y: pos.Y + dy}, newPos,
+		"the bar drag must move the window by the drag delta")
+
+	spec2, ok := tut.Shader()
+	require.True(t, ok, "the pulse must stay armed across a drag")
+	assert.Equal(t, spec1.Offset.X+dx, spec2.Offset.X,
+		"the pulse geometry must follow the window horizontally")
+	assert.Equal(t, spec1.Offset.Y+dy, spec2.Offset.Y,
+		"the pulse geometry must follow the window vertically")
+	assert.NotEqual(t, spec1, spec2,
+		"the moved spec must differ so the composing handler restages it")
 }

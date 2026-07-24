@@ -25,11 +25,12 @@ package starlarktutorial
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/ide/idetutorial"
 )
@@ -87,7 +88,18 @@ type request struct {
 	align       component.Alignment
 	offset      term.Coordinates
 	md          *markdown.Component
-	body        *component.Span
+
+	// win is the overlay-browser window backing this request, opened
+	// at publish time on the run goroutine and closed on resolve,
+	// Stop, or the user's window-bar ✕ click. winContent tracks the
+	// live screen size for the window's Dimensions.
+	win        browser.Window
+	winContent *floatingWindowContent
+	// winClosed is stamped by the content's close callback while the
+	// overlay-browser lock is held; the TUI loop reaps it in Handle
+	// by resolving the request. Atomic because a Stop-driven close
+	// can stamp it from the run goroutine.
+	winClosed atomic.Bool
 
 	// stepNum is the 1-based "visible content" step number snapshot
 	// at publish time. Only reqFloatingWindow and reqMarkdown bump
@@ -127,13 +139,6 @@ type request struct {
 	// choice / confirm.
 	message string
 	options []string
-	// prompt / promptVirtual back the overlay-rendered confirm/choice
-	// UI. Built by publishRequest for reqConfirm/reqChoice and nil
-	// for every other kind. Tutorial.Draw positions promptVirtual
-	// inside the overlay frame; Tutorial.Handle forwards events to
-	// prompt directly.
-	prompt        *handler.Prompt
-	promptVirtual *handler.Virtual[*handler.Prompt]
 	// pendingResp / pendingSelected capture the prompt's OnSelect
 	// outcome so Tutorial.Handle can resolve with the correct
 	// response after the barrier is in place. pendingSelected stays
@@ -142,9 +147,16 @@ type request struct {
 	pendingResp     response
 	pendingSelected bool
 
-	// shader spec staged for the floating_window hint pulse.
-	shaderSpec idetutorial.Shader
-	hasShader  bool
+	// hasShader arms the floating_window hint pulse after a stray
+	// keystroke; the spec itself is derived lazily from the live
+	// window geometry and cached until the geometry or theme
+	// changes.
+	shaderSpec  idetutorial.Shader
+	hasShader   bool
+	shaderBuilt bool
+	shaderPos   term.Coordinates
+	shaderW     int
+	shaderH     int
 
 	respond chan response
 	once    sync.Once

@@ -165,10 +165,6 @@ func builtinFloatingWindow(t *Tutorial) func(*starlark.Thread, *starlark.Builtin
 		if err != nil {
 			return nil, fmt.Errorf("floating_window: parse: %w", err)
 		}
-		body := component.NewSpan(md, component.SpanConfig{
-			PadHorizontal:    floatingWindowBodyPad,
-			ContentAlignment: component.AlignmentHorizontallyCentered,
-		})
 		req := &request{
 			kind:        reqFloatingWindow,
 			text:        string(text),
@@ -176,7 +172,6 @@ func builtinFloatingWindow(t *Tutorial) func(*starlark.Thread, *starlark.Builtin
 			align:       align,
 			offset:      off,
 			md:          md,
-			body:        body,
 			allowKeys:   keys,
 			dismissKeys: dkeys,
 		}

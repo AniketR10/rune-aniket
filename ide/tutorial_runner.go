@@ -40,12 +40,13 @@ import (
 
 type tutorialRunner struct {
 	tui.Handler
-	tutorials     map[string]idetutorial.Tutorial
-	overlay       *idetutorial.Handler
-	activeName    string
-	interrupter   term.Interrupter
-	width, height int
-	onCompleted   func(name string)
+	tutorials      map[string]idetutorial.Tutorial
+	overlay        *idetutorial.Handler
+	browserOverlay *idetutorial.OverlayBrowser
+	activeName     string
+	interrupter    term.Interrupter
+	width, height  int
+	onCompleted    func(name string)
 }
 
 var _ commandObserver = (*tutorialRunner)(nil)
@@ -53,11 +54,13 @@ var _ commandObserver = (*tutorialRunner)(nil)
 func (r *tutorialRunner) init(
 	root tui.Handler,
 	tutorials map[string]idetutorial.Tutorial,
+	browserOverlay *idetutorial.OverlayBrowser,
 	interrupter term.Interrupter,
 	onCompleted func(name string),
 ) {
 	r.Handler = root
 	r.tutorials = tutorials
+	r.browserOverlay = browserOverlay
 	r.interrupter = interrupter
 	r.onCompleted = onCompleted
 }
@@ -66,7 +69,7 @@ func (r *tutorialRunner) setActive(name string, t idetutorial.Tutorial) {
 	if r.overlay != nil {
 		r.clearActive()
 	}
-	r.overlay = idetutorial.New(r.Handler, t, r.interrupter)
+	r.overlay = idetutorial.New(r.Handler, t, r.browserOverlay, r.interrupter)
 	r.activeName = name
 	if r.width > 0 && r.height > 0 {
 		r.overlay.Resize(r.width, r.height)

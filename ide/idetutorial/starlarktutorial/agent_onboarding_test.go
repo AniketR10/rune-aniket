@@ -274,6 +274,7 @@ tutorial(entry=run)
 
 	g := newGridWriter(80, 60)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	assert.True(t, gridContains(g, "install failed"),
 		"on_error hint must be rendered after a dispatch error")
 	tut.Stop()

@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
@@ -107,7 +106,7 @@ func newTestRunner(tutorials map[string]idetutorial.Tutorial, onCompleted ...fun
 	if len(onCompleted) > 0 {
 		completed = onCompleted[0]
 	}
-	r.init(root, tutorials, term.NopInterrupter(), completed)
+	r.init(root, tutorials, nil, term.NopInterrupter(), completed)
 	r.Resize(20, 5)
 	return r, root
 }
@@ -360,8 +359,6 @@ tutorial(entry=run)
 		"basics", src,
 		nil, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -434,8 +431,6 @@ tutorial(entry=run)
 		"argpanic", src,
 		nil, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -493,8 +488,6 @@ tutorial(entry=run)
 		"observe", src,
 		nil, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -543,8 +536,6 @@ tutorial(entry=run)
 		"on_error", src,
 		nil, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -596,8 +587,6 @@ tutorial(entry=run)
 		"observe-event", src,
 		nil, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -685,12 +674,12 @@ def run():
     notify(level=info, message="done")
 tutorial(entry=run)
 `
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := starlarktutorial.New(
 		"wrongkey", src,
-		nil, nil, nil, nil,
+		overlay, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -702,6 +691,8 @@ tutorial(entry=run)
 
 	r, root := newTestRunner(
 		map[string]idetutorial.Tutorial{"wrongkey": tut})
+	r.browserOverlay = overlay
+	r.Resize(80, 24)
 
 	require.NoError(t, r.HandleCommand(context.Background(),
 		textapi.Command{Name: "tutorial", Args: []string{"start", "wrongkey"}}))
@@ -744,12 +735,12 @@ def run():
         notify(level=info, message="ok")
 tutorial(entry=run)
 `
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := starlarktutorial.New(
 		"survives", src,
-		nil, nil, nil, nil,
+		overlay, nil, nil, nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -761,6 +752,8 @@ tutorial(entry=run)
 
 	r, _ := newTestRunner(
 		map[string]idetutorial.Tutorial{"survives": tut})
+	r.browserOverlay = overlay
+	r.Resize(80, 24)
 	require.NoError(t, r.HandleCommand(context.Background(),
 		textapi.Command{Name: "tutorial", Args: []string{"start", "survives"}}))
 	require.NotNil(t, r.overlay)
@@ -790,6 +783,85 @@ tutorial(entry=run)
 	_, _ = r.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	require.True(t, tut.WaitFinished(time.Second),
 		"tutorial must finish after Enter resolves the confirm")
+}
+
+// TestTutorialRunnerWaitKeyHintRoutesMouseKeysFallThrough asserts the
+// non-modal contract of wait_* hint windows through the full runner
+// -> handler -> overlay path: keys fall through to the IDE root while
+// the hint window is shown, mouse events over the hint route to the
+// browser (so the user can drag it aside) without reaching the root,
+// and mouse events elsewhere still reach the root.
+func TestTutorialRunnerWaitKeyHintRoutesMouseKeysFallThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_key(key="<f6>")
+tutorial(entry=run)
+`
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := starlarktutorial.New(
+		"waitkey", src,
+		overlay, nil, nil, nil,
+		term.Attributes{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	r, root := newTestRunner(
+		map[string]idetutorial.Tutorial{"waitkey": tut})
+	r.browserOverlay = overlay
+	r.Resize(80, 24)
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "waitkey"}}))
+	require.True(t, tut.WaitActive("wait_key", time.Second),
+		"wait_key did not become active")
+	require.Equal(t, 1, overlay.Windows(),
+		"a wait_key step must show its hint window")
+
+	_, handled := r.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	assert.True(t, handled)
+	assert.Equal(t, 1, root.handled,
+		"keys must fall through to the IDE root while the hint is shown")
+	assert.Equal(t, 1, overlay.Windows(),
+		"a fallen-through key must not close the hint window")
+
+	inside := term.Coordinates{}
+	found := false
+	for y := 0; y < 24 && !found; y++ {
+		for x := 0; x < 80 && !found; x++ {
+			if overlay.Covers(term.Coordinates{X: x, Y: y}) {
+				inside = term.Coordinates{X: x, Y: y}
+				found = true
+			}
+		}
+	}
+	require.True(t, found, "the hint window must cover some screen cell")
+	_, _ = r.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft,
+		MouseX: inside.X, MouseY: inside.Y})
+	_, _ = r.Handle(term.Event{Type: term.EventMouse, Key: term.MouseRelease,
+		MouseX: inside.X, MouseY: inside.Y})
+	assert.Equal(t, 1, root.handled,
+		"mouse events over the hint window must route to the browser, "+
+			"never reaching the IDE root")
+
+	outside := term.Coordinates{X: 0, Y: 23}
+	require.False(t, overlay.Covers(outside))
+	_, _ = r.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft,
+		MouseX: outside.X, MouseY: outside.Y})
+	assert.Equal(t, 2, root.handled,
+		"mouse events outside the hint window must reach the IDE root")
+
+	_, _ = r.Handle(term.Event{Type: term.EventKey, Key: term.KeyF6})
+	require.True(t, tut.WaitFinished(time.Second),
+		"the awaited key must resolve the wait_key step")
+	assert.Zero(t, overlay.Windows(),
+		"resolving the wait_key step must close its hint window")
 }
 
 // TestTutorialEventObserverDefersToEventLoop is a regression test for a

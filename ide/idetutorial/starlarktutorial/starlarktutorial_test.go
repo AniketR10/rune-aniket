@@ -35,10 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide/idetutorial"
 )
 
 // fakeNotis captures every Notify / NotifyOnce call so tests can
@@ -148,10 +148,12 @@ func gridContains(g *gridWriter, needle string) bool {
 func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 	t.Helper()
 	notis := &fakeNotis{}
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := New(
 		"tutorial-under-test", src,
-		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		overlay, nil, notis, nil,
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -298,7 +300,7 @@ func TestEntryRequired(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(id="x")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -316,7 +318,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(entry="not a func")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -334,7 +336,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(entry=lambda x: 1)`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -356,7 +358,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 			"tutorial(entry=a)\n"+
 			"tutorial(entry=b)\n",
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -373,7 +375,7 @@ func TestEmptySourceRejected(t *testing.T) {
 	_, err := New(
 		"x", "",
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -749,14 +751,16 @@ tutorial(entry=run)
 }
 
 // TestFloatingWindowAlignmentAndOffset asserts the (x, y) placement of
-// the framed window for a handful of alignments.
+// the browser window for a handful of alignments. The overlay's
+// window manager starts one row below the top of the screen (its
+// single-row tab bar), so vertical expectations are offset by wmY.
 func TestFloatingWindowAlignmentAndOffset(t *testing.T) {
 	t.Parallel()
 	const (
 		screenW = 80
 		screenH = 24
+		wmY     = 1
 	)
-	probe := newGridWriter(screenW, screenH)
 	probeTut, _ := newTutorial(t, `
 def run():
     floating_window(text="hi")
@@ -764,11 +768,12 @@ tutorial(entry=run)
 `)
 	probeTut.Resize(screenW, screenH)
 	resetAndWaitNamed(t, probeTut, time.Second, "probe")
-	probeTut.Draw(probe)
-	probeX, probeY := topLeftCorner(probe)
-	require.NotEqual(t, -1, probeX, "probe must render a frame")
-	innerW := frameWidth(probe, probeX, probeY)
-	innerH := frameHeight(probe, probeX, probeY)
+	probeTut.mu.Lock()
+	probeReq := probeTut.active
+	probeTut.mu.Unlock()
+	require.NotNil(t, probeReq, "probe must publish a floating window")
+	_, innerW, innerH, ok := probeTut.winOverlay.WindowRect(probeReq.win)
+	require.True(t, ok, "probe must open a live window")
 	probeTut.Stop()
 
 	cases := []struct {
@@ -778,9 +783,10 @@ tutorial(entry=run)
 		wantX     int
 		wantY     int
 	}{
-		{"center default", "", "", (screenW - innerW) / 2, (screenH - innerH) / 2},
-		{"top-left flush", "top-left", "", 0, 0},
-		{"top-right flush", "top-right", "", screenW - innerW, 0},
+		{"center default", "", "", (screenW - innerW) / 2,
+			wmY + (screenH-wmY-innerH)/2},
+		{"top-left flush", "top-left", "", 0, wmY},
+		{"top-right flush", "top-right", "", screenW - innerW, wmY},
 		{"bottom-left flush", "bottom-left", "", 0, screenH - innerH},
 		{"bottom-right with offset", "bottom-right", "(3, 2)",
 			screenW - innerW - 3, screenH - innerH - 2},
@@ -804,50 +810,17 @@ tutorial(entry=run)
 			tut, _ := newTutorial(t, src)
 			tut.Resize(screenW, screenH)
 			resetAndWait(t, tut, time.Second)
-			g := newGridWriter(screenW, screenH)
-			tut.Draw(g)
-			gotX, gotY := topLeftCorner(g)
-			assert.Equal(t, tc.wantX, gotX, "x")
-			assert.Equal(t, tc.wantY, gotY, "y")
+			tut.mu.Lock()
+			req := tut.active
+			tut.mu.Unlock()
+			require.NotNil(t, req)
+			pos, _, _, ok := tut.winOverlay.WindowRect(req.win)
+			require.True(t, ok, "step must open a live window")
+			assert.Equal(t, tc.wantX, pos.X, "x")
+			assert.Equal(t, tc.wantY, pos.Y, "y")
 			tut.Stop()
 		})
 	}
-}
-
-// topLeftCorner returns the (x, y) of the first '┌' written into the
-// grid. Returns (-1, -1) when no corner is found.
-func topLeftCorner(g *gridWriter) (int, int) {
-	for y := range g.h {
-		for x, r := range g.row(y) {
-			if r == '┌' {
-				return x, y
-			}
-		}
-	}
-	return -1, -1
-}
-
-// frameWidth counts the inner width of the frame whose top-left
-// corner sits at (x0, y0), including the corner glyphs.
-func frameWidth(g *gridWriter, x0, y0 int) int {
-	row := g.row(y0)
-	for x := x0 + 1; x < g.w; x++ {
-		if row[x] == '┐' {
-			return x - x0 + 1
-		}
-	}
-	return -1
-}
-
-// frameHeight counts the inner height of the frame whose top-left
-// corner sits at (x0, y0), including the corner rows.
-func frameHeight(g *gridWriter, x0, y0 int) int {
-	for y := y0 + 1; y < g.h; y++ {
-		if g.row(y)[x0] == '└' {
-			return y - y0 + 1
-		}
-	}
-	return -1
 }
 
 // TestFloatingWindowAlignmentParses asserts that the alignment kwarg
@@ -868,7 +841,7 @@ tutorial(entry=run)
 		tut, err := New(
 			"align_"+a, src,
 			nil, nil, notis, nil,
-			term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+			term.Attributes{},
 			nil, nil, term.KeyComb{Ch: ':'},
 			"standard", nil,
 			nil,
@@ -890,7 +863,7 @@ tutorial(entry=run)
 	tut, err := New(
 		"align_bogus", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -1159,6 +1132,7 @@ tutorial(entry=run)
 	require.Equal(t, "choice", activeKindFor(tut))
 	g := newGridWriter(80, 24)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	assert.True(t, gridContains(g, "pick one"),
 		"choice overlay must render the message")
 	for _, opt := range []string{"A", "B", "C"} {
@@ -1185,6 +1159,7 @@ tutorial(entry=run)
 
 	g := newGridWriter(80, 24)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	assert.True(t, gridContains(g, " Alpha "),
 		"option label must render with surrounding space padding")
 
@@ -1196,25 +1171,27 @@ tutorial(entry=run)
 }
 
 // TestPromptUsesConfiguredStyling asserts that confirm/choice prompts
-// pick up the IDE prompt styling passed to New: the highlighted option
-// is drawn with the configured HighlightAttr background, matching the
-// IDE's browser-driven prompts instead of the SDK's reverse-video
-// default.
+// pick up the overlay browser's prompt styling: the highlighted
+// option is drawn with the configured HighlightAttr background,
+// matching the IDE's browser-driven prompts instead of the SDK's
+// reverse-video default.
 func TestPromptUsesConfiguredStyling(t *testing.T) {
 	t.Parallel()
 	notis := &fakeNotis{}
+	overlayCfg := idetutorial.DefaultOverlayBrowserConfig()
+	overlayCfg.PromptConfig = browser.PromptConfig{
+		HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+		MinWidth:      60,
+	}
+	overlay := idetutorial.NewOverlayBrowser(browser.NewComponent(overlayCfg))
 	tut, err := New(
 		"styled", `
 def run():
     choice(message="pick", options=["Alpha", "Beta"])
 tutorial(entry=run)
 `,
-		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{},
-		browser.PromptConfig{
-			HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
-			MinWidth:      60,
-		},
+		overlay, nil, notis, nil,
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -1229,6 +1206,7 @@ tutorial(entry=run)
 
 	g := newAttrGridWriter(80, 24)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 
 	found := false
 	for y := 0; y < 24 && !found; y++ {
@@ -1564,7 +1542,7 @@ func newTutorialWith(
 	tut, err := New(
 		"tutorial-under-test", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		mode, keyFor,
@@ -1657,7 +1635,7 @@ func newTutorialWorkspace(
 	tut, err := New(
 		"tutorial-under-test", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -1712,7 +1690,7 @@ func newTutorialLSP(
 	tut, err := New(
 		"tutorial-under-test", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -1781,7 +1759,7 @@ func TestStopUnblocksWhileFinalizingOnTUI(t *testing.T) {
 	tut, err := New(
 		"deadlock", "def run():\n    fail('boom')\ntutorial(entry=run)\n",
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		sched, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -1855,6 +1833,7 @@ tutorial(entry=run)
 
 	w := term.NewStringWriter(80, 60)
 	tut.Draw(w)
+	tut.winOverlay.Draw(w)
 	require.NoError(t, w.Flush())
 	wantKey := PrettyKeySpec((term.KeyComb{Ch: ':'}).String())
 	assert.Contains(t, w.String(), wantKey,
@@ -1868,6 +1847,7 @@ tutorial(entry=run)
 		fmt.Errorf("missing directory argument"))
 	w = term.NewStringWriter(80, 60)
 	tut.Draw(w)
+	tut.winOverlay.Draw(w)
 	require.NoError(t, w.Flush())
 	assert.Contains(t, w.String(), wantKey,
 		"on_error hint must expand <cmd> to the configured key")
@@ -1892,6 +1872,7 @@ tutorial(entry=run)
 
 	g := newGridWriter(80, 24)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	assert.True(t, gridContains(g, "WelcomeSentinel"),
 		"floating_window must render header text somewhere")
 	assert.False(t, gridContains(g, "# WelcomeSentinel"),
@@ -1933,7 +1914,7 @@ func TestLoadIsRejected(t *testing.T) {
 	_, err := New(
 		"x", `load("other.star", "thing")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil,
@@ -1991,6 +1972,7 @@ tutorial(entry=run)
 
 	g := newGridWriter(80, 24)
 	tut.Draw(g)
+	tut.winOverlay.Draw(g)
 	assert.True(t, gridContains(g, "continue?"),
 		"prompt message must be rendered on the tutorial layer")
 	assert.True(t, gridContains(g, "Yes"),

@@ -48,12 +48,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
-	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/text"
@@ -85,12 +82,17 @@ type Tutorial struct {
 	id      string
 	version string
 
-	browser          browser.Browser
+	// winOverlay hosts the tutorial's step windows on a dedicated
+	// browser component drawn above the whole IDE root. Windows are
+	// opened at publish time (on the run goroutine) and closed on
+	// resolve/Reset/Stop; OverlayBrowser's internal mutex makes that
+	// safe. Its lock is a leaf: never hold t.mu while calling into
+	// it, and never block on respond/barrier channels while inside.
+	winOverlay       *idetutorial.OverlayBrowser
 	editor           text.Editor
 	notifications    browserapi.Notifications
 	parser           syntaxapi.Parser
 	defaultAttr      term.Attributes
-	frameCharSet     component.FrameCharSet
 	scheduleNextTick func(func()) bool
 	storage          storageapi.Service
 	// commandKeyDisplay is the prettified, display-ready command-prompt
@@ -107,10 +109,6 @@ type Tutorial struct {
 	// user's configured key spec, or "" when unbound. nil disables
 	// key_for() lookups (they return ""). Used by key_for().
 	keyForCommand func(cmd string, args []string) string
-	// promptConfig carries the IDE's confirm/choice prompt styling
-	// (option, highlight, background attributes and minimum width) so
-	// tutorial prompts match the IDE's browser-driven prompts.
-	promptConfig browser.PromptConfig
 	// commandManualLookup resolves a command name to its registered
 	// manual, used by the wait_command hint window so the user sees
 	// the command's synopsis and description while the request is
@@ -176,13 +174,11 @@ var _ idetutorial.Tutorial = (*Tutorial)(nil)
 // are the host services the DSL builtins resolve at runtime.
 func New(
 	name, src string,
-	br browser.Browser,
+	overlay *idetutorial.OverlayBrowser,
 	ed text.Editor,
 	notifications browserapi.Notifications,
 	parser syntaxapi.Parser,
 	defaultAttr term.Attributes,
-	frameCharSet component.FrameCharSet,
-	promptConfig browser.PromptConfig,
 	scheduleNextTick func(func()) bool,
 	storage storageapi.Service,
 	commandKey term.KeyComb,
@@ -197,13 +193,11 @@ func New(
 	}
 	t := &Tutorial{
 		name:                name,
-		browser:             br,
+		winOverlay:          overlay,
 		editor:              ed,
 		notifications:       notifications,
 		parser:              parser,
 		defaultAttr:         defaultAttr,
-		frameCharSet:        frameCharSet,
-		promptConfig:        promptConfig,
 		scheduleNextTick:    scheduleNextTick,
 		storage:             storage,
 		commandKeyDisplay:   PrettyKeySpec(commandKey.String()),
@@ -449,100 +443,119 @@ func isStarlarkExit(err error) bool {
 	return false
 }
 
-// Shader returns the current step's declared shader spec, if any.
-// ok=false when the tutorial is done or the current request has no
-// shader.
+// Shader returns the armed hint-pulse spec for the active
+// floating_window step, derived from the live overlay-window
+// geometry (the last content row above the bottom frame edge). The
+// spec is cached until the window moves, resizes, or the theme
+// changes, so the composing handler's value comparison only restages
+// the pulse when the geometry actually changed. ok=false when the
+// tutorial is done, no request is active, or the pulse is not armed.
 func (t *Tutorial) Shader() (idetutorial.Shader, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.finished || t.active == nil || !t.active.hasShader {
 		return idetutorial.Shader{}, false
 	}
-	return t.active.shaderSpec, true
+	r := t.active
+	if r.kind != reqFloatingWindow || t.winOverlay == nil {
+		return idetutorial.Shader{}, false
+	}
+	pos, width, height, ok := t.winOverlay.WindowRect(r.win)
+	if !ok || width < 4 || height < 3 {
+		return idetutorial.Shader{}, false
+	}
+	if r.shaderBuilt && pos == r.shaderPos &&
+		width == r.shaderW && height == r.shaderH {
+		return r.shaderSpec, true
+	}
+	hintX := pos.X + 1
+	hintY := pos.Y + height - 2
+	hintW := width - 2
+	r.shaderSpec = idetutorial.Shader{
+		Shader:   buildHintPulse(t.defaultAttr, hintX, hintY, hintW),
+		Offset:   term.Coordinates{X: hintX, Y: hintY},
+		Width:    hintW,
+		Height:   1,
+		FPS:      hintFPS,
+		Duration: hintDuration,
+	}
+	r.shaderPos, r.shaderW, r.shaderH = pos, width, height
+	r.shaderBuilt = true
+	return r.shaderSpec, true
 }
 
 // SetDefaultAttributes updates the tutorial's view of the default
-// terminal attributes and restages the active step's shader spec so
-// the next reconcile rebuilds the underlying shader with the new
+// terminal attributes and invalidates the active step's cached
+// shader spec so the next reconcile rebuilds it with the new
 // attributes.
 func (t *Tutorial) SetDefaultAttributes(defAttr term.Attributes) {
 	t.mu.Lock()
 	t.defaultAttr = defAttr
-	if t.active != nil && t.active.kind == reqFloatingWindow {
-		stageFloatingWindowShader(t.active, t.width, t.height,
-			t.frameCharSet, t.defaultAttr)
+	if t.active != nil {
+		t.active.shaderBuilt = false
 	}
 	t.mu.Unlock()
 }
 
-// Resize records the most recent dimensions and restages the active
-// step's shader spec so a terminal resize is reflected on the next
-// reconcile.
+// Resize records the most recent dimensions and forwards them to the
+// overlay browser and to the active step's window content so its
+// Dimensions heuristic tracks the screen; the window manager
+// re-queries it on the next draw.
 func (t *Tutorial) Resize(width, height int) {
 	t.mu.Lock()
 	t.width, t.height = width, height
-	if t.active != nil && t.active.kind == reqFloatingWindow {
-		stageFloatingWindowShader(t.active, width, height,
-			t.frameCharSet, t.defaultAttr)
-	}
+	active := t.active
 	t.mu.Unlock()
+	if t.winOverlay != nil {
+		t.winOverlay.Resize(width, height)
+	}
+	if active != nil && active.winContent != nil {
+		active.winContent.setScreen(width, height)
+	}
 }
 
-// Draw paints the current step's overlay on top of whatever was
-// previously drawn into w. Out-of-range writes are silently dropped.
-// The only state Draw mutates is the overlay virtual geometry that
-// backs ComponentAt.
+// Draw paints the reqMarkdown banner, the only step surface still
+// rendered bespoke — every other step lives in a window on the
+// overlay browser, drawn by the composing handler. Out-of-range
+// writes are silently dropped. The only state Draw mutates is the
+// overlay virtual geometry that backs ComponentAt.
 func (t *Tutorial) Draw(w term.Writer) {
 	t.mu.Lock()
 	active := t.active
 	width, height := t.width, t.height
-	fcs := t.frameCharSet
-	attr := t.defaultAttr
 	finished := t.finished
-	cmdKey := t.commandKeyDisplay
-	lookup := t.commandManualLookup
-	keyForCmd := t.keyForCommand
 	t.mu.Unlock()
 	// Cover nothing unless the per-kind draw claims geometry.
 	t.overlay.Resize(0, 0)
 	if finished || active == nil {
 		return
 	}
-	switch active.kind {
-	case reqFloatingWindow:
-		drawFloatingWindow(&t.overlay, w, width, height, active, fcs, attr)
-	case reqMarkdown:
+	if active.kind == reqMarkdown {
 		drawBanner(&t.overlay, w, width, height, []string{active.text})
-	case reqWaitKey:
-		drawHintBox(&t.overlay, w, width, height, active.title,
-			active.stepNum, "Press "+active.waitKey+" to continue.",
-			fcs, attr)
-	case reqWaitCommand:
-		body := buildWaitCommandHint(active, cmdKey, lookup, keyForCmd)
-		drawHintBox(&t.overlay, w, width, height, active.title,
-			active.stepNum, body, fcs, attr)
-	case reqWaitShell:
-		body := buildWaitShellHint(active, cmdKey)
-		drawHintBox(&t.overlay, w, width, height, active.title,
-			active.stepNum, body, fcs, attr)
-	case reqWaitEvent:
-		drawHintBox(&t.overlay, w, width, height, active.title,
-			active.stepNum, active.text, fcs, attr)
-	case reqChoice, reqConfirm:
-		drawPromptOverlay(&t.overlay, w, width, height, active, fcs, attr)
 	}
 }
 
 // Handle advances the state machine on input. exit=true once the
-// tutorial finishes or is dismissed.
+// tutorial finishes or is dismissed. Before per-kind dispatch it
+// reaps a step window the browser closed out from under the request
+// (the window-bar ✕ click), resolving dismissible kinds with the
+// per-kind dismissal response; wait_* steps stay armed with their
+// hint gone, since only the awaited key/command/event resolves them.
 func (t *Tutorial) Handle(ev term.Event) (bool, bool) {
-	if ev.Type != term.EventKey {
-		return t.exitState(), false
-	}
 	t.mu.Lock()
 	active := t.active
 	finished := t.finished
 	t.mu.Unlock()
+	if !finished && active != nil && active.winClosed.Load() {
+		switch active.kind {
+		case reqFloatingWindow, reqConfirm, reqChoice:
+			t.resolve(active, dismissalOrPendingResponse(active))
+			return t.exitState(), true
+		}
+	}
+	if ev.Type != term.EventKey {
+		return t.exitState(), false
+	}
 	if finished {
 		return true, false
 	}
@@ -598,9 +611,7 @@ func (t *Tutorial) handleFloatingWindow(r *request, ev term.Event) (bool, bool) 
 	// would open a command prompt under the overlay; arm the hint
 	// pulse so the user notices.
 	t.mu.Lock()
-	if r.shaderSpec.Shader != nil {
-		r.hasShader = true
-	}
+	r.hasShader = true
 	t.mu.Unlock()
 	return false, true
 }
@@ -646,31 +657,39 @@ func (t *Tutorial) handleWaitEvent(_ *request, _ term.Event) (bool, bool) {
 	return false, false
 }
 
-// handlePrompt forwards ev to the active prompt overlay and finalises
-// the request on exit. Enter triggers OnSelect (which stamps
-// r.pendingResp/pendingSelected); Esc only sets the prompt's exit
-// flag. handlePrompt then resolves with the pending response or
-// synthesises the per-kind dismissal response. resolve() installs
-// the barrier before delivery so the run goroutine's next publish
-// is observed.
+// handlePrompt routes ev to the overlay browser, whose focused window
+// is the active confirm/choice prompt. Enter fires OnSelect (which
+// stamps r.pendingResp/pendingSelected); both selection and Esc close
+// the prompt window, which fires OnClose and stamps winClosed. The
+// request is then resolved with the pending response or the per-kind
+// dismissal response. resolve() installs the barrier before delivery
+// so the run goroutine's next publish is observed.
 func (t *Tutorial) handlePrompt(r *request, ev term.Event) (bool, bool) {
-	if r.prompt == nil {
+	if r.win == nil || t.winOverlay == nil {
 		return false, false
 	}
-	exit, handled := r.promptVirtual.Handle(ev)
-	if !exit {
+	_, handled := t.winOverlay.Handle(ev)
+	if !r.winClosed.Load() {
 		return false, handled
 	}
-	res := r.pendingResp
-	if !r.pendingSelected {
-		if r.kind == reqConfirm {
-			res = response{confirmed: false}
-		} else {
-			res = response{selectedIdx: -1, selected: false}
-		}
-	}
-	t.resolve(r, res)
+	t.resolve(r, dismissalOrPendingResponse(r))
 	return t.exitState(), handled
+}
+
+// dismissalOrPendingResponse returns the response a closed request
+// resolves with: the OnSelect-stamped pending response when a
+// selection was made, the per-kind dismissal response otherwise.
+func dismissalOrPendingResponse(r *request) response {
+	if r.pendingSelected {
+		return r.pendingResp
+	}
+	switch r.kind {
+	case reqConfirm:
+		return response{confirmed: false}
+	case reqChoice:
+		return response{selectedIdx: -1, selected: false}
+	}
+	return response{}
 }
 
 // Cursor returns no cursor; tutorial overlays do not own the cursor.
@@ -681,10 +700,10 @@ func (t *Tutorial) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Selection returns no selection.
 func (t *Tutorial) Selection() (string, bool) { return "", false }
 
-// ComponentAt returns the handler behind the overlay cell at pos: the
-// active prompt for confirm/choice overlays, the tutorial itself for
-// every other overlay kind. ok=false when the last Draw painted
-// nothing at pos.
+// ComponentAt returns the handler behind the bespoke overlay cell at
+// pos (the wait-hint boxes and banner); browser-hosted windows are
+// hit-tested by the composing handler against the overlay browser
+// instead. ok=false when the last Draw painted nothing at pos.
 func (t *Tutorial) ComponentAt(pos term.Coordinates) (tui.Handler, bool) {
 	t.mu.Lock()
 	active := t.active
@@ -698,9 +717,6 @@ func (t *Tutorial) ComponentAt(pos term.Coordinates) (tui.Handler, bool) {
 		pos.X >= vpos.X+t.overlay.Width() ||
 		pos.Y >= vpos.Y+t.overlay.Height() {
 		return nil, false
-	}
-	if active.promptVirtual != nil {
-		return active.promptVirtual, true
 	}
 	return t, true
 }
@@ -737,6 +753,7 @@ func (t *Tutorial) ObserveCommand(
 		// command prompt already shows the underlying error.
 		if active.onError != "" {
 			active.text = expandCmdTemplate(active.onError, t.commandKeyDisplay)
+			t.refreshHintWindow(active)
 		}
 		return false
 	}
@@ -785,6 +802,7 @@ func (t *Tutorial) observeShellCommand(
 	if err != nil {
 		if active.onError != "" {
 			active.text = expandCmdTemplate(active.onError, t.commandKeyDisplay)
+			t.refreshHintWindow(active)
 		}
 		return false
 	}
@@ -809,7 +827,11 @@ func argsContainAll(have, want []string) bool {
 // the active request and waits for the TUI loop to deliver a
 // response or for the run context to be cancelled. Side-effect
 // builtins (notify, open_file, highlight_window) do not call this;
-// they run inline via runOnTUI instead.
+// they run inline via runOnTUI instead. A floating_window's browser
+// window is opened here, on the run goroutine, before the request
+// becomes active — the overlay browser's leaf lock makes that safe —
+// and is closed by resolve, by the user's ✕ click, or below when the
+// run is cancelled while the request is in flight.
 func (t *Tutorial) publishRequest(r *request) (response, error) {
 	t.mu.Lock()
 	if t.runCtx == nil {
@@ -818,20 +840,29 @@ func (t *Tutorial) publishRequest(r *request) (response, error) {
 	}
 	ctx := t.runCtx
 	width, height := t.width, t.height
-	fcs := t.frameCharSet
-	defAttr := t.defaultAttr
 	r.respond = make(chan response, 1)
-	if r.kind == reqFloatingWindow {
-		stageFloatingWindowShader(r, width, height, fcs, defAttr)
-	}
 	if r.kind == reqFloatingWindow || r.kind == reqMarkdown {
 		t.stepCount++
 		r.stepNum = t.stepCount
 	} else {
 		r.stepNum = t.stepCount
 	}
-	if r.kind == reqConfirm || r.kind == reqChoice {
-		buildPromptOverlay(r, t.promptConfig)
+	t.mu.Unlock()
+
+	switch r.kind {
+	case reqFloatingWindow:
+		t.openFloatingWindow(r, width, height)
+	case reqConfirm, reqChoice:
+		t.openPromptWindow(r)
+	case reqWaitKey, reqWaitCommand, reqWaitShell, reqWaitEvent:
+		t.openHintWindow(r, width, height)
+	}
+
+	t.mu.Lock()
+	if t.runCtx == nil {
+		t.mu.Unlock()
+		t.closeRequestWindow(r)
+		return response{}, errStopped
 	}
 	t.active = r
 	signal := t.firstSignal
@@ -845,53 +876,9 @@ func (t *Tutorial) publishRequest(r *request) (response, error) {
 	case res := <-r.respond:
 		return res, nil
 	case <-ctx.Done():
+		t.closeRequestWindow(r)
 		return response{}, errStopped
 	}
-}
-
-// buildPromptOverlay constructs the handler.Prompt and its
-// positioning wrapper for a reqConfirm/reqChoice request. OnSelect
-// stamps the request's pending response fields; handlePrompt then
-// calls resolve with that response so the resolve barrier is in
-// place before delivery. OnClose is a no-op here: handlePrompt
-// observes prompt exit and resolves with the dismissal response
-// directly when no OnSelect ran.
-func buildPromptOverlay(r *request, promptCfg browser.PromptConfig) {
-	ph := handler.FuncPromptHandler(
-		func(idx int, option string) {
-			value := option
-			if idx >= 0 && idx < len(r.options) {
-				value = r.options[idx]
-			}
-			r.pendingResp = response{
-				selectedIdx:   idx,
-				selectedValue: value,
-				selected:      true,
-			}
-			if r.kind == reqConfirm {
-				r.pendingResp.confirmed = idx == 0
-			}
-			r.pendingSelected = true
-		},
-		func() error {
-			return nil
-		},
-	)
-	cfg := handler.PromptConfig{
-		PromptConfig: component.PromptConfig{
-			Message:              r.message,
-			Options:              padPromptOptions(r.options),
-			BackgroundAttributes: promptCfg.BackgroundAttr,
-			MinWidth:             promptCfg.MinWidth,
-			NewMessage:           newPromptMarkdownMessage,
-		},
-		PromptHandler: ph,
-		OptionAttr:    promptCfg.TextAttr,
-		HighlightAttr: promptCfg.HighlightAttr,
-	}
-	r.prompt = handler.NewPrompt(cfg)
-	r.promptVirtual = &handler.Virtual[*handler.Prompt]{}
-	r.promptVirtual.C = r.prompt
 }
 
 // padPromptOptions surrounds each option label with a single space on
@@ -907,37 +894,11 @@ func padPromptOptions(options []string) []string {
 	return padded
 }
 
-// newPromptMarkdownMessage renders a confirm/choice prompt message as
-// markdown, mirroring browser.Component.Prompt so tutorial prompts
-// match the IDE's prompts. It falls back to a centered plain string
-// when the message is not valid markdown.
-func newPromptMarkdownMessage(str string) component.Floating {
-	mcfg := markdown.DefaultConfig()
-	mcfg.HeaderPrefix = false
-	if mkd, err := markdown.NewWithConfig(str, mcfg); err == nil {
-		return component.NewAspectRatioFloatingResponsive(
-			component.NewSpan(mkd, component.SpanConfig{
-				PadHorizontal:    4,
-				PadVertical:      2,
-				ContentAlignment: component.AlignmentCentered,
-			}), component.DefaultAspectRatio)
-	}
-	messageResponsive := component.NewResponsiveString(str,
-		component.StringResponsiveConfig{
-			NoSplitWords: true,
-			StringConfig: component.StringConfig{
-				PaddingVertical:   4,
-				PaddingHorizontal: 4,
-				Alignment:         component.AlignmentCentered,
-			},
-		})
-	return component.NewAspectRatioFloatingResponsive(
-		messageResponsive, component.DefaultAspectRatio)
-}
-
 // resolve delivers res to r and clears the active slot. The TUI loop
 // calls this from Draw/Handle; multiple resolves on the same request
-// are no-ops thanks to request.deliver's sync.Once. After delivery,
+// are no-ops thanks to request.deliver's sync.Once. The request's
+// browser window is closed before delivery so the old window is gone
+// before the run goroutine can open the next one. After delivery,
 // resolve installs a one-shot barrier and blocks until the run
 // goroutine reaches its next observable state (a freshly published
 // request, an inline side effect, or run completion), so that
@@ -957,12 +918,14 @@ func (t *Tutorial) resolve(r *request, res response) {
 		// exit/fail with the dispatch). Skip the barrier — there
 		// will be no more state transitions.
 		t.mu.Unlock()
+		t.closeRequestWindow(r)
 		r.deliver(res)
 		return
 	}
 	t.firstSignal = signal
 	t.mu.Unlock()
 
+	t.closeRequestWindow(r)
 	r.deliver(res)
 	<-barrier
 }

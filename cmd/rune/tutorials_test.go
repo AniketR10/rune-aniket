@@ -34,11 +34,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 )
 
@@ -57,8 +57,6 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -89,8 +87,6 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -247,10 +243,12 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 	t.Parallel()
 
 	notis := &capturingNotis{}
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
 	tut, err := starlarktutorial.New(
 		"agent", agentTutorial,
-		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		overlay, nil, notis, nil,
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -328,7 +326,7 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	tut, err := starlarktutorial.New(
 		"navigation", navigationTutorial,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", keyFor,
@@ -561,7 +559,7 @@ func advanceToDefinitionWindow(t *testing.T, mode string) *starlarktutorial.Tuto
 	tut, err := starlarktutorial.New(
 		"navigation", navigationTutorial,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		mode, keyFor,
@@ -672,8 +670,6 @@ func TestNavigationTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -698,7 +694,7 @@ func TestAgentTutorialParses(t *testing.T) {
 	tut, err := starlarktutorial.New(
 		"agent", agentTutorial,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
@@ -743,8 +739,6 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -771,8 +765,6 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -801,8 +793,6 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		nil,
 		term.Attributes{},
-		component.FrameCharSet{},
-		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
