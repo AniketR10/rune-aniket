@@ -25,6 +25,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -72,7 +73,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "34", tut.Version())
+	assert.Equal(t, "35", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -101,7 +102,145 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "34", tut.Version())
+	assert.Equal(t, "35", tut.Version())
+}
+
+func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
+	t.Parallel()
+
+	requested := map[string]bool{}
+	keyFor := func(cmd string, args []string) string {
+		requested[strings.Join(append([]string{cmd}, args...), " ")] = true
+		return ""
+	}
+
+	_, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+
+	for _, command := range []string{
+		"windowfocus up",
+		"windowfocus left",
+		"windowfocus down",
+		"windowfocus right",
+		"windowmove up",
+		"windowmove left",
+		"windowmove down",
+		"windowmove right",
+		"windowresize increase height",
+		"windowresize decrease width",
+		"windowresize decrease height",
+		"windowresize increase width",
+		"tabnext",
+		"tabprevious",
+		"tabmove left",
+		"tabmove right",
+	} {
+		assert.Truef(t, requested[command],
+			"the basics tutorial must resolve %q through the active preset", command)
+	}
+}
+
+func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
+	t.Parallel()
+
+	notis := &capturingNotis{}
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(100, 30)
+	tut.Reset()
+
+	wait := func(kind string) {
+		t.Helper()
+		require.True(t, tut.WaitActive(kind, time.Second),
+			"expected a %s step", kind)
+	}
+	dismiss := func(ev term.Event) {
+		t.Helper()
+		_, _ = tut.Handle(ev)
+	}
+	dismissPromptStep := func() {
+		t.Helper()
+		wait("floating_window")
+		dismiss(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+	observe := func(command string, args ...string) {
+		t.Helper()
+		wait("wait_command")
+		tut.ObserveCommand(command, command, args, nil)
+	}
+
+	dismissPromptStep()
+	observe("workspaceopen", "/tmp/tutorial-workspace")
+	dismissPromptStep()
+	observe("edit", "README.md")
+
+	dismissPromptStep()
+	dismissPromptStep()
+	observe("windownew")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+
+	wait("floating_window")
+	dismiss(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	dismissPromptStep()
+	observe("windowfocus", "up")
+	wait("wait_command")
+	tut.ObserveCommand("windowfocus", "windowfocus", []string{"left"}, nil)
+	observe("windowfocus", "right")
+
+	dismissPromptStep()
+	observe("windowmove", "left")
+	observe("windowmove", "right")
+
+	dismissPromptStep()
+	observe("windowresize", "increase", "height")
+	wait("wait_command")
+	tut.ObserveCommand("windowresize", "windowresize",
+		[]string{"increase", "width"}, nil)
+	observe("windowresize", "decrease", "width")
+
+	dismissPromptStep()
+	observe("windowtogglemaximize")
+	dismissPromptStep()
+	observe("windowclose")
+	dismissPromptStep()
+	observe("fexplorer")
+	wait("wait_event")
+	tut.ObserveEvent("open", "file:///README.md")
+	dismissPromptStep()
+	observe("fexplorer")
+	dismissPromptStep()
+	observe("tabnext")
+	observe("tabprevious")
+
+	dismissPromptStep()
+	observe("tabmove", "left")
+	observe("tabmove", "right")
+
+	wait("floating_window")
+	assert.Contains(t, notis.successes(), "You resized a window.")
+	assert.Contains(t, notis.successes(), "You reordered the tabs.")
 }
 
 func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
@@ -650,8 +789,8 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
 // also parses under the emacs editor mode, exercising the emacs branch of
-// the direction-phrasing logic (home-row <meta> focus, GNU-Emacs buffer
-// motion keys, arrow-key completer).
+// the direction-phrasing logic (IJKL layout, GNU-Emacs buffer motion keys,
+// arrow-key completer).
 func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	t.Parallel()
 
@@ -675,5 +814,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "34", tut.Version())
+	assert.Equal(t, "35", tut.Version())
 }

@@ -16,30 +16,55 @@
 ck = command_key()
 mode = editor_mode()
 
-# Direction keys differ by editor mode. Modal and emacs point with the home
-# row; the standard editor uses Ctrl+Meta+Arrow, so focus_example adapts to
-# whichever preset the user is running.
-#
-# dir_phrase is different: it describes moving the cursor inside a buffer
-# (the file explorer), which each editor mode owns directly rather than
-# through a <meta> command. Modal moves with vim's home row `h j k l`,
-# emacs moves with the GNU-Emacs motion keys `<ctrl-p>` / `<ctrl-n>`, and
-# the standard editor moves with the arrow keys.
+# Buffer motion and layout direction are separate systems. The file explorer
+# uses each editor's native movement, while layout commands use HJKL in modal
+# mode and IJKL in the standard and Emacs presets.
 if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
-    focus_example = "`<meta-h>`"
     completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
     modal_surface_allow_keys = ["<esc>"]
+    direction_pattern_md = """\
+You picked **modal** editing, so Rune keeps the familiar HJKL directions:
+
+```text
+    K
+  H J L
+```
+
+`K` points up, `H` left, `J` down, and `L` right.
+"""
 elif mode == "emacs":
     dir_phrase = "the motion keys `<ctrl-p>` / `<ctrl-n>` or the arrow keys"
-    focus_example = "`<meta-h>`"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
     modal_surface_allow_keys = []
+    direction_pattern_md = """\
+You picked **Emacs** editing. Rune leaves the Emacs `<ctrl>` and `<alt>`
+editing chords alone and puts layout direction on an IJKL cluster:
+
+```text
+    I
+  J K L
+```
+
+`I` points up, `J` left, `K` down, and `L` right. Window focus starts with
+`<ctrl-meta>`; adding `<shift>` moves a window, while adding `<alt>` resizes it.
+"""
 else:
     dir_phrase = "the arrow keys"
-    focus_example = "`<ctrl-meta-left>`"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
     modal_surface_allow_keys = []
+    direction_pattern_md = """\
+You picked **standard** editing. Native arrow keys stay available for text,
+while layout direction uses an IJKL cluster under your right hand:
+
+```text
+    I
+  J K L
+```
+
+`I` points up, `J` left, `K` down, and `L` right. The exact modifiers differ
+between macOS and Linux, so the table below shows the bindings active for you.
+"""
 
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
@@ -52,7 +77,15 @@ def keypress(cmd, *args):
     k = key_for(cmd, *args)
     if k:
         return "press `" + k + "`"
-    return "open the command prompt (`" + ck + "`) and run `" + cmd + "`"
+    return ("open the command prompt (`" + ck + "`) and run `" +
+            command_line(cmd, args) + "`")
+
+def command_line(cmd, args):
+    return cmd + ((" " + " ".join(args)) if len(args) else "")
+
+def keylabel(cmd, *args):
+    k = key_for(cmd, *args)
+    return "`" + (k if k else command_line(cmd, args)) + "`"
 
 def dismiss_for(cmd, *args):
     # Keys that dismiss a teaching window. Always include the command
@@ -62,6 +95,50 @@ def dismiss_for(cmd, *args):
     # following wait_command observes.
     k = key_for(cmd, *args)
     return [ck, k] if k else [ck]
+
+def args_match(got, want):
+    if len(got) != len(want):
+        return False
+    for i in range(len(want)):
+        if got[i] != want[i]:
+            return False
+    return True
+
+def wait_expected_command(title, command, expected_args, on_error):
+    # A successfully dispatched command has already taken effect, so keep the
+    # lesson armed and ask for the intended direction rather than rejecting it.
+    for _ in range(1000):
+        result = wait_command(
+            title    = title,
+            command  = command,
+            on_error = on_error,
+        )
+        if args_match(result.args, expected_args):
+            return
+        notify(
+            level   = info,
+            message = ("That ran `" + command_line(command, result.args) +
+                       "`. Now run `" + command_line(command, expected_args) + "`."),
+        )
+
+focus_key_row = " | ".join([
+    keylabel("windowfocus", "up"),
+    keylabel("windowfocus", "left"),
+    keylabel("windowfocus", "down"),
+    keylabel("windowfocus", "right"),
+])
+move_key_row = " | ".join([
+    keylabel("windowmove", "up"),
+    keylabel("windowmove", "left"),
+    keylabel("windowmove", "down"),
+    keylabel("windowmove", "right"),
+])
+resize_key_row = " | ".join([
+    keylabel("windowresize", "increase", "height"),
+    keylabel("windowresize", "decrease", "width"),
+    keylabel("windowresize", "decrease", "height"),
+    keylabel("windowresize", "increase", "width"),
+])
 
 welcome_md = """\
 This is the **home workspace**: a scratch workspace rooted at `~/` that
@@ -113,16 +190,29 @@ just one kind of content among many. Every layout action is a command
 you can type at the prompt; the default keys are just shortcuts, and
 they follow one small, standardized system.
 
-## The three layers
+## One reusable pattern
 
-- **Window and workspace commands live on layout chords.** Modal mode uses
-  `<meta>` plus a direction. Standard mode keeps native text movement free and
-  uses `<ctrl-meta>` plus an arrow for window directions.
-- **`<alt>` is the tab layer.** Switching or reordering the tabs
-  inside a window lives on `<alt>`.
-- **`<shift>` means "move" instead of "go to".** `<meta>` plus a
-  direction *focuses* a window; add `<shift>` and the same direction
-  *moves* it. The rule holds for tabs and workspaces too.
+- **The letter supplies direction.** Modal uses HJKL; standard and Emacs use
+  IJKL.
+- **The modifiers choose what moves.** The same direction can focus, move, or
+  resize a window.
+- **`<shift>` means "move" instead of "go to".** Add it to a window-focus
+  binding to move the window, or to a tab-switch binding to reorder the tab.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
+directional_layout_md = direction_pattern_md + """
+
+## Your current layout keys
+
+| Action | Up | Left | Down | Right |
+| --- | --- | --- | --- | --- |
+| Focus | """ + focus_key_row + """ |
+| Move | """ + move_key_row + """ |
+| Resize | """ + resize_key_row + """ |
+
+The table follows your current configuration, including custom bindings.
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -191,6 +281,18 @@ Move the focused window to the left (""" + keypress("windowmove", "left") + """)
 then back to the right (""" + keypress("windowmove", "right") + """).
 """
 
+resize_window_md = """\
+Window resizing keeps the same directions. In the IJKL layout, `I` makes the
+window taller, `J` narrower, `K` shorter, and `L` wider. Modal mode uses the
+matching arrow directions instead.
+
+- `windowresize increase width` makes the focused window wider.""" + keyhint("windowresize", "increase", "width") + """
+- `windowresize decrease width` makes it narrower.""" + keyhint("windowresize", "decrease", "width") + """
+
+First make the window wider (""" + keypress("windowresize", "increase", "width") + """),
+then make it narrower again (""" + keypress("windowresize", "decrease", "width") + """).
+"""
+
 fullscreen_window_md = """\
 When you want to focus on one window, `windowtogglemaximize` grows it
 to fill the whole editor area. Run it again, or focus another window,
@@ -233,10 +335,22 @@ Toggle the explorer closed: """ + keypress("fexplorer") + """.
 
 tab_switch_md = """\
 That window now holds two tabs. `tabnext` / `tabprevious` cycle through
-them and wrap around; tabs are the `<alt>` layer.
+them and wrap around. Each preset has a horizontal tab pair; adding `<shift>`
+to that pair reorders the current tab instead.
 
 Switch to the next tab (""" + keypress("tabnext") + """), then back to
 the previous one (""" + keypress("tabprevious") + """).
+"""
+
+tab_move_md = """\
+Now use the same horizontal pair with `<shift>` to change the tab's position
+instead of switching tabs.
+
+- `tabmove left` moves it one slot left.""" + keyhint("tabmove", "left") + """
+- `tabmove right` moves the current tab one slot right.""" + keyhint("tabmove", "right") + """
+
+Move the current tab left (""" + keypress("tabmove", "left") + """), then
+move it back right (""" + keypress("tabmove", "right") + """).
 """
 
 close_tab_md = """\
@@ -366,6 +480,10 @@ def teach_layout():
                     dismiss_keys = [ck])
 
 
+def teach_directional_layout():
+    floating_window(title = "Your directional layout", text = directional_layout_md)
+
+
 def teach_split_window():
     floating_window(title = "Split a window", text = split_window_md,
                     dismiss_keys = dismiss_for("windownew"))
@@ -428,14 +546,16 @@ def teach_terminal_split():
 def teach_focus_window():
     floating_window(title = "Move between windows", text = focus_window_md,
                     dismiss_keys = dismiss_for("windowfocus", "left"))
-    wait_command(
+    wait_expected_command(
         title    = "Move between windows",
         command  = "windowfocus",
+        expected_args = ["left"],
         on_error = "Focus the window to the left.",
     )
-    wait_command(
+    wait_expected_command(
         title    = "Move between windows",
         command  = "windowfocus",
+        expected_args = ["right"],
         on_error = "Now focus the window to the right.",
     )
     notify(level = success, message = "You moved between windows.")
@@ -445,17 +565,38 @@ def teach_move_window():
     floating_window(title = "Move a window", text = move_window_md,
                     alignment = "top",
                     dismiss_keys = dismiss_for("windowmove", "left"))
-    wait_command(
+    wait_expected_command(
         title    = "Move a window",
         command  = "windowmove",
+        expected_args = ["left"],
         on_error = "Move the focused window to the left.",
     )
-    wait_command(
+    wait_expected_command(
         title    = "Move a window",
         command  = "windowmove",
+        expected_args = ["right"],
         on_error = "Now move it back to the right.",
     )
     notify(level = success, message = "You moved a window.")
+
+
+def teach_resize_window():
+    floating_window(title = "Resize a window", text = resize_window_md,
+                    alignment = "top",
+                    dismiss_keys = dismiss_for("windowresize", "increase", "width"))
+    wait_expected_command(
+        title         = "Resize a window",
+        command       = "windowresize",
+        expected_args = ["increase", "width"],
+        on_error      = "Make the focused window wider.",
+    )
+    wait_expected_command(
+        title         = "Resize a window",
+        command       = "windowresize",
+        expected_args = ["decrease", "width"],
+        on_error      = "Now make it narrower again.",
+    )
+    notify(level = success, message = "You resized a window.")
 
 
 def teach_fullscreen_window():
@@ -525,6 +666,24 @@ def teach_switch_tabs():
         on_error = "Now move back to the previous tab.",
     )
     notify(level = success, message = "You switched tabs.")
+
+
+def teach_move_tabs():
+    floating_window(title = "Reorder tabs", text = tab_move_md,
+                    dismiss_keys = dismiss_for("tabmove", "left"))
+    wait_expected_command(
+        title         = "Reorder tabs",
+        command       = "tabmove",
+        expected_args = ["left"],
+        on_error      = "Move the current tab one slot to the left.",
+    )
+    wait_expected_command(
+        title         = "Reorder tabs",
+        command       = "tabmove",
+        expected_args = ["right"],
+        on_error      = "Now move it one slot back to the right.",
+    )
+    notify(level = success, message = "You reordered the tabs.")
 
 
 def teach_close_tab():
@@ -637,12 +796,15 @@ def run():
     teach_modal_surfaces()
     teach_split_direction()
     teach_terminal_split()
+    teach_directional_layout()
     teach_focus_window()
     teach_move_window()
+    teach_resize_window()
     teach_fullscreen_window()
     teach_close_window()
     teach_tabs()
     teach_switch_tabs()
+    teach_move_tabs()
     teach_close_tab()
     teach_terminals()
 
@@ -653,4 +815,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "34", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "35", entry = run)
