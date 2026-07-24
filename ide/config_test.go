@@ -1570,3 +1570,25 @@ func TestCommandKeyBindingLookup(t *testing.T) {
 	assert.Equal(t, "", lookup("tabclose", nil))
 	assert.Empty(t, c.errors)
 }
+
+func TestCommandKeyBindingLookupPrefersPrintableAlias(t *testing.T) {
+	t.Parallel()
+	c := ideConfig{
+		cfg: map[string]any{
+			"command": map[string]any{
+				"key_bindings": map[string]any{
+					"<c-a-m-left>": "windowresize decrease width",
+					"<c-a-m-j>":    "windowresize decrease width",
+				},
+			},
+		},
+		errors: map[string]error{},
+	}
+
+	for range 20 {
+		lookup := c.commandKeyBindingLookup()
+		assert.Equal(t, "<ctrl-alt-meta-j>",
+			lookup("windowresize", []string{"decrease", "width"}))
+	}
+	assert.Empty(t, c.errors)
+}

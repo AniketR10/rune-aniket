@@ -49,8 +49,6 @@ command:
     "<s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
-    "<c-tab>": tabnext
-    "<c-s-tab>": tabprevious
     "<f3>": "jumptolocation next search"
     "<s-f3>": "jumptolocation prev search"
     "<a-n>": "lsp rename"
@@ -72,23 +70,42 @@ command:
     "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    "<c-m-left>": "windowfocus left"
-    "<c-m-right>": "windowfocus right"
-    "<c-m-down>": "windowfocus down"
-    "<c-m-up>": "windowfocus up"
-    "<c-s-m-left>": "windowmove left"
-    "<c-s-m-right>": "windowmove right"
-    "<c-s-m-down>": "windowmove down"
-    "<c-s-m-up>": "windowmove up"
+    # IJKL points up, left, down, right. <ctrl-meta> focuses a window;
+    # add <shift> to move it.
+    "<c-m-i>": "windowfocus up"
+    "<c-m-j>": "windowfocus left"
+    "<c-m-k>": "windowfocus down"
+    "<c-m-l>": "windowfocus right"
+    "<c-s-m-i>": "windowmove up"
+    "<c-s-m-j>": "windowmove left"
+    "<c-s-m-k>": "windowmove down"
+    "<c-s-m-l>": "windowmove right"
+    # Tabs use J/L for left/right. Add <shift> to reorder them.
+    "<c-a-j>": tabprevious
+    "<c-a-l>": tabnext
+    "<c-s-a-j>": "tabmove left"
+    "<c-s-a-l>": "tabmove right"
+    # Resize with the same IJKL directions; modified arrows work too.
+    "<c-a-m-i>": "windowresize increase height"
+    "<c-a-m-j>": "windowresize decrease width"
+    "<c-a-m-k>": "windowresize decrease height"
+    "<c-a-m-l>": "windowresize increase width"
     "<c-a-m-left>": "windowresize decrease width"
     "<c-a-m-right>": "windowresize increase width"
     "<c-a-m-down>": "windowresize decrease height"
     "<c-a-m-up>": "windowresize increase height"
     "<c-m-h>": "windowdefaultsplit h"
     "<c-m-v>": "windowdefaultsplit v"
-    "<a-s-m-left>": "tabmove left"
-    "<a-s-m-right>": "tabmove right"
-    # Keep native text movement and selection chords editor-owned.
+    # I/K visits the previous/next item: <ctrl> for diagnostics, <alt> for Git changes.
+    # The standard editor uses <ctrl-k> to cut to the end of the line. To use
+    # that behavior, move the <ctrl-i>/<ctrl-k> diagnostic pair to other keys.
+    "<c-i>": lspprevdiagnostic
+    "<c-k>": lspnextdiagnostic
+    "<a-i>": gitprevchange
+    "<a-k>": gitnextchange
+    "<a-j>": ""
+    "<a-s-j>": ""
+    "<a-s-k>": ""
     "<m-left>": ""
     "<m-right>": ""
     "<m-down>": ""
@@ -99,8 +116,6 @@ command:
     "<s-m-up>": ""
     "<a-s-left>": ""
     "<a-s-right>": ""
-    # Unbind modal home-row aliases so reverse lookup resolves to the
-    # standard modified-arrow bindings.
     "<m-h>": ""
     "<m-j>": ""
     "<m-k>": ""
@@ -111,10 +126,8 @@ command:
     "<s-m-l>": ""
     "<a-s-h>": ""
     "<a-s-l>": ""
-    # Unbind modal tab, split, and jumplist chords this preset re-homes.
     "<a-l>": ""
     "<a-h>": ""
-    "<c-i>": ""
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log

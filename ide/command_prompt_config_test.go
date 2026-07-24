@@ -136,6 +136,19 @@ func TestCommandKeyBindingHintLookupDirect(t *testing.T) {
 	assert.Empty(t, c.errors)
 }
 
+func TestCommandKeyBindingHintLookupPrefersPrintableAlias(t *testing.T) {
+	c := hintConfig(map[string]any{
+		"<c-a-m-left>": "windowresize decrease width",
+		"<c-a-m-j>":    "windowresize decrease width",
+	}, nil)
+
+	for range 20 {
+		lookup := c.commandKeyBindingHintLookup()
+		assert.Equal(t, "<ctrl-alt-meta-j>", lookup["windowresize decrease width"])
+	}
+	assert.Empty(t, c.errors)
+}
+
 // TestCommandKeyBindingHintLookupEchoTopLevel maps an
 // `echo {prompt}<cmd><space>` prefill to a hint on the top-level
 // command word, but not to multi-word command lines.

@@ -13,61 +13,76 @@ terminal:
 command:
   key: <a-x>                       # execute-extended-command (M-x)
   key_bindings:
-    # Files & session
+    # Files and sessions use familiar Emacs C-x chords.
     "<c-x><c-s>": write            # save-buffer
     "<c-x>s": writeall             # save-some-buffers
     "<c-x><c-c>": quit             # save-buffers-kill-terminal
     "<c-x><c-f>": searchfile       # find-file
-    # Window and tab management live on the <meta> (Cmd) layer inherited
-    # from rune.star, not on C-x: in a terminal <c-x> is frequently
-    # intercepted by the terminal emulator / OS, so C-x-prefixed window/tab
-    # bindings never reach Rune. <meta> is unused by real Emacs and has no
-    # editor conflict, so window management uses the base <m-h/l/j/k>
-    # (focus), <s-m-h/l/j/k> (move), <c-m-h/v> (split), <m-w> (close), and
-    # <s-m-f> (maximize) chords directly.
-    #
-    # Tab management: the base <alt> tab chords are unbound below (the emacs
-    # editor owns <alt> as Meta), so add <meta>-layer tab bindings here.
+    # IJKL points up, left, down, right. <ctrl-meta> focuses a window;
+    # add <shift> to move it.
+    "<c-m-i>": "windowfocus up"
+    "<c-m-j>": "windowfocus left"
+    "<c-m-k>": "windowfocus down"
+    "<c-m-l>": "windowfocus right"
+    "<c-s-m-i>": "windowmove up"
+    "<c-s-m-j>": "windowmove left"
+    "<c-s-m-k>": "windowmove down"
+    "<c-s-m-l>": "windowmove right"
+    "<m-h>": ""
+    "<m-j>": ""
+    "<m-k>": ""
+    "<m-l>": ""
+    "<s-m-h>": ""
+    "<s-m-j>": ""
+    "<s-m-k>": ""
+    "<s-m-l>": ""
+    # Resize with the same IJKL directions; modified arrows work too.
+    "<c-a-m-i>": "windowresize increase height"
+    "<c-a-m-j>": "windowresize decrease width"
+    "<c-a-m-k>": "windowresize decrease height"
+    "<c-a-m-l>": "windowresize increase width"
+    "<c-a-m-up>": "windowresize increase height"
+    "<c-a-m-left>": "windowresize decrease width"
+    "<c-a-m-down>": "windowresize decrease height"
+    "<c-a-m-right>": "windowresize increase width"
+    "<s-m-up>": ""
+    "<s-m-left>": ""
+    "<s-m-down>": ""
+    "<s-m-right>": ""
+    # Tabs use <meta-[> / <meta-]> so <alt> stays available as Emacs Meta.
     "<m-]>": tabnext
     "<m-[>": tabprevious
     "<s-m-w>": tabclose
     "<s-m-]>": "tabmove right"
     "<s-m-[>": "tabmove left"
-    # Rune-only history commands also hang off the C-x prefix. C-c is
-    # unavailable as a prefix: the emacs editor claims a bare <c-c> for
-    # copy, so it never reaches the command sequencer.
+    # C-x [ / ] walks cursor history; C-x C-x exchanges point and mark.
     "<c-x>[": "cursorhistory prev"
     "<c-x>]": "cursorhistory next"
-    # exchange-point-and-mark: swap point with the most recent C-SPC mark.
     "<c-x><c-x>": exchangepointandmark
-    # Workspace-wide text search and match navigation.
+    # C-x g searches the workspace; C-x n / p visits its matches.
     "<c-x>g": searchtext               # grep across the workspace
     "<c-x>n": "jumptolocation next search"
     "<c-x>p": "jumptolocation prev search"
-    # Language intelligence on the C-x prefix (GUI mode has no <alt> LSP
-    # chords: <alt> is Meta, owned by the editor). Mirrors the TUI C-x LSP
-    # family so the same muscle memory works in the GUI.
+    # Language tools follow the same C-x family in the GUI and terminal.
     "<c-x>d": "lsp definition"
     "<c-x>r": "lsp references"
     "<c-x>i": "lsp implementation"
     "<c-x>t": "lsp hover"
     "<c-x>b": "lsp format"
     "<c-x>e": "lsp diagnostics"
-    "<c-x>j": "lspnextdiagnostic"
-    "<c-x>l": "lspprevdiagnostic"
-    "<c-x><c-n>": "gitnextchange"
-    "<c-x><c-p>": "gitprevchange"
-    # Bookmarks stay on the function-key row: unambiguous and clear of the
-    # editor and C-x/C-c prefixes.
+    # F5/F6 visits Git changes; F7/F8 visits diagnostics.
+    "<f5>": gitprevchange
+    "<f6>": gitnextchange
+    "<f7>": lspprevdiagnostic
+    "<f8>": lspnextdiagnostic
+    # F2 visits bookmarks; add <shift> to go back.
     "<m-f2>": "locationtoggle bookmark"
     "<f2>": "jumptolocation next bookmark"
     "<s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
     "<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
-    # <alt> is authentic Emacs Meta, owned by the editor (M-f/b/d/w, M-x,
-    # M-;, M-</>, case ops). Unbind every base <alt> command chord so the
-    # editor — not the command layer — receives them and nothing is shadowed.
+    # <alt> remains Emacs Meta for editing commands such as M-f, M-b, M-d and M-w.
     "<a-w>": ""
     "<a-l>": ""
     "<a-h>": ""
@@ -110,8 +125,7 @@ command:
     "<a-s-8>": ""
     "<a-s-9>": ""
     "<alt-enter>": ""
-    # C-SPC is set-mark-command in the editor; drop the base lsp-complete
-    # binding so the editor receives it. Completion stays on <c-x>/ below.
+    # C-SPC sets the mark; C-x / opens completion.
     "<c-space>": ""
     "<c-x>/": "lsp complete"
 

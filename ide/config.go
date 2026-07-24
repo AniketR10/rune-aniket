@@ -527,17 +527,37 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 	return ret
 }
 
+func sortedCommandKeySequences(mappings map[handler.Sequence][][]string) []handler.Sequence {
+	seqs := make([]handler.Sequence, 0, len(mappings))
+	for seq := range mappings {
+		seqs = append(seqs, seq)
+	}
+	slices.SortFunc(seqs, func(a, b handler.Sequence) int {
+		if a.First.Ch != 0 && b.First.Ch == 0 {
+			return -1
+		}
+		if a.First.Ch == 0 && b.First.Ch != 0 {
+			return 1
+		}
+		return strings.Compare(a.String(), b.String())
+	})
+	return seqs
+}
+
 // commandKeyBindingLookup returns a closure that resolves a command
 // name (and optional args) to the user's configured key spec, or ""
 // when no binding matches. It inverts commandKeyMappings once: each
 // command line in a binding maps to that binding's key, keyed by the
 // joined command+args. A multi-command sequence binding maps every
-// command line to the same key; the first writer wins so earlier,
-// more specific bindings stay stable. The closure falls back to the
-// bare command when an args-qualified lookup misses.
+// command line to the same key. Printable chords are preferred over
+// named-key aliases, then lexical order makes the choice stable. The
+// closure falls back to the bare command when an args-qualified lookup
+// misses.
 func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
 	lookup := make(map[string]string)
-	for seq, cmds := range c.commandKeyMappings() {
+	mappings := c.commandKeyMappings()
+	for _, seq := range sortedCommandKeySequences(mappings) {
+		cmds := mappings[seq]
 		key := seq.First.String()
 		if seq.Last != (term.KeyComb{}) {
 			key += seq.Last.String()
@@ -923,7 +943,8 @@ func (c ideConfig) commandKeyBindingHintLookup() map[string]string {
 		return key
 	}
 
-	for seq, cmds := range mappings {
+	for _, seq := range sortedCommandKeySequences(mappings) {
+		cmds := mappings[seq]
 		if len(cmds) != 1 {
 			continue
 		}
@@ -933,7 +954,8 @@ func (c ideConfig) commandKeyBindingHintLookup() map[string]string {
 		}
 	}
 
-	for seq, cmds := range mappings {
+	for _, seq := range sortedCommandKeySequences(mappings) {
+		cmds := mappings[seq]
 		if len(cmds) != 1 || len(cmds[0]) != 2 || cmds[0][0] != "echo" {
 			continue
 		}

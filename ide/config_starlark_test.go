@@ -679,61 +679,127 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 	runeStar := readRuneStar(t)
 
-	wantLayout := map[string]string{
-		"<ctrl-meta-left>":  "windowfocus left",
-		"<ctrl-meta-right>": "windowfocus right",
-		"<ctrl-meta-down>":  "windowfocus down",
-		"<ctrl-meta-up>":    "windowfocus up",
+	common := map[string]string{
+		"<ctrl-alt-meta-i>": "windowresize increase height",
+		"<ctrl-alt-meta-j>": "windowresize decrease width",
+		"<ctrl-alt-meta-k>": "windowresize decrease height",
+		"<ctrl-alt-meta-l>": "windowresize increase width",
 
-		"<ctrl-shift-meta-left>":  "windowmove left",
-		"<ctrl-shift-meta-right>": "windowmove right",
-		"<ctrl-shift-meta-down>":  "windowmove down",
-		"<ctrl-shift-meta-up>":    "windowmove up",
-
-		"<ctrl-alt-meta-left>":  "windowresize decrease width",
-		"<ctrl-alt-meta-right>": "windowresize increase width",
-		"<ctrl-alt-meta-down>":  "windowresize decrease height",
 		"<ctrl-alt-meta-up>":    "windowresize increase height",
+		"<ctrl-alt-meta-left>":  "windowresize decrease width",
+		"<ctrl-alt-meta-down>":  "windowresize decrease height",
+		"<ctrl-alt-meta-right>": "windowresize increase width",
 
 		"<ctrl-meta-h>": "windowdefaultsplit h",
 		"<ctrl-meta-v>": "windowdefaultsplit v",
 
-		"<alt-shift-meta-left>":  "tabmove left",
-		"<alt-shift-meta-right>": "tabmove right",
-	}
-	wantBound := map[string]string{
-
 		"<a-d>": "lsp definition",
 		"<a-r>": "lsp references",
-
 		"<a-n>": "lsp rename",
 		"<a-c>": "lsp declaration",
 		"<a-y>": "lsp type-definition",
 		"<a-g>": "lsp signature-help",
+
+		"<ctrl-i>": "lspprevdiagnostic",
+		"<ctrl-k>": "lspnextdiagnostic",
+		"<alt-i>":  "gitprevchange",
+		"<alt-k>":  "gitnextchange",
 	}
-	for key, cmd := range wantLayout {
-		wantBound[key] = cmd
+	tests := []struct {
+		name      string
+		file      string
+		layout    map[string]string
+		canonical map[string]string
+	}{
+		{
+			name: "darwin",
+			file: "override_standard_darwin.yaml",
+			layout: map[string]string{
+				"<meta-i>": "windowfocus up",
+				"<meta-j>": "windowfocus left",
+				"<meta-k>": "windowfocus down",
+				"<meta-l>": "windowfocus right",
+
+				"<shift-meta-i>": "windowmove up",
+				"<shift-meta-j>": "windowmove left",
+				"<shift-meta-k>": "windowmove down",
+				"<shift-meta-l>": "windowmove right",
+
+				"<alt-j>":       "tabprevious",
+				"<alt-l>":       "tabnext",
+				"<alt-shift-j>": "tabmove left",
+				"<alt-shift-l>": "tabmove right",
+			},
+			canonical: map[string]string{
+				"windowfocus left":  "<meta-j>",
+				"windowmove left":   "<shift-meta-j>",
+				"tabprevious":       "<alt-j>",
+				"tabnext":           "<alt-l>",
+				"tabmove left":      "<alt-shift-j>",
+				"tabmove right":     "<alt-shift-l>",
+				"lspprevdiagnostic": "<ctrl-i>",
+				"lspnextdiagnostic": "<ctrl-k>",
+				"gitprevchange":     "<alt-i>",
+				"gitnextchange":     "<alt-k>",
+			},
+		},
+		{
+			name: "linux",
+			file: "override_standard_linux.yaml",
+			layout: map[string]string{
+				"<ctrl-meta-i>": "windowfocus up",
+				"<ctrl-meta-j>": "windowfocus left",
+				"<ctrl-meta-k>": "windowfocus down",
+				"<ctrl-meta-l>": "windowfocus right",
+
+				"<ctrl-shift-meta-i>": "windowmove up",
+				"<ctrl-shift-meta-j>": "windowmove left",
+				"<ctrl-shift-meta-k>": "windowmove down",
+				"<ctrl-shift-meta-l>": "windowmove right",
+
+				"<ctrl-alt-j>":       "tabprevious",
+				"<ctrl-alt-l>":       "tabnext",
+				"<ctrl-shift-alt-j>": "tabmove left",
+				"<ctrl-shift-alt-l>": "tabmove right",
+			},
+			canonical: map[string]string{
+				"windowfocus left":  "<ctrl-meta-j>",
+				"windowmove left":   "<ctrl-shift-meta-j>",
+				"tabprevious":       "<ctrl-alt-j>",
+				"tabnext":           "<ctrl-alt-l>",
+				"tabmove left":      "<ctrl-shift-alt-j>",
+				"tabmove right":     "<ctrl-shift-alt-l>",
+				"lspprevdiagnostic": "<ctrl-i>",
+				"lspnextdiagnostic": "<ctrl-k>",
+				"gitprevchange":     "<alt-i>",
+				"gitnextchange":     "<alt-k>",
+			},
+		},
 	}
 
-	for _, file := range []string{
-		"override_standard_darwin.yaml",
-		"override_standard_linux.yaml",
-	} {
-		t.Run(file, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			base, err := decodeDefaultConfig(DefaultConfig{
 				src: string(runeStar), modal: true, tui: false,
 			})
 			require.NoError(t, err)
 
-			overlay, err := os.ReadFile(filepath.Join("../cmd/rune", file))
+			overlay, err := os.ReadFile(filepath.Join("../cmd/rune", tc.file))
 			require.NoError(t, err)
 			cfg, err := decodeOverlayConfigFile(
-				bytes.NewReader(overlay), file, base)
+				bytes.NewReader(overlay), tc.file, base)
 			require.NoError(t, err)
 
 			c := &ideConfig{cfg: cfg, errors: map[string]error{}}
 			mappings := c.commandKeyMappings()
 
+			wantBound := make(map[string]string, len(common)+len(tc.layout))
+			for key, cmd := range common {
+				wantBound[key] = cmd
+			}
+			for key, cmd := range tc.layout {
+				wantBound[key] = cmd
+			}
 			for key, wantCmd := range wantBound {
 				seq := mustParseBindingKey(t, key)
 				got, ok := mappings[seq]
@@ -743,16 +809,27 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 			}
 
 			lookup := c.commandKeyBindingLookup()
-			for wantKey, wantCmd := range wantLayout {
+			for wantCmd, wantKey := range tc.canonical {
 				cmd := strings.Split(wantCmd, " ")
 				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
 					"%q must resolve to %s", wantCmd, wantKey)
+			}
+			for wantCmd, wantKey := range map[string]string{
+				"windowresize increase height": "<ctrl-alt-meta-i>",
+				"windowresize decrease width":  "<ctrl-alt-meta-j>",
+				"windowresize decrease height": "<ctrl-alt-meta-k>",
+				"windowresize increase width":  "<ctrl-alt-meta-l>",
+			} {
+				cmd := strings.Split(wantCmd, " ")
+				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
+					"%q must prefer IJKL alias %s", wantCmd, wantKey)
 			}
 
 			for _, key := range []string{
 				"<m-left>", "<m-right>", "<m-down>", "<m-up>",
 				"<s-m-left>", "<s-m-right>", "<s-m-down>", "<s-m-up>",
 				"<a-s-left>", "<a-s-right>",
+				"<a-s-k>",
 			} {
 				seq := mustParseBindingKey(t, key)
 				if got, ok := mappings[seq]; ok {
@@ -827,13 +904,8 @@ func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
 	}
 }
 
-// TestModelessPresetUnbindsStaleModalChords guards against the modeless
-// preset leaving the modal home-row window/tab chords bound after
-// re-homing the same commands onto the arrow layout. When both the stale
-// modal chord and the new arrow chord map to one command, the
-// command->key reverse lookup is non-deterministic and the tutorial/
-// cheatsheet can surface the wrong key (e.g. <shift-meta-h> instead of
-// <shift-meta-left> for `windowmove left`).
+// TestStandardPresetUnbindsStaleModalChords guards against H-based modal
+// aliases surviving after standard mode re-homes layout onto IJKL.
 func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
@@ -854,16 +926,12 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	// The stale modal chords must no longer run their old commands.
 	staleUnbound := map[string]string{
 		"<m-h>":   "windowfocus left",
-		"<m-l>":   "windowfocus right",
 		"<m-j>":   "windowfocus down",
 		"<m-k>":   "windowfocus up",
 		"<s-m-h>": "windowmove left",
-		"<s-m-l>": "windowmove right",
 		"<s-m-j>": "windowmove down",
 		"<s-m-k>": "windowmove up",
 		"<a-s-h>": "tabmove left",
-		"<a-s-l>": "tabmove right",
-		"<a-l>":   "tabnext",
 		"<a-h>":   "tabprevious",
 		"<c-o>":   "cursorhistory prev",
 		"<c-i>":   "cursorhistory next",
@@ -879,15 +947,15 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	// The reverse lookup must resolve to one deterministic standard chord.
 	lookup := c.commandKeyBindingLookup()
 	wantResolved := map[string][]string{
-		"<ctrl-shift-meta-left>": {"windowmove", "left"},
-		"<ctrl-meta-left>":       {"windowfocus", "left"},
-		"<ctrl-alt-meta-left>":   {"windowresize", "decrease", "width"},
-		"<ctrl-meta-h>":          {"windowdefaultsplit", "h"},
-		"<alt-shift-meta-left>":  {"tabmove", "left"},
-		"<alt-meta-right>":       {"tabnext"},
-		"<alt-meta-left>":        {"tabprevious"},
-		"<ctrl-shift-->":         {"cursorhistory", "next"},
-		"<ctrl-->":               {"cursorhistory", "prev"},
+		"<shift-meta-j>":    {"windowmove", "left"},
+		"<meta-j>":          {"windowfocus", "left"},
+		"<ctrl-alt-meta-j>": {"windowresize", "decrease", "width"},
+		"<ctrl-meta-h>":     {"windowdefaultsplit", "h"},
+		"<alt-shift-j>":     {"tabmove", "left"},
+		"<alt-l>":           {"tabnext"},
+		"<alt-j>":           {"tabprevious"},
+		"<ctrl-shift-->":    {"cursorhistory", "next"},
+		"<ctrl-->":          {"cursorhistory", "prev"},
 	}
 	for wantKey, cmd := range wantResolved {
 		got := lookup(cmd[0], cmd[1:])
@@ -952,6 +1020,10 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-x>t":     "lsp hover",
 		"<c-x>b":     "lsp format",
 		"<c-x>/":     "lsp complete",
+		"<f5>":       "gitprevchange",
+		"<f6>":       "gitnextchange",
+		"<f7>":       "lspprevdiagnostic",
+		"<f8>":       "lspnextdiagnostic",
 		"<f2>":       "jumptolocation next bookmark",
 	}
 	for key, wantCmd := range wantBound {
@@ -965,12 +1037,26 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	// Real Emacs never uses Cmd, so the <meta> layer is a pure addition: the
 	// IDE window/workspace/clipboard commands live there with zero conflict.
 	wantLive := map[string]string{
-		"<m-h>":     "windowfocus left",
-		"<m-l>":     "windowfocus right",
-		"<m-j>":     "windowfocus down",
-		"<m-k>":     "windowfocus up",
-		"<s-m-h>":   "windowmove left",
-		"<s-m-l>":   "windowmove right",
+		"<c-m-i>": "windowfocus up",
+		"<c-m-j>": "windowfocus left",
+		"<c-m-k>": "windowfocus down",
+		"<c-m-l>": "windowfocus right",
+
+		"<c-s-m-i>": "windowmove up",
+		"<c-s-m-j>": "windowmove left",
+		"<c-s-m-k>": "windowmove down",
+		"<c-s-m-l>": "windowmove right",
+
+		"<c-a-m-i>": "windowresize increase height",
+		"<c-a-m-j>": "windowresize decrease width",
+		"<c-a-m-k>": "windowresize decrease height",
+		"<c-a-m-l>": "windowresize increase width",
+
+		"<c-a-m-up>":    "windowresize increase height",
+		"<c-a-m-left>":  "windowresize decrease width",
+		"<c-a-m-down>":  "windowresize decrease height",
+		"<c-a-m-right>": "windowresize increase width",
+
 		"<c-m-h>":   "windowdefaultsplit h",
 		"<c-m-v>":   "windowdefaultsplit v",
 		"<m-w>":     "windowclose",
@@ -991,6 +1077,45 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		require.Truef(t, ok, "%s must be bound on the <meta> IDE layer", key)
 		require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
 			got, "%s must run %q", key, wantCmd)
+	}
+
+	lookup := c.commandKeyBindingLookup()
+	for wantCmd, wantKey := range map[string]string{
+		"windowfocus up":               "<ctrl-meta-i>",
+		"windowfocus left":             "<ctrl-meta-j>",
+		"windowfocus down":             "<ctrl-meta-k>",
+		"windowfocus right":            "<ctrl-meta-l>",
+		"windowmove up":                "<ctrl-shift-meta-i>",
+		"windowmove left":              "<ctrl-shift-meta-j>",
+		"windowmove down":              "<ctrl-shift-meta-k>",
+		"windowmove right":             "<ctrl-shift-meta-l>",
+		"windowresize increase height": "<ctrl-alt-meta-i>",
+		"windowresize decrease width":  "<ctrl-alt-meta-j>",
+		"windowresize decrease height": "<ctrl-alt-meta-k>",
+		"windowresize increase width":  "<ctrl-alt-meta-l>",
+		"tabprevious":                  "<meta-[>",
+		"tabnext":                      "<meta-]>",
+		"tabmove left":                 "<shift-meta-[>",
+		"tabmove right":                "<shift-meta-]>",
+		"gitprevchange":                "<f5>",
+		"gitnextchange":                "<f6>",
+		"lspprevdiagnostic":            "<f7>",
+		"lspnextdiagnostic":            "<f8>",
+	} {
+		cmd := strings.Split(wantCmd, " ")
+		require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
+			"%q must resolve to %s", wantCmd, wantKey)
+	}
+
+	for _, key := range []string{
+		"<m-h>", "<m-j>", "<m-k>", "<m-l>",
+		"<s-m-h>", "<s-m-j>", "<s-m-k>", "<s-m-l>",
+	} {
+		seq := mustParseBindingKey(t, key)
+		if got, ok := mappings[seq]; ok {
+			require.Equalf(t, [][]string{{""}}, got,
+				"%s is a stale HJKL layout chord", key)
+		}
 	}
 
 	// None of the emacs editor's single-modifier editing chords may carry
