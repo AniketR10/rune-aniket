@@ -93,12 +93,19 @@ type Runner struct {
 	dataDir string
 }
 
+// TrustVerifier attests that an extension entrypoint belongs to a verified
+// installed package and returns its signing-key fingerprint.
+type TrustVerifier interface {
+	VerifyExtensionEntrypoint(path string) (fingerprint string, ok bool)
+}
+
 // WorkspaceExtensionsRunner creates an extension runner for a workspace. It
 // starts a gRPC server that hosts the extension resources and returns a runner
 // that can launch extensions and execute commands in the workspace.
 func (r *Runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
+	trustVerifier TrustVerifier,
 	dataDir, installDir string, notifications browser.Notifications,
 	executor, extExecutor schemeapi.Executor,
 	grantor extension.Grantor,
@@ -106,6 +113,9 @@ func (r *Runner) WorkspaceExtensionsRunner(
 	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
+	if trustVerifier == nil {
+		panic("extensionv2.WorkspaceExtensionsRunner: nil trust verifier")
+	}
 	var ret wrapCloser
 	ret.URI = uri
 
@@ -190,7 +200,7 @@ func (r *Runner) WorkspaceExtensionsRunner(
 	})
 
 	ret.workspaceRunner = newWorkspaceRunner(
-		executor, extExecutor, grantor, uri,
+		executor, extExecutor, grantor, trustVerifier, uri,
 		socket, r.dataDir, installDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)

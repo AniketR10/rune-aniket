@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/ide/gitpkg"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/multipkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 )
 
@@ -80,6 +81,7 @@ func (m *pkgManager) init(
 	autoInstall bool,
 	afterConfigMerge func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
 	gitRemoteURL func(pkgID string) string,
+	trust *pkgtrust.Store,
 ) {
 	storage := storageapi.WithPartition(rootStorage, idepkg.StoragePartition)
 	// Compose the official release manager (rm) with a git-backed one so
@@ -91,8 +93,7 @@ func (m *pkgManager) init(
 		gitOpts = append(gitOpts, gitpkg.WithRemoteURL(gitRemoteURL))
 	}
 	composed := multipkg.New(gitpkg.New(gitOpts...), rm)
-	m.pkg = idepkg.NewManager(n, composed, storage, scheme, dataDir,
-		configPath, wm, scheduleNextTick, interrupter,
+	opts := []idepkg.Option{
 		idepkg.WithFrameCharSet(fcs),
 		idepkg.WithSyntaxParser(parser),
 		idepkg.WithEditorMode(editorMode),
@@ -104,6 +105,10 @@ func (m *pkgManager) init(
 			return cfg.cfg
 		}),
 		idepkg.WithAfterConfigMerge(afterConfigMerge),
+	}
+	m.pkg = idepkg.NewManager(n, composed, storage, trust, scheme, dataDir,
+		configPath, wm, scheduleNextTick, interrupter,
+		opts...,
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick

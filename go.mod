@@ -60,6 +60,7 @@ require (
 require (
 	cloud.google.com/go/storage v1.62.1
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
+	github.com/ProtonMail/go-crypto v1.3.0
 	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/ebitengine/purego v0.9.0
@@ -102,7 +103,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect

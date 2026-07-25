@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -117,8 +118,9 @@ func (s *sandbox) launch() error {
 	prompt := autoPromptOpener{}
 	storage := storagestub.NewInMemoryService()
 	tick := func(fn func()) bool { fn(); return true }
+	trust := pkgtrust.NewStore(s.dataDir, nil)
 	authorizer, err := ideauthorizer.NewAuthorizer(
-		s.editor, prompt, storage, tick, nil, ideauthorizer.Config{
+		s.editor, prompt, storage, tick, nil, trust, ideauthorizer.Config{
 			AutoAuthorizeExtensions: true,
 			AutoAuthorizeCommands:   true,
 		})
@@ -156,7 +158,7 @@ func (s *sandbox) launch() error {
 		return fmt.Errorf("new extension runner: %w", err)
 	}
 	runner, err := base.WorkspaceExtensionsRunner(
-		uri, res, authorizer, s.dataDir, s.dataDir, s.browser,
+		uri, res, authorizer, nopTrustVerifier{}, s.dataDir, s.dataDir, s.browser,
 		scheme, s.exec, s.grantor, s.editor, prompt, storage, tick)
 	if err != nil {
 		return fmt.Errorf("new workspace extensions runner: %w", err)
@@ -361,6 +363,12 @@ func (autoPromptOpener) Prompt(
 type nopProgress struct{}
 
 func (nopProgress) Progress(int64, int64, string) {}
+
+// nopTrustVerifier trusts no extension entrypoint: the sandbox exercises
+// unverified extensions, so verified-publisher shortcuts never apply.
+type nopTrustVerifier struct{}
+
+func (nopTrustVerifier) VerifyExtensionEntrypoint(string) (string, bool) { return "", false }
 
 var eventTypes = map[string]textapi.EventType{
 	"open":      textapi.EventTypeOpen,

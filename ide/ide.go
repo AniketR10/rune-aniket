@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idenag"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -106,10 +107,11 @@ type EventPublisher func(term.Event) bool
 // may be shared across IDEs (as cmd/rune's bootstrap swap does) without one
 // IDE's shutdown tearing it down underneath another.
 func New(
-	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
+	cwd, cfgfilename, dataDir string, trust *pkgtrust.Store,
+	storage storageapi.Service, opts ...Option,
 ) (i *IDE, err error) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, dataDir, storage, opts...)
+	err = i.init(cwd, cfgfilename, dataDir, trust, storage, opts...)
 	return
 }
 
@@ -472,8 +474,12 @@ func (i *IDE) closeResources() (ret error) {
 }
 
 func (i *IDE) init(
-	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
+	cwd, cfgfilename, dataDir string, trust *pkgtrust.Store,
+	storage storageapi.Service, opts ...Option,
 ) error {
+	if trust == nil {
+		panic("ide.init: nil trust store")
+	}
 	op := newOptions(opts...)
 	i.options = op
 
@@ -608,7 +614,7 @@ func (i *IDE) init(
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,
-		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
+		op.extensionRunner, trust, i.locker, op.extensions, func() (ideConfig, error) {
 			cfg, err := reloadConfig(cfgfilename,
 				op.defaultWallpaper, defaultCfg, op.bell, op.scheduleFn,
 				op.zdotDir)

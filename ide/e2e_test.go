@@ -43,6 +43,7 @@ import (
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/localstorage"
 )
 
@@ -203,7 +204,7 @@ command:
 
 		var mu sync.Mutex
 		tracker := newSchedTracker(hostScheduleNextTick(&mu))
-		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
+		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
 			ide.WithLocker(&mu),
 			ide.WithScheduleNextTick(tracker.Schedule),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
@@ -279,7 +280,7 @@ command:
 			extensionv2.WithAuthTokenEnv("IDETEST_TOKEN"),
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
+		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
 			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
@@ -343,7 +344,7 @@ command:
 			&mu, dir,
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
+		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
 			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),

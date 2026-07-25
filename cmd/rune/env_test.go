@@ -43,6 +43,7 @@ import (
 
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/starlarkconfig"
 )
 
@@ -443,7 +444,7 @@ func newConfiguredBootstrapForEnvTest(
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
-		installBackupDir, rootCfg,
+		installBackupDir, rootCfg, pkgtrust.NewStore(dataDir, nil),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b.realIDE, "config.yaml in dataDir must build the configured IDE directly")

@@ -69,6 +69,7 @@ import (
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idehistory"
 	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -1808,7 +1809,7 @@ func TestWorkspaceConfig(t *testing.T) {
 			notificationsConfig(), cfg, storage, dir,
 			func(term.Event) bool {
 				return true
-			}, runner, mu, nil,
+			}, runner, pkgtrust.NewStore(dir, nil), mu, nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
 			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil, false,
 			false, newCommandObserverRegistry())
@@ -5049,7 +5050,7 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	}
 	m.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
-		notiConfig, cfg, storage, dir, publish, runner, mu, extensions,
+		notiConfig, cfg, storage, dir, publish, runner, pkgtrust.NewStore(dir, nil), mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil, false,
 		false, newCommandObserverRegistry())

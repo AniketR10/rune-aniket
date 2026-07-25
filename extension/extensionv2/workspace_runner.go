@@ -90,13 +90,14 @@ type workspaceRunner struct {
 	// through a remote (ssh) executor breaks the "user owns
 	// extensions" model and surfaces as "lost connection to remote"
 	// when N extensions race to fork/exec over a single SSH channel.
-	extExecutor schemeapi.Executor
-	socket      string
-	tlsCert     []byte
-	keys        auth.Keys
-	ctx         context.Context
-	cancelCtx   func()
-	mu          sync.Mutex
+	extExecutor   schemeapi.Executor
+	socket        string
+	tlsCert       []byte
+	keys          auth.Keys
+	trustVerifier TrustVerifier
+	ctx           context.Context
+	cancelCtx     func()
+	mu            sync.Mutex
 	// registered broadcasts whenever Run installs or replaces a
 	// state. WaitReady uses it to block for an extension that has not
 	// been registered yet, since Run executes asynchronously from
@@ -136,11 +137,12 @@ var _ extension.Runner = (*workspaceRunner)(nil)
 
 func newWorkspaceRunner(
 	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
+	trustVerifier TrustVerifier,
 	workspace workspaceapi.URI, socket, dataDir, installDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) *workspaceRunner {
 	ret := new(workspaceRunner)
-	ret.init(executor, extExecutor, grantor, workspace,
+	ret.init(executor, extExecutor, grantor, trustVerifier, workspace,
 		socket, dataDir, installDir, tlsCert, keys, opts...)
 	return ret
 }
@@ -148,9 +150,13 @@ func newWorkspaceRunner(
 // Init initializes this Runner with the given grantor and options.
 func (m *workspaceRunner) init(
 	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
+	trustVerifier TrustVerifier,
 	workspace workspaceapi.URI, socket, dataDir, installDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) {
+	if trustVerifier == nil {
+		panic("extensionv2: trustVerifier must not be nil")
+	}
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	m.states = make(map[string]*extensionRunState)
 	m.registered = sync.NewCond(&m.mu)
@@ -163,6 +169,7 @@ func (m *workspaceRunner) init(
 		o(&m.cfg)
 	}
 	m.grantor = grantor
+	m.trustVerifier = trustVerifier
 	m.keys = keys
 	m.executor = executor
 	if extExecutor == nil {
@@ -292,6 +299,14 @@ func (m *workspaceRunner) makeCommand(
 	waitCh := make(chan error)
 	// allow args to be passed to extensions
 	argv := strings.Split(path, " ")
+	verifiedPublisher := ""
+	if len(argv) > 0 {
+		if entrypoint, expandErr := m.resolveEntrypoint(argv[0]); expandErr == nil {
+			if fingerprint, ok := m.trustVerifier.VerifyExtensionEntrypoint(entrypoint); ok {
+				verifiedPublisher = fingerprint
+			}
+		}
+	}
 	argv, err = m.sourceEntrypointArgv(extensionID, argv)
 	if err != nil {
 		return workspaceapi.Cmd{}, err
@@ -320,7 +335,7 @@ func (m *workspaceRunner) makeCommand(
 		return workspaceapi.Cmd{}, err
 	}
 	stdin, stdout, stderr, collector, err := m.makeProtocolExchange(
-		extensionID, config, readiness, logPath)
+		extensionID, config, readiness, logPath, verifiedPublisher)
 	if err != nil {
 		return workspaceapi.Cmd{}, err
 	}
@@ -346,6 +361,20 @@ func (m *workspaceRunner) makeCommand(
 		}
 	})
 	return
+}
+
+func (m *workspaceRunner) resolveEntrypoint(path string) (string, error) {
+	cwd := m.dataDir
+	if m.workspace.Scheme() == workspace.FileScheme {
+		var err error
+		cwd, err = workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
+		if err != nil {
+			return "", err
+		}
+	}
+	return workspaceapi.ExpandPath(path, user.Current, func() (string, error) {
+		return cwd, nil
+	})
 }
 
 // sourceEntrypointArgv rewrites a source-file extension entrypoint
@@ -546,13 +575,13 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 }
 
 func (m *workspaceRunner) makeProtocolExchange(
-	extensionID string, cfg config.Config, readiness *extensionReadiness, logPath string,
+	extensionID string, cfg config.Config, readiness *extensionReadiness, logPath, verifiedPublisher string,
 ) (
 	io.Reader, io.Writer, io.Writer, *logCollector, error,
 ) {
 	protocol := newProtocol(m.ctx, m.grantor, extensionID, m.socket,
 		m.dataDir, m.installDir, m.tlsCert, m.cfg.insecureAuth, cfg, m.keys,
-		readiness)
+		readiness, verifiedPublisher)
 	logFile, err := os.OpenFile(logPath,
 		os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {

@@ -30,8 +30,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -46,45 +48,51 @@ var _ io.Reader = (*protocol)(nil)
 const extensionTokenExpiresIn = 10 * 24 * 365 * time.Hour
 
 type protocol struct {
-	write        bytes.Buffer
-	read         bytes.Buffer
-	readiness    *extensionReadiness
-	grantor      extension.Grantor
-	readCh       chan struct{}
-	extensionID  string
-	socket       string
-	dataDir      string
-	installDir   string
-	cert         []byte
-	ctx          context.Context
-	cfg          map[string]any
-	keys         auth.Keys
-	insecureAuth bool
+	write             bytes.Buffer
+	read              bytes.Buffer
+	readiness         *extensionReadiness
+	grantor           extension.Grantor
+	readCh            chan struct{}
+	extensionID       string
+	socket            string
+	dataDir           string
+	installDir        string
+	cert              []byte
+	ctx               context.Context
+	cfg               map[string]any
+	keys              auth.Keys
+	insecureAuth      bool
+	verifiedPublisher string
 }
 
 func newProtocol(
 	ctx context.Context, grantor extension.Grantor,
 	extensionID, socket, dataDir, installDir string,
 	cert []byte, insecureAuth bool, cfg config.Config, keys auth.Keys,
-	readiness *extensionReadiness,
+	readiness *extensionReadiness, verifiedPublishers ...string,
 ) *protocol {
+	verifiedPublisher := ""
+	if len(verifiedPublishers) > 0 {
+		verifiedPublisher = verifiedPublishers[0]
+	}
 	mapCfg := make(map[string]any)
 	cfg.Iterate(func(k string, v any) {
 		mapCfg[k] = v
 	})
 	return &protocol{
-		readCh:       make(chan struct{}),
-		extensionID:  extensionID,
-		dataDir:      dataDir,
-		installDir:   installDir,
-		socket:       socket,
-		cert:         cert,
-		ctx:          ctx,
-		cfg:          mapCfg,
-		keys:         keys,
-		insecureAuth: insecureAuth,
-		grantor:      grantor,
-		readiness:    readiness,
+		readCh:            make(chan struct{}),
+		extensionID:       extensionID,
+		dataDir:           dataDir,
+		installDir:        installDir,
+		socket:            socket,
+		cert:              cert,
+		ctx:               ctx,
+		cfg:               mapCfg,
+		keys:              keys,
+		insecureAuth:      insecureAuth,
+		grantor:           grantor,
+		readiness:         readiness,
+		verifiedPublisher: verifiedPublisher,
 	}
 }
 
@@ -142,7 +150,12 @@ func (p *protocol) Write(data []byte) (int, error) {
 			p.setReady(err)
 			return n, err
 		}
-		claimsExtra := ideauthorizer.Extension{Metadata: meta}
+		verifiedPublisher := p.verifiedPublisher
+		if verifiedPublisher != "" && !matchesPublisherKey(meta.DeveloperKey, verifiedPublisher) {
+			log.Warnf("extension %s developer key does not match verified signing key", p.extensionID)
+			verifiedPublisher = ""
+		}
+		claimsExtra := ideauthorizer.Extension{Metadata: meta, VerifiedPublisher: verifiedPublisher}
 		accessToken, err := auth.SignToken(signKey,
 			meta.DeveloperID, meta.DeveloperEmail, claimsExtra, extensionTokenExpiresIn)
 		if err != nil {
@@ -165,6 +178,12 @@ func (p *protocol) Write(data []byte) (int, error) {
 	close(p.readCh)
 	p.setReady(nil)
 	return n, nil
+}
+
+func matchesPublisherKey(developerKey, fingerprint string) bool {
+	developerKey = strings.TrimPrefix(strings.ToUpper(developerKey), "0X")
+	fingerprint = strings.ToUpper(fingerprint)
+	return developerKey == fingerprint || strings.HasSuffix(fingerprint, developerKey)
 }
 
 func (p *protocol) Read(b []byte) (int, error) {

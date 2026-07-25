@@ -2160,6 +2160,10 @@ func (c ideConfig) authorizerAutoAuthorizeCommands() bool {
 	return c.authorizerAutoAuthorize("auto_authorize_commands", false)
 }
 
+func (c ideConfig) authorizerAutoAuthorizeVerified() bool {
+	return c.authorizerAutoAuthorize("auto_authorize_verified", true)
+}
+
 func (c ideConfig) authorizerAutoAuthorize(key string, defaultValue bool) bool {
 	cfg, ok := c.authorizer()
 	if !ok {

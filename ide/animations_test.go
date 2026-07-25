@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 func newAnimConfig(t *testing.T, src string) ideConfig {
@@ -578,7 +579,7 @@ config = {
 	}
 
 	i := new(IDE)
-	require.NoError(t, i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
+	require.NoError(t, i.init(".", configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(new(sync.Mutex)),

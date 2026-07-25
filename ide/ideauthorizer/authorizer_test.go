@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension/extensionv2/peerprocess"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -231,10 +232,11 @@ func mustNewAutoAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, Config{
-		AutoAuthorizeExtensions: true,
-		AutoAuthorizeCommands:   true,
-	})
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil,
+		testTrustStore(t), Config{
+			AutoAuthorizeExtensions: true,
+			AutoAuthorizeCommands:   true,
+		})
 	require.NoError(t, err)
 	return a
 }
@@ -242,6 +244,10 @@ func mustNewAutoAuthorizer(
 func TestAuthorizerAutoAuthorizeScopes(t *testing.T) {
 	t.Parallel()
 
+	// Commands auto-authorize only when AutoAuthorizeCommands AND the
+	// extension is from a verified publisher. These cases use an
+	// unverified plugin, so the command always prompts regardless of
+	// AutoAuthorizeCommands.
 	for _, tc := range []struct {
 		name                 string
 		config               Config
@@ -250,18 +256,19 @@ func TestAuthorizerAutoAuthorizeScopes(t *testing.T) {
 	}{
 		{"neither", Config{}, 1, 1},
 		{"extensions only", Config{AutoAuthorizeExtensions: true}, 0, 1},
-		{"commands only", Config{AutoAuthorizeCommands: true}, 1, 0},
+		{"commands only", Config{AutoAuthorizeCommands: true}, 1, 1},
 		{"both", Config{
 			AutoAuthorizeExtensions: true,
 			AutoAuthorizeCommands:   true,
-		}, 0, 0},
+		}, 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			opener := &stubPromptOpener{decision: PermissionAllowOnce}
 			a, err := NewAuthorizer(texttest.NopEditor(), opener,
-				storagestub.NewInMemoryService(), syncScheduleNextTick, nil, tc.config)
+				storagestub.NewInMemoryService(), syncScheduleNextTick, nil,
+				testTrustStore(t), tc.config)
 			require.NoError(t, err)
 			ext := testPluginExtension(nil)
 
@@ -328,8 +335,18 @@ func TestAuthorizerAutoAuthorizeStartCommandGrantsWithoutPrompt(t *testing.T) {
 
 	storage := storagestub.NewInMemoryService()
 	opener := &stubPromptOpener{decision: PermissionDenyOnce}
-	a := mustNewAutoAuthorizer(t, opener, storage, texttest.NopEditor())
-	ext := testPluginExtension(nil)
+	// Commands auto-authorize only for a verified publisher when command
+	// auto-authorization is also enabled.
+	trustedFingerprint := "D3F9E65DE72888CC03D45CF5064D4ABCFA6D9338"
+	a, err := NewAuthorizer(texttest.NopEditor(), opener, storage,
+		syncScheduleNextTick, nil, testTrustStore(t), Config{
+			AutoAuthorizeCommands:          true,
+			AutoAuthorizeVerifiedPublisher: true,
+		})
+	require.NoError(t, err)
+	ext := testRegularExtension(extensionapi.NewPermissions(
+		extensionapi.PermissionExecute))
+	ext.VerifiedPublisher = trustedFingerprint
 	ctx := blueauth.ContextWithClaims(context.Background(),
 		blueauth.UserClaims[Extension]{Extra: ext})
 	cmd := workspaceapi.Cmd{Path: "/bin/grep", Args: []string{"foo"}, Dir: "/tmp"}
@@ -340,11 +357,11 @@ func TestAuthorizerAutoAuthorizeStartCommandGrantsWithoutPrompt(t *testing.T) {
 	// Auto-granted decisions are not persisted, so disabling automatic
 	// command authorization later prompts again.
 	command := pluginPermissionCommandDetail{Path: cmd.Path, Args: cmd.Args, Dir: cmd.Dir}
-	keys := pluginPermissionCommandStorageKeys(ext.Path, ext.Args,
+	keys := extensionPermissionCommandStorageKeys(ext,
 		extensionapi.PermissionExecute, command)
-	require.Len(t, keys, 1)
+	require.NotEmpty(t, keys)
 	var stored storedPermissionDecision
-	err := storage.Get(context.Background(), keys[0], &stored)
+	err = storage.Get(context.Background(), keys[0], &stored)
 	assert.ErrorIs(t, err, storageapi.ErrNotFound)
 }
 
@@ -369,6 +386,87 @@ func TestAuthorizerAutoAuthorizeHonorsPersistedDeny(t *testing.T) {
 		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource)
 	assert.ErrorIs(t, err, blueauth.ErrForbidden)
 	assert.Zero(t, opener.calls)
+}
+
+func TestAuthorizerVerifiedPublisherAutoAuthorizes(t *testing.T) {
+	t.Parallel()
+
+	trustedFingerprint := "D3F9E65DE72888CC03D45CF5064D4ABCFA6D9338"
+	ext := testRegularExtension(extensionapi.NewPermissions(
+		extensionapi.PermissionBrowserWindowManager,
+		extensionapi.PermissionExecute,
+	))
+	ext.VerifiedPublisher = trustedFingerprint
+	opener := &stubPromptOpener{decision: PermissionDenyOnce}
+	a, err := NewAuthorizer(texttest.NopEditor(), opener,
+		storagestub.NewInMemoryService(), syncScheduleNextTick, nil,
+		testTrustStore(t), Config{
+			AutoAuthorizeVerifiedPublisher: true,
+			AutoAuthorizeCommands:          true,
+		})
+	require.NoError(t, err)
+
+	require.NoError(t, a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource))
+	ctx := blueauth.ContextWithClaims(context.Background(), blueauth.UserClaims[Extension]{Extra: ext})
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{Path: "/bin/true"}))
+	assert.Zero(t, opener.calls)
+}
+
+// TestAuthorizerVerifiedPublisherAloneStillPromptsCommands verifies that a
+// verified publisher does not by itself auto-authorize commands: the
+// operator must also enable AutoAuthorizeCommands for silent command
+// execution.
+func TestAuthorizerVerifiedPublisherAloneStillPromptsCommands(t *testing.T) {
+	t.Parallel()
+
+	trustedFingerprint := "D3F9E65DE72888CC03D45CF5064D4ABCFA6D9338"
+	ext := testRegularExtension(extensionapi.NewPermissions(
+		extensionapi.PermissionExecute,
+	))
+	ext.VerifiedPublisher = trustedFingerprint
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a, err := NewAuthorizer(texttest.NopEditor(), opener,
+		storagestub.NewInMemoryService(), syncScheduleNextTick, nil,
+		testTrustStore(t), Config{
+			AutoAuthorizeVerifiedPublisher: true,
+		})
+	require.NoError(t, err)
+
+	ctx := blueauth.ContextWithClaims(context.Background(), blueauth.UserClaims[Extension]{Extra: ext})
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{Path: "/bin/true"}))
+	assert.Equal(t, 1, opener.calls)
+}
+
+func TestAuthorizerVerifiedPublisherToggleAndStoredDeny(t *testing.T) {
+	t.Parallel()
+
+	trustedFingerprint := "D3F9E65DE72888CC03D45CF5064D4ABCFA6D9338"
+	ext := testRegularExtension(extensionapi.NewPermissions(extensionapi.PermissionBrowserWindowManager))
+	ext.VerifiedPublisher = trustedFingerprint
+	storage := storagestub.NewInMemoryService()
+	denyOpener := &stubPromptOpener{decision: PermissionDenyAlways}
+	denying := mustNewAuthorizer(t, denyOpener, storage, texttest.NopEditor())
+	require.ErrorIs(t, denying.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource), blueauth.ErrForbidden)
+
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a, err := NewAuthorizer(texttest.NopEditor(), opener, storage,
+		syncScheduleNextTick, nil, testTrustStore(t),
+		Config{AutoAuthorizeVerifiedPublisher: true})
+	require.NoError(t, err)
+	assert.ErrorIs(t, a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource), blueauth.ErrForbidden)
+	assert.Zero(t, opener.calls)
+
+	noToggleOpener := &stubPromptOpener{decision: PermissionAllowOnce}
+	withoutToggle, err := NewAuthorizer(texttest.NopEditor(), noToggleOpener,
+		storagestub.NewInMemoryService(), syncScheduleNextTick, nil,
+		testTrustStore(t), Config{})
+	require.NoError(t, err)
+	require.NoError(t, withoutToggle.Authorize(context.Background(),
+		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource))
+	assert.Equal(t, 1, noToggleOpener.calls)
 }
 
 func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
@@ -1254,7 +1352,8 @@ func mustNewAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, Config{})
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil,
+		testTrustStore(t), Config{})
 	require.NoError(t, err)
 	return a
 }
@@ -1268,9 +1367,17 @@ func mustNewAuthorizerWithNotifications(
 	noti browserapi.Notifications,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti, Config{})
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti,
+		testTrustStore(t), Config{})
 	require.NoError(t, err)
 	return a
+}
+
+// testTrustStore returns a pkgtrust.Store backed by the embedded keyring,
+// which trusts the fingerprint the verified-publisher tests exercise.
+func testTrustStore(t *testing.T) *pkgtrust.Store {
+	t.Helper()
+	return pkgtrust.NewStore(t.TempDir(), nil)
 }
 
 func newTestAuthorizerCore(
@@ -1279,6 +1386,7 @@ func newTestAuthorizerCore(
 	a := &Authorizer{
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, nil),
 		storage:  storage,
+		trust:    pkgtrust.NewStore("", nil),
 		once:     make(map[string]pluginPermissionOnceDecision),
 		pending:  make(map[string]*pendingPrompt),
 	}
@@ -1295,6 +1403,7 @@ func newTestAuthorizerCoreWithNotifications(
 	a := &Authorizer{
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, noti),
 		storage:  storage,
+		trust:    pkgtrust.NewStore("", nil),
 		once:     make(map[string]pluginPermissionOnceDecision),
 		pending:  make(map[string]*pendingPrompt),
 	}

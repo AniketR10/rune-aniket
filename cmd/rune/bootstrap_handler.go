@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideupgrade"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/term/gui"
 )
 
@@ -63,6 +64,7 @@ type bootstrapHandler struct {
 	filenames         []string
 	launchCmd         []string
 	runner            ide.ExtensionsRunner
+	trust             *pkgtrust.Store
 	mu                *sync.Mutex
 	publishEvent      func(term.Event) bool
 	openBrowser       func(*url.URL) error
@@ -94,6 +96,7 @@ func newBootstrapHandler(
 	clip clipboard.Register,
 	installBackupDir string,
 	rootCfg config.Config,
+	trust *pkgtrust.Store,
 ) (*bootstrapHandler, error) {
 	bh := &bootstrapHandler{
 		dataDir:          dataDir,
@@ -104,6 +107,7 @@ func newBootstrapHandler(
 		filenames:        filenames,
 		launchCmd:        launchCmd,
 		runner:           runner,
+		trust:            trust,
 		mu:               mu,
 		publishEvent:     publishEvent,
 		openBrowser:      openBrowser,
@@ -163,7 +167,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithTabsClickCallback(b.handleTabsClick),
 		ide.WithoutHomePrompt(),
 	}
-	preIDE, err := ide.New("", b.configPath, b.dataDir, b.storage, opts...)
+	preIDE, err := ide.New("", b.configPath, b.dataDir, b.trust, b.storage, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +239,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		nagPromptOption(client),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
-		b.storage, opts...)
+		b.trust, b.storage, opts...)
 	if err != nil {
 		return nil, err
 	}

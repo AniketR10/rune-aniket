@@ -24,7 +24,11 @@
 package ide
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -37,11 +41,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/docrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -53,6 +61,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -61,9 +70,12 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/pkgshell"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
@@ -89,7 +101,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(cwdURI.String(), configFile.Name(), dir, newTestStorage(t, dir),
+		err = i.init(cwdURI.String(), configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -119,7 +131,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(),
-			dir, newTestStorage(t, dir), WithPublishEvent(nopPublishEvent),
+			dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir), WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
@@ -144,7 +156,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
+		err = i.init(".", configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -177,7 +189,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
+		err = i.init(".", configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -200,7 +212,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), dir, newTestStorage(t, dir),
+		err = i.init("", configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -221,7 +233,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
+		err = i.init("", configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)),
@@ -255,7 +267,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		var captured term.Attributes
-		i, err := New("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
+		i, err := New("", configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)),
@@ -292,7 +304,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
+		err = i.init("", configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -329,7 +341,7 @@ func TestOpen(t *testing.T) {
 		dataDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
-		i, err := New("", config.Name(), dataDir, newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
+		i, err := New("", config.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -347,7 +359,7 @@ func TestOpen(t *testing.T) {
 		dataDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
-		i, err := New(os.TempDir(), config.Name(), dataDir, newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
+		i, err := New(os.TempDir(), config.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -374,7 +386,7 @@ func TestOpen(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		i, err := New("", config.Name(), dataDir, newTestStorage(t, dataDir), WithReleaseManager(rm), WithPublishEvent(nopPublishEvent))
+		i, err := New("", config.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), WithReleaseManager(rm), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -409,7 +421,7 @@ func TestHomeWorkspaceDoesNotStartExtensions(t *testing.T) {
 
 	recorder := &recordingRunner{}
 	mu := new(sync.Mutex)
-	i, err := New("", configPath, dir, newTestStorage(t, dir),
+	i, err := New("", configPath, dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(recordingExtensionsRunner{runner: recorder}),
 		WithLocker(mu),
@@ -430,6 +442,245 @@ func TestHomeWorkspaceDoesNotStartExtensions(t *testing.T) {
 
 	assert.Empty(t, recorder.runCalls(),
 		"no extension may be started on the home workspace")
+}
+
+func TestSignedPackageTrustIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts a real workspace extension process")
+	}
+
+	const (
+		goodPkgID = "signed-extension"
+		badPkgID  = "tampered-signature-extension"
+		extID     = "signed-extension"
+		version   = release.Version("1")
+	)
+
+	entity, err := openpgp.NewEntity("Rune Test Publisher", "", "publisher@example.com", nil)
+	require.NoError(t, err)
+	fingerprint := strings.ToUpper(hex.EncodeToString(entity.PrimaryKey.Fingerprint))
+
+	testBinary, err := os.Executable()
+	require.NoError(t, err)
+	entrypoint := "signed-extension"
+	configYAML := "extensions:\n  " + extID + ":\n" +
+		"    path: $RUNE_DATADIR/lib/$RUNE_PKG_ID/" + entrypoint + "\n"
+	script := "#!/bin/sh\n" +
+		"export RUNE_IDE_PKGTRUST_HELPER=1\n" +
+		"export RUNE_IDE_PKGTRUST_FINGERPRINT=" + fingerprint + "\n" +
+		"exec " + shellQuote(testBinary) +
+		" -test.run=^TestSignedPackageTrustExtensionHelper$\n"
+	tarball := signedExtensionTarball(t, configYAML, entrypoint, script)
+
+	rm := docrelease.NewManager(document.NewInMemoryService())
+	seedSignedPackage(t, rm, entity, goodPkgID, version, tarball, tarball)
+	seedSignedPackage(t, rm, entity, badPkgID, version, tarball,
+		append(append([]byte(nil), tarball...), "tampered"...))
+
+	workspaceDir := t.TempDir()
+	dataTarget := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.Symlink(dataTarget, dataDir); err != nil {
+		dataDir = dataTarget
+	}
+	configPath := filepath.Join(t.TempDir(), "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(
+		"editor:\n  mode: modal\n"+
+			"authorizer:\n"+
+			"  auto_authorize_extensions: false\n"+
+			"  auto_authorize_verified: true\n"), 0o644))
+
+	mu := new(sync.Mutex)
+	schedule, startSchedule := newDeferredScheduler(mu)
+	extensions, err := extensionv2.NewRunner(context.Background(), mu, dataDir)
+	require.NoError(t, err)
+	keyring := armoredPublicKeyring(t, entity)
+	trust := pkgtrust.NewStore(dataDir, func() ([]byte, error) { return keyring, nil })
+	i, err := New(workspaceDir, configPath, dataDir, trust, newTestStorage(t, dataDir),
+		WithReleaseManager(rm),
+		WithExtensionsRunner(extensions),
+		WithPublishEvent(nopPublishEvent),
+		WithLocker(mu),
+		WithScheduleNextTick(schedule),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, i.Close()) })
+	_ = i.Ready()
+	startSchedule()
+	i.WaitWorkspaces()
+
+	packages := pkgshell.New(pkgshell.Config{
+		Manager:       i.workspaceHandler.pkgmanager.pkg,
+		UpdateChecker: i.workspaceHandler.pkgmanager.uc,
+	})
+	install := func(pkgID string) error {
+		_, err := packages.HandleCommand(context.Background(), repl.Command{
+			Name: pkgshell.CommandName,
+			Args: []string{"install", pkgID},
+		}, repl.NopProgressWriter())
+		return err
+	}
+
+	err = install(badPkgID)
+	require.ErrorContains(t, err, "verify package")
+	_, installed := i.workspaceHandler.pkgmanager.pkg.PackageVersionInUse(badPkgID)
+	assert.False(t, installed)
+	_, err = os.Stat(filepath.Join(dataDir, "pkg", badPkgID, string(version)))
+	assert.True(t, os.IsNotExist(err), "bad signature package must not be installed: %v", err)
+
+	require.NoError(t, install(goodPkgID))
+	installedVersion, installed := i.workspaceHandler.pkgmanager.pkg.PackageVersionInUse(goodPkgID)
+	require.True(t, installed)
+	assert.Equal(t, version, installedVersion)
+	_, err = os.Stat(filepath.Join(dataDir, "pkg", goodPkgID,
+		".manifest-"+string(version)+".json"))
+	require.NoError(t, err)
+	installedEntrypoint := filepath.Join(dataDir, "pkg", goodPkgID, string(version), entrypoint)
+	verifiedFingerprint, verified := i.workspaceHandler.pkgmanager.pkg.
+		VerifyExtensionEntrypoint(installedEntrypoint)
+	if !verified {
+		manifestPath := filepath.Join(dataDir, "pkg", goodPkgID,
+			".manifest-"+string(version)+".json")
+		manifest, readErr := os.ReadFile(manifestPath)
+		entryInfo, statErr := os.Stat(installedEntrypoint)
+		configInfo, configStatErr := os.Stat(filepath.Join(
+			dataDir, "pkg", goodPkgID, string(version), "config.yaml"))
+		t.Fatalf("installed entrypoint was not verified: manifest=%s manifestErr=%v "+
+			"entry=%v entryErr=%v config=%v configErr=%v",
+			manifest, readErr, entryInfo, statErr, configInfo, configStatErr)
+	}
+	assert.Equal(t, fingerprint, verifiedFingerprint)
+	readyCtx, readyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	require.NoError(t, i.workspaceHandler.focusRunner().WaitReady(readyCtx, extID))
+	readyCancel()
+
+	require.Eventually(t, func() bool {
+		return storageSentinelPresent(context.Background(), dataDir, extID, "signed")
+	}, 10*time.Second, 20*time.Millisecond)
+	assert.Zero(t, countFloatingWindows(i, mu),
+		"trusted publisher must bypass the permission prompt")
+
+	deleteExtensionSentinel(t, dataDir, extID)
+	f, err := os.OpenFile(installedEntrypoint, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString("# tampered\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	mu.Lock()
+	restart, ok := i.workspaceHandler.focusEx().comp.REPLCommand("extensions")
+	mu.Unlock()
+	require.True(t, ok)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = restart.HandleCommand(ctx, repl.Command{
+		Name: "extensions",
+		Args: []string{"restart", extID},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return countFloatingWindows(i, mu) > 0
+	}, 10*time.Second, 20*time.Millisecond,
+		"tampered extension must require authorization")
+	require.Never(t, func() bool {
+		return storageSentinelPresent(context.Background(), dataDir, extID, "signed")
+	}, 500*time.Millisecond, 20*time.Millisecond,
+		"tampered extension must not access protected storage before authorization")
+}
+
+func TestSignedPackageTrustExtensionHelper(t *testing.T) {
+	if os.Getenv("RUNE_IDE_PKGTRUST_HELPER") != "1" {
+		return
+	}
+	meta := extensionapi.Metadata{
+		DeveloperID:      "rune-test-publisher",
+		DeveloperEmail:   "publisher@example.com",
+		DeveloperKey:     os.Getenv("RUNE_IDE_PKGTRUST_FINGERPRINT"),
+		ExtensionID:      "signed-extension",
+		ExtensionName:    "Signed extension",
+		ExtensionVersion: "1",
+		Permissions:      extensionapi.NewPermissions(extensionapi.PermissionStorage),
+	}
+	ext := extensionapi.FuncWorkspaceExtension(func(
+		ctx context.Context, workspace *extensionapi.Workspace, _ config.Config,
+	) error {
+		if err := workspace.Storage(ctx).Set(ctx, "sentinel", map[string]any{
+			"lang": "signed",
+		}); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		return nil
+	})
+	require.NoError(t, extensionapi.ServeWorkspaceExtension(ext, meta))
+}
+
+func signedExtensionTarball(t *testing.T, configYAML, entrypoint, script string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+	for _, file := range []struct {
+		name    string
+		content string
+		mode    int64
+	}{
+		{name: "config.yaml", content: configYAML, mode: 0o644},
+		{name: entrypoint, content: script, mode: 0o755},
+	} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name: file.name, Mode: file.mode, Size: int64(len(file.content)),
+		}))
+		_, err := tw.Write([]byte(file.content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gzw.Close())
+	return buf.Bytes()
+}
+
+func seedSignedPackage(
+	t *testing.T, manager release.Manager, entity *openpgp.Entity,
+	pkgID string, version release.Version, payload, signedPayload []byte,
+) {
+	t.Helper()
+	ctx := context.Background()
+	require.NoError(t, manager.Create(ctx, release.Package{Name: pkgID, Latest: version}))
+	var signature bytes.Buffer
+	require.NoError(t, openpgp.ArmoredDetachSign(
+		&signature, entity, bytes.NewReader(signedPayload), nil))
+	bundle := release.Bundle{
+		Package: pkgID,
+		Version: version,
+		Metadata: map[string]string{
+			pkgtrust.MetadataSigningKeyID: fmt.Sprintf("%016X", entity.PrimaryKey.KeyId),
+			pkgtrust.MetadataSignature:    signature.String(),
+		},
+	}
+	require.NoError(t, manager.Upload(ctx, bundle,
+		release.NopProgressReader(bytes.NewReader(payload))))
+}
+
+func armoredPublicKeyring(t *testing.T, entities ...*openpgp.Entity) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w, err := armor.Encode(&buf, openpgp.PublicKeyType, nil)
+	require.NoError(t, err)
+	for _, entity := range entities {
+		require.NoError(t, entity.Serialize(w))
+	}
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+func deleteExtensionSentinel(t *testing.T, dataDir, extensionID string) {
+	t.Helper()
+	storage := localstorage.New(context.Background(), filepath.Join(dataDir, "extensions"),
+		docbson.Marshaler())
+	defer func() { require.NoError(t, storage.Close()) }()
+	require.NoError(t, storageapi.WithPartition(storage, extensionID).
+		Delete(context.Background(), "sentinel"))
 }
 
 // TestWonAliasIntegration is an end-to-end test that wires the IDE
@@ -484,7 +735,7 @@ command:
 	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
 
 	mu := new(sync.Mutex)
-	i, err := New(repoB, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(repoB, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),
@@ -581,7 +832,7 @@ command:
 	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
 
 	mu := new(sync.Mutex)
-	i, err := New(repoB, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(repoB, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),
@@ -684,7 +935,7 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 			mu := new(sync.Mutex)
 			scheduleNextTick, drain := newTestScheduler(mu)
 			i, err := New(repoB, configFile.Name(), dataDir,
-				newTestStorage(t, dataDir),
+				pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 				WithPublishEvent(nopPublishEvent),
 				WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 				WithLocker(mu),
@@ -826,7 +1077,7 @@ command:
 		return runner, nil
 	}
 
-	i, err := New(repo, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(repo, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(runnerFn)),
 		WithScheduleNextTick(scheduleNextTick),
@@ -942,7 +1193,7 @@ command:
 		return runner, nil
 	}
 
-	i, err := New(repo, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(repo, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(runnerFn)),
 		WithScheduleNextTick(scheduleNextTick),
@@ -1064,7 +1315,7 @@ workspace:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1262,7 +1513,7 @@ workspace:
 		return true
 	}
 
-	i, err := New(homeDir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(homeDir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
@@ -1411,7 +1662,7 @@ command:
 		})
 		return true
 	}
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1549,7 +1800,7 @@ workspace:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1633,7 +1884,7 @@ clipboard: memory
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1696,7 +1947,7 @@ command:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1791,7 +2042,7 @@ workspace:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -1937,7 +2188,7 @@ command:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -2211,7 +2462,7 @@ func TestIDEExoMisconfigurationFallsBackToDefault(t *testing.T) {
 			i := new(IDE)
 			require.NotPanics(t, func() {
 				err = i.init(cwdURI.String(),
-					configFile.Name(), dir, newTestStorage(t, dir),
+					configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 					WithPublishEvent(nopPublishEvent),
 					WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 					WithLocker(new(sync.Mutex)))
@@ -2266,7 +2517,7 @@ func TestIDEExoWellFormedConfigDoesNotFallBack(t *testing.T) {
 	i := new(IDE)
 	require.NotPanics(t, func() {
 		err = i.init(cwdURI.String(),
-			configFile.Name(), dir, newTestStorage(t, dir),
+			configFile.Name(), dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -2354,7 +2605,7 @@ command:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithBell(func() {}),
@@ -2569,7 +2820,7 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 			}
 
 			i, err := New("", configFile.Name(), dataDir,
-				newTestStorage(t, dataDir), opts...)
+				pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), opts...)
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = i.Close() })
 
@@ -2655,7 +2906,7 @@ tutorial(entry=run)
 		if registerNavigation {
 			opts = append(opts, WithStarlarkTutorial("navigation", minimalStarTutorial))
 		}
-		i, err := New("", configFile.Name(), dataDir, newTestStorage(t, dataDir), opts...)
+		i, err := New("", configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), opts...)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = i.Close() })
 		root := i.Ready()
@@ -2757,7 +3008,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New("", configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -2790,7 +3041,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New("", configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -2853,7 +3104,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New("", configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -2916,7 +3167,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New("", configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -2955,7 +3206,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New(repo, configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -2989,7 +3240,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		scheduleNextTick, drain := newTestScheduler(mu)
 
 		i, err := New("", configFile.Name(), dataDir,
-			newTestStorage(t, dataDir),
+			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(mu),
@@ -3039,7 +3290,7 @@ func TestCloseDoesNotCloseBorrowedStorage(t *testing.T) {
 	store := &closeCountingService{Service: newTestStorage(t, dataDir)}
 	t.Cleanup(func() { _ = store.Service.Close() })
 
-	i, err := New("", config.Name(), dataDir, store,
+	i, err := New("", config.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), store,
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(new(sync.Mutex)))
@@ -3087,6 +3338,7 @@ func TestSharedStorageSurvivesPreIDEClose(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 
 	shared := newTestStorage(t, dataDir)
+	trust := pkgtrust.NewStore(dataDir, nil)
 	t.Cleanup(func() { _ = shared.Close() })
 
 	opts := []Option{
@@ -3095,12 +3347,12 @@ func TestSharedStorageSurvivesPreIDEClose(t *testing.T) {
 		WithLocker(new(sync.Mutex)),
 	}
 
-	preIDE, err := New("", config.Name(), dataDir, shared, opts...)
+	preIDE, err := New("", config.Name(), dataDir, trust, shared, opts...)
 	require.NoError(t, err)
 	_ = preIDE.Ready()
 	preIDE.WaitWorkspaces()
 
-	configuredIDE, err := New("", config.Name(), dataDir, shared, opts...)
+	configuredIDE, err := New("", config.Name(), dataDir, trust, shared, opts...)
 	require.NoError(t, err)
 	_ = configuredIDE.Ready()
 	configuredIDE.WaitWorkspaces()
@@ -3145,7 +3397,7 @@ func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
 	dataDir := t.TempDir()
 
 	var mu sync.Mutex
-	i, err := New(homeURI, configFile.Name(), dataDir, newTestStorage(t, dataDir),
+	i, err := New(homeURI, configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithLocker(&mu),
 		WithScheduleNextTick(func(fn func()) bool {
 			go func() {

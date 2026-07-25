@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/cdnrelease"
+	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -61,6 +62,7 @@ import (
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
@@ -529,10 +531,17 @@ func run() int {
 		}
 	}
 
+	// A single process-wide trust store distributes the package-signing
+	// keyring to the package manager (install verification) and the
+	// authorizer (verified-publisher check). The store fetches the served
+	// keyring once, asynchronously, at construction; the first
+	// VerifyBundle briefly waits for it.
+	trust := pkgtrust.NewStore(*flagDataPath, trustKeyringFetcher())
+
 	if *flagGUI {
-		return runGUI(filenames, runner, &mu, pathDone)
+		return runGUI(filenames, runner, trust, &mu, pathDone)
 	} else if *flagTUI {
-		return runTUI(filenames, runner, &mu)
+		return runTUI(filenames, runner, trust, &mu)
 	} else {
 		fmt.Fprintf(os.Stderr, "--gui must be set if running on %s\n",
 			runtime.GOOS)
@@ -541,7 +550,7 @@ func run() int {
 }
 
 func runTUI(
-	filenames []string, runner ide.ExtensionsRunner,
+	filenames []string, runner ide.ExtensionsRunner, trust *pkgtrust.Store,
 	mu *sync.Mutex,
 ) int {
 	opts := []ide.Option{
@@ -591,7 +600,7 @@ func runTUI(
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,
-		*flagDataPath, storage, opts...)
+		*flagDataPath, trust, storage, opts...)
 	if err != nil {
 		fmt.Printf("%s", err)
 		return 1
@@ -641,7 +650,7 @@ func runTUI(
 }
 
 func runGUI(
-	filenames []string, runner ide.ExtensionsRunner,
+	filenames []string, runner ide.ExtensionsRunner, trust *pkgtrust.Store,
 	mu *sync.Mutex, pathDone <-chan error,
 ) int {
 	setEnvForGUI(*flagDataPath)
@@ -702,7 +711,7 @@ func runGUI(
 		*flagWorkspace, *flagZdotDir, filenames,
 		launchCmd, runner, mu, publishEvent,
 		func(u *url.URL) error { return extbrowser.Browse(u) },
-		text.NewSystemClipboard(), os.TempDir(), rootCfg,
+		text.NewSystemClipboard(), os.TempDir(), rootCfg, trust,
 	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
@@ -871,6 +880,24 @@ func newAPIClient(
 	releaseManager := cdnrelease.NewManager(httpClient,
 		idepkg.ReleasesURL(*flagHTTPAddress, idepkg.HostArch()))
 	return client, releaseManager
+}
+
+// trustKeyringFetcher builds the KeyringFetcher the process trust store uses
+// to load the package-signing keyring the API advertises. It fetches the
+// oauth2 config once and returns the armored keyring it carries.
+func trustKeyringFetcher() pkgtrust.KeyringFetcher {
+	endpoint, err := url.Parse(*flagHTTPAddress)
+	if err != nil {
+		log.Warnf("parse http endpoint for trust keyring fetch: %v", err)
+		return nil
+	}
+	return func() ([]byte, error) {
+		conf, err := auth.FetchConfig(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(conf.PackageKeyringArmored), nil
+	}
 }
 
 func doRunTUI(mu *sync.Mutex, i *ide.IDE) error {

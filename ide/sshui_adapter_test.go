@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ide
 
 import (
@@ -35,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 func TestPromptChoiceCompletion(t *testing.T) {
@@ -130,7 +130,7 @@ func TestPromptChoiceBrowserLifecycle(t *testing.T) {
 		workspaceDir,
 		configFile.Name(),
 		dataDir,
-		newTestStorage(t, dataDir),
+		pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),

@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 )
 
@@ -492,7 +493,7 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 	mu := new(sync.Mutex)
 	events := make(chan term.Event, 4096)
 	scheduler := newQueuedScheduler()
-	i, err := New(dir, cfgName, dir, newTestStorage(t, dir),
+	i, err := New(dir, cfgName, dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduler.ScheduleNextTick),
 		WithPublishEvent(func(ev term.Event) bool {

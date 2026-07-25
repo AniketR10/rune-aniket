@@ -54,6 +54,7 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
@@ -114,7 +115,7 @@ func TestExtensionInterruptPermissionE2E(t *testing.T) {
 	authorizer, err := ideauthorizer.NewAuthorizer(
 		texttest.NopEditor(), prompt, storage,
 		func(fn func()) bool { fn(); return true },
-		nil, ideauthorizer.Config{},
+		nil, pkgtrust.NewStore(t.TempDir(), nil), ideauthorizer.Config{},
 	)
 	require.NoError(t, err)
 
@@ -128,6 +129,7 @@ func TestExtensionInterruptPermissionE2E(t *testing.T) {
 		uri,
 		extension.BrowserResources(hostBrowser, publishEvent),
 		authorizer,
+		nopTrustVerifier{},
 		dataDir,
 		dataDir,
 		hostBrowser,
@@ -357,7 +359,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	authorizer, err := ideauthorizer.NewAuthorizer(
 		texttest.NopEditor(), prompt, storage, scheduleNextTick, nil,
-		ideauthorizer.Config{},
+		pkgtrust.NewStore(t.TempDir(), nil), ideauthorizer.Config{},
 	)
 	require.NoError(t, err)
 
@@ -367,6 +369,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 		uri,
 		extension.BrowserResources(hostBrowser, publishEvent),
 		authorizer,
+		nopTrustVerifier{},
 		dataDir,
 		dataDir,
 		hostBrowser,

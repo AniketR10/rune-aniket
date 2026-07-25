@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/localstorage"
 )
 
@@ -106,6 +107,7 @@ workspace:
 
 	var mu sync.Mutex
 	i, err := ide.New(workspaceURI.String(), cfgPath, dir,
+		pkgtrust.NewStore(dir, nil),
 		localstorage.New(context.Background(), dir, docbson.Marshaler()),
 		ide.WithLocker(&mu),
 		ide.WithScheduleNextTick(hostScheduleNextTickIDE(&mu)),

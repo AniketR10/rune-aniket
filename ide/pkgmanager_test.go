@@ -656,7 +656,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 				interrupter.Interrupt(ev.Context)
 			}
 			return true
-		}, runner, mu, nil,
+		}, runner, idepkgtest.TrustStore(), mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())
@@ -746,7 +746,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 				interrupter.Interrupt(ev.Context)
 			}
 			return true
-		}, runner, mu, extensions,
+		}, runner, idepkgtest.TrustStore(), mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())

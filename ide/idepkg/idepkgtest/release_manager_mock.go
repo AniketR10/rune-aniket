@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idepkgtest
 
 import (
@@ -36,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 // ReleaseManager is a release.Manager for testing idepkg.Manager.
@@ -191,30 +191,45 @@ func (t *ReleaseManager) Get(
 		defer wg.Done()
 		t.mu.Lock()
 		defer t.mu.Unlock()
+		var payload []byte
 		if buf, ok := t.tarballs[pkgID]; ok {
-			_, err = writer.Write(buf)
+			payload = buf
+		} else {
+			switch pkgID {
+			case "go":
+				payload = goTar
+			case "testpkg":
+				payload = testPkgTar
+			case "six":
+				payload = testPkgTar
+			case "configpkg":
+				if version == "2" {
+					payload = configPkgV2Tar
+				} else {
+					payload = configPkgTar
+				}
+			case "configpkgstar":
+				payload, err = makeConfigPkgStarTar()
+				if err != nil {
+					return
+				}
+			}
+		}
+		if payload == nil {
 			return
 		}
-		switch pkgID {
-		case "go":
-			_, err = writer.Write(goTar)
-		case "testpkg":
-			_, err = writer.Write(testPkgTar)
-		case "six":
-			_, err = writer.Write(testPkgTar)
-		case "configpkg":
-			if version == "2" {
-				_, err = writer.Write(configPkgV2Tar)
-			} else {
-				_, err = writer.Write(configPkgTar)
-			}
-		case "configpkgstar":
-			var buf []byte
-			buf, err = makeConfigPkgStarTar()
-			if err == nil {
-				_, err = writer.Write(buf)
-			}
+		// Sign the payload with the shared test entity and record the
+		// provenance metadata so mandatory bundle verification passes
+		// for every non-git package install without a production backdoor.
+		keyID, signature, signErr := signTestPayload(payload)
+		if signErr != nil {
+			err = signErr
+			return
 		}
+		found.Metadata = cloneMetadata(found.Metadata)
+		found.Metadata[pkgtrust.MetadataSigningKeyID] = keyID
+		found.Metadata[pkgtrust.MetadataSignature] = signature
+		_, err = writer.Write(payload)
 
 	})
 

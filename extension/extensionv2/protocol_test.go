@@ -80,3 +80,47 @@ func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
 	assert.False(t, claims.Extra.Plugin)
 	assert.Equal(t, meta.Permissions, claims.Extra.Permissions)
 }
+
+func TestProtocolCarriesVerifiedPublisherOnlyWhenDeveloperKeyMatches(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+	verifyKeys, err := keys.Verify(context.Background())
+	require.NoError(t, err)
+	meta := extensionapi.Metadata{
+		DeveloperID: "dev-id", DeveloperEmail: "dev@example.com",
+		DeveloperKey: "064D4ABCFA6D9338", ExtensionID: "ext-id",
+		ExtensionName: "Test Extension", Permissions: extensionapi.NewPermissions(extensionapi.PermissionStorage),
+	}
+	trustedFingerprint := "D3F9E65DE72888CC03D45CF5064D4ABCFA6D9338"
+	p := newProtocol(context.Background(), extension.GrantAll(),
+		"ext-id", "/tmp/rune.sock", "/tmp/rune-data", "/tmp/rune-install",
+		[]byte("cert"), false, config.MapConfig(map[string]any{}), keys, nil, trustedFingerprint)
+	encoded, err := json.Marshal(meta)
+	require.NoError(t, err)
+	_, err = p.Write(encoded)
+	require.NoError(t, err)
+	data, err := io.ReadAll(p)
+	require.NoError(t, err)
+	var cfg extensionapi.Config
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	claims, err := auth.VerifyToken[ideauthorizer.Extension](verifyKeys[0], cfg.Token.AccessToken)
+	require.NoError(t, err)
+	assert.Equal(t, trustedFingerprint, claims.Extra.VerifiedPublisher)
+
+	meta.DeveloperKey = "different"
+	p = newProtocol(context.Background(), extension.GrantAll(),
+		"ext-id", "/tmp/rune.sock", "/tmp/rune-data", "/tmp/rune-install",
+		[]byte("cert"), false, config.MapConfig(map[string]any{}), keys, nil, trustedFingerprint)
+	encoded, err = json.Marshal(meta)
+	require.NoError(t, err)
+	_, err = p.Write(encoded)
+	require.NoError(t, err)
+	data, err = io.ReadAll(p)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	claims, err = auth.VerifyToken[ideauthorizer.Extension](verifyKeys[0], cfg.Token.AccessToken)
+	require.NoError(t, err)
+	assert.Empty(t, claims.Extra.VerifiedPublisher)
+}

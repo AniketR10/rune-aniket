@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/text"
@@ -534,6 +535,7 @@ func (n nopExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
+	trust extensionv2.TrustVerifier,
 	dataDir, installDir string, notifications browser.Notifications,
 	exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,

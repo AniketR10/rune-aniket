@@ -27,6 +27,9 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -55,6 +58,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/gitpkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -149,11 +154,15 @@ func translateListErr(err error, pkgID string) error {
 // and manage executables.
 func NewManager(
 	n browserapi.Notifications, m release.Manager,
-	storage storageapi.Service, scheme schemeapi.Scheme, dataDir string,
+	storage storageapi.Service, trust *pkgtrust.Store,
+	scheme schemeapi.Scheme, dataDir string,
 	configPath string, wm browserapi.WindowManager,
 	scheduleNextTick func(func()) bool,
 	interrupter term.Interrupter, opts ...Option,
 ) *Manager {
+	if trust == nil {
+		panic("idepkg.NewManager: nil trust store")
+	}
 	if dataDir == "" {
 		panic("data directory must not be empty")
 	}
@@ -175,6 +184,7 @@ func NewManager(
 		n:                n,
 		m:                m,
 		storage:          storage,
+		trust:            trust,
 	}
 	ret.iterators.m = make(map[string]*sync.Mutex)
 	for _, opt := range opts {
@@ -202,6 +212,7 @@ type Manager struct {
 	scheme           schemeapi.Scheme
 	schemeURI        workspaceapi.URI
 	binDir           string
+	trust            *pkgtrust.Store
 
 	editorMode string
 
@@ -734,8 +745,22 @@ func (m *Manager) runDownload(
 		pw:     pw,
 	}
 	m.log(log.TraceLevel, "fetching package %s version %s", pkgID, version)
-	if _, err := m.m.Get(ctx, pkgID, version, writer); err != nil {
+	bundle, err := m.m.Get(ctx, pkgID, version, writer)
+	if err != nil {
 		return translateVersionErr(err, pkgID, string(version))
+	}
+	var provenance *ProvenanceRecord
+	if !gitpkg.IsGitPkgID(pkgID) {
+		verified, err := m.trust.VerifyBundle(bundle, tarfile)
+		if err != nil {
+			return fmt.Errorf("verify package %s version %s: %w", pkgID, version, err)
+		}
+		provenance = &ProvenanceRecord{
+			KeyID:       verified.KeyID,
+			Fingerprint: verified.Fingerprint,
+			Identity:    verified.PrimaryIdentity,
+			Signature:   verified.Signature,
+		}
 	}
 
 	m.log(log.TraceLevel, "extracting package %s version %s", pkgID, version)
@@ -743,12 +768,11 @@ func (m *Manager) runDownload(
 	stagingDir := makeStagingDirname(m.dataDir, pkgID, version)
 	_ = os.RemoveAll(stagingDir)
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
-	stagingConfigFile, executables, err := m.untar(tarfile, stagingDir, pw)
+	stagingConfigFile, executables, manifest, err := m.untar(tarfile, stagingDir, pw)
 	if err != nil {
 		_ = os.RemoveAll(stagingDir)
 		return err
 	}
-
 	if err := m.installRequirements(
 		ctx, pkgID, version, stagingConfigFile, pw,
 	); err != nil {
@@ -768,14 +792,34 @@ func (m *Manager) runDownload(
 		_ = os.RemoveAll(pkgVersionDirname)
 		return err
 	}
+	if provenance != nil {
+		manifestSHA256, err := manifest.SHA256()
+		if err != nil {
+			_ = os.RemoveAll(pkgVersionDirname)
+			_ = removeExecutables(executables, m.binDir)
+			return err
+		}
+		provenance.ManifestSHA256 = manifestSHA256
+		if err := writeManifest(makeManifestFilename(m.dataDir, pkgID, version), manifest); err != nil {
+			_ = os.RemoveAll(pkgVersionDirname)
+			_ = removeExecutables(executables, m.binDir)
+			return err
+		}
+	}
 
 	updates := []storageapi.Update{
 		{FieldPath: []string{"Executables"}, Value: executables},
 		{FieldPath: []string{"Complete"}, Value: true},
 	}
+	if provenance != nil {
+		updates = append(updates, storageapi.Update{FieldPath: []string{"Provenance"}, Value: provenance})
+	}
 	if err := m.storage.Update(ctx, key, updates); err != nil {
 		_ = os.RemoveAll(pkgVersionDirname)
 		_ = removeExecutables(executables, m.binDir)
+		if provenance != nil {
+			_ = os.Remove(makeManifestFilename(m.dataDir, pkgID, version))
+		}
 		return fmt.Errorf("update storage field: %w", err)
 	}
 
@@ -1136,20 +1180,20 @@ func (m *Manager) processConfig(
 
 func (m *Manager) untar(
 	tarfile *os.File, dirname string, pw repl.ProgressWriter,
-) (string, []executableEntry, error) {
+) (string, []executableEntry, pkgtrust.Manifest, error) {
 	if err := os.MkdirAll(dirname, 0777); err != nil {
 		err = fmt.Errorf("mkdir: %w", err)
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	stat, err := tarfile.Stat()
 	if err != nil {
-		return "", nil, fmt.Errorf("stat tarball file: %w", err)
+		return "", nil, nil, fmt.Errorf("stat tarball file: %w", err)
 	}
 	totalBytes := stat.Size()
 	_, err = tarfile.Seek(0, 0)
 	if err != nil {
 		err = fmt.Errorf("seek tarball file: %w", err)
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	// Count compressed bytes read from disk so progress tracks
@@ -1158,11 +1202,11 @@ func (m *Manager) untar(
 	gzr, err := gzip.NewReader(counter)
 	if err != nil {
 		err = fmt.Errorf("new gzip reader: %w", err)
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	defer func() { _ = gzr.Close() }()
 
-	executables, err := untar(dirname, gzr, func() {
+	executables, manifest, err := untar(dirname, gzr, func() {
 		// Hold back the terminal extract sample so notification
 		// writers that auto-dismiss on progress==total stay alive
 		// until install actually completes.
@@ -1175,11 +1219,11 @@ func (m *Manager) untar(
 	})
 	if err != nil {
 		err = fmt.Errorf("untar into %s: %w", dirname, err)
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	configFile := pkgConfigFile(dirname)
-	return configFile, executables, nil
+	return configFile, executables, manifest, nil
 }
 
 func loadIdePkgConfigFile(path string, base map[string]any) (map[string]any, error) {
@@ -1674,23 +1718,25 @@ func isExecutable(info fs.FileInfo) bool {
 	return info.Mode()&os.ModeType == 0 && info.Mode()&0111 != 0
 }
 
-func untar(dst string, r io.Reader, onProgress func()) ([]executableEntry, error) {
+func untar(dst string, r io.Reader, onProgress func()) ([]executableEntry, pkgtrust.Manifest, error) {
 	tr := tar.NewReader(r)
 
 	var executables []executableEntry
+	var manifest pkgtrust.Manifest
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("tar next: %w", err)
+			return nil, nil, fmt.Errorf("tar next: %w", err)
 		}
 		if onProgress != nil {
 			onProgress()
 		}
 
 		target := filepath.Join(dst, filepath.Clean(hdr.Name))
+		entry := pkgtrust.Entry{Path: filepath.ToSlash(hdr.Name), Mode: hdr.FileInfo().Mode()}
 		if isExecutable(hdr.FileInfo()) && !isHidden(hdr.Name) {
 			executables = append(executables, executableEntry{
 				Name: hdr.Name,
@@ -1700,35 +1746,39 @@ func untar(dst string, r io.Reader, onProgress func()) ([]executableEntry, error
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, hdr.FileInfo().Mode()); err != nil {
-				return nil, fmt.Errorf("make dir %s: %w", target, err)
+				return nil, nil, fmt.Errorf("make dir %s: %w", target, err)
 			}
 		case tar.TypeSymlink:
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return nil, fmt.Errorf("make parent dirs for symlink %s: %w", target, err)
+				return nil, nil, fmt.Errorf("make parent dirs for symlink %s: %w", target, err)
 			}
 			if err := os.Symlink(hdr.Linkname, target); err != nil {
-				return nil, fmt.Errorf("symlink %s -> %s: %w", target, hdr.Linkname, err)
+				return nil, nil, fmt.Errorf("symlink %s -> %s: %w", target, hdr.Linkname, err)
 			}
+			entry.Link = hdr.Linkname
 		case tar.TypeLink:
 			/* hard links are ignored */
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return nil, fmt.Errorf("make parent dirs: %w", err)
+				return nil, nil, fmt.Errorf("make parent dirs: %w", err)
 			}
 
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC,
 				hdr.FileInfo().Mode())
 			if err != nil {
-				return nil, fmt.Errorf("create file %s: %w", target, err)
+				return nil, nil, fmt.Errorf("create file %s: %w", target, err)
 			}
-			_, err = io.Copy(f, tr)
+			hash := sha256.New()
+			_, err = io.Copy(io.MultiWriter(f, hash), tr)
 			_ = f.Close()
 			if err != nil {
-				return nil, fmt.Errorf("write file %s: %w", target, err)
+				return nil, nil, fmt.Errorf("write file %s: %w", target, err)
 			}
+			entry.SHA256 = hex.EncodeToString(hash.Sum(nil))
 		}
+		manifest = append(manifest, entry)
 	}
-	return executables, nil
+	return executables, manifest, nil
 }
 
 func copyExecutables(files []executableEntry, dirname, targetdirname string) error {
@@ -1839,6 +1889,131 @@ type pkgVersionValue struct {
 	Version     release.Version
 	Executables []executableEntry
 	Complete    bool
+	Provenance  *ProvenanceRecord
+}
+
+// ProvenanceRecord stores the host-verified origin of an installed bundle.
+type ProvenanceRecord struct {
+	KeyID          string
+	Fingerprint    string
+	Identity       string
+	Signature      string
+	ManifestSHA256 string
+}
+
+func makeManifestFilename(dataDir, pkgID string, version release.Version) string {
+	return filepath.Join(dataDir, "pkg", pkgID, ".manifest-"+string(version)+".json")
+}
+
+func writeManifest(path string, manifest pkgtrust.Manifest) error {
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal package manifest: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write package manifest: %w", err)
+	}
+	return nil
+}
+
+// VerifyExtensionEntrypoint returns the trusted signing-key fingerprint for a
+// verified installed extension entrypoint. It verifies only extension identity
+// code; toolchain executables are command inputs and are intentionally omitted.
+func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		m.log(log.WarnLevel, "resolve extension entrypoint %s: %v", path, err)
+		return "", false
+	}
+	dit, err := m.storage.List(context.Background(), nil)
+	if err != nil {
+		m.log(log.WarnLevel, "list package provenance: %v", err)
+		return "", false
+	}
+	entries, err := iterator.ToSlice(context.Background(), iterator.FromDocumentIterator[pkgVersionValue](dit))
+	if err != nil {
+		m.log(log.WarnLevel, "read package provenance: %v", err)
+		return "", false
+	}
+	for _, installed := range entries {
+		if !installed.Complete || installed.Provenance == nil {
+			continue
+		}
+		dir := makePackageVersionDirname(m.dataDir, installed.Package, installed.Version)
+		resolvedDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(resolvedDir, resolved)
+		if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+			continue
+		}
+		manifest, err := readManifest(makeManifestFilename(m.dataDir, installed.Package, installed.Version))
+		if err != nil {
+			m.log(log.WarnLevel, "read package manifest for %s: %v", installed.Package, err)
+			return "", false
+		}
+		digest, err := manifest.SHA256()
+		if err != nil || digest != installed.Provenance.ManifestSHA256 {
+			m.log(log.WarnLevel, "package manifest provenance mismatch for %s", installed.Package)
+			return "", false
+		}
+		entryPath := filepath.ToSlash(rel)
+		configPath, err := filepath.Rel(dir, pkgConfigFile(dir))
+		if err != nil {
+			return "", false
+		}
+		configPath = filepath.ToSlash(configPath)
+		wanted := make(map[string]pkgtrust.Entry)
+		for _, entry := range manifest {
+			if entry.Path == entryPath || entry.Path == configPath || isLibraryEntry(entry.Path) {
+				wanted[entry.Path] = entry
+			}
+		}
+		if _, ok := wanted[entryPath]; !ok {
+			m.log(log.WarnLevel, "extension entrypoint %s is absent from package manifest", resolved)
+			return "", false
+		}
+		if _, err := os.Stat(pkgConfigFile(dir)); err != nil {
+			m.log(log.WarnLevel, "package config is unavailable for %s: %v", installed.Package, err)
+			return "", false
+		}
+		if _, ok := wanted[configPath]; !ok {
+			m.log(log.WarnLevel, "package config is absent from manifest for %s", installed.Package)
+			return "", false
+		}
+		if err := pkgtrust.VerifyEntries(dir, manifestEntries(wanted)); err != nil {
+			m.log(log.WarnLevel, "package integrity check failed for %s: %v", installed.Package, err)
+			return "", false
+		}
+		return installed.Provenance.Fingerprint, true
+	}
+	return "", false
+}
+
+func readManifest(path string) (pkgtrust.Manifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var manifest pkgtrust.Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+func manifestEntries(entries map[string]pkgtrust.Entry) []pkgtrust.Entry {
+	result := make([]pkgtrust.Entry, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, entry)
+	}
+	return result
+}
+
+func isLibraryEntry(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".so" || ext == ".dylib" || ext == ".dll"
 }
 
 type executableEntry struct {
@@ -1866,27 +2041,7 @@ func validatePkgPath(val string) error {
 // Reconcile cleans up incomplete installs left by a previous crash.
 // It should be called once at startup, before any new installs.
 func (m *Manager) Reconcile(ctx context.Context) error {
-	// Phase 1: Clean leftover staging directories.
 	pkgRoot := filepath.Join(m.dataDir, "pkg")
-	if entries, err := os.ReadDir(pkgRoot); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			pkgDir := filepath.Join(pkgRoot, entry.Name())
-			subEntries, err := os.ReadDir(pkgDir)
-			if err != nil {
-				continue
-			}
-			for _, sub := range subEntries {
-				if strings.HasPrefix(sub.Name(), ".staging-") {
-					_ = os.RemoveAll(filepath.Join(pkgDir, sub.Name()))
-				}
-			}
-		}
-	}
-
-	// Phase 2: Clean stale storage entries (Complete == false).
 	dit, err := m.storage.List(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("list storage entries: %w", err)
@@ -1896,6 +2051,28 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read storage entries: %w", err)
 	}
+	manifests := make(map[string]struct{})
+	for _, pkv := range entries {
+		if pkv.Complete && pkv.Provenance != nil {
+			manifests[makeManifestFilename(m.dataDir, pkv.Package, pkv.Version)] = struct{}{}
+		}
+	}
+	_ = filepath.WalkDir(pkgRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".staging-") {
+			_ = os.RemoveAll(path)
+			return filepath.SkipDir
+		}
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), ".manifest-") {
+			if _, ok := manifests[path]; !ok {
+				_ = os.Remove(path)
+			}
+		}
+		return nil
+	})
+
 	for _, pkv := range entries {
 		if pkv.Package == "" || pkv.Version == "" {
 			continue
@@ -1916,11 +2093,13 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				}
 			}
 			_ = m.storage.Delete(ctx, key)
+			_ = os.Remove(makeManifestFilename(m.dataDir, pkv.Package, pkv.Version))
 			continue
 		}
 		// Phase 4: Verify complete entries — if dir is missing, delete storage.
 		if _, serr := os.Stat(dirname); os.IsNotExist(serr) {
 			_ = m.storage.Delete(ctx, key)
+			_ = os.Remove(makeManifestFilename(m.dataDir, pkv.Package, pkv.Version))
 		}
 	}
 

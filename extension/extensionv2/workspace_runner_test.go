@@ -170,6 +170,7 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 		exec,
 		exec, // separate extExecutor not exercised here
 		nil,  // grantor is not used by StartCommand
+		nopTrustVerifier{},
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -230,7 +231,7 @@ func TestWorkspaceRunnerStartCommandDoesNotDoubleResolveDir(t *testing.T) {
 
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(
-		exec, exec, nil, uri,
+		exec, exec, nil, nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys,
 	)
 
@@ -269,6 +270,7 @@ func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
 		&recordingExecutor{},
 		&recordingExecutor{}, // separate extExecutor not exercised here
 		nil,                  // grantor is not used by StartCommand
+		nopTrustVerifier{},
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -312,6 +314,7 @@ func TestWorkspaceRunnerRunCarriesExtensionID(t *testing.T) {
 		exec,
 		exec, // separate extExecutor not exercised here
 		nil,  // grantor is not used before process execution in this test
+		nopTrustVerifier{},
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -357,6 +360,7 @@ func TestWorkspaceRunnerRunSSHWorkspaceUsesExtExecutor(t *testing.T) {
 		cmdExec, // workspace executor (would route to remote)
 		extExec, // local executor for extension binaries
 		nil,
+		nopTrustVerifier{},
 		uri,
 		"/tmp/ext.sock",
 		dataDir,
@@ -560,7 +564,7 @@ func TestWorkspaceRunnerRunSourceEntrypoint(t *testing.T) {
 
 			exec := &recordingExecutor{}
 			runner := newWorkspaceRunner(
-				exec, exec, nil, uri,
+				exec, exec, nil, nopTrustVerifier{}, uri,
 				"/tmp/ext.sock", dataDir, "/tmp/ext-install",
 				[]byte("cert"), keys,
 			)
@@ -616,7 +620,7 @@ func TestWorkspaceRunnerPythonEntrypointResolvesPackageSymlink(t *testing.T) {
 
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(
-		exec, exec, nil, uri,
+		exec, exec, nil, nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", dataDir, "/tmp/ext-install", []byte("cert"), keys,
 	)
 	require.NoError(t, runner.Run("src-ext", libMain, config.NopConfig()))
@@ -659,6 +663,7 @@ func TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor(t *testing.T) {
 		cmdExec,
 		extExec,
 		nil,
+		nopTrustVerifier{},
 		uri,
 		"/tmp/ext.sock",
 		t.TempDir(),
@@ -690,7 +695,7 @@ func TestWorkspaceRunnerRunRejectsDuplicateRunningID(t *testing.T) {
 	require.NoError(t, err)
 
 	exec0 := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec0, exec0, nil, uri,
+	runner := newWorkspaceRunner(exec0, exec0, nil, nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -709,7 +714,7 @@ func TestWorkspaceRunnerStopExtensionMarksStateStopped(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, exec, nil, uri,
+	runner := newWorkspaceRunner(exec, exec, nil, nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -732,7 +737,7 @@ func TestWorkspaceRunnerStopExtensionRecordsReason(t *testing.T) {
 	require.NoError(t, err)
 
 	exec1 := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec1, exec1, nil, uri,
+	runner := newWorkspaceRunner(exec1, exec1, nil, nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -754,7 +759,7 @@ func TestWorkspaceRunnerRestartReusesStoredCommandAndConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &protocolDrivingExecutor{extensionID: "test-extension"}
-	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	cfg := config.MapConfig(map[string]any{"foo": "bar"})
 	require.NoError(t, runner.Run("test-extension", "/bin/ext --serve", cfg))
@@ -784,7 +789,7 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	done := make(chan error, 1)
@@ -836,7 +841,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 		require.NoError(t, err)
 
 		exec := &recordingExecutor{}
-		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
@@ -882,7 +887,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 		require.NoError(t, err)
 
 		exec := &recordingExecutor{}
-		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -915,7 +920,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 		require.NoError(t, err)
 
 		exec := &recordingExecutor{}
-		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		done := make(chan error, 1)
@@ -967,7 +972,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 		require.NoError(t, err)
 
 		exec := &recordingExecutor{}
-		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		done := make(chan error, 1)
@@ -999,7 +1004,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 		require.NoError(t, err)
 
 		exec := &recordingExecutor{}
-		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
@@ -1035,7 +1040,7 @@ func TestWorkspaceRunnerStartExtensionReturnsProtocolError(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	done := make(chan error, 1)
@@ -1076,7 +1081,7 @@ func TestWorkspaceRunnerStartExtensionReturnsStartCommandError(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := startErrorExecutor{err: errors.New("boom")}
-	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	err = runner.startExtension(context.Background(), "test-extension", "/bin/ext", config.NopConfig())

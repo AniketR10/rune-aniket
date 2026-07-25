@@ -45,6 +45,12 @@ import (
 func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
 	requests := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// New always fetches the oauth2 config in the background for
+		// the package trust keyring; only telemetry traffic matters.
+		if r.URL.Path == auth.ServeConfigPath {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		requests <- struct{}{}
 		w.WriteHeader(http.StatusOK)
 	}))

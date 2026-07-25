@@ -80,6 +80,7 @@ import (
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
 	"unstable.build/go-tui/ide/pkgshell"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
@@ -143,6 +144,7 @@ type workspaceManagerHandler struct {
 	events                  *eventRouter
 	tabsClickCallback       func(int) bool
 	extensionRunner         ExtensionsRunner
+	trust                   *pkgtrust.Store
 	sixDir                  string
 	configPath              string
 	llmRouter               *llmrouter.Router
@@ -549,7 +551,7 @@ func (h *workspaceManagerHandler) init(
 	notiConfig notifications.Config,
 	cfg ideConfig, storage storageapi.Service, sixDir string,
 	publishEvent func(term.Event) bool,
-	extensionRunner ExtensionsRunner, locker sync.Locker,
+	extensionRunner ExtensionsRunner, trust *pkgtrust.Store, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int, workspacesIcon rune,
@@ -597,6 +599,7 @@ func (h *workspaceManagerHandler) init(
 	h.macroPlayer = idemacro.NewPlayer(h.clip, h.macro, h.events.globalPublisher())
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
+	h.trust = trust
 	h.builtinExtensions = builtinExtensions
 	h.initialVTECapacity = initialVTECapacity
 	h.dispatchOnPreview = dispatchOnPreview
@@ -2023,9 +2026,10 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}()
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications,
-		ideauthorizer.Config{
-			AutoAuthorizeExtensions: cfg.authorizerAutoAuthorizeExtensions(),
-			AutoAuthorizeCommands:   cfg.authorizerAutoAuthorizeCommands(),
+		h.trust, ideauthorizer.Config{
+			AutoAuthorizeExtensions:        cfg.authorizerAutoAuthorizeExtensions(),
+			AutoAuthorizeCommands:          cfg.authorizerAutoAuthorizeCommands(),
+			AutoAuthorizeVerifiedPublisher: cfg.authorizerAutoAuthorizeVerified(),
 		})
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
@@ -2179,7 +2183,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	// party extensions.
 	grantor := extension.GrantAll()
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
-		dataDir, installDir, browser, cwd, extExecutor, grantor,
+		h.pkgmanager.pkg, dataDir, installDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new workspace extensions runner: %v", err)
@@ -3406,7 +3410,8 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
-		editorMode, autoInstall, h.afterPackageConfigMerge, h.gitRemoteURL)
+		editorMode, autoInstall, h.afterPackageConfigMerge, h.gitRemoteURL,
+		h.trust)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

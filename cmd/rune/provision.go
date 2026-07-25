@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/ide/gitpkg"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/multipkg"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
@@ -118,9 +119,10 @@ func installRemotePackageEntries(
 	// installs that merge package gui.env into the config.
 	editorMode := resolveRemoteEditorMode()
 
+	trust := pkgtrust.NewStore(*flagDataPath, trustKeyringFetcher())
 	mgr, storage := idepkg.NewProvisioningManager(
 		newRuneStorage(*flagDataPath), releaseManager, scheme,
-		*flagDataPath, *flagConfigPath, editorMode, configBase)
+		*flagDataPath, *flagConfigPath, editorMode, configBase, trust)
 	defer func() { _ = storage.Close() }()
 
 	ctx := context.Background()

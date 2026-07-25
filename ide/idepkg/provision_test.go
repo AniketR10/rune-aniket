@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 )
 
 type fakeProvisionSource struct {
@@ -165,7 +166,8 @@ func TestProvisioningManagerSharesEditorPartition(t *testing.T) {
 	// identically and therefore see the editor's entry.
 	mgr, storage := NewProvisioningManager(
 		root, nil, newLocalScheme(t.TempDir()),
-		t.TempDir(), filepath.Join(t.TempDir(), "config.yaml"), "", nil)
+		t.TempDir(), filepath.Join(t.TempDir(), "config.yaml"), "", nil,
+		idepkgtest.TrustStore())
 	t.Cleanup(func() { _ = storage.Close() })
 
 	it, err := mgr.ListInstalledPackages(context.Background())

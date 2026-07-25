@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )
@@ -93,7 +94,7 @@ func TestScheduleNextTickDoesNotReacquireHostLock(t *testing.T) {
 	err = h.init(nil, homeURI, manager,
 		notificationsConfig(), cfg, storage, dir,
 		func(term.Event) bool { return true },
-		FuncExtensionsRunner(testRunnerFn), mu, nil,
+		FuncExtensionsRunner(testRunnerFn), pkgtrust.NewStore(dir, nil), mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())

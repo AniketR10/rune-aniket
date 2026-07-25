@@ -202,6 +202,7 @@ func TestLibDir(t *testing.T) {
 				n1 := idepkgtest.NewNotifications(t)
 				rm := idepkgtest.NewReleaseManager(pkgs, versions)
 				m1 := NewManager(n1, rm, storage,
+					idepkgtest.TrustStore(),
 					fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 
 				err = m1.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
@@ -218,6 +219,7 @@ func TestLibDir(t *testing.T) {
 				// Second Manager: same storage and dataDir, simulating a restart.
 				n2 := idepkgtest.NewNotifications(t)
 				m2 := NewManager(n2, rm, storage,
+					idepkgtest.TrustStore(),
 					fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 
 				err = m2.Reconcile(context.Background())
@@ -313,7 +315,8 @@ func TestDescribeRelease(t *testing.T) {
 
 		pkg, err := m.DescribeRelease(context.Background(), "go", "m")
 		require.NoError(t, err)
-		assert.Equal(t, release.Bundle{Package: "go", Version: "m"}, pkg)
+		assert.Equal(t, "go", pkg.Package)
+		assert.Equal(t, release.Version("m"), pkg.Version)
 	})
 	t.Run("bubbles up release manager error", func(t *testing.T) {
 		t.Parallel()
@@ -1140,6 +1143,7 @@ func newTestManager(
 		},
 	}
 	manager := NewManager(n, m, storagestub.NewInMemoryService(),
+		idepkgtest.TrustStore(),
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, m, temp
 }
@@ -2047,6 +2051,7 @@ func newTestManagerWithStorage(
 	}
 	storage := document.NewInMemoryService()
 	manager := NewManager(n, m, bluestore.AdaptTo(storage),
+		idepkgtest.TrustStore(),
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, m, temp, storage
 }
@@ -2925,6 +2930,7 @@ func newTestManagerWithLocalStorage(
 	}
 	storage := localstorage.New(context.Background(), temp, docbson.Marshaler())
 	manager := NewManager(n, r, storage,
+		idepkgtest.TrustStore(),
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, r, temp, storage
 }
@@ -3012,7 +3018,8 @@ func TestInstallNoConfigPromptOnFailure(t *testing.T) {
 			failKey: "configpkg:1",
 			failErr: errors.New("simulated storage update failure"),
 		}
-		m := NewManager(n, rel, storage, fileScheme, temp, configPath, wm,
+		m := NewManager(n, rel, storage,
+			idepkgtest.TrustStore(), fileScheme, temp, configPath, wm,
 			syncTick, term.NopInterrupter())
 
 		err = m.InstallPackageVersion(context.Background(), "configpkg", "1", repl.NopProgressWriter())
@@ -3082,7 +3089,8 @@ func TestInstallConfigPromptScheduledAfterSuccess(t *testing.T) {
 			completeAt: "configpkg:1",
 			completed:  &storageComplete,
 		}
-		m := NewManager(n, rel, storage, fileScheme, temp, configPath, wm,
+		m := NewManager(n, rel, storage,
+			idepkgtest.TrustStore(), fileScheme, temp, configPath, wm,
 			syncTick, term.NopInterrupter())
 
 		err = m.InstallPackageVersion(context.Background(), "configpkg", "1", repl.NopProgressWriter())

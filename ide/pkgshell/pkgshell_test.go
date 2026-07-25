@@ -97,6 +97,7 @@ func newManager(
 	temp := t.TempDir()
 	configPath := filepath.Join(temp, "config.yaml")
 	return idepkg.NewManager(n, rm, storagestub.NewInMemoryService(),
+		idepkgtest.TrustStore(),
 		newFixtureScheme(temp), temp, configPath, &fixtureWindowManager{},
 		syncTick, term.NopInterrupter())
 }

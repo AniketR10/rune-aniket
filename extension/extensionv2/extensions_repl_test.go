@@ -537,7 +537,7 @@ func newTestWorkspaceRunnerWithExecutor(t *testing.T, exec schemeapi.Executor) *
 	uri, err := workspaceapi.ParseURI("file:///tmp/" + sanitizeTestName(t.Name()))
 	require.NoError(t, err)
 	runner := newWorkspaceRunner(
-		exec, exec, extension.GrantAll(), uri,
+		exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys,
 	)
 	t.Cleanup(func() { _ = runner.Close() })

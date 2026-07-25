@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 )
 
@@ -58,9 +59,10 @@ import (
 // associated with some access to some resources.
 type Extension struct {
 	extensionapi.Metadata
-	Plugin bool
-	Path   string
-	Args   []string
+	Plugin            bool
+	Path              string
+	Args              []string
+	VerifiedPublisher string
 }
 
 // PermissionRequest describes a single permission requested by an extension or
@@ -109,8 +111,9 @@ type PromptOpener interface {
 
 // Config controls which permission requests are granted without prompting.
 type Config struct {
-	AutoAuthorizeExtensions bool
-	AutoAuthorizeCommands   bool
+	AutoAuthorizeExtensions        bool
+	AutoAuthorizeCommands          bool
+	AutoAuthorizeVerifiedPublisher bool
 }
 
 // NewAuthorizer returns an Authorizer that satisfies both the workspace
@@ -121,15 +124,19 @@ func NewAuthorizer(
 	promptOpener PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 	notifications browserapi.Notifications,
-	config Config,
+	trust *pkgtrust.Store, config Config,
 ) (*Authorizer, error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
+	}
+	if trust == nil {
+		return nil, errors.New("trust store is required")
 	}
 	a := &Authorizer{
 		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
 		storage:  storage,
 		config:   config,
+		trust:    trust,
 		once:     make(map[string]pluginPermissionOnceDecision),
 		pending:  make(map[string]*pendingPrompt),
 	}
@@ -147,6 +154,7 @@ type Authorizer struct {
 	prompter *permissionPrompter
 	storage  storageapi.Service
 	config   Config
+	trust    *pkgtrust.Store
 
 	onceMu sync.Mutex
 	once   map[string]pluginPermissionOnceDecision
@@ -258,8 +266,13 @@ func (a *Authorizer) AuthorizeCommand(
 		keys = extensionPermissionCommandStorageKeys(claims.Extra, perm, command)
 		onceKey = stablePermissionOnceKey(identity, perm, &command)
 	}
+	// Commands run silently only when the operator opted into
+	// auto-authorizing commands AND the extension is from a verified
+	// publisher; either alone still prompts.
+	autoAuthorize := a.config.AutoAuthorizeCommands &&
+		!claims.Extra.Plugin && a.verified(claims.Extra)
 	return a.authorizePermission(ctx, claims.Extra, identity, keys, onceKey, perm, resource,
-		&command, a.config.AutoAuthorizeCommands)
+		&command, autoAuthorize)
 }
 
 func (a *Authorizer) authorizeExtension(
@@ -269,7 +282,12 @@ func (a *Authorizer) authorizeExtension(
 	key := extensionPermissionStorageKey(ext, perm)
 	onceKey := stablePermissionOnceKey(identity, perm, nil)
 	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource,
-		nil, a.config.AutoAuthorizeExtensions)
+		nil, a.config.AutoAuthorizeExtensions || a.verified(ext))
+}
+
+func (a *Authorizer) verified(ext Extension) bool {
+	return a.config.AutoAuthorizeVerifiedPublisher && ext.VerifiedPublisher != "" &&
+		a.trust.IsTrustedFingerprint(ext.VerifiedPublisher)
 }
 
 func (a *Authorizer) authorizePermission(

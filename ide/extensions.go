@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/text"
 )
@@ -39,6 +40,7 @@ type ExtensionsRunner interface {
 	WorkspaceExtensionsRunner(
 		uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 		authorizer *ideauthorizer.Authorizer,
+		trust extensionv2.TrustVerifier,
 		dataDir, installDir string, notifications browser.Notifications,
 		executor, extExecutor schemeapi.Executor,
 		grantor extension.Grantor,
@@ -75,6 +77,7 @@ func (f fnExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
+	trust extensionv2.TrustVerifier,
 	dataDir, installDir string, n browser.Notifications, exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,

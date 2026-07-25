@@ -498,7 +498,7 @@ func TestPkgInstallRegistersTutorialLive(t *testing.T) {
 	// workspace FS watcher while the install is in flight.
 	dataDir := t.TempDir()
 	sched, startSched := newDeferredScheduler(mu)
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, idepkgtest.TrustStore(), newTestStorage(t, dataDir),
 		WithReleaseManager(rm),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
@@ -579,7 +579,7 @@ func TestPkgInstallMultipleTutorialsPromptsOnce(t *testing.T) {
 	// outside the watched workspace.
 	dataDir := t.TempDir()
 	sched, startSched := newDeferredScheduler(mu)
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, idepkgtest.TrustStore(), newTestStorage(t, dataDir),
 		WithReleaseManager(rm),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
@@ -655,7 +655,7 @@ func TestPkgInstallTutorialDoesNotPromptDuringActiveTutorial(t *testing.T) {
 	mu := new(sync.Mutex)
 	dataDir := t.TempDir()
 	sched, startSched := newDeferredScheduler(mu)
-	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+	i, err := New(dir, configPath, dataDir, idepkgtest.TrustStore(), newTestStorage(t, dataDir),
 		WithReleaseManager(rm),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
@@ -815,6 +815,7 @@ type recordingExtensionsRunner struct{ runner *recordingRunner }
 func (r recordingExtensionsRunner) WorkspaceExtensionsRunner(
 	_ workspaceapi.URI, _ map[extensionapi.Permission]extension.ResourceRegistrar,
 	_ *ideauthorizer.Authorizer,
+	_ extensionv2.TrustVerifier,
 	_, _ string, _ browser.Notifications, _, _ schemeapi.Executor,
 	_ extension.Grantor, _ text.Editor,
 	_ ideauthorizer.PromptOpener, _ storageapi.Service,
@@ -929,7 +930,7 @@ func newPkgInstallExtHandler(
 	require.NoError(t, m.workspaceManagerHandler.init(nil, homeURI, manager,
 		notiCfg, cfg, storage, dir,
 		func(term.Event) bool { return true },
-		runner, mu, nil, reload,
+		runner, idepkgtest.TrustStore(), mu, nil, reload,
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry()))
 	return m

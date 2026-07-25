@@ -40,6 +40,7 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/extension/extensionv2/peerprocess"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -69,7 +70,7 @@ func TestAuthorizerRegistersRevokeREPLCommand(t *testing.T) {
 
 	editor := newCapturingEditor()
 	_, err := NewAuthorizer(editor, nil, storagestub.NewInMemoryService(),
-		syncScheduleNextTick, nil, Config{})
+		syncScheduleNextTick, nil, pkgtrust.NewStore(t.TempDir(), nil), Config{})
 	require.NoError(t, err)
 
 	require.Equal(t, 1, editor.calls)
@@ -84,7 +85,7 @@ func TestAuthorizerRequiresEditor(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewAuthorizer(nil, nil, storagestub.NewInMemoryService(),
-		syncScheduleNextTick, nil, Config{})
+		syncScheduleNextTick, nil, pkgtrust.NewStore(t.TempDir(), nil), Config{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "editor is required")
 }

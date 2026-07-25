@@ -47,9 +47,16 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
+
+// nopTrustVerifier is a TrustVerifier that trusts nothing; e2e tests exercise
+// prompt flows for unverified extensions.
+type nopTrustVerifier struct{}
+
+func (nopTrustVerifier) VerifyExtensionEntrypoint(string) (string, bool) { return "", false }
 
 func TestPluginPermissionPromptE2E(t *testing.T) {
 	if testing.Short() {
@@ -139,13 +146,14 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 					fn()
 					return true
 				},
-				nil, ideauthorizer.Config{},
+				nil, pkgtrust.NewStore(t.TempDir(), nil), ideauthorizer.Config{},
 			)
 			require.NoError(t, err)
 			runner, err := baseRunner.WorkspaceExtensionsRunner(
 				uri,
 				extension.BrowserResources(e2eBrowser{}, func(term.Event) bool { return true }),
 				authorizer,
+				nopTrustVerifier{},
 				dataDir,
 				dataDir,
 				e2eBrowser{},

@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 // StoragePartition is the storage partition every package Manager reads and
@@ -78,15 +79,18 @@ func HostArch() string {
 func NewProvisioningManager(
 	rootStorage storageapi.Service, rm release.Manager, scheme schemeapi.Scheme,
 	dataDir, configPath, editorMode string, configBase func() map[string]any,
-	opts ...Option,
+	trust *pkgtrust.Store, opts ...Option,
 ) (*Manager, storageapi.Service) {
+	if trust == nil {
+		panic("idepkg.NewProvisioningManager: nil trust store")
+	}
 	storage := storageapi.WithPartition(rootStorage, StoragePartition)
 	baseOpts := []Option{WithConfigBase(configBase)}
 	if editorMode != "" {
 		baseOpts = append(baseOpts, WithEditorMode(editorMode))
 	}
 	mgr := NewManager(
-		nopNotifications{}, rm, storage, scheme, dataDir, configPath,
+		nopNotifications{}, rm, storage, trust, scheme, dataDir, configPath,
 		nopWindowManager{}, syncScheduleNextTick, term.NopInterrupter(),
 		append(baseOpts, opts...)...,
 	)
