@@ -37,6 +37,8 @@ const (
 	// ClaudeFable5 is Anthropic's Claude Fable 5 model — its most capable
 	// widely released model.
 	ClaudeFable5 = "claude-fable-5"
+	// ClaudeOpus5 is Anthropic's Claude Opus 5 model.
+	ClaudeOpus5 = "claude-opus-5"
 	// ClaudeOpus4Dot8 is Anthropic's Claude Opus 4.8 model.
 	ClaudeOpus4Dot8 = "claude-opus-4-8"
 	// ClaudeOpus4Dot7 is Anthropic's Claude Opus 4.7 model.
@@ -73,6 +75,7 @@ const (
 func AvailableModels() map[string]int {
 	return map[string]int{
 		ClaudeFable5:      1000000,
+		ClaudeOpus5:       1000000,
 		ClaudeOpus4Dot8:   1000000,
 		ClaudeOpus4Dot7:   1000000,
 		ClaudeOpus4Dot6:   1000000,
@@ -90,10 +93,11 @@ func AvailableModels() map[string]int {
 }
 
 // SupportsAdaptiveThinking reports whether the given model supports adaptive
-// extended thinking. Currently only 4.6 models support the adaptive mode.
+// extended thinking.
 func SupportsAdaptiveThinking(model string) bool {
 	switch model {
-	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6, ClaudeOpus4Dot7, ClaudeOpus4Dot8, ClaudeFable5:
+	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6, ClaudeOpus4Dot7, ClaudeOpus4Dot8,
+		ClaudeOpus5, ClaudeFable5:
 		return true
 	default:
 		return false
@@ -105,6 +109,7 @@ func SupportsAdaptiveThinking(model string) bool {
 // ceiling; MaxOutputTokens returns 0 for them so callers apply no cap.
 var maxOutputTokens = map[string]int{
 	ClaudeFable5:      128000,
+	ClaudeOpus5:       128000,
 	ClaudeOpus4Dot8:   128000,
 	ClaudeOpus4Dot7:   128000,
 	ClaudeOpus4Dot6:   128000,
@@ -138,8 +143,7 @@ var claude4Efforts = map[string]bool{
 	"high":   true,
 }
 
-// claude46Efforts are the effort levels supported by Claude 4.6 models.
-// These models additionally support "xhigh" and "max".
+// claude46Efforts are the effort levels supported by adaptive-thinking models.
 var claude46Efforts = map[string]bool{
 	"low":    true,
 	"medium": true,
@@ -196,4 +200,4 @@ func ModelEntries() []llmapi.ModelEntry {
 // FlagshipModel returns the provider's top model identifier. It is
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
-func FlagshipModel() string { return ClaudeOpus4Dot8 }
+func FlagshipModel() string { return ClaudeOpus5 }

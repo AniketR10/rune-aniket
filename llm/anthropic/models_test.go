@@ -32,7 +32,13 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, ClaudeOpus4Dot8, FlagshipModel())
+	assert.Equal(t, ClaudeOpus5, FlagshipModel())
+}
+
+func TestClaudeOpus5Catalog(t *testing.T) {
+	assert.Equal(t, 1000000, AvailableModels()[ClaudeOpus5])
+	assert.Equal(t, 128000, MaxOutputTokens(ClaudeOpus5))
+	assert.True(t, SupportsAdaptiveThinking(ClaudeOpus5))
 }
 
 func TestMaxOutputTokens(t *testing.T) {
@@ -40,6 +46,7 @@ func TestMaxOutputTokens(t *testing.T) {
 		model string
 		want  int
 	}{
+		{ClaudeOpus5, 128000},
 		{ClaudeFable5, 128000},
 		{ClaudeSonnet4Dot5, 64000},
 		{ClaudeOpus4, 32000},
@@ -58,6 +65,7 @@ func TestSupportsEffort(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{ClaudeOpus5, true},
 		{ClaudeOpus4Dot7, true},
 		{ClaudeOpus4Dot6, true},
 		{ClaudeSonnet4Dot6, true},
@@ -83,6 +91,7 @@ func TestSupportsAdaptiveThinking(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{ClaudeOpus5, true},
 		{ClaudeOpus4Dot6, true},
 		{ClaudeSonnet4Dot6, true},
 		{ClaudeHaiku4Dot5, false},
@@ -151,6 +160,11 @@ func TestNormalizeEffort(t *testing.T) {
 		{"fable-5 high", ClaudeFable5, "high", "high", false},
 		{"fable-5 xhigh", ClaudeFable5, "xhigh", "xhigh", false},
 		{"fable-5 max", ClaudeFable5, "max", "max", false},
+		{"opus-5 low", ClaudeOpus5, "low", "low", false},
+		{"opus-5 medium", ClaudeOpus5, "medium", "medium", false},
+		{"opus-5 high", ClaudeOpus5, "high", "high", false},
+		{"opus-5 xhigh", ClaudeOpus5, "xhigh", "xhigh", false},
+		{"opus-5 max", ClaudeOpus5, "max", "max", false},
 
 		// Claude 4.6: unsupported levels are dropped with warning.
 		{"opus-4.6 none", ClaudeOpus4Dot6, "none", "", true},

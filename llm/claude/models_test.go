@@ -31,13 +31,14 @@ import (
 	"unstable.build/go-tui/llm/anthropic"
 )
 
-func TestFlagshipModelIsOpus48(t *testing.T) {
-	assert.Equal(t, anthropic.ClaudeOpus4Dot8, FlagshipModel())
+func TestFlagshipModelIsOpus5(t *testing.T) {
+	assert.Equal(t, anthropic.ClaudeOpus5, FlagshipModel())
 }
 
 func TestMaxOutputTokensMirrorsAnthropic(t *testing.T) {
-	model := anthropic.ClaudeFable5
+	model := anthropic.ClaudeOpus5
 	assert.Equal(t, anthropic.MaxOutputTokens(model), MaxOutputTokens(model))
+	assert.Equal(t, 128000, MaxOutputTokens(model))
 	assert.Equal(t, 0, MaxOutputTokens("unknown-model"))
 }
 
@@ -46,10 +47,15 @@ func TestModelEntriesStampClaudeProvider(t *testing.T) {
 	require.NotEmpty(t, entries)
 
 	gotSlugs := make(map[string]bool, len(entries))
+	var opus5ContextWindow int
 	for _, e := range entries {
 		assert.Equal(t, LLMProvider, e.Provider, "entry %q not stamped claude", e.Name)
 		gotSlugs[e.Name] = true
+		if e.Name == anthropic.ClaudeOpus5 {
+			opus5ContextWindow = e.ContextWindow
+		}
 	}
+	assert.Equal(t, 1000000, opus5ContextWindow)
 
 	wantSlugs := make(map[string]bool)
 	for _, e := range anthropic.ModelEntries() {

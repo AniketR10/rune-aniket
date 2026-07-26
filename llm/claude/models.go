@@ -48,10 +48,8 @@ func ModelEntries() []llmapi.ModelEntry {
 	return out
 }
 
-// FlagshipModel returns the provider's top model identifier. The Claude
-// Code subscription path pins Opus 4.8 as its flagship rather than
-// mirroring the Anthropic api-key flagship.
-func FlagshipModel() string { return anthropic.ClaudeOpus4Dot8 }
+// FlagshipModel returns the provider's top model identifier.
+func FlagshipModel() string { return anthropic.ClaudeOpus5 }
 
 // MaxOutputTokens returns the model's documented maximum output-token
 // ceiling. It mirrors the Anthropic catalog since the slugs are identical.
