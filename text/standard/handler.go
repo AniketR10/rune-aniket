@@ -71,6 +71,7 @@ type standardHandler struct {
 	metaK            bool
 	lastPaste        bool
 	historyIdx       int
+	find             findState
 }
 
 // NewHandler returns a standard, simple-to-use text.Handler. indentTabspaces
@@ -368,6 +369,11 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			_ = h.doMoveToBounds()
 		}
 	}()
+	if h.find.active {
+		if !h.handleFindKey(ev) {
+			return false, true
+		}
+	}
 
 	if ev.Mod == term.ModShift {
 		switch ev.Key {
@@ -606,9 +612,7 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 					handled = h.cursor.DeleteSelection()
 				}
 			case 'f':
-				ev.Key = 0
-				ev.Ch = '/'
-				_, handled = h.less.Handle(ev)
+				handled = h.startFind()
 			case 'a':
 				if _, ok := h.cursor.SelectionMode(); ok {
 					h.cursor.Unselect()
@@ -786,6 +790,8 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 		switch ev.Ch {
+		case 'f':
+			handled = h.startFind()
 		case 'c':
 			handled = h.copySelectionOrLine()
 		case 'x':
@@ -1043,7 +1049,7 @@ func (h *standardHandler) SetWrap(wrap bool) {
 }
 
 func (h *standardHandler) IsSearchMode() bool {
-	return h.less.Mode() == handler.LessSearchMode
+	return h.find.active
 }
 
 func (t *standardHandler) ShowCommandBar(show bool) {

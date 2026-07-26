@@ -41,6 +41,8 @@ type emacsConfig struct {
 	indentRune         rune
 	ruler              int
 	attr               term.Attributes
+	barAttr            term.Attributes
+	barAttrSet         bool
 	resAttr            term.Attributes
 	comments           text.CommentConfig
 	registry           text.WorkspaceCommandRegistry
@@ -111,6 +113,14 @@ type Option func(*emacsConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *emacsConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithBarAttr sets the incremental-search status attributes.
+func WithBarAttr(attr term.Attributes) Option {
+	return func(cfg *emacsConfig) {
+		cfg.barAttr = attr
+		cfg.barAttrSet = true
 	}
 }
 

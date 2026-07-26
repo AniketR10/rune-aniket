@@ -354,6 +354,7 @@ func (h *workspaceManagerHandler) newBuiltinStandardEditor(
 	return standard.Editor(
 		standard.WithCommandBar(true),
 		standard.WithResAttr(cfg.modelessResultAttr()),
+		standard.WithBarAttr(cfg.modelessBarAttr()),
 		standard.WithTabspaces(cfg.editorTabspaces()),
 		standard.WithIndents(cfg.editorIndents()),
 		standard.WithRuler(cfg.editorRuler()),
@@ -384,14 +385,15 @@ func (h *workspaceManagerHandler) newBuiltinEmacsEditor(
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	return emacs.Editor(
 		emacs.WithCommandBar(true),
-		emacs.WithResAttr(cfg.modelessResultAttr()),
+		emacs.WithResAttr(cfg.emacsResultAttr()),
+		emacs.WithBarAttr(cfg.emacsBarAttr()),
 		emacs.WithTabspaces(cfg.editorTabspaces()),
 		emacs.WithIndents(cfg.editorIndents()),
 		emacs.WithRuler(cfg.editorRuler()),
 		emacs.WithAutoPair(cfg.editorAutoPair()),
 		emacs.WithComments(cfg.editorComments()),
 		emacs.WithScheduleNextTick(cfg.scheduleNextTick),
-		emacs.WithAttr(cfg.modelessAttr()),
+		emacs.WithAttr(cfg.emacsAttr()),
 		emacs.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
 		emacs.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
 		emacs.WithGitIcons(cfg.gitIconsEnabled()),

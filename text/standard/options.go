@@ -41,6 +41,8 @@ type standardConfig struct {
 	indentRune         rune
 	ruler              int
 	attr               term.Attributes
+	barAttr            term.Attributes
+	barAttrSet         bool
 	resAttr            term.Attributes
 	comments           text.CommentConfig
 	registry           text.WorkspaceCommandRegistry
@@ -111,6 +113,14 @@ type Option func(*standardConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *standardConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithBarAttr sets the incremental-find status attributes.
+func WithBarAttr(attr term.Attributes) Option {
+	return func(cfg *standardConfig) {
+		cfg.barAttr = attr
+		cfg.barAttrSet = true
 	}
 }
 

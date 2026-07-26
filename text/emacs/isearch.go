@@ -183,7 +183,7 @@ func (h *emacsHandler) acceptIsearch() {
 		h.isearch.last = append(h.isearch.last[:0], h.isearch.query...)
 	}
 	h.isearch.query = h.isearch.query[:0]
-	h.less.SetMessage("")
+	h.statusBar.SetStatus("", term.Attributes{})
 }
 
 // abortIsearch exits the search, restores point to the origin and clears the
@@ -193,7 +193,7 @@ func (h *emacsHandler) abortIsearch() {
 	h.isearch.query = h.isearch.query[:0]
 	h.cursor.Search("")
 	h.cursor.MoveToScroll(h.isearch.origin)
-	h.less.SetMessage("")
+	h.statusBar.SetStatus("", term.Attributes{})
 }
 
 // renderIsearch shows the incremental-search prompt. failed toggles the
@@ -206,7 +206,11 @@ func (h *emacsHandler) renderIsearch(matched bool) {
 	if !matched {
 		label = "Failing " + label
 	}
-	h.less.SetMessage("%s%s", label, string(h.isearch.query))
+	attr := h.cfg.barAttr
+	if !h.cfg.barAttrSet {
+		attr = h.cfg.attr
+	}
+	h.statusBar.SetStatus(label+string(h.isearch.query), attr)
 }
 
 // handleIsearchKey consumes one key while an incremental search is active. It

@@ -325,6 +325,22 @@ config = {
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
         },
+        "modeless": {
+            # Default text attributes.
+            "attr":        attr(fg = "default", bg = "default"),
+            # Incremental-find status attributes.
+            "bar_attr":    attr(fg = "default", bg = "purple"),
+            # Search result attributes.
+            "search_attr": attr(fg = "grey", bg = "yellow"),
+        },
+        "emacs": {
+            # Default text attributes.
+            "attr":        attr(fg = "default", bg = "default"),
+            # Incremental-search status attributes.
+            "bar_attr":    attr(fg = "default", bg = "purple"),
+            # Search result attributes.
+            "search_attr": attr(fg = "grey", bg = "yellow"),
+        },
         # External editor configuration, only consulted when mode == "exo".
         #
         # `command` is the argv template Rune executes inside a vte to open a

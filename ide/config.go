@@ -2224,6 +2224,17 @@ func (c ideConfig) modeless() (config.Config, bool) {
 	return c.getConfig(b, "modeless")
 }
 
+func (c ideConfig) emacs() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	b, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "emacs")
+}
+
 // exo returns the `editor.exo` configuration block, if any.
 func (c ideConfig) exo() (config.Config, bool) {
 	if c.cfg == nil {
@@ -2831,6 +2842,22 @@ func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
 	return attr
 }
 
+func (c ideConfig) modelessBarAttr() (attr term.Attributes) {
+	attr = c.modelessAttr()
+	cfg, ok := c.modeless()
+	if !ok {
+		return
+	}
+	barAttr, err := config.GetAttributes(cfg, "bar_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.modeless.bar_attr"] = err
+		}
+		return attr
+	}
+	return barAttr
+}
+
 func (c ideConfig) modelessAttr() (attr term.Attributes) {
 	cfg, ok := c.modeless()
 	if !ok {
@@ -2843,6 +2870,54 @@ func (c ideConfig) modelessAttr() (attr term.Attributes) {
 		}
 	}
 	return attr
+}
+
+func (c ideConfig) emacsResultAttr() term.Attributes {
+	attr := c.modelessResultAttr()
+	cfg, ok := c.emacs()
+	if !ok {
+		return attr
+	}
+	configured, err := config.GetAttributes(cfg, "search_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.emacs.search_attr"] = err
+		}
+		return attr
+	}
+	return configured
+}
+
+func (c ideConfig) emacsBarAttr() term.Attributes {
+	attr := c.modelessBarAttr()
+	cfg, ok := c.emacs()
+	if !ok {
+		return attr
+	}
+	configured, err := config.GetAttributes(cfg, "bar_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.emacs.bar_attr"] = err
+		}
+		return attr
+	}
+	return configured
+}
+
+func (c ideConfig) emacsAttr() term.Attributes {
+	attr := c.modelessAttr()
+	cfg, ok := c.emacs()
+	if !ok {
+		return attr
+	}
+	configured, err := config.GetAttributes(cfg, "attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.emacs.attr"] = err
+		}
+		return attr
+	}
+	return configured
 }
 
 func (c ideConfig) syntaxConfig() (ret syntax.Config) {

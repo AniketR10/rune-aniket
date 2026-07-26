@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/registerhistory"
 	"unstable.build/go-tui/text/registerset"
+	"unstable.build/go-tui/text/texttest"
 )
 
 type testSelectionService struct {
@@ -818,7 +819,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Scroll view down one line", "<ctrl-alt-down>", nil, term.Coordinates{Y: 1}, nil},
 
 		// Search and replace
-		//{"Find", "<meta-f>", nil, term.Coordinates{}},
+		{"Find", "<meta-f>", nil, term.Coordinates{}, nil},
 		//{"Find next", "<meta-f><meta-g>", nil, term.Coordinates{}},
 		//{"Find previous", "<meta-f><shift-meta-g>", nil, term.Coordinates{}},
 		//{"Incremental find", "<meta-i>", nil, term.Coordinates{}},
@@ -1549,6 +1550,575 @@ func TestPasteAndReindent(t *testing.T) {
 			assert.Equal(t, tt.wantCursor, handler.CursorAtScroll(), "cursor position")
 		})
 	}
+}
+
+type findTestRange struct {
+	from term.Coordinates
+	to   term.Coordinates
+}
+
+type findTestStep struct {
+	name          string
+	keys          string
+	wantMode      bool
+	wantCursor    term.Coordinates
+	wantSelection *findTestRange
+	wantMatches   []findTestRange
+	wantPrompt    string
+}
+
+func TestStandardFind(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		initialCursor term.Coordinates
+		wantInitial   term.Coordinates
+		steps         []findTestStep
+	}{
+		{
+			name:    "Meta-F owns input and refines live",
+			content: "foo bar foo",
+			steps: []findTestStep{
+				{
+					name:          "partial query",
+					keys:          "<meta-f>ba",
+					wantMode:      true,
+					wantCursor:    term.Coordinates{X: 6},
+					wantSelection: findRange(4, 0, 6, 0),
+					wantMatches:   findRanges(4, 0, 6, 0),
+					wantPrompt:    "Find: ba  1/1",
+				},
+				{
+					name:          "complete query",
+					keys:          "r",
+					wantMode:      true,
+					wantCursor:    term.Coordinates{X: 7},
+					wantSelection: findRange(4, 0, 7, 0),
+					wantMatches:   findRanges(4, 0, 7, 0),
+					wantPrompt:    "Find: bar  1/1",
+				},
+			},
+		},
+		{
+			name:    "Ctrl-F and space search",
+			content: "foo bar x foo bar",
+			steps: []findTestStep{
+				{
+					keys:          "<ctrl-f>foo<space>bar",
+					wantMode:      true,
+					wantCursor:    term.Coordinates{X: 7},
+					wantSelection: findRange(0, 0, 7, 0),
+					wantMatches: findRanges(
+						0, 0, 7, 0,
+						10, 0, 17, 0,
+					),
+					wantPrompt: "Find: foo bar  1/2",
+				},
+			},
+		},
+		{
+			name:    "Enter advances and wraps",
+			content: "foo x foo",
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 0, 0, 3, 0, "Find: foo  1/2", 0, 0, 3, 0, 6, 0, 9, 0),
+				findStep("<enter>", 6, 0, 9, 0, "Find: foo  2/2", 0, 0, 3, 0, 6, 0, 9, 0),
+				findStep("<enter>", 0, 0, 3, 0, "Find: foo  1/2", 0, 0, 3, 0, 6, 0, 9, 0),
+			},
+		},
+		{
+			name:    "Shift-Enter moves backward and wraps",
+			content: "foo x foo",
+			steps: []findTestStep{
+				findStep("<meta-f>foo<shift-enter>", 6, 0, 9, 0, "Find: foo  2/2", 0, 0, 3, 0, 6, 0, 9, 0),
+				findStep("<shift-enter>", 0, 0, 3, 0, "Find: foo  1/2", 0, 0, 3, 0, 6, 0, 9, 0),
+			},
+		},
+		{
+			name:    "Meta-F advances while active",
+			content: "foo x foo",
+			steps: []findTestStep{
+				findStep("<meta-f>foo<meta-f>", 6, 0, 9, 0, "Find: foo  2/2", 0, 0, 3, 0, 6, 0, 9, 0),
+			},
+		},
+		{
+			name:    "Ctrl-F advances while active",
+			content: "foo x foo",
+			steps: []findTestStep{
+				findStep("<meta-f>foo<ctrl-f>", 6, 0, 9, 0, "Find: foo  2/2", 0, 0, 3, 0, 6, 0, 9, 0),
+			},
+		},
+		{
+			name:    "Backspace widens then empties the query",
+			content: "aX aY",
+			steps: []findTestStep{
+				findStep("<meta-f>aX", 0, 0, 2, 0, "Find: aX  1/1", 0, 0, 2, 0),
+				findStep("<backspace>", 0, 0, 1, 0, "Find: a  1/2", 0, 0, 1, 0, 3, 0, 4, 0),
+				{
+					name:       "empty query",
+					keys:       "<backspace>",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: ",
+				},
+				{
+					name:       "backspace remains safe",
+					keys:       "<backspace>",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: ",
+				},
+			},
+		},
+		{
+			name:    "Search is case sensitive",
+			content: "Foo foo FOO",
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 4, 0, 7, 0, "Find: foo  1/1", 4, 0, 7, 0),
+			},
+		},
+		{
+			name:    "Esc accepts then clears on second Esc",
+			content: "foo bar",
+			steps: []findTestStep{
+				{
+					name:          "accept",
+					keys:          "<meta-f>bar<esc>",
+					wantCursor:    term.Coordinates{X: 7},
+					wantSelection: findRange(4, 0, 7, 0),
+					wantMatches:   findRanges(4, 0, 7, 0),
+				},
+				{
+					name:       "clear",
+					keys:       "<esc>",
+					wantCursor: term.Coordinates{X: 7},
+				},
+			},
+		},
+		{
+			name:    "Arrow accepts and is rehandled",
+			content: "foo bar baz",
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>bar<right>",
+					wantCursor: term.Coordinates{X: 8},
+				},
+			},
+		},
+		{
+			name:    "Empty prompt resumes last accepted query",
+			content: "foo x foo y foo",
+			steps: []findTestStep{
+				{
+					name:          "accept first result",
+					keys:          "<meta-f>foo<esc>",
+					wantCursor:    term.Coordinates{X: 3},
+					wantSelection: findRange(0, 0, 3, 0),
+					wantMatches: findRanges(
+						0, 0, 3, 0,
+						6, 0, 9, 0,
+						12, 0, 15, 0,
+					),
+				},
+				{
+					name:          "open empty prompt",
+					keys:          "<meta-f>",
+					wantMode:      true,
+					wantCursor:    term.Coordinates{X: 3},
+					wantSelection: findRange(0, 0, 3, 0),
+					wantMatches: findRanges(
+						0, 0, 3, 0,
+						6, 0, 9, 0,
+						12, 0, 15, 0,
+					),
+					wantPrompt: "Find: ",
+				},
+				findStep("<meta-f>", 6, 0, 9, 0, "Find: foo  2/3", 0, 0, 3, 0, 6, 0, 9, 0, 12, 0, 15, 0),
+			},
+		},
+		{
+			name:          "No match parks at origin",
+			content:       "foo bar",
+			initialCursor: term.Coordinates{X: 2},
+			wantInitial:   term.Coordinates{X: 2},
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>zzz",
+					wantMode:   true,
+					wantCursor: term.Coordinates{X: 2},
+					wantPrompt: "Find: zzz  no matches",
+				},
+			},
+		},
+		{
+			name:    "Empty buffer is safe",
+			content: "",
+			steps: []findTestStep{
+				{
+					keys:       "<ctrl-f>x",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: x  no matches",
+				},
+			},
+		},
+		{
+			name:          "Origin chooses the next multiline match",
+			content:       "foo\nx foo\nfoo",
+			initialCursor: term.Coordinates{X: 2},
+			wantInitial:   term.Coordinates{X: 2},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 2, 1, 5, 1, "Find: foo  2/3", 0, 0, 3, 0, 2, 1, 5, 1, 0, 2, 3, 2),
+				findStep("<enter>", 0, 2, 3, 2, "Find: foo  3/3", 0, 0, 3, 0, 2, 1, 5, 1, 0, 2, 3, 2),
+				findStep("<enter>", 0, 0, 3, 0, "Find: foo  1/3", 0, 0, 3, 0, 2, 1, 5, 1, 0, 2, 3, 2),
+			},
+		},
+		{
+			name:    "Search does not cross lines",
+			content: "ab\ncd",
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>abcd",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: abcd  no matches",
+				},
+			},
+		},
+		{
+			name:    "Wide character matches use cell coordinates",
+			content: "界x界",
+			steps: []findTestStep{
+				findStep("<meta-f>界", 0, 0, 1, 0, "Find: 界  1/2", 0, 0, 1, 0, 2, 0, 3, 0),
+				findStep("<enter>", 2, 0, 3, 0, "Find: 界  2/2", 0, 0, 1, 0, 2, 0, 3, 0),
+			},
+		},
+		{
+			name:    "Multi-wide query selects every rune",
+			content: "你好 x 你好",
+			steps: []findTestStep{
+				findStep("<meta-f>你好", 0, 0, 2, 0, "Find: 你好  1/2", 0, 0, 2, 0, 5, 0, 7, 0),
+				findStep("<shift-enter>", 5, 0, 7, 0, "Find: 你好  2/2", 0, 0, 2, 0, 5, 0, 7, 0),
+			},
+		},
+		{
+			name:    "NUL cells preserve separated matches",
+			content: "foo\x00foo\x00",
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 0, 0, 3, 0, "Find: foo  1/2", 0, 0, 3, 0, 4, 0, 7, 0),
+				findStep("<enter>", 4, 0, 7, 0, "Find: foo  2/2", 0, 0, 3, 0, 4, 0, 7, 0),
+			},
+		},
+		{
+			name:    "Search does not cross a NUL cell",
+			content: "a\x00b",
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>ab",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: ab  no matches",
+				},
+			},
+		},
+		{
+			name:    "Only NUL cells are safe",
+			content: "\x00\x00\x00",
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>x",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: x  no matches",
+				},
+			},
+		},
+		{
+			name:          "Positive X overflow clamps before searching",
+			content:       "foo bar",
+			initialCursor: term.Coordinates{X: 99},
+			wantInitial:   term.Coordinates{X: 7},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 0, 0, 3, 0, "Find: foo  1/1", 0, 0, 3, 0),
+			},
+		},
+		{
+			name:          "Positive Y overflow clamps to the last row",
+			content:       "foo\nbar foo",
+			initialCursor: term.Coordinates{Y: 99},
+			wantInitial:   term.Coordinates{Y: 1},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 4, 1, 7, 1, "Find: foo  2/2", 0, 0, 3, 0, 4, 1, 7, 1),
+			},
+		},
+		{
+			name:          "Negative X clamps to the row start",
+			content:       "x foo",
+			initialCursor: term.Coordinates{X: -99},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 2, 0, 5, 0, "Find: foo  1/1", 2, 0, 5, 0),
+			},
+		},
+		{
+			name:          "Negative Y clamps to the first row",
+			content:       "x foo\nfoo",
+			initialCursor: term.Coordinates{X: 2, Y: -99},
+			wantInitial:   term.Coordinates{X: 2},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 2, 0, 5, 0, "Find: foo  1/2", 2, 0, 5, 0, 0, 1, 3, 1),
+			},
+		},
+		{
+			name:          "Combined overflow clamps to the last row end",
+			content:       "foo\nbar foo",
+			initialCursor: term.Coordinates{X: 99, Y: 99},
+			wantInitial:   term.Coordinates{X: 7, Y: 1},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 0, 0, 3, 0, "Find: foo  1/2", 0, 0, 3, 0, 4, 1, 7, 1),
+			},
+		},
+		{
+			name:          "Combined negative coordinates clamp to origin",
+			content:       "foo",
+			initialCursor: term.Coordinates{X: -99, Y: -99},
+			steps: []findTestStep{
+				findStep("<meta-f>foo", 0, 0, 3, 0, "Find: foo  1/1", 0, 0, 3, 0),
+			},
+		},
+		{
+			name:          "Empty buffer clamps overflow to origin",
+			content:       "",
+			initialCursor: term.Coordinates{X: 99, Y: 99},
+			steps: []findTestStep{
+				{
+					keys:       "<meta-f>x",
+					wantMode:   true,
+					wantCursor: term.Coordinates{},
+					wantPrompt: "Find: x  no matches",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, buf := newStandardFindHandler(t, tt.content)
+			h.SetCursorAtScroll(tt.initialCursor)
+			assert.Equal(t, tt.wantInitial, h.CursorAtScroll(), "initial cursor")
+
+			for _, step := range tt.steps {
+				name := step.name
+				if name == "" {
+					name = step.keys
+				}
+				t.Run(name, func(t *testing.T) {
+					feedKeys(t, h, step.keys)
+					assert.Equal(t, tt.content, buf.String(), "buffer content")
+					assert.Equal(t, step.wantMode, h.IsSearchMode(), "search mode")
+					assert.Equal(t, step.wantCursor, h.CursorAtScroll(), "cursor")
+					assertFindState(t, h, step)
+				})
+			}
+		})
+	}
+}
+
+func TestStandardFindCurrentMatchInvertsDefaultAttributes(t *testing.T) {
+	tests := []struct {
+		name          string
+		keys          string
+		currentStart  int
+		inactiveStart int
+	}{
+		{"first result", "<meta-f>foo", 0, 6},
+		{"advanced result", "<meta-f>foo<enter>", 6, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newStandardFindHandler(
+				t,
+				"foo x foo",
+				WithResAttr(term.Attributes{Bg: term.ColorYellow}),
+			)
+			feedKeys(t, h, tt.keys)
+
+			w := cell.NewBufferWriter(context.Background(), 80, 10)
+			h.Draw(w)
+			cells := w.RawCells()[0]
+			for x := range 3 {
+				assert.Equal(t, term.Attributes{Attrs: term.AttrReverse}, cells[tt.currentStart+x].Attributes)
+				assert.Equal(t, term.Attributes{Bg: term.ColorYellow}, cells[tt.inactiveStart+x].Attributes)
+			}
+		})
+	}
+}
+
+func TestStandardFindStatusAttributes(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []Option
+		want term.Attributes
+	}{
+		{
+			name: "configured foreground and background",
+			opts: []Option{WithBarAttr(term.Attributes{
+				Fg: term.ColorBlack,
+				Bg: term.ColorWhite,
+			})},
+			want: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorWhite},
+		},
+		{
+			name: "unconfigured status inherits editor attributes",
+			opts: []Option{WithAttr(term.Attributes{Bg: term.ColorRed})},
+			want: term.Attributes{Bg: term.ColorRed},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newStandardFindHandler(t, "foo", tt.opts...)
+			feedKeys(t, h, "<meta-f>foo")
+
+			w := cell.NewBufferWriter(context.Background(), 80, 10)
+			h.Draw(w)
+			row := w.RawCells()[9]
+			for x := range len("Find: foo  1/1") {
+				require.Equal(t, tt.want.Fg, row[x].Attributes.Fg, "status fg cell %d", x)
+				require.Equal(t, tt.want.Bg, row[x].Attributes.Bg, "status bg cell %d", x)
+			}
+			assert.NotEqual(t, tt.want.Bg, row[len("Find: foo  1/1")].Attributes.Bg)
+		})
+	}
+}
+
+type standardFindTestHandler struct {
+	text.Handler
+	root *standardHandler
+}
+
+func (h standardFindTestHandler) SelectionBounds() (term.Coordinates, term.Coordinates, bool) {
+	return h.root.SelectionBounds()
+}
+
+func newStandardFindHandler(t *testing.T, content string, opts ...Option) (text.Handler, *cell.Buffer) {
+	t.Helper()
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader(content))
+	uri, err := workspaceapi.ParseURI("memory:///find.txt")
+	require.NoError(t, err)
+	opts = append(opts, WithCommandBar(true))
+	root := NewHandler(buf, uri, text.IndentRuneTab, 0, opts...).(*standardHandler)
+	bar := text.WithStatusBar(root, buf, root.less.Scroll(), false, false, text.StatusBarConfig{
+		Publisher:        &texttest.TestEditor{},
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+		Layout: []text.StatusBarComponent{{
+			Type:     text.StatusBarStatus,
+			Template: "%s",
+		}},
+	})
+	root.setStatusBar(bar)
+	bar.Resize(80, 10)
+	return standardFindTestHandler{Handler: bar, root: root}, buf
+}
+
+func findStep(
+	keys string,
+	fromX, fromY, toX, toY int,
+	prompt string,
+	matchCoordinates ...int,
+) findTestStep {
+	return findTestStep{
+		keys:          keys,
+		wantMode:      true,
+		wantCursor:    term.Coordinates{X: toX, Y: toY},
+		wantSelection: findRange(fromX, fromY, toX, toY),
+		wantMatches:   findRanges(matchCoordinates...),
+		wantPrompt:    prompt,
+	}
+}
+
+func findRange(fromX, fromY, toX, toY int) *findTestRange {
+	return &findTestRange{
+		from: term.Coordinates{X: fromX, Y: fromY},
+		to:   term.Coordinates{X: toX, Y: toY},
+	}
+}
+
+func findRanges(coordinates ...int) []findTestRange {
+	if len(coordinates)%4 != 0 {
+		panic("find range coordinates must be provided in groups of four")
+	}
+	ranges := make([]findTestRange, 0, len(coordinates)/4)
+	for i := 0; i < len(coordinates); i += 4 {
+		ranges = append(ranges, *findRange(
+			coordinates[i],
+			coordinates[i+1],
+			coordinates[i+2],
+			coordinates[i+3],
+		))
+	}
+	return ranges
+}
+
+func assertFindState(t *testing.T, h text.Handler, step findTestStep) {
+	t.Helper()
+	gotFrom, gotTo, ok := selectionBounds(t, h)
+	if step.wantSelection == nil {
+		assert.False(t, ok, "selection")
+	} else if assert.True(t, ok, "selection") {
+		assert.Equal(t, step.wantSelection.from, gotFrom, "selection start")
+		assert.Equal(t, step.wantSelection.to, gotTo, "selection end")
+	}
+
+	var gotMatches []findTestRange
+	for _, location := range findLocations(h) {
+		gotMatches = append(gotMatches, findTestRange{
+			from: location.From,
+			to:   location.To,
+		})
+	}
+	assert.Equal(t, step.wantMatches, gotMatches, "search matches")
+	if step.wantPrompt != "" {
+		drawn := strings.ReplaceAll(drawStandardHandler(t, h), "\x00", "")
+		assert.Contains(
+			t,
+			strings.Join(strings.Fields(drawn), ""),
+			strings.Join(strings.Fields(step.wantPrompt), ""),
+			"prompt",
+		)
+	}
+}
+
+func selectionBounds(t *testing.T, h text.Handler) (term.Coordinates, term.Coordinates, bool) {
+	t.Helper()
+	withBounds, ok := h.(interface {
+		SelectionBounds() (term.Coordinates, term.Coordinates, bool)
+	})
+	require.True(t, ok)
+	return withBounds.SelectionBounds()
+}
+
+func findLocations(h text.Handler) []textapi.Location {
+	for _, list := range h.LocationLists() {
+		if list.ID == searchListID {
+			return list.Locations
+		}
+	}
+	return nil
+}
+
+func drawStandardHandler(t *testing.T, h text.Handler) string {
+	t.Helper()
+	w := cell.NewBufferWriter(context.Background(), 80, 10)
+	h.Draw(w)
+	var drawn strings.Builder
+	for _, row := range w.RawCells() {
+		for _, c := range row {
+			drawn.WriteRune(c.Ch)
+		}
+		drawn.WriteByte('\n')
+	}
+	return drawn.String()
 }
 
 // robustnessSequences is the catalog of input token strings exercised by every

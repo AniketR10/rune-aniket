@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -278,6 +279,137 @@ diff_buf_adjust(win_
 		pos := h.CursorAtScroll()
 		assert.Equal(t, pos, term.Coordinates{Y: 7})
 	})
+}
+
+func TestFindUsesStatusBarAcrossEditorChrome(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		cases   []handlertest.SequenceTestCase
+	}{
+		{
+			name:    "refinement navigation failure and acceptance",
+			content: "foo x foo\n界 foo\nlast",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<meta-f>", Expected: "  1 ▐oo x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find:                     "},
+				{InputSequence: "foo", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find: foo  1/3            "},
+				{InputSequence: "<enter>", Expected: "  1 foo x foo▐            \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find: foo  2/3            "},
+				{InputSequence: "<shift-enter>", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find: foo  1/3            "},
+				{InputSequence: "z", Expected: "  1 ▐oo x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find: fooz  no matches    "},
+				{InputSequence: "<backspace>", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Find: foo  1/3            "},
+				{InputSequence: "<esc>", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "wide queries spaces wrapping and empty query",
+			content: "界 foo bar\nfoo bar 界\nend",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-f>界", Expected: "  1 界 ▐foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Find: 界   1/2             "},
+				{InputSequence: "<enter>", Expected: "  1 界  foo bar            \n" +
+					"  2 foo bar 界 ▐           \n" +
+					"  1 end                   \n" +
+					"  2                       \n" +
+					"Find: 界   2/2             "},
+				{InputSequence: "<shift-enter>", Expected: "  1 界 ▐foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Find: 界   1/2             "},
+				{InputSequence: "<backspace>", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Find:                     "},
+				{InputSequence: "foo<space>bar", Expected: "  1 界  foo bar▐           \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Find: foo bar  1/2        "},
+				{InputSequence: "<enter>", Expected: "  1 界  foo bar            \n" +
+					"  2 foo bar▐界             \n" +
+					"  1 end                   \n" +
+					"  2                       \n" +
+					"Find: foo bar  2/2        "},
+				{InputSequence: "q", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Find: foo barq  no matches"},
+				{InputSequence: "<backspace><esc>", Expected: "  1 界  foo bar▐           \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newStatusFindIntegrationHandler(t, tt.content)
+			handlertest.RunHandlerSequence(t, h, 26, 5, tt.cases)
+		})
+	}
+}
+
+func newStatusFindIntegrationHandler(t *testing.T, content string) text.Handler {
+	t.Helper()
+	buf := cell.NewBuffer()
+	buf.WriteString(content)
+	uri, err := workspaceapi.ParseURI("memory:///find-status.txt")
+	require.NoError(t, err)
+	root := NewHandler(buf, uri, '\t', 0,
+		WithBarAttr(term.Attributes{Fg: term.ColorBlack, Bg: term.ColorWhite}),
+		WithCommandBar(true),
+	)
+	standard := root.(*standardHandler)
+	scroll := standard.less.Scroll()
+	var h text.Handler = text.WithAuxBar(root, buf, scroll, text.AuxBarConfig{
+		LinesEnabled:     true,
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	})
+	h = text.WithIconsBar(nil, false, h, buf, scroll, text.IconsBarConfig{
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	})
+	bar := text.WithStatusBar(h, buf, scroll, false, false, text.StatusBarConfig{
+		Publisher:        &texttest.TestEditor{},
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+		Layout:           []text.StatusBarComponent{{Type: text.StatusBarStatus, Template: "%s"}},
+	})
+	standard.setStatusBar(bar)
+	return bar
 }
 
 var _ = (foldsService)(testFoldsService{})

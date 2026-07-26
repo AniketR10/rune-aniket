@@ -324,6 +324,13 @@ func TestRuneStarFixture(t *testing.T) {
 				exo := editor["exo"].(map[string]any)
 				assert.Equal(t, false, exo["experimental_highlights"])
 				assert.NotContains(t, exo, "override_highlights")
+				emacs := editor["emacs"].(map[string]any)
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "default"}, emacs["attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "gray"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, emacs["search_attr"])
+				statusLayout := editor["status_bar"].(map[string]any)["layout"].(string)
+				assert.Contains(t, statusLayout, "{{ .Status | bold }}")
+				assert.NotContains(t, statusLayout, "{{ .Status | bg")
 				// GUI-specific window manager frame charset should use the
 				// braille-ish corners.
 				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
@@ -344,6 +351,12 @@ func TestRuneStarFixture(t *testing.T) {
 				_, hasMode := editor["mode"]
 				assert.False(t, hasMode, "editor.mode should not be set in rune.star")
 				assert.Equal(t, false, editor["auto_pair"])
+				emacs := editor["emacs"].(map[string]any)
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, emacs["attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{
+					"fg": "default", "bg": "#1e1e1e", "flags": "reverse",
+				}, emacs["search_attr"])
 			},
 		},
 	}

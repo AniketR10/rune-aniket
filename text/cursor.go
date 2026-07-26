@@ -4555,6 +4555,7 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 func (c *Cursor) setSearchLocationList(text string, word bool) int {
 	c.search = text
 	n := c.scroll.Search(text)
+	searchLength := len([]rune(text))
 
 	searchLoc := make([]textapi.Location, 0, n)
 	for range n {
@@ -4572,7 +4573,7 @@ func (c *Cursor) setSearchLocationList(text string, word bool) int {
 		}
 		searchLoc = append(searchLoc, textapi.Location{
 			From: res,
-			To:   term.Coordinates{Y: res.Y, X: res.X + len(text)},
+			To:   term.Coordinates{Y: res.Y, X: res.X + searchLength},
 			Attr: c.searchAttr,
 		})
 	}

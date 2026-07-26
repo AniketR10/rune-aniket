@@ -117,10 +117,23 @@ editor:
         attr:
             bg: green
             fg: "#f9f9f9"
+        bar_attr:
+            bg: white
+            fg: black
         search_attr:
             bg: red
             fg: "#f1f1f1"
         wrap: false
+    emacs:
+        attr:
+            bg: blue
+            fg: "#f8f8f8"
+        bar_attr:
+            bg: teal
+            fg: white
+        search_attr:
+            bg: maroon
+            fg: "#f7f7f7"
     virtual:
         shell: bash
         editor: vim
@@ -423,7 +436,11 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
 		cfg.modelessResultAttr())
+	assert.Equal(t, term.Attributes{}, cfg.modelessBarAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
+	assert.Equal(t, cfg.modelessResultAttr(), cfg.emacsResultAttr())
+	assert.Equal(t, cfg.modelessBarAttr(), cfg.emacsBarAttr())
+	assert.Equal(t, cfg.modelessAttr(), cfg.emacsAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.True(t, cfg.autoRestore())
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
@@ -1141,6 +1158,12 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
 		Fg: term.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorWhite,
+		Fg: term.ColorBlack}, cfg.modelessBarAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorMaroon,
+		Fg: term.GetColor("#f7f7f7")}, cfg.emacsResultAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorTeal,
+		Fg: term.ColorWhite}, cfg.emacsBarAttr())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	expectedSyntaxConfig.Autoindent = false
@@ -1154,6 +1177,8 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorGreen,
 		Fg: term.GetColor("#f9f9f9")}, cfg.modelessAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorBlue,
+		Fg: term.GetColor("#f8f8f8")}, cfg.emacsAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorYellow,
 		Fg: term.GetColor("#f2f2f2")}, cfg.modalAttr())
 

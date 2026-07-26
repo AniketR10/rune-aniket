@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -278,6 +279,131 @@ diff_buf_adjust(win_
 		pos := h.CursorAtScroll()
 		assert.Equal(t, pos, term.Coordinates{Y: 7})
 	})
+}
+
+func TestIncrementalSearchUsesStatusBarAcrossEditorChrome(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		cases   []handlertest.SequenceTestCase
+	}{
+		{
+			name:    "forward refinement navigation failure and acceptance",
+			content: "foo x foo\n界 foo\nlast",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>", Expected: "  1 ▐oo x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"I-search:                 "},
+				{InputSequence: "foo", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"I-search: foo             "},
+				{InputSequence: "<ctrl-s>", Expected: "  1 foo x foo▐            \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"I-search: foo             "},
+				{InputSequence: "z", Expected: "  1 ▐oo x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"Failing I-search: fooz    "},
+				{InputSequence: "<backspace>", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"I-search: foo             "},
+				{InputSequence: "<enter>", Expected: "  1 foo▐x foo             \n" +
+					"  1 界  foo                \n" +
+					"  2 last                  \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "wide queries spaces direction changes and abort",
+			content: "界 foo bar\nfoo bar 界\nend",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>界", Expected: "  1 界 ▐foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"I-search: 界               "},
+				{InputSequence: "<ctrl-s>", Expected: "  1 界  foo bar            \n" +
+					"  2 foo bar 界 ▐           \n" +
+					"  1 end                   \n" +
+					"  2                       \n" +
+					"I-search: 界               "},
+				{InputSequence: "<ctrl-r>", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"I-search backward: 界      "},
+				{InputSequence: "<backspace>", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"I-search backward:        "},
+				{InputSequence: "foo<space>bar", Expected: "  1 界  foo bar            \n" +
+					"  2 ▐oo bar 界             \n" +
+					"  1 end                   \n" +
+					"  2                       \n" +
+					"I-search backward: foo bar"},
+				{InputSequence: "<ctrl-s>", Expected: "  1 界  foo bar▐           \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"I-search: foo bar         "},
+				{InputSequence: "q", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"Failing I-search: foo barq"},
+				{InputSequence: "<ctrl-g>", Expected: "  1 ▐  foo bar            \n" +
+					"  1 foo bar 界             \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newStatusIsearchIntegrationHandler(t, tt.content)
+			handlertest.RunHandlerSequence(t, h, 26, 5, tt.cases)
+		})
+	}
+}
+
+func newStatusIsearchIntegrationHandler(t *testing.T, content string) text.Handler {
+	t.Helper()
+	buf := cell.NewBuffer()
+	buf.WriteString(content)
+	uri, err := workspaceapi.ParseURI("memory:///isearch-status.txt")
+	require.NoError(t, err)
+	root := NewHandler(buf, uri, '\t', 0,
+		WithBarAttr(term.Attributes{Fg: term.ColorBlack, Bg: term.ColorWhite}),
+		WithCommandBar(true),
+	).(*emacsHandler)
+	scroll := root.less.Scroll()
+	var h text.Handler = text.WithAuxBar(root, buf, scroll, text.AuxBarConfig{
+		LinesEnabled:     true,
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	})
+	h = text.WithIconsBar(nil, false, h, buf, scroll, text.IconsBarConfig{
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	})
+	bar := text.WithStatusBar(h, buf, scroll, false, false, text.StatusBarConfig{
+		Publisher:        &texttest.TestEditor{},
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+		Layout:           []text.StatusBarComponent{{Type: text.StatusBarStatus, Template: "%s"}},
+	})
+	root.setStatusBar(bar)
+	return bar
 }
 
 var _ = (foldsService)(testFoldsService{})
