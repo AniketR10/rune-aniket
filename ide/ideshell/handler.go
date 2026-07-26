@@ -1149,6 +1149,9 @@ func (h *Handler) acceptSearch() {
 	h.stopCompletionStream()
 	h.list.Cancel()
 	h.list.Wait()
+	if h.mode == modeCompletion && len(h.query) == 0 && !h.compMoved {
+		h.list.FocusStart()
+	}
 	match, ok := h.list.Focus()
 	mode := h.mode
 	prefix := h.shim.lastPrefix

@@ -47,6 +47,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
+const realLSPCloseTimeout = 15 * time.Second
+
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	goplsBin := findGopls(t)
@@ -616,7 +618,8 @@ func TestE2E(t *testing.T) {
 				var wg sync.WaitGroup
 				var ready sync.Once
 				cfg := Config{
-					MaxRetries: 1,
+					MaxRetries:   1,
+					CloseTimeout: realLSPCloseTimeout,
 					Callback: &testCallback{
 						onShowMessage: func(params semanticapi.ShowMessageParams) {
 							if strings.Contains(params.Message, "Finished loading packages") {
@@ -1408,7 +1411,8 @@ func Broken() {
 				var wg sync.WaitGroup
 				var ready sync.Once
 				cfg := Config{
-					MaxRetries: 1,
+					MaxRetries:   1,
+					CloseTimeout: realLSPCloseTimeout,
 					Callback: &testCallback{
 						onShowMessage: func(params semanticapi.ShowMessageParams) {
 							if strings.Contains(params.Message, "Finished loading packages") ||

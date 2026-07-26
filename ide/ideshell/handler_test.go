@@ -1207,6 +1207,23 @@ func TestHandler(t *testing.T) {
 	}
 }
 
+func TestCompletionAcceptsFirstCandidateBeforeSettlementTick(t *testing.T) {
+	h := newTestHandlerFull(t, nil, 100, twoArgs)
+	h.Resize(testWidthH, testHeight)
+
+	keys, err := term.ParseKeys("g<space><tab>")
+	require.NoError(t, err)
+	for _, key := range keys {
+		_, _ = h.Handle(term.Event{
+			Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey,
+		})
+	}
+	h.WaitCompletion()
+
+	_, _ = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.Equal(t, "g alpha", h.editBuf.String())
+}
+
 // runShellSequence drives the shell handler through an input sequence
 // and compares the rendered output. Unlike handlertest.RunHandlerSequence
 // it waits for any in-flight completion stream to settle before drawing,

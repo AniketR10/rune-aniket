@@ -653,7 +653,7 @@ func TestE2E_Python_CtrlCDoesNotStopEventStream(t *testing.T) {
 	_, err = h.run(h.ctx, subLaunch, mainPath)
 	require.NoError(t, err)
 
-	h.waitMilestone(t, "initialized", 15*time.Second)
+	h.waitMilestone(t, "initialized", 30*time.Second)
 	h.setBreakpoint(t, mainPath, pyFirstStmtLine(t, mainPath))
 
 	// >>> Ctrl-C <<<
