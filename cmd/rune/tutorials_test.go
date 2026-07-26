@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "35", tut.Version())
+	assert.Equal(t, "36", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,90 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "35", tut.Version())
+	assert.Equal(t, "36", tut.Version())
+}
+
+func TestBasicsTutorialLayoutIntro(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		mode     string
+		contains []string
+	}{
+		{
+			name: "modal",
+			mode: "modal",
+			contains: []string{
+				"HJKL controls the layout",
+				"Hold <meta> and press HJKL",
+				"Hold <alt> and press H/L",
+				"Add <shift> to move content instead of focus it",
+			},
+		},
+		{
+			name: "standard",
+			mode: "standard",
+			contains: []string{
+				"Why IJKL?",
+				"Vim made generations of programmers extraordinarily productive",
+				"Keyboard-driven does not have to mean learning an entirely new way to edit",
+				"Rune brings that advantage to a familiar, non-modal editor",
+				"<meta-j> focuses the window to the left",
+				"<alt-j> focuses the previous tab",
+				"<shift-meta-j> moves the focused window's content left",
+				"<alt-shift-j> moves the current tab left in the tab list",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keyFor := func(cmd string, args []string) string {
+				keys := map[string]string{
+					"windowfocus left": "<meta-j>",
+					"windowmove left":  "<shift-meta-j>",
+					"tabprevious":      "<alt-j>",
+					"tabmove left":     "<alt-shift-j>",
+				}
+				return keys[strings.Join(append([]string{cmd}, args...), " ")]
+			}
+			overlay := idetutorial.NewOverlayBrowser(
+				browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+			tut, err := starlarktutorial.New(
+				"basics", basicsTutorial,
+				overlay, nil, nil, nil,
+				term.Attributes{}, nil, nil,
+				term.KeyComb{Ch: ':'},
+				tt.mode, keyFor,
+				nil, nil, nil,
+			)
+			require.NoError(t, err)
+			tut.Resize(120, 40)
+			tut.Reset()
+
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+			_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+			require.True(t, tut.WaitActive("wait_command", time.Second))
+			tut.ObserveCommand("workspaceopen", "workspaceopen", []string{"/tmp/workspace"}, nil)
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+			_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+			require.True(t, tut.WaitActive("wait_command", time.Second))
+			tut.ObserveCommand("edit", "edit", []string{"README.md"}, nil)
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+
+			w := term.NewStringWriter(120, 40)
+			tut.Draw(w)
+			overlay.Draw(w)
+			require.NoError(t, w.Flush())
+			rendered := strings.Join(strings.Fields(
+				strings.ReplaceAll(w.String(), "│", " ")), " ")
+			for _, expected := range tt.contains {
+				assert.Contains(t, rendered, expected)
+			}
+			assert.NotContains(t, rendered, "standard and Emacs")
+		})
+	}
 }
 
 func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
@@ -113,8 +196,7 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 	_, err := starlarktutorial.New(
 		"basics", basicsTutorial,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
-		nil, nil,
+		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", keyFor,
 		nil, nil, nil,
@@ -151,8 +233,7 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	tut, err := starlarktutorial.New(
 		"basics", basicsTutorial,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
-		nil, nil,
+		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
 		"standard", nil,
 		nil, nil, nil,
@@ -804,5 +885,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "35", tut.Version())
+	assert.Equal(t, "36", tut.Version())
 }

@@ -140,6 +140,67 @@ resize_key_row = " | ".join([
     keylabel("windowresize", "increase", "width"),
 ])
 
+if mode == "modal":
+    layout_pattern_md = """\
+## HJKL controls the layout
+
+Vim's keyboard-first design keeps navigation under your fingers. Repeated
+actions become muscle memory, so you spend less time searching for interface
+controls and can keep your attention on the work.
+
+Rune carries that same HJKL language into layout management: `H` points left,
+`J` down, `K` up, and `L` right.
+
+- Hold `<meta>` and press HJKL to focus a window in that direction.
+- Hold `<alt>` and press H/L to focus the previous or next tab.
+- Add `<shift>` to move content instead of focus it. `<meta>` + `<shift>` +
+  HJKL moves the focused window's content; `<alt>` + `<shift>` + H/L moves
+  the current tab left or right in the tab list.
+"""
+elif mode == "emacs":
+    layout_pattern_md = """\
+## IJKL controls the layout
+
+Emacs already puts keyboard-driven workflows under your fingers. Rune keeps
+its editing chords available and gives layout management a separate IJKL
+direction cluster: `I` points up, `J` left, `K` down, and `L` right.
+
+- Use the IJKL window chord to focus a window in that direction.
+- Use the horizontal tab chord to focus the previous or next tab.
+- Add `<shift>` to move content instead of focus it: either move the focused
+  window's content or reorder the current tab in the tab list.
+
+The next page shows the bindings active for you.
+"""
+else:
+    layout_pattern_md = """\
+## Why IJKL?
+
+Vim made generations of programmers extraordinarily productive by keeping
+navigation under their fingers. Repeated actions become muscle memory,
+reducing menu hunting and the mental fatigue of switching attention between
+code and interface controls.
+
+Keyboard-driven does not have to mean learning an entirely new way to edit.
+Rune brings that advantage to a familiar, non-modal editor by treating IJKL
+as a second set of arrow keys used only for layout management:
+
+```text
+    I
+  J K L
+```
+
+`I` points up, `J` left, `K` down, and `L` right. For example:
+
+- """ + keylabel("windowfocus", "left") + """ focuses the window to the left.
+- """ + keylabel("tabprevious") + """ focuses the previous tab.
+- """ + keylabel("windowmove", "left") + """ moves the focused window's content left.
+- """ + keylabel("tabmove", "left") + """ moves the current tab left in the tab list.
+
+The pattern is direction plus target: the window chord affects windows, the
+tab chord affects tabs, and adding `<shift>` moves content instead of focus.
+"""
+
 welcome_md = """\
 This is the **home workspace**: a scratch workspace rooted at `~/` that
 Rune shows when no project workspace is open at the current slot.
@@ -188,16 +249,9 @@ Rune is a full tiling window manager: you split the screen into
 output), and group whole projects into **workspaces**. The editor is
 just one kind of content among many. Every layout action is a command
 you can type at the prompt; the default keys are just shortcuts, and
-they follow one small, standardized system.
+they follow a directional pattern.
 
-## One reusable pattern
-
-- **The letter supplies direction.** Modal uses HJKL; standard and Emacs use
-  IJKL.
-- **The modifiers choose what moves.** The same direction can focus, move, or
-  resize a window.
-- **`<shift>` means "move" instead of "go to".** Add it to a window-focus
-  binding to move the window, or to a tab-switch binding to reorder the tab.
+""" + layout_pattern_md + """
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -815,4 +869,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "35", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "36", entry = run)
