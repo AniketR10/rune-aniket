@@ -382,6 +382,39 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.Equal(t, 2000, cfg.consoleMaxHistory())
 }
 
+func TestRuneStarModalUsesHomeRowResizeBindings(t *testing.T) {
+	data := readRuneStar(t)
+
+	var cfg ideConfig
+	require.NoError(t, loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
+		DefaultConfig{
+			src:   string(data),
+			modal: true,
+			tui:   false,
+		},
+		term.RingBell, term.ScheduleNextTick, ""))
+
+	mappings := cfg.commandKeyMappings()
+	for key, wantCmd := range map[string]string{
+		"<alt-meta-h>": "windowresize decrease width",
+		"<alt-meta-j>": "windowresize decrease height",
+		"<alt-meta-k>": "windowresize increase height",
+		"<alt-meta-l>": "windowresize increase width",
+	} {
+		seq := mustParseBindingKey(t, key)
+		require.Equalf(t, [][]string{strings.Split(wantCmd, " ")}, mappings[seq],
+			"%s must run %q", key, wantCmd)
+	}
+
+	for _, key := range []string{
+		"<shift-meta-up>", "<shift-meta-down>",
+		"<shift-meta-left>", "<shift-meta-right>",
+	} {
+		_, ok := mappings[mustParseBindingKey(t, key)]
+		require.Falsef(t, ok, "%s must not remain bound", key)
+	}
+}
+
 // TestRuneStarModelsConfig verifies the shipped rune.star renders a
 // `models` block with the documented sub-keys. This locks the schema so
 // downstream loaders can rely on the keys being present.
@@ -925,16 +958,20 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 
 	// The stale modal chords must no longer run their old commands.
 	staleUnbound := map[string]string{
-		"<m-h>":   "windowfocus left",
-		"<m-j>":   "windowfocus down",
-		"<m-k>":   "windowfocus up",
-		"<s-m-h>": "windowmove left",
-		"<s-m-j>": "windowmove down",
-		"<s-m-k>": "windowmove up",
-		"<a-s-h>": "tabmove left",
-		"<a-h>":   "tabprevious",
-		"<c-o>":   "cursorhistory prev",
-		"<c-i>":   "cursorhistory next",
+		"<m-h>":        "windowfocus left",
+		"<m-j>":        "windowfocus down",
+		"<m-k>":        "windowfocus up",
+		"<s-m-h>":      "windowmove left",
+		"<s-m-j>":      "windowmove down",
+		"<s-m-k>":      "windowmove up",
+		"<alt-meta-h>": "windowresize decrease width",
+		"<alt-meta-j>": "windowresize decrease height",
+		"<alt-meta-k>": "windowresize increase height",
+		"<alt-meta-l>": "windowresize increase width",
+		"<a-s-h>":      "tabmove left",
+		"<a-h>":        "tabprevious",
+		"<c-o>":        "cursorhistory prev",
+		"<c-i>":        "cursorhistory next",
 	}
 	for key, oldCmd := range staleUnbound {
 		seq := mustParseBindingKey(t, key)
@@ -1110,6 +1147,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	for _, key := range []string{
 		"<m-h>", "<m-j>", "<m-k>", "<m-l>",
 		"<s-m-h>", "<s-m-j>", "<s-m-k>", "<s-m-l>",
+		"<alt-meta-h>", "<alt-meta-j>", "<alt-meta-k>", "<alt-meta-l>",
 	} {
 		seq := mustParseBindingKey(t, key)
 		if got, ok := mappings[seq]; ok {

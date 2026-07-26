@@ -49,6 +49,10 @@ command:
     "<s-m-left>": ""
     "<s-m-down>": ""
     "<s-m-right>": ""
+    "<alt-meta-h>": ""
+    "<alt-meta-j>": ""
+    "<alt-meta-k>": ""
+    "<alt-meta-l>": ""
     # Tabs use <meta-[> / <meta-]> so <alt> stays available as Emacs Meta.
     "<m-]>": tabnext
     "<m-[>": tabprevious
