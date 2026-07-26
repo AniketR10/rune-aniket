@@ -103,6 +103,7 @@ command:
     "<c-k>": lspnextdiagnostic
     "<a-i>": gitprevchange
     "<a-k>": gitnextchange
+    "<s-m-r>": history
     "<a-j>": ""
     "<a-s-j>": ""
     "<a-s-k>": ""

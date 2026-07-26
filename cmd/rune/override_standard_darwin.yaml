@@ -95,6 +95,8 @@ command:
     "<c-k>": lspnextdiagnostic
     "<a-i>": gitprevchange
     "<a-k>": gitnextchange
+    "<s-m-r>": history
+    <m-r>: ""
     "<a-s-k>": ""
     "<m-left>": ""
     "<m-right>": ""
