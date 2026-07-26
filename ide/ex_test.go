@@ -2404,6 +2404,82 @@ func TestExStandardNavigationPrecedesLayoutBindings(t *testing.T) {
 	require.Equal(t, []string{"layoutfocus"}, h.firedCommands())
 }
 
+func TestExStandardAltLayoutBindingsReachCommandLayer(t *testing.T) {
+	bindings := []struct {
+		key     string
+		command string
+	}{
+		{"<alt-i>", "focusup"},
+		{"<alt-j>", "focusleft"},
+		{"<alt-k>", "focusdown"},
+		{"<alt-l>", "focusright"},
+		{"<alt-shift-i>", "moveup"},
+		{"<alt-shift-j>", "moveleft"},
+		{"<alt-shift-k>", "movedown"},
+		{"<alt-shift-l>", "moveright"},
+		{"<alt-meta-i>", "resizeup"},
+		{"<alt-meta-j>", "resizeleft"},
+		{"<alt-meta-k>", "resizedown"},
+		{"<alt-meta-l>", "resizeright"},
+		{"<alt-n>", "createwindow"},
+		{"<alt-enter>", "createterminal"},
+		{"<alt-q>", "closewindow"},
+		{"<alt-shift-enter>", "converttab"},
+		{"<alt-t>", "createtab"},
+		{"<alt-w>", "closetab"},
+		{"<alt-[>", "previoustab"},
+		{"<alt-]>", "nexttab"},
+		{"<alt-shift-[>", "tabmoveleft"},
+		{"<alt-shift-]>", "tabmoveright"},
+		{"<alt-h>", "hover"},
+		{"<ctrl-meta-i>", "gitprevious"},
+		{"<ctrl-meta-k>", "gitnext"},
+		{"<ctrl-meta-j>", "diagnosticprevious"},
+		{"<ctrl-meta-l>", "diagnosticnext"},
+	}
+
+	keyBindings := make(map[term.KeyComb][][]string, len(bindings))
+	ordered := make([]struct {
+		key     term.KeyComb
+		command string
+	}, 0, len(bindings))
+	for _, binding := range bindings {
+		parsed, err := term.ParseKeys(binding.key)
+		require.NoError(t, err)
+		require.Len(t, parsed, 1)
+		keyBindings[parsed[0]] = [][]string{{binding.command}}
+		ordered = append(ordered, struct {
+			key     term.KeyComb
+			command string
+		}{key: parsed[0], command: binding.command})
+	}
+
+	h := newExSequencerHarness(t, nil, keyBindings, nil, 20*time.Millisecond)
+	resource, err := workspaceapi.ParseURI("file:///standard-alt-layout.go")
+	require.NoError(t, err)
+	buf := new(cell.Buffer)
+	buf.Init()
+	buf.WriteString("first line\nsecond line")
+	ed := standard.NewHandler(buf, resource, text.IndentRuneTab, 0)
+	ed.Resize(40, 10)
+	require.NoError(t, h.ex.invokeWindow().SetContent(ed))
+
+	for _, binding := range ordered {
+		_, _ = h.ex.Handle(term.Event{
+			Type: term.EventKey,
+			Key:  binding.key.Key,
+			Mod:  binding.key.Mod,
+			Ch:   binding.key.Ch,
+		})
+	}
+
+	want := make([]string, len(ordered))
+	for i, binding := range ordered {
+		want[i] = binding.command
+	}
+	require.Equal(t, want, h.firedCommands())
+}
+
 func nonEmpty(s []string) []string {
 	if len(s) == 0 {
 		return nil

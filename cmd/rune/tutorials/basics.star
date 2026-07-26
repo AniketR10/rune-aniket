@@ -62,8 +62,9 @@ while layout direction uses an IJKL cluster under your right hand:
   J K L
 ```
 
-`I` points up, `J` left, `K` down, and `L` right. The exact modifiers differ
-between macOS and Linux, so the table below shows the bindings active for you.
+`I` points up, `J` left, `K` down, and `L` right. Rune keeps Standard layout
+shortcuts centered on `<alt>`: hold it with IJKL to focus a window, add
+`<shift>` to move its content, or add `<meta>` to resize it.
 """
 
 def keyhint(cmd, *args):
@@ -174,7 +175,7 @@ The next page shows the bindings active for you.
 """
 else:
     layout_pattern_md = """\
-## Why IJKL?
+## Alt drives the layout
 
 Vim made generations of programmers extraordinarily productive by keeping
 navigation under their fingers. Repeated actions become muscle memory,
@@ -192,13 +193,16 @@ as a second set of arrow keys used only for layout management:
 
 `I` points up, `J` left, `K` down, and `L` right. For example:
 
-- """ + keylabel("windowfocus", "left") + """ focuses the window to the left.
-- """ + keylabel("tabprevious") + """ focuses the previous tab.
-- """ + keylabel("windowmove", "left") + """ moves the focused window's content left.
-- """ + keylabel("tabmove", "left") + """ moves the current tab left in the tab list.
+- Hold `<alt>` and press IJKL to focus a window. Add `<shift>` to move its
+  content, or add `<meta>` to resize it.
+- Use """ + keylabel("tabprevious") + """ / """ + keylabel("tabnext") + """ to switch tabs.
+  Add `<shift>` to reorder the current tab instead.
+- Use """ + keylabel("windownew") + """ to split a window, """ + keylabel("terminalneworsplit") + """
+  to open a terminal, and """ + keylabel("windowclose") + """ to close a window.
+- Use """ + keylabel("tabnew") + """ to create a tab and """ + keylabel("tabclose") + """ to close it.
 
-The pattern is direction plus target: the window chord affects windows, the
-tab chord affects tabs, and adding `<shift>` moves content instead of focus.
+The pattern is Alt plus the target: IJKL affects windows, brackets affect tabs,
+and adding `<shift>` moves content instead of focus.
 """
 
 welcome_md = """\
@@ -218,7 +222,7 @@ still the home workspace, ready for whatever you need.
 ## Commands and key bindings
 
 IDE-wide operations are exposed as **commands** that you invoke
-from the command prompt. Keys like `<meta-1>` and `<meta-enter>`
+from the command prompt. Keys like `<meta-1>` and """ + keylabel("terminalneworsplit") + """
 are bound to those commands through your user configuration under
 `command.key_bindings`, so every binding shown here is rebindable.
 
@@ -869,4 +873,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "36", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "37", entry = run)

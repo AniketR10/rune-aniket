@@ -51,7 +51,6 @@ command:
     "<s-m-f2>": "locationdeleteall bookmark"
     "<f3>": "jumptolocation next search"
     "<s-f3>": "jumptolocation prev search"
-    "<a-n>": "lsp rename"
     "<a-c>": "lsp declaration"
     "<a-y>": "lsp type-definition"
     "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
@@ -70,43 +69,61 @@ command:
     "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    # IJKL points up, left, down, right. <ctrl-meta> focuses a window;
-    # add <shift> to move it.
-    "<c-m-i>": "windowfocus up"
-    "<c-m-j>": "windowfocus left"
-    "<c-m-k>": "windowfocus down"
-    "<c-m-l>": "windowfocus right"
-    "<c-s-m-i>": "windowmove up"
-    "<c-s-m-j>": "windowmove left"
-    "<c-s-m-k>": "windowmove down"
-    "<c-s-m-l>": "windowmove right"
-    # Tabs use J/L for left/right. Add <shift> to reorder them.
-    "<c-a-j>": tabprevious
-    "<c-a-l>": tabnext
-    "<c-s-a-j>": "tabmove left"
-    "<c-s-a-l>": "tabmove right"
-    # Resize with the same IJKL directions; modified arrows work too.
-    "<c-a-m-i>": "windowresize increase height"
-    "<c-a-m-j>": "windowresize decrease width"
-    "<c-a-m-k>": "windowresize decrease height"
-    "<c-a-m-l>": "windowresize increase width"
+    # IJKL points up, left, down, right. <alt> focuses a window;
+    # add <shift> to move it and <meta> to resize it.
+    "<a-i>": "windowfocus up"
+    "<a-j>": "windowfocus left"
+    "<a-k>": "windowfocus down"
+    "<a-l>": "windowfocus right"
+    "<a-s-i>": "windowmove up"
+    "<a-s-j>": "windowmove left"
+    "<a-s-k>": "windowmove down"
+    "<a-s-l>": "windowmove right"
+    "<a-m-i>": "windowresize increase height"
+    "<a-m-j>": "windowresize decrease width"
+    "<a-m-k>": "windowresize decrease height"
+    "<a-m-l>": "windowresize increase width"
+    # The modified arrows remain available as resize aliases.
     "<c-a-m-left>": "windowresize decrease width"
     "<c-a-m-right>": "windowresize increase width"
     "<c-a-m-down>": "windowresize decrease height"
     "<c-a-m-up>": "windowresize increase height"
+    # Create and close windows and tabs on the same <alt> layer.
+    "<a-n>": windownew
+    "<alt-enter>": terminalneworsplit
+    "<a-q>": windowclose
+    "<a-s-enter>": "echo {prompt}windowconverttab<space>"
+    "<a-t>": tabnew
+    "<a-w>": tabclose
+    # Brackets switch tabs; add <shift> to reorder them.
+    "<a-[>": tabprevious
+    "<a-]>": tabnext
+    "<a-s-[>": "tabmove left"
+    "<a-s-]>": "tabmove right"
+    "<a-s-h>": ""
     "<c-m-h>": "windowdefaultsplit h"
     "<c-m-v>": "windowdefaultsplit v"
-    # I/K visits the previous/next item: <ctrl> for diagnostics, <alt> for Git changes.
-    # The standard editor uses <ctrl-k> to cut to the end of the line. To use
-    # that behavior, move the <ctrl-i>/<ctrl-k> diagnostic pair to other keys.
-    "<c-i>": lspprevdiagnostic
-    "<c-k>": lspnextdiagnostic
-    "<a-i>": gitprevchange
-    "<a-k>": gitnextchange
+    # Ctrl-Meta I/K visits Git changes; J/L visits diagnostics.
+    "<c-m-i>": gitprevchange
+    "<c-m-k>": gitnextchange
+    "<c-m-j>": lspprevdiagnostic
+    "<c-m-l>": lspnextdiagnostic
+    "<a-h>": "lsp hover"
+    "<c-i>": ""
+    "<c-k>": ""
     "<s-m-r>": history
-    "<a-j>": ""
-    "<a-s-j>": ""
-    "<a-s-k>": ""
+    "<c-a-m-i>": ""
+    "<c-a-m-j>": ""
+    "<c-a-m-k>": ""
+    "<c-a-m-l>": ""
+    "<c-a-j>": ""
+    "<c-a-l>": ""
+    "<c-s-a-j>": ""
+    "<c-s-a-l>": ""
+    "<c-s-m-i>": ""
+    "<c-s-m-j>": ""
+    "<c-s-m-k>": ""
+    "<c-s-m-l>": ""
     "<m-left>": ""
     "<m-right>": ""
     "<m-down>": ""
@@ -116,9 +133,6 @@ command:
     "<s-m-down>": ""
     "<s-m-up>": ""
     "<alt-meta-h>": ""
-    "<alt-meta-j>": ""
-    "<alt-meta-k>": ""
-    "<alt-meta-l>": ""
     "<a-s-left>": ""
     "<a-s-right>": ""
     "<m-h>": ""
@@ -129,10 +143,6 @@ command:
     "<s-m-j>": ""
     "<s-m-k>": ""
     "<s-m-l>": ""
-    "<a-s-h>": ""
-    "<a-s-l>": ""
-    "<a-l>": ""
-    "<a-h>": ""
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log

@@ -522,10 +522,6 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.DeleteSelection()
 		case 0:
 			switch ev.Ch {
-			case '{':
-				handled = h.cursor.CollapseFold(context.Background())
-			case '}':
-				handled = h.cursor.ExpandFold(context.Background())
 			case 'z':
 				h.SetWrap(!h.less.Scroll().Wrap)
 				handled = true

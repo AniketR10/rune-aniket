@@ -43,6 +43,26 @@ func TestFoldsIntegration(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///vi_test")
 	require.NoError(t, err)
 
+	t.Run("alt shift brackets remain available to commands", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.WriteString(snippet)
+		fs := &testFoldsService{}
+		fs.view = buf.WithView(fs)
+		h := NewHandler(buf, uri, '\t', 0)
+		h.Resize(50, 10)
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 7}))
+
+		for _, ch := range []rune{'{', '}'} {
+			_, handled := h.Handle(term.Event{
+				Type: term.EventKey,
+				Mod:  term.ModAlt,
+				Ch:   ch,
+			})
+			require.Falsef(t, handled,
+				"Alt+Shift+bracket must reach the command layer")
+		}
+	})
+
 	t.Run("initial folds", func(t *testing.T) {
 		buf := cell.NewBuffer()
 		buf.WriteString(snippet)

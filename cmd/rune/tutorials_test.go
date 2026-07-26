@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "36", tut.Version())
+	assert.Equal(t, "37", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "36", tut.Version())
+	assert.Equal(t, "37", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -123,14 +123,16 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 			name: "standard",
 			mode: "standard",
 			contains: []string{
-				"Why IJKL?",
+				"Alt drives the layout",
 				"Vim made generations of programmers extraordinarily productive",
 				"Keyboard-driven does not have to mean learning an entirely new way to edit",
 				"Rune brings that advantage to a familiar, non-modal editor",
-				"<meta-j> focuses the window to the left",
-				"<alt-j> focuses the previous tab",
-				"<shift-meta-j> moves the focused window's content left",
-				"<alt-shift-j> moves the current tab left in the tab list",
+				"Hold <alt> and press IJKL to focus a window",
+				"Add <shift> to move its content, or add <meta> to resize it",
+				"Use <alt-[> / <alt-]> to switch tabs",
+				"Use <alt-n> to split a window, <alt-enter> to open a terminal",
+				"and <alt-q> to close a window",
+				"Use <alt-t> to create a tab and <alt-w> to close it",
 			},
 		},
 	}
@@ -139,10 +141,16 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			keyFor := func(cmd string, args []string) string {
 				keys := map[string]string{
-					"windowfocus left": "<meta-j>",
-					"windowmove left":  "<shift-meta-j>",
-					"tabprevious":      "<alt-j>",
-					"tabmove left":     "<alt-shift-j>",
+					"windowfocus left":   "<alt-j>",
+					"windowmove left":    "<alt-shift-j>",
+					"tabprevious":        "<alt-[>",
+					"tabnext":            "<alt-]>",
+					"tabmove left":       "<alt-shift-[>",
+					"windownew":          "<alt-n>",
+					"terminalneworsplit": "<alt-enter>",
+					"windowclose":        "<alt-q>",
+					"tabnew":             "<alt-t>",
+					"tabclose":           "<alt-w>",
 				}
 				return keys[strings.Join(append([]string{cmd}, args...), " ")]
 			}
@@ -885,5 +893,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "36", tut.Version())
+	assert.Equal(t, "37", tut.Version())
 }

@@ -726,10 +726,20 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 	runeStar := readRuneStar(t)
 
 	common := map[string]string{
-		"<ctrl-alt-meta-i>": "windowresize increase height",
-		"<ctrl-alt-meta-j>": "windowresize decrease width",
-		"<ctrl-alt-meta-k>": "windowresize decrease height",
-		"<ctrl-alt-meta-l>": "windowresize increase width",
+		"<alt-i>": "windowfocus up",
+		"<alt-j>": "windowfocus left",
+		"<alt-k>": "windowfocus down",
+		"<alt-l>": "windowfocus right",
+
+		"<alt-shift-i>": "windowmove up",
+		"<alt-shift-j>": "windowmove left",
+		"<alt-shift-k>": "windowmove down",
+		"<alt-shift-l>": "windowmove right",
+
+		"<alt-meta-i>": "windowresize increase height",
+		"<alt-meta-j>": "windowresize decrease width",
+		"<alt-meta-k>": "windowresize decrease height",
+		"<alt-meta-l>": "windowresize increase width",
 
 		"<ctrl-alt-meta-up>":    "windowresize increase height",
 		"<ctrl-alt-meta-left>":  "windowresize decrease width",
@@ -739,86 +749,40 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<ctrl-meta-h>": "windowdefaultsplit h",
 		"<ctrl-meta-v>": "windowdefaultsplit v",
 
-		"<a-d>": "lsp definition",
-		"<a-r>": "lsp references",
-		"<a-n>": "lsp rename",
-		"<a-c>": "lsp declaration",
-		"<a-y>": "lsp type-definition",
-		"<a-g>": "lsp signature-help",
+		"<alt-n>":           "windownew",
+		"<alt-enter>":       "terminalneworsplit",
+		"<alt-q>":           "windowclose",
+		"<alt-shift-enter>": "echo {prompt}windowconverttab<space>",
+		"<alt-t>":           "tabnew",
+		"<alt-w>":           "tabclose",
+		"<alt-[>":           "tabprevious",
+		"<alt-]>":           "tabnext",
+		"<alt-shift-[>":     "tabmove left",
+		"<alt-shift-]>":     "tabmove right",
 
-		"<ctrl-i>": "lspprevdiagnostic",
-		"<ctrl-k>": "lspnextdiagnostic",
-		"<alt-i>":  "gitprevchange",
-		"<alt-k>":  "gitnextchange",
+		"<alt-h>": "lsp hover",
+
+		"<ctrl-meta-i>": "gitprevchange",
+		"<ctrl-meta-k>": "gitnextchange",
+		"<ctrl-meta-j>": "lspprevdiagnostic",
+		"<ctrl-meta-l>": "lspnextdiagnostic",
 	}
 	tests := []struct {
-		name      string
-		file      string
-		layout    map[string]string
-		canonical map[string]string
+		name    string
+		file    string
+		unbound []string
 	}{
 		{
 			name: "darwin",
 			file: "override_standard_darwin.yaml",
-			layout: map[string]string{
-				"<meta-i>": "windowfocus up",
-				"<meta-j>": "windowfocus left",
-				"<meta-k>": "windowfocus down",
-				"<meta-l>": "windowfocus right",
-
-				"<shift-meta-i>": "windowmove up",
-				"<shift-meta-j>": "windowmove left",
-				"<shift-meta-k>": "windowmove down",
-				"<shift-meta-l>": "windowmove right",
-
-				"<alt-j>":       "tabprevious",
-				"<alt-l>":       "tabnext",
-				"<alt-shift-j>": "tabmove left",
-				"<alt-shift-l>": "tabmove right",
-			},
-			canonical: map[string]string{
-				"windowfocus left":  "<meta-j>",
-				"windowmove left":   "<shift-meta-j>",
-				"tabprevious":       "<alt-j>",
-				"tabnext":           "<alt-l>",
-				"tabmove left":      "<alt-shift-j>",
-				"tabmove right":     "<alt-shift-l>",
-				"lspprevdiagnostic": "<ctrl-i>",
-				"lspnextdiagnostic": "<ctrl-k>",
-				"gitprevchange":     "<alt-i>",
-				"gitnextchange":     "<alt-k>",
-			},
 		},
 		{
 			name: "linux",
 			file: "override_standard_linux.yaml",
-			layout: map[string]string{
-				"<ctrl-meta-i>": "windowfocus up",
-				"<ctrl-meta-j>": "windowfocus left",
-				"<ctrl-meta-k>": "windowfocus down",
-				"<ctrl-meta-l>": "windowfocus right",
-
-				"<ctrl-shift-meta-i>": "windowmove up",
-				"<ctrl-shift-meta-j>": "windowmove left",
-				"<ctrl-shift-meta-k>": "windowmove down",
-				"<ctrl-shift-meta-l>": "windowmove right",
-
-				"<ctrl-alt-j>":       "tabprevious",
-				"<ctrl-alt-l>":       "tabnext",
-				"<ctrl-shift-alt-j>": "tabmove left",
-				"<ctrl-shift-alt-l>": "tabmove right",
-			},
-			canonical: map[string]string{
-				"windowfocus left":  "<ctrl-meta-j>",
-				"windowmove left":   "<ctrl-shift-meta-j>",
-				"tabprevious":       "<ctrl-alt-j>",
-				"tabnext":           "<ctrl-alt-l>",
-				"tabmove left":      "<ctrl-shift-alt-j>",
-				"tabmove right":     "<ctrl-shift-alt-l>",
-				"lspprevdiagnostic": "<ctrl-i>",
-				"lspnextdiagnostic": "<ctrl-k>",
-				"gitprevchange":     "<alt-i>",
-				"gitnextchange":     "<alt-k>",
+			unbound: []string{
+				"<c-a-j>", "<c-a-l>",
+				"<c-s-a-j>", "<c-s-a-l>",
+				"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
 			},
 		},
 	}
@@ -839,11 +803,8 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 			c := &ideConfig{cfg: cfg, errors: map[string]error{}}
 			mappings := c.commandKeyMappings()
 
-			wantBound := make(map[string]string, len(common)+len(tc.layout))
+			wantBound := make(map[string]string, len(common))
 			for key, cmd := range common {
-				wantBound[key] = cmd
-			}
-			for key, cmd := range tc.layout {
 				wantBound[key] = cmd
 			}
 			for key, wantCmd := range wantBound {
@@ -855,32 +816,55 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 			}
 
 			lookup := c.commandKeyBindingLookup()
-			for wantCmd, wantKey := range tc.canonical {
-				cmd := strings.Split(wantCmd, " ")
-				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
-					"%q must resolve to %s", wantCmd, wantKey)
-			}
 			for wantCmd, wantKey := range map[string]string{
-				"windowresize increase height": "<ctrl-alt-meta-i>",
-				"windowresize decrease width":  "<ctrl-alt-meta-j>",
-				"windowresize decrease height": "<ctrl-alt-meta-k>",
-				"windowresize increase width":  "<ctrl-alt-meta-l>",
+				"windowfocus up":               "<alt-i>",
+				"windowfocus left":             "<alt-j>",
+				"windowfocus down":             "<alt-k>",
+				"windowfocus right":            "<alt-l>",
+				"windowmove up":                "<alt-shift-i>",
+				"windowmove left":              "<alt-shift-j>",
+				"windowmove down":              "<alt-shift-k>",
+				"windowmove right":             "<alt-shift-l>",
+				"windowresize increase height": "<alt-meta-i>",
+				"windowresize decrease width":  "<alt-meta-j>",
+				"windowresize decrease height": "<alt-meta-k>",
+				"windowresize increase width":  "<alt-meta-l>",
+				"tabprevious":                  "<alt-[>",
+				"tabnext":                      "<alt-]>",
+				"tabmove left":                 "<alt-shift-[>",
+				"tabmove right":                "<alt-shift-]>",
+				"lspprevdiagnostic":            "<ctrl-meta-j>",
+				"lspnextdiagnostic":            "<ctrl-meta-l>",
+				"gitprevchange":                "<ctrl-meta-i>",
+				"gitnextchange":                "<ctrl-meta-k>",
+				"lsp hover":                    "<alt-h>",
 			} {
 				cmd := strings.Split(wantCmd, " ")
 				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
-					"%q must prefer IJKL alias %s", wantCmd, wantKey)
+					"%q must resolve to %s", wantCmd, wantKey)
 			}
 
 			for _, key := range []string{
 				"<m-left>", "<m-right>", "<m-down>", "<m-up>",
 				"<s-m-left>", "<s-m-right>", "<s-m-down>", "<s-m-up>",
 				"<a-s-left>", "<a-s-right>",
-				"<a-s-k>",
+				"<m-h>", "<m-i>", "<m-j>", "<m-k>", "<m-l>",
+				"<s-m-h>", "<s-m-i>", "<s-m-j>", "<s-m-k>", "<s-m-l>",
+				"<a-s-h>",
+				"<c-a-m-i>", "<c-a-m-j>", "<c-a-m-k>", "<c-a-m-l>",
+				"<c-i>", "<c-k>",
 			} {
 				seq := mustParseBindingKey(t, key)
 				if got, ok := mappings[seq]; ok {
 					require.Equalf(t, [][]string{{""}}, got,
 						"%s is an editor chord and must not carry a layout command", key)
+				}
+			}
+			for _, key := range tc.unbound {
+				seq := mustParseBindingKey(t, key)
+				if got, ok := mappings[seq]; ok {
+					require.Equalf(t, [][]string{{""}}, got,
+						"%s must not carry a stale Standard layout command", key)
 				}
 			}
 		})
@@ -978,9 +962,6 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		"<s-m-j>":      "windowmove down",
 		"<s-m-k>":      "windowmove up",
 		"<alt-meta-h>": "windowresize decrease width",
-		"<alt-meta-j>": "windowresize decrease height",
-		"<alt-meta-k>": "windowresize increase height",
-		"<alt-meta-l>": "windowresize increase width",
 		"<a-s-h>":      "tabmove left",
 		"<a-h>":        "tabprevious",
 		"<c-o>":        "cursorhistory prev",
@@ -997,15 +978,15 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	// The reverse lookup must resolve to one deterministic standard chord.
 	lookup := c.commandKeyBindingLookup()
 	wantResolved := map[string][]string{
-		"<shift-meta-j>":    {"windowmove", "left"},
-		"<meta-j>":          {"windowfocus", "left"},
-		"<ctrl-alt-meta-j>": {"windowresize", "decrease", "width"},
-		"<ctrl-meta-h>":     {"windowdefaultsplit", "h"},
-		"<alt-shift-j>":     {"tabmove", "left"},
-		"<alt-l>":           {"tabnext"},
-		"<alt-j>":           {"tabprevious"},
-		"<ctrl-shift-->":    {"cursorhistory", "next"},
-		"<ctrl-->":          {"cursorhistory", "prev"},
+		"<alt-shift-j>":  {"windowmove", "left"},
+		"<alt-j>":        {"windowfocus", "left"},
+		"<alt-meta-j>":   {"windowresize", "decrease", "width"},
+		"<ctrl-meta-h>":  {"windowdefaultsplit", "h"},
+		"<alt-shift-[>":  {"tabmove", "left"},
+		"<alt-]>":        {"tabnext"},
+		"<alt-[>":        {"tabprevious"},
+		"<ctrl-shift-->": {"cursorhistory", "next"},
+		"<ctrl-->":       {"cursorhistory", "prev"},
 	}
 	for wantKey, cmd := range wantResolved {
 		got := lookup(cmd[0], cmd[1:])

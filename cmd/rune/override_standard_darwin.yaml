@@ -52,7 +52,6 @@ command:
     "<s-m-f>": searchtext
     "<m-g>": "jumptolocation next search"
     "<s-m-g>": "jumptolocation prev search"
-    "<a-n>": "lsp rename"
     "<a-c>": "lsp declaration"
     "<a-y>": "lsp type-definition"
     "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
@@ -62,42 +61,62 @@ command:
     "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    # IJKL points up, left, down, right. <meta> focuses a window;
-    # add <shift> to move it.
-    "<m-i>": "windowfocus up"
-    "<m-j>": "windowfocus left"
-    "<m-k>": "windowfocus down"
-    "<m-l>": "windowfocus right"
-    "<s-m-i>": "windowmove up"
-    "<s-m-j>": "windowmove left"
-    "<s-m-k>": "windowmove down"
-    "<s-m-l>": "windowmove right"
-    # Tabs use J/L for left/right. Add <shift> to reorder them.
-    "<a-j>": tabprevious
-    "<a-l>": tabnext
-    "<a-s-j>": "tabmove left"
-    "<a-s-l>": "tabmove right"
-    # Resize with the same IJKL directions; modified arrows work too.
-    "<c-a-m-i>": "windowresize increase height"
-    "<c-a-m-j>": "windowresize decrease width"
-    "<c-a-m-k>": "windowresize decrease height"
-    "<c-a-m-l>": "windowresize increase width"
+    # IJKL points up, left, down, right. <alt> focuses a window;
+    # add <shift> to move it and <meta> to resize it.
+    "<a-i>": "windowfocus up"
+    "<a-j>": "windowfocus left"
+    "<a-k>": "windowfocus down"
+    "<a-l>": "windowfocus right"
+    "<a-s-i>": "windowmove up"
+    "<a-s-j>": "windowmove left"
+    "<a-s-k>": "windowmove down"
+    "<a-s-l>": "windowmove right"
+    "<a-m-i>": "windowresize increase height"
+    "<a-m-j>": "windowresize decrease width"
+    "<a-m-k>": "windowresize decrease height"
+    "<a-m-l>": "windowresize increase width"
+    # The modified arrows remain available as resize aliases.
     "<c-a-m-left>": "windowresize decrease width"
     "<c-a-m-right>": "windowresize increase width"
     "<c-a-m-down>": "windowresize decrease height"
     "<c-a-m-up>": "windowresize increase height"
+    # Create and close windows and tabs on the same <alt> layer.
+    "<a-n>": windownew
+    "<alt-enter>": terminalneworsplit
+    "<a-q>": windowclose
+    "<a-s-enter>": "echo {prompt}windowconverttab<space>"
+    "<a-t>": tabnew
+    "<a-w>": tabclose
+    # Brackets switch tabs; add <shift> to reorder them.
+    "<a-[>": tabprevious
+    "<a-]>": tabnext
+    "<a-s-[>": "tabmove left"
+    "<a-s-]>": "tabmove right"
+    "<a-s-h>": ""
     "<c-m-h>": "windowdefaultsplit h"
     "<c-m-v>": "windowdefaultsplit v"
-    # I/K visits the previous/next item: <ctrl> for diagnostics, <alt> for Git changes.
-    # The standard editor uses <ctrl-k> to cut to the end of the line. To use
-    # that behavior, move the <ctrl-i>/<ctrl-k> diagnostic pair to other keys.
-    "<c-i>": lspprevdiagnostic
-    "<c-k>": lspnextdiagnostic
-    "<a-i>": gitprevchange
-    "<a-k>": gitnextchange
+    # Ctrl-Meta I/K visits Git changes; J/L visits diagnostics.
+    "<c-m-i>": gitprevchange
+    "<c-m-k>": gitnextchange
+    "<c-m-j>": lspprevdiagnostic
+    "<c-m-l>": lspnextdiagnostic
+    "<a-h>": "lsp hover"
+    "<c-i>": ""
+    "<c-k>": ""
     "<s-m-r>": history
     <m-r>: ""
-    "<a-s-k>": ""
+    "<c-a-m-i>": ""
+    "<c-a-m-j>": ""
+    "<c-a-m-k>": ""
+    "<c-a-m-l>": ""
+    "<m-i>": ""
+    "<m-j>": ""
+    "<m-k>": ""
+    "<m-l>": ""
+    "<s-m-i>": ""
+    "<s-m-j>": ""
+    "<s-m-k>": ""
+    "<s-m-l>": ""
     "<m-left>": ""
     "<m-right>": ""
     "<m-down>": ""
@@ -107,15 +126,10 @@ command:
     "<s-m-down>": ""
     "<s-m-up>": ""
     "<alt-meta-h>": ""
-    "<alt-meta-j>": ""
-    "<alt-meta-k>": ""
-    "<alt-meta-l>": ""
     "<a-s-left>": ""
     "<a-s-right>": ""
     "<m-h>": ""
     "<s-m-h>": ""
-    "<a-s-h>": ""
-    "<a-h>": ""
     "<c-o>": ""
 
 # log_level: info               # debug | info | warn | error
