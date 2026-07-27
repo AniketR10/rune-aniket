@@ -742,6 +742,115 @@ func TestViEditUnit(t *testing.T) {
 		assert.Equal(t, "b\nb", comp.scroll.Buffer().String())
 	})
 
+	t.Run("parser edits keep predictive cursor valid for modal commands", func(t *testing.T) {
+		operations := []struct {
+			name       string
+			content    string
+			cursor     term.Coordinates
+			start      term.Coordinates
+			end        term.Coordinates
+			insert     string
+			want       string
+			wantCursor term.Coordinates
+		}{
+			{
+				name: "line insert above", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 4}, insert: "\n", want: "\n0\n1\n2\n3\n4",
+				wantCursor: term.Coordinates{Y: 5},
+			},
+			{
+				name: "same-line insert before", content: "abcde",
+				cursor: term.Coordinates{X: 4}, start: term.Coordinates{X: 1},
+				end: term.Coordinates{X: 1}, insert: "X", want: "aXbcde",
+				wantCursor: term.Coordinates{X: 5},
+			},
+			{
+				name: "same-line delete before", content: "abcde",
+				cursor: term.Coordinates{X: 4}, start: term.Coordinates{X: 1},
+				end: term.Coordinates{X: 3}, want: "ade",
+				wantCursor: term.Coordinates{X: 2},
+			},
+			{
+				name: "line delete above", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 4}, end: term.Coordinates{Y: 2},
+				want: "2\n3\n4", wantCursor: term.Coordinates{Y: 2},
+			},
+			{
+				name: "line replacement above", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 4}, end: term.Coordinates{Y: 2},
+				insert: "X\nY", want: "X\nY2\n3\n4", wantCursor: term.Coordinates{Y: 3},
+			},
+			{
+				name: "delete through cursor", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 2}, start: term.Coordinates{Y: 1},
+				end: term.Coordinates{Y: 3}, want: "0\n3\n4",
+				wantCursor: term.Coordinates{Y: 1},
+			},
+			{
+				name: "line insert below", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 1}, start: term.Coordinates{Y: 4, X: 1},
+				end: term.Coordinates{Y: 4, X: 1}, insert: "\n5", want: "0\n1\n2\n3\n4\n5",
+				wantCursor: term.Coordinates{Y: 1},
+			},
+			{
+				name: "line delete below", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 1}, start: term.Coordinates{Y: 3},
+				end: term.Coordinates{Y: 4}, want: "0\n1\n2\n4",
+				wantCursor: term.Coordinates{Y: 1},
+			},
+			{
+				name: "delete whole buffer", content: "0\n1\n2\n3\n4",
+				cursor: term.Coordinates{Y: 2}, end: term.Coordinates{Y: 4, X: 1},
+				want: "", wantCursor: term.Coordinates{},
+			},
+		}
+		commands := []struct {
+			name string
+			ev   term.Event
+		}{
+			{name: "open below", ev: term.Event{Type: term.EventKey, Ch: 'o'}},
+			{name: "open above", ev: term.Event{Type: term.EventKey, Ch: 'O'}},
+			{name: "append", ev: term.Event{Type: term.EventKey, Ch: 'a'}},
+			{name: "delete character", ev: term.Event{Type: term.EventKey, Ch: 'x'}},
+			{name: "move up", ev: term.Event{Type: term.EventKey, Ch: 'k'}},
+			{name: "move down", ev: term.Event{Type: term.EventKey, Ch: 'j'}},
+			{name: "end of line", ev: term.Event{Type: term.EventKey, Ch: '$'}},
+			{name: "join lines", ev: term.Event{Type: term.EventKey, Ch: 'J'}},
+		}
+
+		for _, operation := range operations {
+			for _, command := range commands {
+				t.Run(operation.name+"/"+command.name, func(t *testing.T) {
+					comp := newTestParentComponent("", term.Coordinates{})
+					var vi viHandler
+					vi.doInit(comp, DefaultConfig())
+					vi.Resize(10, 3)
+
+					ctx := vtescreen.NewContext(context.Background())
+					vi.Edit(ctx, term.Coordinates{}, term.Coordinates{}, operation.content)
+					vi.setCursorAtScroll(operation.cursor)
+					require.Equal(t, operation.cursor, vi.copy.vi.CursorAtScroll())
+
+					vi.Edit(ctx, operation.start, operation.end, operation.insert)
+
+					assert.Equal(t, operation.want, vi.copy.vi.CellView().String())
+					at := vi.copy.vi.CursorAtScroll()
+					assert.Equal(t, operation.wantCursor, at)
+					require.Greater(t, vi.copy.vi.CellView().Rows(), 0)
+					assert.GreaterOrEqual(t, at.Y, 0)
+					assert.Less(t, at.Y, vi.copy.vi.CellView().Rows())
+					if at.Y >= 0 && at.Y < vi.copy.vi.CellView().Rows() {
+						assert.GreaterOrEqual(t, at.X, 0)
+						assert.LessOrEqual(t, at.X, vi.copy.vi.CellView().Columns(at.Y))
+					}
+					assert.NotPanics(t, func() {
+						_, _ = vi.copy.vi.Handle(command.ev)
+					})
+				})
+			}
+		}
+	})
+
 	// Mirrors the production restore path: vte.Component.RestoreFromSnapshot
 	// rewrites primary-buffer cells in place (preserving *cell.Buffer
 	// identity) and the cursor moves. Handler.RestoreFromSnapshot then
