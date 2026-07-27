@@ -18,7 +18,7 @@ mode = editor_mode()
 
 # Buffer motion and layout direction are separate systems. The file explorer
 # uses each editor's native movement, while layout commands use HJKL in modal
-# mode and IJKL in the standard and Emacs presets.
+# mode, IJKL in standard mode, and PNBF in Emacs mode.
 if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
@@ -39,15 +39,16 @@ elif mode == "emacs":
     modal_surface_allow_keys = []
     direction_pattern_md = """\
 You picked **Emacs** editing. Rune leaves the Emacs `<ctrl>` and `<alt>`
-editing chords alone and puts layout direction on an IJKL cluster:
+editing chords alone and reuses its directional vocabulary for windows:
 
-```text
-    I
-  J K L
-```
+- `P` is previous/up
+- `N` next/down
+- `B` backward/left
+- `F` forward/right
 
-`I` points up, `J` left, `K` down, and `L` right. Window focus starts with
-`<ctrl-meta>`; adding `<shift>` moves a window, while adding `<alt>` resizes it.
+Your fingers already know those directions from `<ctrl-p>` / `<ctrl-n>` and
+`<ctrl-b>` / `<ctrl-f>`. Hold `<meta>` with PNBF to apply that muscle memory to
+window focus. Add `<shift>` to move the focused content instead.
 """
 else:
     dir_phrase = "the arrow keys"
@@ -140,6 +141,7 @@ resize_key_row = " | ".join([
     keylabel("windowresize", "decrease", "height"),
     keylabel("windowresize", "increase", "width"),
 ])
+split_window_args = ["down"] if mode == "emacs" else []
 
 if mode == "modal":
     layout_pattern_md = """\
@@ -160,16 +162,18 @@ Rune carries that same HJKL language into layout management: `H` points left,
 """
 elif mode == "emacs":
     layout_pattern_md = """\
-## IJKL controls the layout
+## Emacs directions control the layout
 
-Emacs already puts keyboard-driven workflows under your fingers. Rune keeps
-its editing chords available and gives layout management a separate IJKL
-direction cluster: `I` points up, `J` left, `K` down, and `L` right.
+Rune keeps `<ctrl-p>` / `<ctrl-n>` and `<ctrl-b>` / `<ctrl-f>` available for
+editing. Rather than teach a second direction map, Rune changes the target:
+hold `<meta>` with the same PNBF directions to focus windows, then add `<shift>`
+to move window content instead. Reusing that muscle memory keeps repeated
+layout actions fast.
 
-- Use the IJKL window chord to focus a window in that direction.
-- Use the horizontal tab chord to focus the previous or next tab.
-- Add `<shift>` to move content instead of focus it: either move the focused
-  window's content or reorder the current tab in the tab list.
+- `<ctrl-x>0` closes a window, `<ctrl-x>1` closes the others, and `<ctrl-x>2` /
+  `<ctrl-x>3` split below or right.
+- `<ctrl-tab>` / `<ctrl-shift-tab>` cycle tabs. Meta-brackets provide the same
+  left/right direction, and adding `<shift>` reorders the current tab.
 
 The next page shows the bindings active for you.
 """
@@ -279,7 +283,14 @@ split_window_md = """\
 A **window** is a tile on screen, and right now this workspace has just
 one.
 
-Split the focused window into two: """ + keypress("windownew") + """.
+Split the focused window into two: """ + keypress("windownew", *split_window_args) + """.
+"""
+
+emacs_split_right_md = """\
+`<ctrl-x>2` split below, matching GNU Emacs. Its familiar neighbor `<ctrl-x>3`
+splits to the right.
+
+Split right now: """ + keypress("windownew", "right") + """.
 """
 
 terminal_md = """\
@@ -339,10 +350,19 @@ Move the focused window to the left (""" + keypress("windowmove", "left") + """)
 then back to the right (""" + keypress("windowmove", "right") + """).
 """
 
-resize_window_md = """\
-Window resizing keeps the same directions. In the IJKL layout, `I` makes the
-window taller, `J` narrower, `K` shorter, and `L` wider. Modal mode uses the
-matching arrow directions instead.
+resize_direction_md = ("""\
+Window resizing keeps the IJKL directions: `I` makes the window taller, `J`
+narrower, `K` shorter, and `L` wider.
+""" if mode == "standard" else ("""\
+Resize is less frequent, so Emacs mode keeps it on modified arrows instead of
+taking more editing letters: up makes the window taller, left narrower, down
+shorter, and right wider.
+""" if mode == "emacs" else """\
+Window resizing uses matching arrow directions: up makes the window taller,
+left narrower, down shorter, and right wider.
+"""))
+
+resize_window_md = resize_direction_md + """
 
 - `windowresize increase width` makes the focused window wider.""" + keyhint("windowresize", "increase", "width") + """
 - `windowresize decrease width` makes it narrower.""" + keyhint("windowresize", "decrease", "width") + """
@@ -367,8 +387,22 @@ least one.""" + keyhint("windowclose") + """
 To close the split you just made, """ + keypress("windowclose") + """.
 """
 
-tabs_md = """\
+emacs_close_others_md = """\
+You used `<ctrl-x>0` to close one window. `<ctrl-x>1` keeps the focused window
+and closes every other split, just as it does in GNU Emacs.
+
+Keep only this window: """ + keypress("windowcloseall") + """.
+"""
+
+tabs_intro_md = ("""\
+A window shows one **tab** at a time: a file, a terminal, task output. Emacs
+mode keeps tab lifecycle on Rune's host Meta layer: """ + keylabel("tabnew") + """ starts a
+new tab and """ + keylabel("tabclose") + """ closes the current one.
+""" if mode == "emacs" else """\
 A window shows one **tab** at a time: a file, a terminal, task output.
+""")
+
+tabs_md = tabs_intro_md + """
 You already have one open. Let's add another from the file explorer.
 
 Open the file explorer: """ + keypress("fexplorer") + """.
@@ -391,18 +425,32 @@ space.
 Toggle the explorer closed: """ + keypress("fexplorer") + """.
 """
 
-tab_switch_md = """\
-That window now holds two tabs. `tabnext` / `tabprevious` cycle through
-them and wrap around. Each preset has a horizontal tab pair; adding `<shift>`
-to that pair reorders the current tab instead.
+tab_switch_intro_md = ("""\
+That window now holds two tabs. Emacs muscle memory works here too:
+`<ctrl-tab>` moves to the next tab and `<ctrl-shift-tab>` moves to the previous
+one. Rune also keeps tab direction on Meta-brackets, where `[` is left and `]`
+is right. Both pairs wrap around.
+""" if mode == "emacs" else """\
+That window now holds two tabs. `tabnext` / `tabprevious` cycle through them
+and wrap around. Each preset has a horizontal tab pair; adding `<shift>` to
+that pair reorders the current tab instead.
+""")
+
+tab_switch_md = tab_switch_intro_md + """
 
 Switch to the next tab (""" + keypress("tabnext") + """), then back to
 the previous one (""" + keypress("tabprevious") + """).
 """
 
-tab_move_md = """\
+tab_move_intro_md = ("""\
+For tab placement, add `<shift>` to the Meta-bracket pair. The direction stays
+left or right, but the current tab moves instead of focus.
+""" if mode == "emacs" else """\
 Now use the same horizontal pair with `<shift>` to change the tab's position
 instead of switching tabs.
+""")
+
+tab_move_md = tab_move_intro_md + """
 
 - `tabmove left` moves it one slot left.""" + keyhint("tabmove", "left") + """
 - `tabmove right` moves the current tab one slot right.""" + keyhint("tabmove", "right") + """
@@ -544,15 +592,37 @@ def teach_directional_layout():
 
 def teach_split_window():
     floating_window(title = "Split a window", text = split_window_md,
-                    dismiss_keys = dismiss_for("windownew"))
-    wait_command(
-        title    = "Split a window",
-        command  = "windownew",
-        on_error = ("Split the active window into two. Add an optional " +
-                    "direction (`<cmd>windownew right` / `left` / `up` / " +
-                    "`down`) to choose where the new pane lands."),
-    )
+                    dismiss_keys = dismiss_for("windownew", *split_window_args))
+    if len(split_window_args):
+        wait_expected_command(
+            title         = "Split a window",
+            command       = "windownew",
+            expected_args = split_window_args,
+            on_error      = "Split the active window below.",
+        )
+    else:
+        wait_command(
+            title    = "Split a window",
+            command  = "windownew",
+            on_error = ("Split the active window into two. Add an optional " +
+                        "direction (`<cmd>windownew right` / `left` / `up` / " +
+                        "`down`) to choose where the new pane lands."),
+        )
     notify(level = success, message = "You split the window.")
+
+
+def teach_emacs_split_right():
+    if mode != "emacs":
+        return
+    floating_window(title = "Split right", text = emacs_split_right_md,
+                    dismiss_keys = dismiss_for("windownew", "right"))
+    wait_expected_command(
+        title         = "Split right",
+        command       = "windownew",
+        expected_args = ["right"],
+        on_error      = "Split the active window to the right.",
+    )
+    notify(level = success, message = "You used the Emacs split family.")
 
 
 def teach_terminal():
@@ -678,6 +748,19 @@ def teach_close_window():
                     "window."),
     )
     notify(level = success, message = "You closed the window.")
+
+
+def teach_emacs_close_others():
+    if mode != "emacs":
+        return
+    floating_window(title = "Keep one window", text = emacs_close_others_md,
+                    dismiss_keys = dismiss_for("windowcloseall"))
+    wait_command(
+        title    = "Keep one window",
+        command  = "windowcloseall",
+        on_error = "Close every window except the focused one.",
+    )
+    notify(level = success, message = "You cleaned up the window layout.")
 
 
 def teach_tabs():
@@ -850,6 +933,7 @@ def run():
 
     teach_layout()
     teach_split_window()
+    teach_emacs_split_right()
     teach_terminal()
     teach_modal_surfaces()
     teach_split_direction()
@@ -860,6 +944,7 @@ def run():
     teach_resize_window()
     teach_fullscreen_window()
     teach_close_window()
+    teach_emacs_close_others()
     teach_tabs()
     teach_switch_tabs()
     teach_move_tabs()
@@ -873,4 +958,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "37", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "39", entry = run)

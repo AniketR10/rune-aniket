@@ -72,11 +72,11 @@ func TestRenderOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, ema, "mode: emacs",
 		"the emacs choice must switch the editor into emacs")
-	require.Contains(t, ema,
-		`"<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>`+
-			`local.definition.method|local.definition.function<space>"`,
-		"emacs must bind <m-f> to the jumptoast function/method prefill "+
-			"since <a-f> is reserved for Meta")
+	require.Contains(t, ema, `"<m-f>": "windowfocus right"`,
+		"emacs must use the PNBF direction layer for window focus")
+	require.NotContains(t, ema,
+		`"<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>`,
+		"the displaced function search binding must remain prompt-only")
 
 	_, err = renderOverride("bogus")
 	require.Error(t, err)

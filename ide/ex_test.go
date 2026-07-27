@@ -73,6 +73,7 @@ import (
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/text/emacs"
 	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/standard"
@@ -2471,6 +2472,84 @@ func TestExStandardAltLayoutBindingsReachCommandLayer(t *testing.T) {
 			Mod:  binding.key.Mod,
 			Ch:   binding.key.Ch,
 		})
+	}
+
+	want := make([]string, len(ordered))
+	for i, binding := range ordered {
+		want[i] = binding.command
+	}
+	require.Equal(t, want, h.firedCommands())
+}
+
+func TestExEmacsMetaLayoutBindingsReachCommandLayer(t *testing.T) {
+	bindings := []struct {
+		key     string
+		command string
+	}{
+		{"<meta-p>", "focusup"},
+		{"<meta-b>", "focusleft"},
+		{"<meta-n>", "focusdown"},
+		{"<meta-f>", "focusright"},
+		{"<shift-meta-p>", "moveup"},
+		{"<shift-meta-b>", "moveleft"},
+		{"<shift-meta-n>", "movedown"},
+		{"<shift-meta-f>", "moveright"},
+		{"<ctrl-alt-meta-up>", "resizeup"},
+		{"<ctrl-alt-meta-left>", "resizeleft"},
+		{"<ctrl-alt-meta-down>", "resizedown"},
+		{"<ctrl-alt-meta-right>", "resizeright"},
+		{"<ctrl-x>0", "closewindow"},
+		{"<ctrl-x>1", "closeotherwindows"},
+		{"<ctrl-x>2", "splitbelow"},
+		{"<ctrl-x>3", "splitright"},
+		{"<ctrl-tab>", "nexttab"},
+		{"<ctrl-shift-tab>", "previoustab"},
+	}
+
+	sequences := map[thandler.Sequence][][]string{}
+	keyBindings := map[term.KeyComb][][]string{}
+	ordered := make([]struct {
+		keys    []term.KeyComb
+		command string
+	}, 0, len(bindings))
+	for _, binding := range bindings {
+		parsed, err := term.ParseKeys(binding.key)
+		require.NoError(t, err)
+		switch len(parsed) {
+		case 1:
+			keyBindings[parsed[0]] = [][]string{{binding.command}}
+		case 2:
+			sequences[thandler.Sequence{First: parsed[0], Last: parsed[1]}] =
+				[][]string{{binding.command}}
+		default:
+			require.Failf(t, "unsupported test sequence", "%s parsed to %d keys",
+				binding.key, len(parsed))
+		}
+		ordered = append(ordered, struct {
+			keys    []term.KeyComb
+			command string
+		}{keys: parsed, command: binding.command})
+	}
+
+	h := newExSequencerHarness(t, sequences, keyBindings, nil, 20*time.Millisecond)
+	resource, err := workspaceapi.ParseURI("file:///emacs-meta-layout.go")
+	require.NoError(t, err)
+	buf := new(cell.Buffer)
+	buf.Init()
+	buf.WriteString("first line\nsecond line")
+	ed := emacs.NewHandler(buf, resource, text.IndentRuneTab, 0)
+	ed.Resize(40, 10)
+	require.NoError(t, h.ex.invokeWindow().SetContent(ed))
+
+	for _, binding := range ordered {
+		for _, key := range binding.keys {
+			_, _ = h.ex.Handle(term.Event{
+				Type: term.EventKey,
+				Key:  key.Key,
+				Mod:  key.Mod,
+				Ch:   key.Ch,
+			})
+		}
 	}
 
 	want := make([]string, len(ordered))

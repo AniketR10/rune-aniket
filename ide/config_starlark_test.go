@@ -1002,12 +1002,10 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 // control and alt chords (motion, kill, yank, mark, folds, M-x), so any host
 // command sharing one of those would be shadowed and unreachable — every base
 // <alt> command binding is therefore explicitly unbound. <meta> is free of
-// editor bindings, so the IDE window/workspace/tab layer lives there:
-// window/tab management is not homed on C-x because a terminal often
-// intercepts <c-x> before it reaches Rune. C-x is safe for the remaining
-// file/session/LSP/search/mark/history commands because the editor ignores a
-// bare <c-x>, and the second key of a two-key sequence bypasses the editor
-// entirely.
+// editor bindings, so frequent directional operations live there and remain
+// available when terminal programs intercept <c-x>. GNU-compatible lifecycle,
+// file, and session commands use C-x: the editor ignores the prefix, and the
+// second key of a configured sequence bypasses the editor entirely.
 func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
@@ -1065,37 +1063,37 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 			got, "%s must run %q", key, wantCmd)
 	}
 
-	// Real Emacs never uses Cmd, so the <meta> layer is a pure addition: the
-	// IDE window/workspace/clipboard commands live there with zero conflict.
+	// The host layout uses Emacs's P/N/B/F direction vocabulary without
+	// consuming the editor-owned C-P/N/B/F and M-P/N/B/F chords.
 	wantLive := map[string]string{
-		"<c-m-i>": "windowfocus up",
-		"<c-m-j>": "windowfocus left",
-		"<c-m-k>": "windowfocus down",
-		"<c-m-l>": "windowfocus right",
+		"<m-p>": "windowfocus up",
+		"<m-b>": "windowfocus left",
+		"<m-n>": "windowfocus down",
+		"<m-f>": "windowfocus right",
 
-		"<c-s-m-i>": "windowmove up",
-		"<c-s-m-j>": "windowmove left",
-		"<c-s-m-k>": "windowmove down",
-		"<c-s-m-l>": "windowmove right",
-
-		"<c-a-m-i>": "windowresize increase height",
-		"<c-a-m-j>": "windowresize decrease width",
-		"<c-a-m-k>": "windowresize decrease height",
-		"<c-a-m-l>": "windowresize increase width",
+		"<s-m-p>": "windowmove up",
+		"<s-m-b>": "windowmove left",
+		"<s-m-n>": "windowmove down",
+		"<s-m-f>": "windowmove right",
 
 		"<c-a-m-up>":    "windowresize increase height",
 		"<c-a-m-left>":  "windowresize decrease width",
 		"<c-a-m-down>":  "windowresize decrease height",
 		"<c-a-m-right>": "windowresize increase width",
 
+		"<c-x>0": "windowclose",
+		"<c-x>1": "windowcloseall",
+		"<c-x>2": "windownew down",
+		"<c-x>3": "windownew right",
+
 		"<c-m-h>":   "windowdefaultsplit h",
 		"<c-m-v>":   "windowdefaultsplit v",
 		"<m-w>":     "windowclose",
-		"<m-n>":     "windownew",
-		"<s-m-f>":   "windowtogglemaximize",
 		"<m-1>":     "workspacefocus 1",
 		"<s-m-1>":   "workspacemove 1",
 		"<m-enter>": "terminalneworsplit",
+		"<c-tab>":   "tabnext",
+		"<c-s-tab>": "tabprevious",
 		"<m-]>":     "tabnext",
 		"<m-[>":     "tabprevious",
 		"<s-m-w>":   "tabclose",
@@ -1112,18 +1110,22 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 
 	lookup := c.commandKeyBindingLookup()
 	for wantCmd, wantKey := range map[string]string{
-		"windowfocus up":               "<ctrl-meta-i>",
-		"windowfocus left":             "<ctrl-meta-j>",
-		"windowfocus down":             "<ctrl-meta-k>",
-		"windowfocus right":            "<ctrl-meta-l>",
-		"windowmove up":                "<ctrl-shift-meta-i>",
-		"windowmove left":              "<ctrl-shift-meta-j>",
-		"windowmove down":              "<ctrl-shift-meta-k>",
-		"windowmove right":             "<ctrl-shift-meta-l>",
-		"windowresize increase height": "<ctrl-alt-meta-i>",
-		"windowresize decrease width":  "<ctrl-alt-meta-j>",
-		"windowresize decrease height": "<ctrl-alt-meta-k>",
-		"windowresize increase width":  "<ctrl-alt-meta-l>",
+		"windowfocus up":               "<meta-p>",
+		"windowfocus left":             "<meta-b>",
+		"windowfocus down":             "<meta-n>",
+		"windowfocus right":            "<meta-f>",
+		"windowmove up":                "<shift-meta-p>",
+		"windowmove left":              "<shift-meta-b>",
+		"windowmove down":              "<shift-meta-n>",
+		"windowmove right":             "<shift-meta-f>",
+		"windowresize increase height": "<ctrl-alt-meta-up>",
+		"windowresize decrease width":  "<ctrl-alt-meta-left>",
+		"windowresize decrease height": "<ctrl-alt-meta-down>",
+		"windowresize increase width":  "<ctrl-alt-meta-right>",
+		"windowclose":                  "<ctrl-x>0",
+		"windowcloseall":               "<ctrl-x>1",
+		"windownew down":               "<ctrl-x>2",
+		"windownew right":              "<ctrl-x>3",
 		"tabprevious":                  "<meta-[>",
 		"tabnext":                      "<meta-]>",
 		"tabmove left":                 "<shift-meta-[>",
@@ -1142,6 +1144,9 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<m-h>", "<m-j>", "<m-k>", "<m-l>",
 		"<s-m-h>", "<s-m-j>", "<s-m-k>", "<s-m-l>",
 		"<alt-meta-h>", "<alt-meta-j>", "<alt-meta-k>", "<alt-meta-l>",
+		"<c-m-i>", "<c-m-j>", "<c-m-k>", "<c-m-l>",
+		"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
+		"<c-a-m-i>", "<c-a-m-j>", "<c-a-m-k>", "<c-a-m-l>",
 	} {
 		seq := mustParseBindingKey(t, key)
 		if got, ok := mappings[seq]; ok {

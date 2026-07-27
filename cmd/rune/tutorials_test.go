@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "37", tut.Version())
+	assert.Equal(t, "39", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "37", tut.Version())
+	assert.Equal(t, "39", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -117,6 +117,21 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 				"Hold <meta> and press HJKL",
 				"Hold <alt> and press H/L",
 				"Add <shift> to move content instead of focus it",
+			},
+		},
+		{
+			name: "emacs",
+			mode: "emacs",
+			contains: []string{
+				"Emacs directions control the layout",
+				"Rather than teach a second direction map, Rune changes the target",
+				"hold <meta> with the same PNBF directions to focus windows",
+				"add <shift> to move window content instead",
+				"Reusing that muscle memory keeps repeated layout actions fast",
+				"<ctrl-x>0 closes a window, <ctrl-x>1 closes the others",
+				"<ctrl-x>2 / <ctrl-x>3 split below or right",
+				"<ctrl-tab> / <ctrl-shift-tab> cycle tabs",
+				"Meta-brackets provide the same left/right direction",
 			},
 		},
 		{
@@ -234,6 +249,54 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 	}
 }
 
+func TestBasicsTutorialResolvesEmacsLayoutBindings(t *testing.T) {
+	t.Parallel()
+
+	requested := map[string]bool{}
+	keyFor := func(cmd string, args []string) string {
+		requested[strings.Join(append([]string{cmd}, args...), " ")] = true
+		return ""
+	}
+
+	_, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, nil, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'},
+		"emacs", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+
+	for _, command := range []string{
+		"windownew down",
+		"windownew right",
+		"windowclose",
+		"windowcloseall",
+		"windowfocus up",
+		"windowfocus left",
+		"windowfocus down",
+		"windowfocus right",
+		"windowmove up",
+		"windowmove left",
+		"windowmove down",
+		"windowmove right",
+		"windowresize increase height",
+		"windowresize decrease width",
+		"windowresize decrease height",
+		"windowresize increase width",
+		"tabnext",
+		"tabprevious",
+		"tabmove left",
+		"tabmove right",
+		"tabnew",
+		"tabclose",
+	} {
+		assert.Truef(t, requested[command],
+			"the Emacs basics tutorial must resolve %q through the active preset", command)
+	}
+}
+
 func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	t.Parallel()
 
@@ -326,6 +389,82 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	wait("floating_window")
 	assert.Contains(t, notis.successes(), "You resized a window.")
 	assert.Contains(t, notis.successes(), "You reordered the tabs.")
+}
+
+func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
+	t.Parallel()
+
+	notis := &capturingNotis{}
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, notis, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'},
+		"emacs", nil,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(100, 30)
+	tut.Reset()
+
+	wait := func(kind string) {
+		t.Helper()
+		require.True(t, tut.WaitActive(kind, time.Second),
+			"expected a %s step", kind)
+	}
+	dismissPromptStep := func() {
+		t.Helper()
+		wait("floating_window")
+		_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+	observe := func(command string, args ...string) {
+		t.Helper()
+		wait("wait_command")
+		tut.ObserveCommand(command, command, args, nil)
+	}
+
+	dismissPromptStep()
+	observe("workspaceopen", "/tmp/tutorial-workspace")
+	dismissPromptStep()
+	observe("edit", "README.md")
+
+	dismissPromptStep()
+	dismissPromptStep()
+	wait("wait_command")
+	tut.ObserveCommand("windownew", "windownew", []string{"right"}, nil)
+	wait("wait_command")
+	tut.ObserveCommand("windownew", "windownew", []string{"down"}, nil)
+
+	dismissPromptStep()
+	observe("windownew", "right")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+
+	wait("floating_window")
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	dismissPromptStep()
+	observe("windowfocus", "left")
+	observe("windowfocus", "right")
+	dismissPromptStep()
+	observe("windowmove", "left")
+	observe("windowmove", "right")
+	dismissPromptStep()
+	observe("windowresize", "increase", "width")
+	observe("windowresize", "decrease", "width")
+	dismissPromptStep()
+	observe("windowtogglemaximize")
+	dismissPromptStep()
+	observe("windowclose")
+	dismissPromptStep()
+	observe("windowcloseall")
+
+	assert.Contains(t, notis.successes(), "You used the Emacs split family.")
+	assert.Contains(t, notis.successes(), "You cleaned up the window layout.")
 }
 
 func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
@@ -893,5 +1032,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "37", tut.Version())
+	assert.Equal(t, "39", tut.Version())
 }

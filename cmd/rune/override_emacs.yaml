@@ -18,16 +18,28 @@ command:
     "<c-x>s": writeall             # save-some-buffers
     "<c-x><c-c>": quit             # save-buffers-kill-terminal
     "<c-x><c-f>": searchfile       # find-file
-    # IJKL points up, left, down, right. <ctrl-meta> focuses a window;
-    # add <shift> to move it.
-    "<c-m-i>": "windowfocus up"
-    "<c-m-j>": "windowfocus left"
-    "<c-m-k>": "windowfocus down"
-    "<c-m-l>": "windowfocus right"
-    "<c-s-m-i>": "windowmove up"
-    "<c-s-m-j>": "windowmove left"
-    "<c-s-m-k>": "windowmove down"
-    "<c-s-m-l>": "windowmove right"
+    # P/N/B/F follows Emacs's previous, next, backward, and forward directions.
+    "<m-p>": "windowfocus up"
+    "<m-b>": "windowfocus left"
+    "<m-n>": "windowfocus down"
+    "<m-f>": "windowfocus right"
+    "<s-m-p>": "windowmove up"
+    "<s-m-b>": "windowmove left"
+    "<s-m-n>": "windowmove down"
+    "<s-m-f>": "windowmove right"
+    # C-x 0/1/2/3 keeps GNU Emacs's window lifecycle meanings.
+    "<c-x>0": windowclose
+    "<c-x>1": windowcloseall
+    "<c-x>2": "windownew down"
+    "<c-x>3": "windownew right"
+    "<c-m-i>": ""
+    "<c-m-j>": ""
+    "<c-m-k>": ""
+    "<c-m-l>": ""
+    "<c-s-m-i>": ""
+    "<c-s-m-j>": ""
+    "<c-s-m-k>": ""
+    "<c-s-m-l>": ""
     "<m-h>": ""
     "<m-j>": ""
     "<m-k>": ""
@@ -36,11 +48,11 @@ command:
     "<s-m-j>": ""
     "<s-m-k>": ""
     "<s-m-l>": ""
-    # Resize with the same IJKL directions; modified arrows work too.
-    "<c-a-m-i>": "windowresize increase height"
-    "<c-a-m-j>": "windowresize decrease width"
-    "<c-a-m-k>": "windowresize decrease height"
-    "<c-a-m-l>": "windowresize increase width"
+    # Resize stays on modified arrows instead of consuming Emacs editing letters.
+    "<c-a-m-i>": ""
+    "<c-a-m-j>": ""
+    "<c-a-m-k>": ""
+    "<c-a-m-l>": ""
     "<c-a-m-up>": "windowresize increase height"
     "<c-a-m-left>": "windowresize decrease width"
     "<c-a-m-down>": "windowresize decrease height"
@@ -56,6 +68,8 @@ command:
     # Tabs use <meta-[> / <meta-]> so <alt> stays available as Emacs Meta.
     "<m-]>": tabnext
     "<m-[>": tabprevious
+    "<c-tab>": tabnext
+    "<c-s-tab>": tabprevious
     "<s-m-w>": tabclose
     "<s-m-]>": "tabmove right"
     "<s-m-[>": "tabmove left"
@@ -85,7 +99,6 @@ command:
     "<s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
-    "<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
     # <alt> remains Emacs Meta for editing commands such as M-f, M-b, M-d and M-w.
     "<a-w>": ""
     "<a-l>": ""
