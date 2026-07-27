@@ -762,6 +762,8 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Join line below to end of current line", "<meta-j>", new("ab\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Indent current line(s)", "<meta-]>", new("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Unindent current line(s)", "<meta-]><meta-[>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Indent current line(s) with Ctrl", "<ctrl-]>", new("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Unindent current line(s) with Ctrl", "<ctrl-]><ctrl-[>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Delete from cursor to end of line", "<meta-k><meta-k>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Delete to beginning of line", "<right><meta-k><meta-backspace>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Set mark at cursor position", "<meta-k><meta-space>", nil, term.Coordinates{}, nil},
@@ -775,6 +777,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 
 		// Comments - depends on language/syntax (assuming C-style)
 		{"Toggle line comment", "<meta-/>", new("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}, nil},
+		{"Toggle line comment with Ctrl", "<ctrl-/>", new("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}, nil},
 		{"Toggle block comment", "<shift-right><alt-meta-/>", new("/*a*/\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 2}, nil},
 
 		// Text transformation - require selection

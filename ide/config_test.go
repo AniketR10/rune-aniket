@@ -51,6 +51,7 @@ import (
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/standard"
 )
 
 var sampleConfig = `
@@ -113,7 +114,7 @@ editor:
             fg: "#f0f0f0"
         debug: true
         wrap: true
-    modeless:
+    standard:
         attr:
             bg: green
             fg: "#f9f9f9"
@@ -435,12 +436,12 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Zero(t, cfg.defaultAttr())
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
-		cfg.modelessResultAttr())
-	assert.Equal(t, term.Attributes{}, cfg.modelessBarAttr())
-	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
-	assert.Equal(t, cfg.modelessResultAttr(), cfg.emacsResultAttr())
-	assert.Equal(t, cfg.modelessBarAttr(), cfg.emacsBarAttr())
-	assert.Equal(t, cfg.modelessAttr(), cfg.emacsAttr())
+		cfg.standardResultAttr())
+	assert.Equal(t, term.Attributes{}, cfg.standardBarAttr())
+	assert.Equal(t, term.Attributes{}, cfg.standardAttr())
+	assert.Equal(t, cfg.standardResultAttr(), cfg.emacsResultAttr())
+	assert.Equal(t, cfg.standardBarAttr(), cfg.emacsBarAttr())
+	assert.Equal(t, cfg.standardAttr(), cfg.emacsAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.True(t, cfg.autoRestore())
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
@@ -466,6 +467,171 @@ func TestConfigDefault(t *testing.T) {
 		term.RingBell, term.ScheduleNextTick, "", "")
 	assertDefaultConfig(t, ret)
 }
+
+func TestStandardSearchConfigDefaults(t *testing.T) {
+	cfg := &ideConfig{errors: map[string]error{}}
+	wm := currentWorkspaceWindowManager{}
+
+	actual := cfg.standardSearchConfig(wm)
+
+	assert.Equal(t, wm, actual.WindowManager)
+	assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'f'}, actual.FindKey)
+	assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'r'}, actual.ReplaceKey)
+	assert.Equal(t, term.Attributes{}, actual.Attr)
+	assert.Equal(t, actual.Attr, actual.InputAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorGray}, actual.PlaceholderAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorGray}, actual.FrameAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorSilver}, actual.FocusFrameAttr)
+	assert.Equal(t, term.Attributes{Bg: term.ColorGray}, actual.ButtonAttr)
+	assert.Equal(t, term.Attributes{Bg: term.ColorBlue}, actual.ButtonHoverAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow}, actual.MatchAttr)
+	assert.Equal(t, actual.Attr, actual.CurrentMatchAttr)
+	assert.Equal(t, actual.Attr, actual.StatusAttr)
+	assert.Empty(t, cfg.errors)
+}
+
+func TestStandardConfigNamespaceResolution(t *testing.T) {
+	tests := []struct {
+		name       string
+		editor     map[string]any
+		want       term.Attributes
+		wantErrors []string
+	}{
+		{
+			name: "standard",
+			editor: map[string]any{
+				"standard": map[string]any{"attr": map[string]any{"fg": "green"}},
+			},
+			want: term.Attributes{Fg: term.ColorGreen},
+		},
+		{
+			name: "modeless namespace ignored",
+			editor: map[string]any{
+				"modeless": map[string]any{"attr": map[string]any{"fg": "yellow"}},
+			},
+			want: term.Attributes{},
+		},
+		{
+			name: "standard wins",
+			editor: map[string]any{
+				"standard": map[string]any{"attr": map[string]any{"fg": "green"}},
+				"modeless": map[string]any{"attr": map[string]any{"fg": "yellow"}},
+			},
+			want: term.Attributes{Fg: term.ColorGreen},
+		},
+		{
+			name: "malformed standard does not fall back",
+			editor: map[string]any{
+				"standard": "bad",
+				"modeless": map[string]any{"attr": map[string]any{"fg": "yellow"}},
+			},
+			wantErrors: []string{"editor.standard"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ideConfig{cfg: map[string]any{"editor": tt.editor}, errors: map[string]error{}}
+			assert.Equal(t, tt.want, cfg.standardAttr())
+			for _, path := range tt.wantErrors {
+				assert.Error(t, cfg.errors[path])
+			}
+			assert.Len(t, cfg.errors, len(tt.wantErrors))
+		})
+	}
+}
+
+func TestStandardSearchConfigNestedOverrides(t *testing.T) {
+	attrs := map[string]any{
+		"attr":               map[string]any{"fg": "red"},
+		"input_attr":         map[string]any{"fg": "green"},
+		"placeholder_attr":   map[string]any{"fg": "yellow"},
+		"frame_attr":         map[string]any{"fg": "blue"},
+		"focus_frame_attr":   map[string]any{"fg": "purple"},
+		"button_attr":        map[string]any{"fg": "teal"},
+		"button_hover_attr":  map[string]any{"fg": "silver"},
+		"match_attr":         map[string]any{"fg": "maroon"},
+		"current_match_attr": map[string]any{"fg": "gray"},
+		"status_attr":        map[string]any{"fg": "white"},
+	}
+	search := map[string]any{"find_key": "<c-g>", "replace_key": "<c-r>"}
+	for key, value := range attrs {
+		search[key] = value
+	}
+	cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
+		"standard": map[string]any{
+			"attr":     map[string]any{"bg": "black"},
+			"bar_attr": map[string]any{"bg": "red"}, "search_attr": map[string]any{"bg": "yellow"},
+			"search": search,
+		},
+	}}, errors: map[string]error{}}
+
+	actual := cfg.standardSearchConfig(currentWorkspaceWindowManager{})
+
+	assert.Equal(t, term.KeyComb{Mod: term.ModCtrl, Ch: 'g'}, actual.FindKey)
+	assert.Equal(t, term.KeyComb{Mod: term.ModCtrl, Ch: 'r'}, actual.ReplaceKey)
+	assert.Equal(t, term.Attributes{Fg: term.ColorRed}, actual.Attr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorGreen}, actual.InputAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorYellow}, actual.PlaceholderAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlue}, actual.FrameAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorPurple}, actual.FocusFrameAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorTeal}, actual.ButtonAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorSilver}, actual.ButtonHoverAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorMaroon}, actual.MatchAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorGray}, actual.CurrentMatchAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, actual.StatusAttr)
+	assert.Empty(t, cfg.errors)
+}
+
+func TestStandardSearchConfigIgnoresModelessNamespaceAndEmacsUnchanged(t *testing.T) {
+	cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
+		"modeless": map[string]any{
+			"attr":        map[string]any{"fg": "green"},
+			"bar_attr":    map[string]any{"fg": "blue"},
+			"search_attr": map[string]any{"fg": "yellow"},
+			"search":      map[string]any{"input_attr": map[string]any{"fg": "red"}},
+		},
+		"emacs": map[string]any{
+			"attr":        map[string]any{"fg": "purple"},
+			"bar_attr":    map[string]any{"fg": "teal"},
+			"search_attr": map[string]any{"fg": "maroon"},
+		},
+	}}, errors: map[string]error{}}
+
+	actual := cfg.standardSearchConfig(currentWorkspaceWindowManager{})
+
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow}, actual.MatchAttr)
+	assert.Equal(t, term.Attributes{}, actual.StatusAttr)
+	assert.Equal(t, term.Attributes{}, actual.InputAttr)
+	assert.Equal(t, term.Attributes{Fg: term.ColorMaroon}, cfg.emacsResultAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorTeal}, cfg.emacsBarAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorPurple}, cfg.emacsAttr())
+	assert.Empty(t, cfg.errors)
+}
+
+func TestStandardSearchConfigMalformedPaths(t *testing.T) {
+	tests := []struct {
+		name, path string
+		search     any
+	}{
+		{name: "search", path: "editor.standard.search", search: "bad"},
+		{name: "find key type", path: "editor.standard.search.find_key", search: map[string]any{"find_key": true}},
+		{name: "find key syntax", path: "editor.standard.search.find_key", search: map[string]any{"find_key": "<not-a-key>"}},
+		{name: "replace key", path: "editor.standard.search.replace_key", search: map[string]any{"replace_key": []any{}}},
+		{name: "attribute", path: "editor.standard.search.button_attr", search: map[string]any{"button_attr": "bad"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
+				"standard": map[string]any{"search": tt.search},
+			}}, errors: map[string]error{}}
+			_ = cfg.standardSearchConfig(currentWorkspaceWindowManager{})
+			assert.Error(t, cfg.errors[tt.path])
+			assert.Len(t, cfg.errors, 1)
+		})
+	}
+}
+
+var _ standard.SearchWindowManager = currentWorkspaceWindowManager{}
 
 func TestUpdatesAutoInstall(t *testing.T) {
 	for _, tc := range []struct {
@@ -1157,9 +1323,9 @@ func TestConfigSetting(t *testing.T) {
 		Fg: term.GetColor("#f0f0f0")}, cfg.modalResultAttr())
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
-		Fg: term.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
+		Fg: term.GetColor("#f1f1f1")}, cfg.standardResultAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorWhite,
-		Fg: term.ColorBlack}, cfg.modelessBarAttr())
+		Fg: term.ColorBlack}, cfg.standardBarAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorMaroon,
 		Fg: term.GetColor("#f7f7f7")}, cfg.emacsResultAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorTeal,
@@ -1176,7 +1342,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedSyntaxConfig, syntaxConfig)
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorGreen,
-		Fg: term.GetColor("#f9f9f9")}, cfg.modelessAttr())
+		Fg: term.GetColor("#f9f9f9")}, cfg.standardAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorBlue,
 		Fg: term.GetColor("#f8f8f8")}, cfg.emacsAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorYellow,

@@ -326,11 +326,14 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.NotContains(t, exo, "override_highlights")
 				emacs := editor["emacs"].(map[string]any)
 				assert.Equal(t, map[string]any{"fg": "default", "bg": "default"}, emacs["attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "gray"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, emacs["bar_attr"])
 				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, emacs["search_attr"])
+				search := editor["standard"].(map[string]any)["search"].(map[string]any)
+				assertStandardSearchMap(t, search, "default")
+				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, search["match_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, search["status_attr"])
 				statusLayout := editor["status_bar"].(map[string]any)["layout"].(string)
-				assert.Contains(t, statusLayout, "{{ .Status | bold }}")
-				assert.NotContains(t, statusLayout, "{{ .Status | bg")
+				assert.Contains(t, statusLayout, "{{ .Status | bg \"red\" | fg \"white\" | bold }}")
 				// GUI-specific window manager frame charset should use the
 				// braille-ish corners.
 				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
@@ -352,11 +355,15 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.False(t, hasMode, "editor.mode should not be set in rune.star")
 				assert.Equal(t, false, editor["auto_pair"])
 				emacs := editor["emacs"].(map[string]any)
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, emacs["attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "default"}, emacs["attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, emacs["search_attr"])
+				search := editor["standard"].(map[string]any)["search"].(map[string]any)
+				assertStandardSearchMap(t, search, "#1e1e1e")
 				assert.Equal(t, map[string]any{
 					"fg": "default", "bg": "#1e1e1e", "flags": "reverse",
-				}, emacs["search_attr"])
+				}, search["match_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, search["status_attr"])
 			},
 		},
 	}
@@ -372,6 +379,22 @@ func TestRuneStarFixture(t *testing.T) {
 			c.checks(t, cfg)
 		})
 	}
+}
+
+func assertStandardSearchMap(t *testing.T, search map[string]any, bg string) {
+	t.Helper()
+	assert.Equal(t, "<m-f>", search["find_key"])
+	assert.Equal(t, "<m-r>", search["replace_key"])
+	for _, key := range []string{
+		"attr", "input_attr", "placeholder_attr", "frame_attr", "focus_frame_attr",
+		"button_attr", "button_hover_attr", "match_attr", "current_match_attr", "status_attr",
+	} {
+		assert.Contains(t, search, key)
+	}
+	assert.Equal(t, map[string]any{"fg": "default", "bg": bg}, search["attr"])
+	assert.Equal(t, map[string]any{"fg": "silver", "bg": bg}, search["focus_frame_attr"])
+	assert.Equal(t, map[string]any{"fg": "default", "bg": "gray"}, search["button_attr"])
+	assert.Equal(t, map[string]any{"fg": "default", "bg": "blue"}, search["button_hover_attr"])
 }
 
 // TestRuneStarAsDefaultConfig wires the shipped rune.star Starlark config through
@@ -1085,10 +1108,11 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-x>1": "windowcloseall",
 		"<c-x>2": "windownew down",
 		"<c-x>3": "windownew right",
+		"<c-x>9": "windowtogglemaximize",
 
 		"<c-m-h>":   "windowdefaultsplit h",
 		"<c-m-v>":   "windowdefaultsplit v",
-		"<m-w>":     "windowclose",
+		"<m-w>":     "tabclose",
 		"<m-1>":     "workspacefocus 1",
 		"<s-m-1>":   "workspacemove 1",
 		"<m-enter>": "terminalneworsplit",
@@ -1096,7 +1120,6 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-s-tab>": "tabprevious",
 		"<m-]>":     "tabnext",
 		"<m-[>":     "tabprevious",
-		"<s-m-w>":   "tabclose",
 		"<s-m-]>":   "tabmove right",
 		"<s-m-[>":   "tabmove left",
 	}
@@ -1126,6 +1149,8 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"windowcloseall":               "<ctrl-x>1",
 		"windownew down":               "<ctrl-x>2",
 		"windownew right":              "<ctrl-x>3",
+		"windowtogglemaximize":         "<ctrl-x>9",
+		"tabclose":                     "<meta-w>",
 		"tabprevious":                  "<meta-[>",
 		"tabnext":                      "<meta-]>",
 		"tabmove left":                 "<shift-meta-[>",
@@ -1147,6 +1172,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-m-i>", "<c-m-j>", "<c-m-k>", "<c-m-l>",
 		"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
 		"<c-a-m-i>", "<c-a-m-j>", "<c-a-m-k>", "<c-a-m-l>",
+		"<s-m-w>",
 	} {
 		seq := mustParseBindingKey(t, key)
 		if got, ok := mappings[seq]; ok {

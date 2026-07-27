@@ -134,6 +134,27 @@ func (r *Box) Buffer() *cell.Buffer {
 	return r.buf
 }
 
+// CursorAtScroll returns the editor cursor in the input buffer.
+func (r *Box) CursorAtScroll() term.Coordinates {
+	return r.handler.CursorAtScroll()
+}
+
+// SetCursorAtScroll sets the editor cursor in the input buffer.
+func (r *Box) SetCursorAtScroll(pos term.Coordinates) bool {
+	return r.handler.SetCursorAtScroll(pos)
+}
+
+// SelectionBounds returns the editor selection in input-buffer coordinates.
+func (r *Box) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	h, ok := r.handler.(interface {
+		SelectionBounds() (term.Coordinates, term.Coordinates, bool)
+	})
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	return h.SelectionBounds()
+}
+
 // Reset resets this input box to its initial state.
 func (r *Box) Reset() {
 	_ = r.handler.SetCursorAtScroll(term.Coordinates{})

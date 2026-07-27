@@ -24,6 +24,7 @@
 package standard
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -34,11 +35,24 @@ import (
 const searchListID = "search"
 
 type findState struct {
-	active   bool
-	query    []rune
-	origin   term.Coordinates
-	last     []rune
-	matchIdx int
+	active       bool
+	legacyPrompt bool
+	query        []rune
+	origin       term.Coordinates
+	last         []rune
+	matchIdx     int
+}
+
+type searchController interface {
+	beginSearch([]rune, term.Coordinates)
+	setSearchQuery(string)
+	advanceSearch()
+	replaceNext(string)
+	replaceAll(string)
+	finishSearch()
+	searchQuery() string
+	searchLast() string
+	searchOrigin() term.Coordinates
 }
 
 func (h *standardHandler) searchLocations() []textapi.Location {
@@ -69,6 +83,93 @@ func coordLess(a, b term.Coordinates) bool {
 	return a.X < b.X
 }
 
+func orderedCoordinates(a, b term.Coordinates) (term.Coordinates, term.Coordinates) {
+	if coordLess(b, a) {
+		return b, a
+	}
+	return a, b
+}
+
+func (h *standardHandler) beginSearch(query []rune, origin term.Coordinates) {
+	h.find.active = true
+	h.find.legacyPrompt = false
+	h.find.origin = origin
+	h.find.query = append(h.find.query[:0], query...)
+	h.find.matchIdx = -1
+	h.researchFind()
+}
+
+func (h *standardHandler) setSearchQuery(query string) {
+	h.find.query = append(h.find.query[:0], []rune(query)...)
+	h.find.matchIdx = -1
+	h.researchFind()
+}
+
+func (h *standardHandler) advanceSearch() {
+	h.advanceFind(true)
+}
+
+func (h *standardHandler) searchQuery() string {
+	return string(h.find.query)
+}
+
+func (h *standardHandler) searchLast() string {
+	return string(h.find.last)
+}
+
+func (h *standardHandler) searchOrigin() term.Coordinates {
+	return h.cursor.CursorAtScroll()
+}
+
+func (h *standardHandler) finishSearch() {
+	if !h.find.active {
+		return
+	}
+	if len(h.find.query) == 0 {
+		h.cursor.Search("")
+		h.cursor.Unselect()
+		h.cursor.MoveToScroll(h.find.origin)
+	}
+	h.acceptFind()
+}
+
+func (h *standardHandler) replaceNext(replacement string) {
+	if len(h.find.query) == 0 {
+		return
+	}
+	locs := h.searchLocations()
+	if h.find.matchIdx < 0 || h.find.matchIdx >= len(locs) {
+		return
+	}
+	loc := locs[h.find.matchIdx]
+	from, to := orderedCoordinates(loc.From, loc.To)
+	h.buf.MarkStartUndo()
+	_, boundary, _ := h.CellEditor().Edit(context.Background(), from, to, replacement)
+	h.buf.GroupUndo()
+	h.find.origin = boundary
+	h.find.matchIdx = -1
+	h.researchFind()
+}
+
+func (h *standardHandler) replaceAll(replacement string) {
+	if len(h.find.query) == 0 {
+		return
+	}
+	locs := append([]textapi.Location(nil), h.searchLocations()...)
+	if len(locs) == 0 {
+		return
+	}
+	h.buf.MarkStartUndo()
+	ed := h.CellEditor()
+	for i := len(locs) - 1; i >= 0; i-- {
+		from, to := orderedCoordinates(locs[i].From, locs[i].To)
+		ed.Edit(context.Background(), from, to, replacement)
+	}
+	h.buf.GroupUndo()
+	h.find.matchIdx = -1
+	h.researchFind()
+}
+
 func (h *standardHandler) startFind() bool {
 	if h.find.active {
 		if len(h.find.query) == 0 {
@@ -85,6 +186,7 @@ func (h *standardHandler) startFind() bool {
 	}
 
 	h.find.active = true
+	h.find.legacyPrompt = true
 	h.find.query = h.find.query[:0]
 	h.find.origin = h.cursor.CursorAtScroll()
 	h.find.matchIdx = -1
@@ -101,10 +203,10 @@ func (h *standardHandler) landFind(loc textapi.Location) {
 
 func (h *standardHandler) styleFindLocations(locs []textapi.Location) {
 	for i := range locs {
-		locs[i].Attr = h.cfg.resAttr
+		locs[i].Attr = h.cfg.search.MatchAttr
 	}
 	if h.find.matchIdx >= 0 && h.find.matchIdx < len(locs) {
-		locs[h.find.matchIdx].Attr = term.Attributes{}
+		locs[h.find.matchIdx].Attr = h.cfg.search.CurrentMatchAttr
 	}
 	h.cursor.SetLocationList(
 		textapi.LocationPriorityCritical, searchListID, text.LocationSlice(locs))
@@ -165,9 +267,13 @@ func (h *standardHandler) acceptFind() {
 	}
 	h.find.query = h.find.query[:0]
 	h.setFindPrompt("")
+	h.find.legacyPrompt = false
 }
 
 func (h *standardHandler) renderFind(matched bool) {
+	if !h.find.legacyPrompt {
+		return
+	}
 	if !matched {
 		h.setFindPrompt(fmt.Sprintf("Find: %s  no matches", string(h.find.query)))
 		return
@@ -181,8 +287,11 @@ func (h *standardHandler) renderFind(matched bool) {
 }
 
 func (h *standardHandler) setFindPrompt(prompt string) {
-	attr := h.cfg.barAttr
-	if !h.cfg.barAttrSet {
+	if !h.find.legacyPrompt && prompt != "" {
+		return
+	}
+	attr := h.cfg.search.StatusAttr
+	if attr == (term.Attributes{}) {
 		attr = h.cfg.attr
 	}
 	h.statusBar.SetStatus(prompt, attr)

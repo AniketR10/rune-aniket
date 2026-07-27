@@ -113,15 +113,23 @@ func TestStandardKeymapMotion(t *testing.T) {
 	}
 }
 
-// TestStandardKeymapSelectAll pins ctrl-a selecting the whole buffer
-// instead of the old emacs move-to-line-start.
 func TestStandardKeymapSelectAll(t *testing.T) {
-	h, _, _ := newStandardKeymapHandler(t, "hello\nworld", term.Coordinates{})
-	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a'})
-	require.True(t, handled)
-	sel, ok := h.Selection()
-	require.True(t, ok, "ctrl-a must create a selection")
-	assert.Equal(t, "hello\nworld\n", sel)
+	for _, tc := range []struct {
+		name string
+		mod  term.Modifier
+	}{
+		{name: "ctrl-a", mod: term.ModCtrl},
+		{name: "meta-a", mod: term.ModMeta},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, _ := newStandardKeymapHandler(t, "hello\nworld", term.Coordinates{})
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'a'})
+			require.True(t, handled)
+			sel, ok := h.Selection()
+			require.True(t, ok, "%s must create a selection", tc.name)
+			assert.Equal(t, "hello\nworld\n", sel)
+		})
+	}
 }
 
 // TestStandardKeymapSelectLine pins cmd-l selecting the current line,
@@ -147,15 +155,32 @@ func TestStandardKeymapRecenter(t *testing.T) {
 
 // TestStandardKeymapClipboard pins ctrl-c copy, ctrl-x cut, ctrl-v paste.
 func TestStandardKeymapClipboard(t *testing.T) {
-	t.Run("ctrl-x cuts current line when no selection", func(t *testing.T) {
-		h, buf, clip := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
-		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'x'})
-		require.True(t, handled)
-		assert.Equal(t, "one\nthree", buf.String())
-		data, err := clip.Paste(clipboard.DefaultRegisterID)
-		require.NoError(t, err)
-		assert.Contains(t, data.Text, "two")
-	})
+	for _, tc := range []struct {
+		name string
+		mod  term.Modifier
+	}{
+		{name: "ctrl", mod: term.ModCtrl},
+		{name: "meta", mod: term.ModMeta},
+	} {
+		t.Run(tc.name+"-x cuts current line when no selection", func(t *testing.T) {
+			h, buf, clip := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'x'})
+			require.True(t, handled)
+			assert.Equal(t, "one\nthree", buf.String())
+			data, err := clip.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Contains(t, data.Text, "two")
+		})
+
+		t.Run(tc.name+"-v pastes clipboard", func(t *testing.T) {
+			h, buf, clip := newStandardKeymapHandler(t, "ab", term.Coordinates{})
+			require.NoError(t, clip.Copy(clipboard.DefaultRegisterID,
+				clipboard.Data{Text: "X", Metadata: text.StandardSelection}))
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'v'})
+			require.True(t, handled)
+			assert.Equal(t, "Xab", buf.String())
+		})
+	}
 
 	t.Run("ctrl-c copies selection without deleting", func(t *testing.T) {
 		h, buf, clip := newStandardKeymapHandler(t, "one\ntwo\nthree", term.Coordinates{Y: 1})
@@ -166,15 +191,6 @@ func TestStandardKeymapClipboard(t *testing.T) {
 		data, err := clip.Paste(clipboard.DefaultRegisterID)
 		require.NoError(t, err)
 		assert.Contains(t, data.Text, "two")
-	})
-
-	t.Run("ctrl-v pastes clipboard", func(t *testing.T) {
-		h, buf, clip := newStandardKeymapHandler(t, "ab", term.Coordinates{})
-		require.NoError(t, clip.Copy(clipboard.DefaultRegisterID,
-			clipboard.Data{Text: "X", Metadata: text.StandardSelection}))
-		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'v'})
-		require.True(t, handled)
-		assert.Equal(t, "Xab", buf.String())
 	})
 
 	t.Run("ctrl-c copies current line when no selection", func(t *testing.T) {
@@ -209,16 +225,32 @@ func TestStandardKeymapClipboard(t *testing.T) {
 	})
 }
 
-// TestStandardKeymapUndoRedo pins ctrl-z undo and ctrl-y / ctrl-shift-z redo.
 func TestStandardKeymapUndoRedo(t *testing.T) {
-	t.Run("ctrl-z undoes", func(t *testing.T) {
-		h, buf, _ := newStandardKeymapHandler(t, "", term.Coordinates{})
-		_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
-		require.Equal(t, "a", buf.String())
-		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'z'})
-		require.True(t, handled)
-		assert.Equal(t, "", buf.String())
-	})
+	for _, tc := range []struct {
+		name string
+		mod  term.Modifier
+	}{
+		{name: "ctrl", mod: term.ModCtrl},
+		{name: "meta", mod: term.ModMeta},
+	} {
+		t.Run(tc.name+"-z undoes", func(t *testing.T) {
+			h, buf, _ := newStandardKeymapHandler(t, "", term.Coordinates{})
+			_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
+			require.Equal(t, "a", buf.String())
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'z'})
+			require.True(t, handled)
+			assert.Equal(t, "", buf.String())
+		})
+
+		t.Run(tc.name+"-shift-z redoes", func(t *testing.T) {
+			h, buf, _ := newStandardKeymapHandler(t, "", term.Coordinates{})
+			_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
+			_, _ = h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'z'})
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'Z'})
+			require.True(t, handled)
+			assert.Equal(t, "a", buf.String())
+		})
+	}
 
 	t.Run("ctrl-y redoes", func(t *testing.T) {
 		h, buf, _ := newStandardKeymapHandler(t, "", term.Coordinates{})
@@ -230,14 +262,25 @@ func TestStandardKeymapUndoRedo(t *testing.T) {
 		assert.Equal(t, "a", buf.String())
 	})
 
-	t.Run("ctrl-shift-z redoes", func(t *testing.T) {
-		h, buf, _ := newStandardKeymapHandler(t, "", term.Coordinates{})
-		_, _ = h.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
-		_, _ = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'z'})
-		_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'Z'})
-		require.True(t, handled)
-		assert.Equal(t, "a", buf.String())
-	})
+}
+
+func TestStandardKeymapSelectNextOccurrence(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mod  term.Modifier
+	}{
+		{name: "ctrl-d", mod: term.ModCtrl},
+		{name: "meta-d", mod: term.ModMeta},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, _ := newStandardKeymapHandler(t, "foo bar foo", term.Coordinates{})
+			_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: tc.mod, Ch: 'd'})
+			require.True(t, handled)
+			sel, ok := h.Selection()
+			require.True(t, ok)
+			assert.Equal(t, "foo", sel)
+		})
+	}
 }
 
 // TestStandardKeymapDeletion pins ctrl/alt-backspace and ctrl/alt-delete word

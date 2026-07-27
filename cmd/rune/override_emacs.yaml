@@ -2,7 +2,7 @@
 editor:
   mode: emacs
   auto_pair: true
-  modeless:
+  standard:
     attr: {fg: default, bg: default}
     bar_attr: {fg: default, bg: default}
     search_attr: {fg: grey, bg: yellow}
@@ -32,6 +32,7 @@ command:
     "<c-x>1": windowcloseall
     "<c-x>2": "windownew down"
     "<c-x>3": "windownew right"
+    "<c-x>9": windowtogglemaximize
     "<c-m-i>": ""
     "<c-m-j>": ""
     "<c-m-k>": ""
@@ -70,7 +71,8 @@ command:
     "<m-[>": tabprevious
     "<c-tab>": tabnext
     "<c-s-tab>": tabprevious
-    "<s-m-w>": tabclose
+    "<m-w>": tabclose
+    "<s-m-w>": ""
     "<s-m-]>": "tabmove right"
     "<s-m-[>": "tabmove left"
     # C-x [ / ] walks cursor history; C-x C-x exchanges point and mark.

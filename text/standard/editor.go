@@ -81,9 +81,9 @@ func (e *editor) Edit(
 	if ok {
 		indentRune = r
 	}
-	handler := NewHandler(buf, file, indentRune, tabspaces, e.opts...)
-	ret = handler
-	cursor := &handler.(*standardHandler).cursor
+	root := NewHandler(buf, file, indentRune, tabspaces, e.opts...).(*standardHandler)
+	ret = root
+	cursor := &root.cursor
 	if e.fileRegistry != nil {
 		var err error
 		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
@@ -108,32 +108,34 @@ func (e *editor) Edit(
 			return nil, err
 		}
 	}
-	scroll := handler.(*standardHandler).less.Scroll()
+	scroll := root.less.Scroll()
 	ret = e.pub.PublishEdit(file, buf, ret, cursor)
-	if !text.BarsFromContext(ctx) {
-		return ret, nil
+	if text.BarsFromContext(ctx) {
+		auxBarConfig := e.auxBarConfig
+		auxBarConfig.CommandRegistry = e.fileRegistry
+		iconsBarConfig := e.iconsBarConfig
+		iconsBarConfig.CommandRegistry = e.fileRegistry
+		iconsBarConfig.Publisher = publisherEventsAdapter{pub: &e.pub}
+		if e.enableAuxBar {
+			ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
+		}
+		if e.enableIconsBar {
+			ret = text.WithIconsBar(e.auxBarConfig.Service, e.enableGitIcons, ret, buf,
+				scroll, iconsBarConfig)
+		}
+		if e.statusBarEnabled {
+			bar := text.WithStatusBar(ret, buf, scroll, readOnly, recovered, e.statusBarConfig)
+			root.setStatusBar(bar)
+			if !e.commandBar {
+				bar.ShowCommandBar(false)
+			}
+			ret = bar
+		}
 	}
-	auxBarConfig := e.auxBarConfig
-	auxBarConfig.CommandRegistry = e.fileRegistry
-	iconsBarConfig := e.iconsBarConfig
-	iconsBarConfig.CommandRegistry = e.fileRegistry
-	iconsBarConfig.Publisher = publisherEventsAdapter{pub: &e.pub}
-	if e.enableAuxBar {
-		ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
+	if e.search.WindowManager != nil {
+		ret = &searchHandler{Handler: ret, controller: root, config: e.search}
 	}
-	if e.enableIconsBar {
-		ret = text.WithIconsBar(e.auxBarConfig.Service, e.enableGitIcons, ret, buf,
-			scroll, iconsBarConfig)
-	}
-	if !e.statusBarEnabled {
-		return ret, nil
-	}
-	bar := text.WithStatusBar(ret, buf, scroll, readOnly, recovered, e.statusBarConfig)
-	handler.(*standardHandler).setStatusBar(bar)
-	if !e.commandBar {
-		bar.ShowCommandBar(false)
-	}
-	return bar, nil
+	return ret, nil
 }
 
 func (e *editor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {

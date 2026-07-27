@@ -2502,6 +2502,8 @@ func TestExEmacsMetaLayoutBindingsReachCommandLayer(t *testing.T) {
 		{"<ctrl-x>1", "closeotherwindows"},
 		{"<ctrl-x>2", "splitbelow"},
 		{"<ctrl-x>3", "splitright"},
+		{"<ctrl-x>9", "togglemaximize"},
+		{"<meta-w>", "closetab"},
 		{"<ctrl-tab>", "nexttab"},
 		{"<ctrl-shift-tab>", "previoustab"},
 	}
@@ -2645,6 +2647,44 @@ func TestExTabclosePromptsForDirtyTab(t *testing.T) {
 	assert.True(t, handled)
 	assert.Empty(t, b.comp.Tabs())
 	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+}
+
+func TestExTabcloseClosesStandardSearchWindow(t *testing.T) {
+	rootURI, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), rootURI)
+	require.NoError(t, err)
+	touchTestFile(t, scheme, "search.txt")
+
+	wm := new(exSearchWindowManager)
+	searchCfg := standard.SearchConfig{WindowManager: wm}
+	b := newExForTestingWithWorkspace(t,
+		workspace.NewSchemeWorkspace(rootURI, scheme, inlineSchedule),
+		standard.Editor(standard.WithSearchConfig(searchCfg)),
+		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+	wm.comp = b.comp.Browser()
+	b.Resize(56, 14)
+
+	fileURI, err := workspaceapi.ParseURI("memory:///search.txt")
+	require.NoError(t, err)
+	tab, err := b.editFileURI(fileURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+	tabWindow, ok := tab.Window()
+	require.True(t, ok)
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'f'})
+	require.False(t, exit)
+	require.True(t, handled)
+	require.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	_, err = b.comp.SetFocus(tabWindow)
+	require.NoError(t, err)
+	require.NoError(t, b.ex.dispatchCommand("tabclose"))
+	assert.Zero(t, b.comp.Browser().FloatingWindows())
 }
 
 func TestExTabcloseDirtyTabNoKeepsTabOpen(t *testing.T) {
@@ -2810,6 +2850,20 @@ type testEx struct {
 	*ex
 	mu        sync.Locker
 	scheduler *queuedScheduler
+}
+
+type exSearchWindowManager struct {
+	comp *browser.Component
+}
+
+func (m *exSearchWindowManager) Floating(
+	f browserapi.Floating, cfg browserapi.FloatingConfig,
+) (browserapi.Window, error) {
+	return m.comp.Floating(f, cfg), nil
+}
+
+func (m *exSearchWindowManager) CloseWindow(win browserapi.Window) error {
+	return win.(browser.Window).Close()
 }
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {

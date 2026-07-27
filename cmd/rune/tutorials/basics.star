@@ -170,8 +170,8 @@ hold `<meta>` with the same PNBF directions to focus windows, then add `<shift>`
 to move window content instead. Reusing that muscle memory keeps repeated
 layout actions fast.
 
-- `<ctrl-x>0` closes a window, `<ctrl-x>1` closes the others, and `<ctrl-x>2` /
-  `<ctrl-x>3` split below or right.
+- `<ctrl-x>0` closes a window, `<ctrl-x>1` closes the others, `<ctrl-x>2` /
+  `<ctrl-x>3` split below or right, and `<ctrl-x>9` toggles maximization.
 - `<ctrl-tab>` / `<ctrl-shift-tab>` cycle tabs. Meta-brackets provide the same
   left/right direction, and adding `<shift>` reorders the current tab.
 
@@ -958,4 +958,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "39", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "40", entry = run)

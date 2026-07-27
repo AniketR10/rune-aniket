@@ -300,12 +300,12 @@ config = {
     "editor": {
         # Editor mode and exo settings are not configured here. The
         # bootstrap flow writes an override file with the user's choice
-        # ("modal", "modeless", or "exo" with a preset). Without an
+        # ("modal", "standard", "emacs", or "exo" with a preset). Without an
         # override, Rune defaults to modal as configured below.
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
         # Auto-pair quotes, brackets, and braces while editing. Explicitly off
-        # for modal mode by default; the modeless override below enables it.
+        # for modal mode by default; the standard override enables it.
         "auto_pair":  False,
         # Auto-save dirty buffers after a brief idle period. Off by default;
         # set to True to flush file tabs ~2s after the last edit.
@@ -325,13 +325,27 @@ config = {
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
         },
-        "modeless": {
+        "standard": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),
             # Incremental-find status attributes.
             "bar_attr":    attr(fg = "default", bg = "purple"),
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
+            "search": {
+                "find_key":          "<m-f>",
+                "replace_key":       "<m-r>",
+                "attr":              attr(fg = "default", bg = "default"),
+                "input_attr":        attr(fg = "default", bg = "default"),
+                "placeholder_attr":  attr(fg = "gray", bg = "default"),
+                "frame_attr":        attr(fg = "gray", bg = "default"),
+                "focus_frame_attr":  attr(fg = "silver", bg = "default"),
+                "button_attr":       attr(fg = "default", bg = "gray"),
+                "button_hover_attr": attr(fg = "default", bg = "blue"),
+                "match_attr":        attr(fg = "grey", bg = "yellow"),
+                "current_match_attr": attr(fg = "default", bg = "default"),
+                "status_attr":       attr(fg = "default", bg = "purple"),
+            },
         },
         "emacs": {
             # Default text attributes.
@@ -389,8 +403,8 @@ config = {
             "goto":    "<esc>:{line}<enter>{col}|",
             # Rune-native editor used to serve URIs the external editor
             # cannot meaningfully edit (memory:// pseudo-URIs such as
-            # the file explorer's tab). Valid values are "modal" or
-            # "modeless".
+            # the file explorer's tab). Valid values are "modal", "standard",
+            # or "emacs". "modeless" remains a deprecated alias for "standard".
             "fallback": "modal",
             # Experimental. When True, Rune overlays its own location-list
             # attributes (syntax highlights, LSP diagnostics, debugger variables)
@@ -901,10 +915,24 @@ if tui:
                 "bar_attr":    attr(fg = "default", bg = "#1e1e1e"),
                 "search_attr": attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
             },
-            "modeless": {
+            "standard": {
                 "attr":        attr(fg = "default", bg = "#1e1e1e"),
                 "bar_attr":    attr(fg = "default", bg = "#1e1e1e"),
                 "search_attr": attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
+                "search": {
+                    "find_key":          "<m-f>",
+                    "replace_key":       "<m-r>",
+                    "attr":              attr(fg = "default", bg = "#1e1e1e"),
+                    "input_attr":        attr(fg = "default", bg = "#1e1e1e"),
+                    "placeholder_attr":  attr(fg = "gray", bg = "#1e1e1e"),
+                    "frame_attr":        attr(fg = "#3a3a3a", bg = "#1e1e1e"),
+                    "focus_frame_attr":  attr(fg = "silver", bg = "#1e1e1e"),
+                    "button_attr":       attr(fg = "default", bg = "gray"),
+                    "button_hover_attr": attr(fg = "default", bg = "blue"),
+                    "match_attr":        attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
+                    "current_match_attr": attr(fg = "default", bg = "#1e1e1e"),
+                    "status_attr":       attr(fg = "default", bg = "#1e1e1e"),
+                },
             },
             "aux_bar": {
                 "git_del_inline_attr":    attr(fg = "maroon", flags = "bold"),

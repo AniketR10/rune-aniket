@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package input
+package input_test
 
 import (
 	"testing"
@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler/input"
 	"unstable.build/go-tui/text/standard"
 )
 
@@ -39,27 +40,27 @@ func TestBox(t *testing.T) {
 	ed := standard.Editor()
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
-		NewBox(cell.NewBuffer(), ed, BoxConfig{})
+		input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{})
 
 		// ok
-		NewBox(cell.NewBuffer(), ed, BoxConfig{MinHeight: 1})
+		input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{MinHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1})
+		input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{MaxHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1, MinHeight: 1})
+		input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{MaxHeight: 1, MinHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 2, MinHeight: 1})
+		input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{MaxHeight: 2, MinHeight: 1})
 
 		assert.Panics(t, func() {
-			NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1, MinHeight: 3})
+			input.NewBox(cell.NewBuffer(), ed, input.BoxConfig{MaxHeight: 1, MinHeight: 3})
 		})
 	})
 	t.Run("no placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, ed, BoxConfig{})
+		b := input.NewBox(buf, ed, input.BoxConfig{})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -217,7 +218,7 @@ hello world
 	})
 	t.Run("with placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, ed, BoxConfig{Placeholder: "HERE..."})
+		b := input.NewBox(buf, ed, input.BoxConfig{Placeholder: "HERE..."})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -332,7 +333,7 @@ HERE...
 
 	t.Run("with long placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, ed, BoxConfig{Placeholder: "please write to your great, lovely, assistant"})
+		b := input.NewBox(buf, ed, input.BoxConfig{Placeholder: "please write to your great, lovely, assistant"})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -406,7 +407,7 @@ te to your
 	})
 	t.Run("with min, max height", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
+		b := input.NewBox(buf, ed, input.BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -491,7 +492,7 @@ RE
 func TestInsertIntegration(t *testing.T) {
 	ed := standard.Editor()
 	buf := cell.NewBuffer()
-	b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
+	b := input.NewBox(buf, ed, input.BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 	b.Resize(3, 3)
 
 	for _, r := range "hello world" {

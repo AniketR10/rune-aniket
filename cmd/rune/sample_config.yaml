@@ -16,9 +16,14 @@
 #  window_opacity: { fg: 1, bg: 1 }
 
 #editor:
-#  # 'modal' (vi-like) or 'modeless' (conventional).
+#  # 'modal' (vi-like), 'standard' (conventional), 'emacs', or 'exo'.
 #  mode: modal
 #  autoindent: true
+#  #standard:
+#  #  search:
+#  #    focus_frame_attr: { fg: silver, bg: default }
+#  #    button_attr: { fg: default, bg: gray }
+#  #    button_hover_attr: { fg: default, bg: blue }
 #  # Override syntax highlight colors. Any key omitted inherits the default.
 #  #highlights:
 #  #  keyword: { fg: yellow }

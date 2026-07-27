@@ -353,15 +353,15 @@ func (h *workspaceManagerHandler) newBuiltinStandardEditor(
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	return standard.Editor(
 		standard.WithCommandBar(true),
-		standard.WithResAttr(cfg.modelessResultAttr()),
-		standard.WithBarAttr(cfg.modelessBarAttr()),
+		standard.WithSearchConfig(cfg.standardSearchConfig(
+			currentWorkspaceWindowManager{root: h})),
 		standard.WithTabspaces(cfg.editorTabspaces()),
 		standard.WithIndents(cfg.editorIndents()),
 		standard.WithRuler(cfg.editorRuler()),
 		standard.WithAutoPair(cfg.editorAutoPair()),
 		standard.WithComments(cfg.editorComments()),
 		standard.WithScheduleNextTick(cfg.scheduleNextTick),
-		standard.WithAttr(cfg.modelessAttr()),
+		standard.WithAttr(cfg.standardAttr()),
 		standard.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
 		standard.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
 		standard.WithGitIcons(cfg.gitIconsEnabled()),

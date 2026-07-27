@@ -47,6 +47,10 @@ type cursorPublisher struct {
 	Handler
 }
 
+func (p *cursorPublisher) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	return p.cursor.SelectionBounds()
+}
+
 // NewPublisher allocates storage for a new Publisher and initializes it.
 func NewPublisher() *Publisher {
 	ret := new(Publisher)

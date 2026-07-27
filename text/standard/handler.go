@@ -102,7 +102,7 @@ func (h *standardHandler) Init(
 		Wrap:               h.cfg.wrap,
 		NoBar:              !h.cfg.commandBar,
 		SuperimposeMessage: true,
-		ResAttr:            h.cfg.resAttr,
+		ResAttr:            h.cfg.search.MatchAttr,
 		Attributes:         h.cfg.attr,
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
@@ -936,6 +936,8 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		switch ev.Ch {
 		case 'Q':
 			handled = h.playMacro()
+		case 'V':
+			handled = h.pasteAndReindent()
 		case 'M':
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||

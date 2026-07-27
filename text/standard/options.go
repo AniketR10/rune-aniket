@@ -41,9 +41,7 @@ type standardConfig struct {
 	indentRune         rune
 	ruler              int
 	attr               term.Attributes
-	barAttr            term.Attributes
-	barAttrSet         bool
-	resAttr            term.Attributes
+	search             SearchConfig
 	comments           text.CommentConfig
 	registry           text.WorkspaceCommandRegistry
 	wrap               bool
@@ -65,6 +63,29 @@ type standardConfig struct {
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
 	scheduleNextTick   func(fn func()) bool
+}
+
+// SearchWindowManager manages the floating window used by standard search.
+type SearchWindowManager interface {
+	Floating(browserapi.Floating, browserapi.FloatingConfig) (browserapi.Window, error)
+	CloseWindow(browserapi.Window) error
+}
+
+// SearchConfig configures standard-editor find and replace.
+type SearchConfig struct {
+	WindowManager    SearchWindowManager
+	FindKey          term.KeyComb
+	ReplaceKey       term.KeyComb
+	Attr             term.Attributes
+	InputAttr        term.Attributes
+	PlaceholderAttr  term.Attributes
+	FrameAttr        term.Attributes
+	FocusFrameAttr   term.Attributes
+	ButtonAttr       term.Attributes
+	ButtonHoverAttr  term.Attributes
+	MatchAttr        term.Attributes
+	CurrentMatchAttr term.Attributes
+	StatusAttr       term.Attributes
 }
 
 type statusBar interface {
@@ -92,8 +113,15 @@ func defaultConfig() standardConfig {
 		tabspaces:  component.DefaultTabspaces,
 		indentRune: text.IndentRuneTab,
 		ruler:      90,
-		resAttr: term.Attributes{
-			Attrs: term.AttrReverse,
+		search: SearchConfig{
+			FindKey:    term.KeyComb{Mod: term.ModMeta, Ch: 'f'},
+			ReplaceKey: term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
+			MatchAttr: term.Attributes{
+				Attrs: term.AttrReverse,
+			},
+			FocusFrameAttr:  term.Attributes{Fg: term.ColorSilver},
+			ButtonAttr:      term.Attributes{Bg: term.ColorGray},
+			ButtonHoverAttr: term.Attributes{Bg: term.ColorBlue},
 		},
 		commandBar: true,
 		clipboard:  clipboard.NewInMemory(),
@@ -109,18 +137,35 @@ func defaultConfig() standardConfig {
 // Option represents a Editor configuration option.
 type Option func(*standardConfig)
 
+// WithSearchConfig configures floating standard-editor search.
+func WithSearchConfig(search SearchConfig) Option {
+	if search.WindowManager == nil {
+		panic("standard: SearchConfig.WindowManager must not be nil")
+	}
+	return func(cfg *standardConfig) {
+		if search.FindKey == (term.KeyComb{}) {
+			search.FindKey = cfg.search.FindKey
+		}
+		if search.ReplaceKey == (term.KeyComb{}) {
+			search.ReplaceKey = cfg.search.ReplaceKey
+		}
+		cfg.search = search
+	}
+}
+
 // WithResAttr sets the search result cell attributes to be rendered.
+// Deprecated: use WithSearchConfig.
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *standardConfig) {
-		cfg.resAttr = attr
+		cfg.search.MatchAttr = attr
 	}
 }
 
 // WithBarAttr sets the incremental-find status attributes.
+// Deprecated: use WithSearchConfig.
 func WithBarAttr(attr term.Attributes) Option {
 	return func(cfg *standardConfig) {
-		cfg.barAttr = attr
-		cfg.barAttrSet = true
+		cfg.search.StatusAttr = attr
 	}
 }
 

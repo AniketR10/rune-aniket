@@ -70,6 +70,7 @@ import (
 	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/text/registerhistory"
 	"unstable.build/go-tui/text/registerset"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -2213,15 +2214,23 @@ func (c ideConfig) modal() (config.Config, bool) {
 	return c.getConfig(b, "modal")
 }
 
-func (c ideConfig) modeless() (config.Config, bool) {
+func (c ideConfig) standard() (config.Config, string, bool) {
 	if c.cfg == nil {
-		return nil, false
+		return nil, "", false
 	}
 	b, ok := c.editor()
 	if !ok {
-		return nil, false
+		return nil, "", false
 	}
-	return c.getConfig(b, "modeless")
+	cfg, err := b.GetConfig("standard")
+	if err == nil {
+		return cfg, "editor.standard", true
+	}
+	if err != config.ErrNotFound {
+		c.errors["editor.standard"] = err
+		return nil, "editor.standard", false
+	}
+	return nil, "", false
 }
 
 func (c ideConfig) emacs() (config.Config, bool) {
@@ -2827,53 +2836,127 @@ func (c ideConfig) clipboard() clipboard.Register {
 	return registerhistory.NewClipboard(registerset.New(ret))
 }
 
-func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
+func (c ideConfig) standardResultAttr() (attr term.Attributes) {
 	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
-	cfg, ok := c.modeless()
+	cfg, path, ok := c.standard()
 	if !ok {
 		return
 	}
 	attr, err := config.GetAttributes(cfg, "search_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.modeless.search_attr"] = err
+			c.errors[path+".search_attr"] = err
 		}
 	}
 	return attr
 }
 
-func (c ideConfig) modelessBarAttr() (attr term.Attributes) {
-	attr = c.modelessAttr()
-	cfg, ok := c.modeless()
+func (c ideConfig) standardBarAttr() (attr term.Attributes) {
+	attr = c.standardAttr()
+	cfg, path, ok := c.standard()
 	if !ok {
 		return
 	}
 	barAttr, err := config.GetAttributes(cfg, "bar_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.modeless.bar_attr"] = err
+			c.errors[path+".bar_attr"] = err
 		}
 		return attr
 	}
 	return barAttr
 }
 
-func (c ideConfig) modelessAttr() (attr term.Attributes) {
-	cfg, ok := c.modeless()
+func (c ideConfig) standardAttr() (attr term.Attributes) {
+	cfg, path, ok := c.standard()
 	if !ok {
 		return
 	}
 	attr, err := config.GetAttributes(cfg, "attr")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.modeless.attr"] = err
+			c.errors[path+".attr"] = err
 		}
 	}
 	return attr
 }
 
+func (c ideConfig) standardSearchConfig(wm standard.SearchWindowManager) standard.SearchConfig {
+	standardAttr := c.standardAttr()
+	ret := standard.SearchConfig{
+		WindowManager:    wm,
+		FindKey:          term.KeyComb{Mod: term.ModMeta, Ch: 'f'},
+		ReplaceKey:       term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
+		Attr:             standardAttr,
+		InputAttr:        standardAttr,
+		PlaceholderAttr:  standardAttr,
+		FrameAttr:        standardAttr,
+		FocusFrameAttr:   standardAttr,
+		ButtonAttr:       standardAttr,
+		ButtonHoverAttr:  standardAttr,
+		MatchAttr:        c.standardResultAttr(),
+		CurrentMatchAttr: standardAttr,
+		StatusAttr:       c.standardBarAttr(),
+	}
+	ret.PlaceholderAttr.Fg = term.ColorGray
+	ret.FrameAttr.Fg = term.ColorGray
+	ret.FocusFrameAttr.Fg = term.ColorSilver
+	ret.ButtonAttr.Bg = term.ColorGray
+	ret.ButtonHoverAttr.Bg = term.ColorBlue
+	standardCfg, path, ok := c.standard()
+	if !ok {
+		return ret
+	}
+	searchCfg, err := standardCfg.GetConfig("search")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[path+".search"] = err
+		}
+		return ret
+	}
+	for key, dst := range map[string]*term.KeyComb{
+		"find_key": &ret.FindKey, "replace_key": &ret.ReplaceKey,
+	} {
+		configured, err := searchCfg.GetString(key)
+		if err != nil {
+			if err != config.ErrNotFound {
+				c.errors[path+".search."+key] = err
+			}
+			continue
+		}
+		parsed, err := term.ParseKey(configured)
+		if err != nil {
+			c.errors[path+".search."+key] = err
+			continue
+		}
+		*dst = parsed
+	}
+	for key, dst := range map[string]*term.Attributes{
+		"attr":               &ret.Attr,
+		"input_attr":         &ret.InputAttr,
+		"placeholder_attr":   &ret.PlaceholderAttr,
+		"frame_attr":         &ret.FrameAttr,
+		"focus_frame_attr":   &ret.FocusFrameAttr,
+		"button_attr":        &ret.ButtonAttr,
+		"button_hover_attr":  &ret.ButtonHoverAttr,
+		"match_attr":         &ret.MatchAttr,
+		"current_match_attr": &ret.CurrentMatchAttr,
+		"status_attr":        &ret.StatusAttr,
+	} {
+		configured, err := config.GetAttributes(searchCfg, key)
+		if err != nil {
+			if err != config.ErrNotFound {
+				c.errors[path+".search."+key] = err
+			}
+			continue
+		}
+		*dst = configured
+	}
+	return ret
+}
+
 func (c ideConfig) emacsResultAttr() term.Attributes {
-	attr := c.modelessResultAttr()
+	attr := c.standardResultAttr()
 	cfg, ok := c.emacs()
 	if !ok {
 		return attr
@@ -2889,7 +2972,7 @@ func (c ideConfig) emacsResultAttr() term.Attributes {
 }
 
 func (c ideConfig) emacsBarAttr() term.Attributes {
-	attr := c.modelessBarAttr()
+	attr := c.standardBarAttr()
 	cfg, ok := c.emacs()
 	if !ok {
 		return attr
@@ -2905,7 +2988,7 @@ func (c ideConfig) emacsBarAttr() term.Attributes {
 }
 
 func (c ideConfig) emacsAttr() term.Attributes {
-	attr := c.modelessAttr()
+	attr := c.standardAttr()
 	cfg, ok := c.emacs()
 	if !ok {
 		return attr

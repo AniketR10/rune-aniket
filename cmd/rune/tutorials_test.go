@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "39", tut.Version())
+	assert.Equal(t, "40", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "39", tut.Version())
+	assert.Equal(t, "40", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -130,6 +130,7 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 				"Reusing that muscle memory keeps repeated layout actions fast",
 				"<ctrl-x>0 closes a window, <ctrl-x>1 closes the others",
 				"<ctrl-x>2 / <ctrl-x>3 split below or right",
+				"<ctrl-x>9 toggles maximization",
 				"<ctrl-tab> / <ctrl-shift-tab> cycle tabs",
 				"Meta-brackets provide the same left/right direction",
 			},
@@ -1032,5 +1033,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "39", tut.Version())
+	assert.Equal(t, "40", tut.Version())
 }

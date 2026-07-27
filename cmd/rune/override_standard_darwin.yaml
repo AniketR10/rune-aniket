@@ -25,7 +25,7 @@
 editor:
   mode: standard
   auto_pair: true
-  modeless:
+  standard:
     attr: {fg: default, bg: default}
     bar_attr: {fg: default, bg: default}
     search_attr: {fg: grey, bg: yellow}
