@@ -29,6 +29,7 @@ func TestBundledConfigStar(t *testing.T) {
 	}{
 		{"modal", "modal"},
 		{"standard", "standard"},
+		{"emacs", "emacs"},
 		{"empty_mode_acts_as_non_standard", ""},
 	}
 	for _, tc := range cases {
@@ -48,12 +49,22 @@ func TestBundledConfigStar(t *testing.T) {
 			cmd := cfg["command"].(map[string]any)
 			kb := cmd["key_bindings"].(map[string]any)
 
-			// Base bindings present in all modes.
-			assert.Equal(t, "searchfile", kb["<m-p>"])
-			assert.Equal(t, "searchtext", kb["<m-\\\\>"])
-			assert.Equal(t, "searchfunc", kb["<a-s-f>"])
-			assert.Equal(t, "searchvar", kb["<a-s-v>"])
-			assert.Equal(t, "searchtype", kb["<a-s-s>"])
+			if tc.mode == "emacs" {
+				assert.Equal(t, "searchfile", kb["<c-x><c-f>"])
+				assert.Equal(t, "searchtext", kb["<a-s>o"])
+				for _, key := range []string{
+					"<m-p>", "<m-\\\\>", "<a-s-f>", "<a-s-v>", "<a-s-s>",
+				} {
+					assert.NotContains(t, kb, key,
+						"the Emacs package map must not replace preset or editing keys")
+				}
+			} else {
+				assert.Equal(t, "searchfile", kb["<m-p>"])
+				assert.Equal(t, "searchtext", kb["<m-\\\\>"])
+				assert.Equal(t, "searchfunc", kb["<a-s-f>"])
+				assert.Equal(t, "searchvar", kb["<a-s-v>"])
+				assert.Equal(t, "searchtype", kb["<a-s-s>"])
+			}
 
 			// Aliases present in all modes.
 			aliases := cmd["aliases"].(map[string]any)

@@ -71,15 +71,23 @@ config = {
             "searchvar":       "echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>",
             "searchtype":      "echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>",
         },
-        "key_bindings": {
-            "<m-p>":    "searchfile",
-            "<m-\\\\>": "searchtext",
-            "<a-s-f>":  "searchfunc",
-            "<a-s-v>":  "searchvar",
-            "<a-s-s>":  "searchtype",
-        },
+        "key_bindings": {},
     },
 }
+
+if mode == "emacs":
+    config["command"]["key_bindings"] = {
+        "<c-x><c-f>": "searchfile",
+        "<a-s>o":     "searchtext",
+    }
+else:
+    config["command"]["key_bindings"] = {
+        "<m-p>":    "searchfile",
+        "<m-\\\\>": "searchtext",
+        "<a-s-f>":  "searchfunc",
+        "<a-s-v>":  "searchvar",
+        "<a-s-s>":  "searchtype",
+    }
 
 if mode == "standard":
     config["command"]["key_bindings"]["<s-m-f>"] = "searchtext"

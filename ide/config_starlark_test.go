@@ -775,6 +775,7 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<alt-n>":           "windownew",
 		"<alt-enter>":       "terminalneworsplit",
 		"<alt-q>":           "windowclose",
+		"<alt-m>":           "windowtogglemaximize",
 		"<alt-shift-enter>": "echo {prompt}windowconverttab<space>",
 		"<alt-t>":           "tabnew",
 		"<alt-w>":           "tabclose",
@@ -783,7 +784,9 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<alt-shift-[>":     "tabmove left",
 		"<alt-shift-]>":     "tabmove right",
 
-		"<alt-h>": "lsp hover",
+		"<alt-h>":            "lsp hover",
+		"<ctrl-alt-i>":       "lsp implementation",
+		"<ctrl-shift-alt-i>": "echo {prompt}lsp<space>implementation<space>",
 
 		"<ctrl-meta-i>": "gitprevchange",
 		"<ctrl-meta-k>": "gitnextchange",
@@ -861,6 +864,8 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 				"gitprevchange":                "<ctrl-meta-i>",
 				"gitnextchange":                "<ctrl-meta-k>",
 				"lsp hover":                    "<alt-h>",
+				"lsp implementation":           "<ctrl-alt-i>",
+				"windowtogglemaximize":         "<alt-m>",
 			} {
 				cmd := strings.Split(wantCmd, " ")
 				require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
@@ -1020,8 +1025,8 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 
 // TestEmacsPresetKeepsCommandsOffEditorChords pins that the emacs preset
 // opens the command prompt with M-x (on <alt>, authentic Emacs Meta) and
-// homes host commands on the GNU Emacs C-x prefix plus the <meta> (Cmd)
-// window/workspace/tab layer. The emacs editor owns the single-modifier
+// uses GNU Emacs navigation keys where Rune has matching behavior, and homes
+// Rune-only commands on the <meta> (Cmd) window/workspace/tab layer. The emacs editor owns the single-modifier
 // control and alt chords (motion, kill, yank, mark, folds, M-x), so any host
 // command sharing one of those would be shadowed and unreachable — every base
 // <alt> command binding is therefore explicitly unbound. <meta> is free of
@@ -1060,23 +1065,28 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-x>s":     "writeall",
 		"<c-x><c-c>": "quit",
 		"<c-x><c-f>": "searchfile",
-		"<c-x>[":     "cursorhistory prev",
-		"<c-x>]":     "cursorhistory next",
+		"<a-,>":      "cursorhistory prev",
+		"<c-a-,>":    "cursorhistory next",
 		"<c-x><c-x>": "exchangepointandmark",
-		"<c-x>g":     "searchtext",
-		"<c-x>n":     "jumptolocation next search",
-		"<c-x>p":     "jumptolocation prev search",
-		"<c-x>d":     "lsp definition",
-		"<c-x>r":     "lsp references",
-		"<c-x>i":     "lsp implementation",
-		"<c-x>t":     "lsp hover",
-		"<c-x>b":     "lsp format",
-		"<c-x>/":     "lsp complete",
+		"<a-.>":      "lsp definition",
+		"<a-s-/>":    "lsp references",
+		"<c-a-.>":    "echo {prompt}lsp<space>definition<space>",
+		"<c-s-a-/>":  "echo {prompt}lsp<space>references<space>",
+		"<c-x>d":     "fexplorer",
+		"<c-x>b":     "tabsearch",
+		"<c-x>j": "echo {prompt}jumptoast<space>locals.scm<space>" +
+			"local.definition.method|local.definition.function<space>",
+		"<a-s>o":     "searchtext",
+		"<c-x>?":     "lsp hover",
+		"<c-a-\\\\>": "lsp format",
+		"<c-a-i>":    "lsp complete",
 		"<f5>":       "gitprevchange",
 		"<f6>":       "gitnextchange",
 		"<f7>":       "lspprevdiagnostic",
 		"<f8>":       "lspnextdiagnostic",
-		"<f2>":       "jumptolocation next bookmark",
+		"<f9>":       "lsp diagnostics",
+		"<c-f2>":     "jumptolocation next bookmark",
+		"<c-s-f2>":   "jumptolocation previous bookmark",
 	}
 	for key, wantCmd := range wantBound {
 		seq := mustParseBindingKey(t, key)
@@ -1089,10 +1099,16 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	// The host layout uses Emacs's P/N/B/F direction vocabulary without
 	// consuming the editor-owned C-P/N/B/F and M-P/N/B/F chords.
 	wantLive := map[string]string{
-		"<m-p>": "windowfocus up",
-		"<m-b>": "windowfocus left",
-		"<m-n>": "windowfocus down",
-		"<m-f>": "windowfocus right",
+		"<m-p>":   "windowfocus up",
+		"<m-b>":   "windowfocus left",
+		"<m-n>":   "windowfocus down",
+		"<m-f>":   "windowfocus right",
+		"<m-j>":   "cursorhistory jump",
+		"<m-g>":   "jumptolocation next search",
+		"<s-m-g>": "jumptolocation prev search",
+		"<m-i>":   "lsp implementation",
+		"<s-m-i>": "echo {prompt}lsp<space>implementation<space>",
+		"<s-m-h>": "echo {prompt}lsp<space>hover<space>",
 
 		"<s-m-p>": "windowmove up",
 		"<s-m-b>": "windowmove left",
@@ -1150,6 +1166,21 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"windownew down":               "<ctrl-x>2",
 		"windownew right":              "<ctrl-x>3",
 		"windowtogglemaximize":         "<ctrl-x>9",
+		"cursorhistory prev":           "<alt-,>",
+		"cursorhistory next":           "<ctrl-alt-,>",
+		"cursorhistory jump":           "<meta-j>",
+		"lsp definition":               "<alt-.>",
+		"lsp references":               "<alt-shift-/>",
+		"lsp implementation":           "<meta-i>",
+		"lsp hover":                    "<ctrl-x><shift-/>",
+		"lsp format":                   "<ctrl-alt-\\\\>",
+		"lsp diagnostics":              "<f9>",
+		"searchtext":                   "<alt-s>o",
+		"jumptolocation next search":   "<meta-g>",
+		"jumptolocation prev search":   "<shift-meta-g>",
+		"fexplorer":                    "<ctrl-x>d",
+		"tabsearch":                    "<ctrl-x>b",
+		"lsp complete":                 "<ctrl-alt-i>",
 		"tabclose":                     "<meta-w>",
 		"tabprevious":                  "<meta-[>",
 		"tabnext":                      "<meta-]>",
@@ -1166,18 +1197,30 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		"<m-h>", "<m-j>", "<m-k>", "<m-l>",
-		"<s-m-h>", "<s-m-j>", "<s-m-k>", "<s-m-l>",
+		"<m-h>", "<m-k>", "<m-l>", "<m-e>",
+		"<s-m-j>", "<s-m-k>", "<s-m-l>",
 		"<alt-meta-h>", "<alt-meta-j>", "<alt-meta-k>", "<alt-meta-l>",
 		"<c-m-i>", "<c-m-j>", "<c-m-k>", "<c-m-l>",
 		"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
 		"<c-a-m-i>", "<c-a-m-j>", "<c-a-m-k>", "<c-a-m-l>",
 		"<s-m-w>",
+		"<c-o>", "<c-i>", "<s-tab>", "<f2>",
 	} {
 		seq := mustParseBindingKey(t, key)
 		if got, ok := mappings[seq]; ok {
 			require.Equalf(t, [][]string{{""}}, got,
 				"%s is a stale HJKL layout chord", key)
+		}
+	}
+
+	for _, key := range []string{
+		"<c-x>[", "<c-x>]", "<c-x>g", "<c-x>n", "<c-x>p",
+		"<c-x>r", "<c-x>i", "<c-x>t", "<c-x>e", "<c-x>/",
+	} {
+		seq := mustParseBindingKey(t, key)
+		if got, ok := mappings[seq]; ok {
+			require.Equalf(t, [][]string{{""}}, got,
+				"%s must not carry an unrelated Rune command", key)
 		}
 	}
 

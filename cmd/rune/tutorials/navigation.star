@@ -35,25 +35,18 @@ if editor_mode() == "modal":
 else:
     move_phrase = "the arrow keys `<up>` / `<down>`"
 
-# `<alt-shift-d>` opens the command prompt prefilled with `lsp definition `
-# so the user only types the symbol name. That prefill binding ships in
-# modal and standard mode; emacs has no equivalent, so fall back to the
-# command-prompt wording there.
 if editor_mode() == "emacs":
-    def_by_name_cta = ("open the command prompt (`" + ck +
-                       "`) and type `lsp definition `")
-    def_by_name_dismiss = [ck]
+    def_by_name_key = "<ctrl-alt-.>"
 else:
-    def_by_name_cta = "press `<alt-shift-d>`"
-    def_by_name_dismiss = [ck, "<alt-shift-d>"]
+    def_by_name_key = "<alt-shift-d>"
+def_by_name_cta = "press `" + def_by_name_key + "`"
+def_by_name_dismiss = [ck, def_by_name_key]
 
 # The `jumptoast` prefill fuzzy-jumps to a function or method defined in
 # the current file. It is bound as a prompt-prefill macro whose chord
-# differs by mode: `<alt-f>` in modal/standard, `<meta-f>` in emacs (where
-# `<alt-f>` is reserved for Meta). `key_for` cannot resolve prefill macros,
-# so hardcode the chord per mode.
+# differs by mode. `key_for` cannot resolve prefill macros, so hardcode it.
 if editor_mode() == "emacs":
-    jump_symbol_key = "<meta-f>"
+    jump_symbol_key = "<ctrl-x>j"
 else:
     jump_symbol_key = "<alt-f>"
 jump_symbol_dismiss = [ck, jump_symbol_key]
@@ -190,8 +183,9 @@ your steps.
 First, go back to where you jumped from: """ + keypress("cursorhistory", "prev") + """.
 
 `cursorhistory jump` opens a picker over the whole history when you want
-to leap several stops at once. `<alt-j>` / `<alt-k>` step through the
-diagnostics in the current file the same way.
+to leap several stops at once: """ + keypress("cursorhistory", "jump") + """.
+""" + keypress("lspnextdiagnostic") + """ / """ + keypress("lspprevdiagnostic") + """
+step through diagnostics in the current file.
 """
 
 cursorhistory_next_md = """\
@@ -314,7 +308,7 @@ def teach_definition_by_name():
         title    = "Find a definition by name",
         command  = "lsp",
         on_error = ("Run `<cmd>lsp definition <name>` with a symbol name, or " +
-                    "press `<alt-shift-d>` to prefill `lsp definition ` and " +
+                    "press `" + def_by_name_key + "` to prefill `lsp definition ` and " +
                     "type the name."),
     )
     notify(level = success, message = "You jumped to a definition by name.")
@@ -383,4 +377,4 @@ def run():
                     alignment = "top", dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "8", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "9", entry = run)

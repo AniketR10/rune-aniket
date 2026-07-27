@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "40", tut.Version())
+	assert.Equal(t, "41", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "40", tut.Version())
+	assert.Equal(t, "41", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -131,8 +131,8 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 				"<ctrl-x>0 closes a window, <ctrl-x>1 closes the others",
 				"<ctrl-x>2 / <ctrl-x>3 split below or right",
 				"<ctrl-x>9 toggles maximization",
-				"<ctrl-tab> / <ctrl-shift-tab> cycle tabs",
-				"Meta-brackets provide the same left/right direction",
+				"<meta-[> / <meta-]> cycle tabs",
+				"<shift-meta-[> / <shift-meta-]> reorder the current tab",
 			},
 		},
 		{
@@ -157,16 +157,28 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			keyFor := func(cmd string, args []string) string {
 				keys := map[string]string{
-					"windowfocus left":   "<alt-j>",
-					"windowmove left":    "<alt-shift-j>",
-					"tabprevious":        "<alt-[>",
-					"tabnext":            "<alt-]>",
-					"tabmove left":       "<alt-shift-[>",
-					"windownew":          "<alt-n>",
-					"terminalneworsplit": "<alt-enter>",
-					"windowclose":        "<alt-q>",
-					"tabnew":             "<alt-t>",
-					"tabclose":           "<alt-w>",
+					"windowfocus left":     "<alt-j>",
+					"windowmove left":      "<alt-shift-j>",
+					"windownew down":       "<ctrl-x>2",
+					"windownew right":      "<ctrl-x>3",
+					"tabprevious":          "<alt-[>",
+					"tabnext":              "<alt-]>",
+					"tabmove left":         "<alt-shift-[>",
+					"tabmove right":        "<alt-shift-]>",
+					"windownew":            "<alt-n>",
+					"terminalneworsplit":   "<alt-enter>",
+					"windowclose":          "<alt-q>",
+					"windowcloseall":       "<ctrl-x>1",
+					"windowtogglemaximize": "<ctrl-x>9",
+					"tabnew":               "<alt-t>",
+					"tabclose":             "<alt-w>",
+				}
+				if tt.mode == "emacs" {
+					keys["windowclose"] = "<ctrl-x>0"
+					keys["tabprevious"] = "<meta-[>"
+					keys["tabnext"] = "<meta-]>"
+					keys["tabmove left"] = "<shift-meta-[>"
+					keys["tabmove right"] = "<shift-meta-]>"
 				}
 				return keys[strings.Join(append([]string{cmd}, args...), " ")]
 			}
@@ -205,6 +217,70 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 			}
 			assert.NotContains(t, rendered, "standard and Emacs")
 		})
+	}
+}
+
+func TestBasicsTutorialWelcomeUsesResolvedBindings(t *testing.T) {
+	t.Parallel()
+
+	keyFor := func(cmd string, args []string) string {
+		key := strings.Join(append([]string{cmd}, args...), " ")
+		if strings.HasPrefix(key, "workspacefocus ") {
+			return "<f" + args[0] + ">"
+		}
+		if key == "terminalneworsplit" {
+			return "<f10>"
+		}
+		return ""
+	}
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		overlay, nil, nil, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(120, 40)
+	tut.Reset()
+	require.True(t, tut.WaitActive("floating_window", time.Second))
+
+	w := term.NewStringWriter(120, 40)
+	tut.Draw(w)
+	overlay.Draw(w)
+	require.NoError(t, w.Flush())
+	rendered := strings.Join(strings.Fields(
+		strings.ReplaceAll(w.String(), "│", " ")), " ")
+	assert.Contains(t, rendered,
+		"<f1> <f2> <f3> <f4> <f5> <f6> <f7> <f8> <f9>")
+	assert.Contains(t, rendered, "Bindings like <f1> and <f10>")
+
+	for _, key := range []term.Key{term.KeyF1, term.KeyF10} {
+		exit, handled := tut.Handle(term.Event{Type: term.EventKey, Key: key})
+		assert.False(t, exit)
+		assert.Falsef(t, handled, "%v must fall through to the IDE", key)
+		assert.True(t, tut.WaitActive("floating_window", time.Second))
+	}
+}
+
+func TestBasicsTutorialHasNoHardcodedCommandKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{
+		"<meta-1>",
+		"<ctrl-x>0",
+		"<ctrl-x>1",
+		"<ctrl-x>2",
+		"<ctrl-x>3",
+		"<ctrl-x>9",
+		"<ctrl-tab>",
+		"<ctrl-shift-tab>",
+	} {
+		assert.NotContainsf(t, basicsTutorial, key,
+			"command key %s must be resolved through key_for", key)
 	}
 }
 
@@ -270,6 +346,7 @@ func TestBasicsTutorialResolvesEmacsLayoutBindings(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, command := range []string{
+		"windowtogglemaximize",
 		"windownew down",
 		"windownew right",
 		"windowclose",
@@ -727,16 +804,24 @@ func TestNavigationTutorialCursorKeysMoveCursor(t *testing.T) {
 
 // TestNavigationTutorialDefinitionByNameKeyFallsThrough is a regression
 // test for the by-name definition step: its CTA tells modal/standard
-// users to press <alt-shift-d> (which opens the command prompt prefilled
+// users to press <alt-shift-d> and Emacs users to press <ctrl-alt-.>
+// (which opens the command prompt prefilled
 // with `lsp definition `). The teaching window must dismiss on that key
 // and let it reach the IDE root, rather than swallowing it and pulsing
-// the hint. Emacs has no such prefill binding, so it is not exercised.
+// the hint.
 func TestNavigationTutorialDefinitionByNameKeyFallsThrough(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"standard", "modal"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		key  string
+	}{
+		{mode: "standard", key: "<alt-shift-d>"},
+		{mode: "modal", key: "<alt-shift-d>"},
+		{mode: "emacs", key: "<ctrl-alt-.>"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
-			tut := advanceToDefinitionWindow(t, mode)
+			tut := advanceToDefinitionWindow(t, tc.mode)
 
 			// Advance past "Go to definition" to "Find a definition by
 			// name": dismiss the cursor window, resolve its wait_command,
@@ -751,19 +836,19 @@ func TestNavigationTutorialDefinitionByNameKeyFallsThrough(t *testing.T) {
 			require.True(t, tut.WaitActive("floating_window", 2*time.Second),
 				"the by-name definition window should be active")
 
-			// <alt-shift-d> must dismiss the window AND fall through so the
+			// The prefill key must dismiss the window AND fall through so the
 			// IDE root opens the prefilled command prompt.
-			asd, err := term.ParseKeys("<alt-shift-d>")
+			asd, err := term.ParseKeys(tc.key)
 			require.NoError(t, err)
 			require.Len(t, asd, 1)
 			_, handled := tut.Handle(term.Event{
 				Type: term.EventKey, Key: asd[0].Key, Mod: asd[0].Mod, Ch: asd[0].Ch,
 			})
 			assert.False(t, handled,
-				"<alt-shift-d> must fall through to the IDE root to open the "+
+				tc.key+" must fall through to the IDE root to open the "+
 					"prefilled command prompt")
 			require.True(t, tut.WaitActive("wait_command", 2*time.Second),
-				"pressing <alt-shift-d> must dismiss the window and arm the "+
+				"pressing "+tc.key+" must dismiss the window and arm the "+
 					"wait_command step")
 		})
 	}
@@ -913,7 +998,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "8", tut.Version())
+	assert.Equal(t, "9", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -979,7 +1064,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "8", tut.Version())
+	assert.Equal(t, "9", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1005,7 +1090,18 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "8", tut.Version())
+	assert.Equal(t, "9", tut.Version())
+}
+
+func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, navigationTutorial, `jump_symbol_key = "<ctrl-x>j"`)
+	require.Contains(t, navigationTutorial, `def_by_name_key = "<ctrl-alt-.>"`)
+	require.Contains(t, navigationTutorial,
+		`"press `+"`"+`" + def_by_name_key + "`+"`"+` to prefill`)
+	require.NotContains(t, navigationTutorial,
+		`press `+"`"+`<alt-shift-d>`+"`"+` to prefill`)
+	require.NotContains(t, navigationTutorial, `jump_symbol_key = "<meta-f>"`)
 }
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
@@ -1033,5 +1129,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "40", tut.Version())
+	assert.Equal(t, "41", tut.Version())
 }

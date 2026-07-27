@@ -98,6 +98,30 @@ def dismiss_for(cmd, *args):
     k = key_for(cmd, *args)
     return [ck, k] if k else [ck]
 
+workspace_slot_keys = [
+    key_for("workspacefocus", "1"),
+    key_for("workspacefocus", "2"),
+    key_for("workspacefocus", "3"),
+    key_for("workspacefocus", "4"),
+    key_for("workspacefocus", "5"),
+    key_for("workspacefocus", "6"),
+    key_for("workspacefocus", "7"),
+    key_for("workspacefocus", "8"),
+    key_for("workspacefocus", "9"),
+]
+workspace_slot_key_row = " ".join([
+    keylabel("workspacefocus", "1"),
+    keylabel("workspacefocus", "2"),
+    keylabel("workspacefocus", "3"),
+    keylabel("workspacefocus", "4"),
+    keylabel("workspacefocus", "5"),
+    keylabel("workspacefocus", "6"),
+    keylabel("workspacefocus", "7"),
+    keylabel("workspacefocus", "8"),
+    keylabel("workspacefocus", "9"),
+])
+welcome_allow_keys = [k for k in workspace_slot_keys + [key_for("terminalneworsplit")] if k]
+
 def args_match(got, want):
     if len(got) != len(want):
         return False
@@ -170,10 +194,11 @@ hold `<meta>` with the same PNBF directions to focus windows, then add `<shift>`
 to move window content instead. Reusing that muscle memory keeps repeated
 layout actions fast.
 
-- `<ctrl-x>0` closes a window, `<ctrl-x>1` closes the others, `<ctrl-x>2` /
-  `<ctrl-x>3` split below or right, and `<ctrl-x>9` toggles maximization.
-- `<ctrl-tab>` / `<ctrl-shift-tab>` cycle tabs. Meta-brackets provide the same
-  left/right direction, and adding `<shift>` reorders the current tab.
+- """ + keylabel("windowclose") + """ closes a window, """ + keylabel("windowcloseall") + """ closes the others,
+  """ + keylabel("windownew", "down") + """ / """ + keylabel("windownew", "right") + """ split below or right, and
+  """ + keylabel("windowtogglemaximize") + """ toggles maximization.
+- """ + keylabel("tabprevious") + """ / """ + keylabel("tabnext") + """ cycle tabs, while
+  """ + keylabel("tabmove", "left") + """ / """ + keylabel("tabmove", "right") + """ reorder the current tab.
 
 The next page shows the bindings active for you.
 """
@@ -217,8 +242,11 @@ or to keep notes between sessions.
 
 ## Switching workspaces
 
-Rune has **nine workspace slots**. Press `<meta-1>` through `<meta-9>` to jump between
-them (On macOS `<meta>` is the Command key ⌘; on Linux it is the Super or Windows key).
+Rune has **nine workspace slots**. Their current bindings are:
+
+""" + workspace_slot_key_row + """
+
+Press one to jump to that slot.
 Every empty slot shows this same home workspace; a slot only gets a project attached when
 you open one inside it. So slot 1 may be the project you're working on while slots 2-9 are
 still the home workspace, ready for whatever you need.
@@ -226,7 +254,7 @@ still the home workspace, ready for whatever you need.
 ## Commands and key bindings
 
 IDE-wide operations are exposed as **commands** that you invoke
-from the command prompt. Keys like `<meta-1>` and """ + keylabel("terminalneworsplit") + """
+from the command prompt. Bindings like """ + keylabel("workspacefocus", "1") + """ and """ + keylabel("terminalneworsplit") + """
 are bound to those commands through your user configuration under
 `command.key_bindings`, so every binding shown here is rebindable.
 
@@ -287,8 +315,8 @@ Split the focused window into two: """ + keypress("windownew", *split_window_arg
 """
 
 emacs_split_right_md = """\
-`<ctrl-x>2` split below, matching GNU Emacs. Its familiar neighbor `<ctrl-x>3`
-splits to the right.
+""" + keylabel("windownew", "down") + """ split below, matching GNU Emacs. Its familiar neighbor
+""" + keylabel("windownew", "right") + """ splits to the right.
 
 Split right now: """ + keypress("windownew", "right") + """.
 """
@@ -388,8 +416,8 @@ To close the split you just made, """ + keypress("windowclose") + """.
 """
 
 emacs_close_others_md = """\
-You used `<ctrl-x>0` to close one window. `<ctrl-x>1` keeps the focused window
-and closes every other split, just as it does in GNU Emacs.
+You used """ + keylabel("windowclose") + """ to close one window. """ + keylabel("windowcloseall") + """ keeps the
+focused window and closes every other split, just as it does in GNU Emacs.
 
 Keep only this window: """ + keypress("windowcloseall") + """.
 """
@@ -427,9 +455,8 @@ Toggle the explorer closed: """ + keypress("fexplorer") + """.
 
 tab_switch_intro_md = ("""\
 That window now holds two tabs. Emacs muscle memory works here too:
-`<ctrl-tab>` moves to the next tab and `<ctrl-shift-tab>` moves to the previous
-one. Rune also keeps tab direction on Meta-brackets, where `[` is left and `]`
-is right. Both pairs wrap around.
+""" + keylabel("tabprevious") + """ moves to the previous tab and """ + keylabel("tabnext") + """ moves to the next.
+Both wrap around.
 """ if mode == "emacs" else """\
 That window now holds two tabs. `tabnext` / `tabprevious` cycle through them
 and wrap around. Each preset has a horizontal tab pair; adding `<shift>` to
@@ -443,8 +470,8 @@ the previous one (""" + keypress("tabprevious") + """).
 """
 
 tab_move_intro_md = ("""\
-For tab placement, add `<shift>` to the Meta-bracket pair. The direction stays
-left or right, but the current tab moves instead of focus.
+For tab placement, """ + keylabel("tabmove", "left") + """ moves the current tab left and
+""" + keylabel("tabmove", "right") + """ moves it right.
 """ if mode == "emacs" else """\
 Now use the same horizontal pair with `<shift>` to change the tab's position
 instead of switching tabs.
@@ -910,12 +937,7 @@ def run():
     floating_window(
         title = "Welcome",
         text = welcome_md,
-        allow_keys = [
-            "<meta-1>", "<meta-2>", "<meta-3>",
-            "<meta-4>", "<meta-5>", "<meta-6>",
-            "<meta-7>", "<meta-8>", "<meta-9>",
-            "<meta-enter>",
-        ],
+        allow_keys = welcome_allow_keys,
         dismiss_keys = [ck],
     )
 
@@ -958,4 +980,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "40", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "41", entry = run)

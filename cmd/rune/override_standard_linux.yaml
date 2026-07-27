@@ -93,6 +93,7 @@ command:
     "<a-n>": windownew
     "<alt-enter>": terminalneworsplit
     "<a-q>": windowclose
+    "<a-m>": windowtogglemaximize
     "<a-s-enter>": "echo {prompt}windowconverttab<space>"
     "<a-t>": tabnew
     "<a-w>": tabclose
@@ -110,6 +111,8 @@ command:
     "<c-m-j>": lspprevdiagnostic
     "<c-m-l>": lspnextdiagnostic
     "<a-h>": "lsp hover"
+    "<c-a-i>": "lsp implementation"
+    "<c-s-a-i>": "echo {prompt}lsp<space>implementation<space>"
     "<c-i>": ""
     "<c-k>": ""
     "<s-m-r>": history
