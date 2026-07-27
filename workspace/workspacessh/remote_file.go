@@ -27,7 +27,9 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"sync/atomic"
 
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -38,23 +40,42 @@ var (
 )
 
 type remoteFile struct {
-	fd       uintptr
-	filename string
-	scheme   *remoteScheme
+	fd         uintptr
+	filename   string
+	scheme     *remoteScheme
+	generation uint64
+	closed     atomic.Bool
 }
 
-func newRemoteFile(s *remoteScheme, fd uintptr, filename string) *remoteFile {
-	ret := &remoteFile{scheme: s, fd: fd, filename: filename}
+func newRemoteFile(
+	s *remoteScheme, fd uintptr, filename string, generation uint64,
+) *remoteFile {
+	ret := &remoteFile{
+		scheme: s, fd: fd, filename: filename, generation: generation,
+	}
 	runtime.SetFinalizer(ret, func(f *remoteFile) {
 		f.Close()
 	})
 	return ret
 }
 
+func (c *remoteFile) key() remoteFileKey {
+	return remoteFileKey{generation: c.generation, fd: c.fd}
+}
+
 func (c *remoteFile) newFile() (workspaceapi.File, error) {
-	err, scheme := c.scheme.state()
+	scheme, generation, err := c.scheme.stateWithGeneration()
 	if err != nil {
 		return nil, err
+	}
+	return c.newFileForState(scheme, generation)
+}
+
+func (c *remoteFile) newFileForState(
+	scheme schemeapi.Scheme, generation uint64,
+) (workspaceapi.File, error) {
+	if generation != c.generation {
+		return nil, errInvalidFd
 	}
 	f := scheme.NewFile(c.fd, c.filename)
 	if f == nil {
@@ -131,11 +152,18 @@ func (c *remoteFile) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (c *remoteFile) Close() error {
-	f, err := c.newFile()
-	if err != nil {
-		return err
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
 	}
 	runtime.SetFinalizer(c, nil)
-	c.scheme.files.Delete(c.Fd())
+	c.scheme.files.Delete(c.key())
+
+	f, err := c.newFile()
+	if err != nil {
+		if errors.Is(err, errInvalidFd) {
+			return nil
+		}
+		return err
+	}
 	return f.Close()
 }

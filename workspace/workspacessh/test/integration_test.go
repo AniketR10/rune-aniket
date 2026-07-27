@@ -26,15 +26,22 @@ package workspacetest
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -88,6 +95,120 @@ func TestIntegrationScheme(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestIntegrationStaleEditorCloseDuringReconnectOpen(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:     "/id_ed25519.pub",
+		InstallRuneBinary: true,
+	})
+	cfg := config.MapConfig(map[string]any{
+		"private_keys": []any{PrivateKeyPath(t, "id_ed25519")},
+		"timeout":      "20s",
+		"insecure":     true,
+	})
+	scheme := newSchemeIntegration(t, c.HostPort, cfg)
+
+	for _, name := range []string{"before.txt", "after.txt"} {
+		f, err := scheme.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(name + "\n"))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+	}
+
+	rootURI, err := scheme.URI(".")
+	require.NoError(t, err)
+	beforeURI, err := scheme.URI("before.txt")
+	require.NoError(t, err)
+	afterURI, err := scheme.URI("after.txt")
+	require.NoError(t, err)
+	beforeSwapDir, err := workspace.DefaultSwapDirectory(beforeURI)
+	require.NoError(t, err)
+	afterSwapDir, err := workspace.DefaultSwapDirectory(afterURI)
+	require.NoError(t, err)
+
+	blocking := &blockAfterOpenScheme{
+		Scheme:  scheme,
+		name:    ".after.txt" + workspace.SwapFileExtensionName,
+		opened:  make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	t.Cleanup(blocking.unblock)
+	ws := workspace.NewSchemeWorkspace(rootURI, blocking, func(fn func()) bool {
+		fn()
+		return true
+	})
+
+	stale, err := ws.Load(beforeURI, cell.NewBuffer(), beforeSwapDir, false)
+	require.NoError(t, err)
+
+	remote := scheme.(workspace.RemoteScheme)
+	disconnected := remote.OnDisconnect()
+	TerminateRemoteRuneServer(t, c.ID)
+	select {
+	case <-disconnected:
+	case <-time.After(20 * time.Second):
+		t.Fatal("remote scheme did not observe the server restart")
+	}
+	require.Eventually(t, func() bool {
+		_, statErr := scheme.Stat("after.txt")
+		return statErr == nil
+	}, 20*time.Second, 100*time.Millisecond)
+
+	type loadResult struct {
+		file workspace.FlusherCloser
+		err  error
+	}
+	loaded := make(chan loadResult, 1)
+	go debug.CapturePanicReport(func() {
+		f, loadErr := ws.Load(afterURI, cell.NewBuffer(), afterSwapDir, false)
+		loaded <- loadResult{file: f, err: loadErr}
+	})
+
+	select {
+	case <-blocking.opened:
+	case <-time.After(20 * time.Second):
+		t.Fatal("post-reconnect swap open did not reach the test barrier")
+	}
+	require.NoError(t, stale.Close())
+	blocking.unblock()
+
+	result := <-loaded
+	if result.err == nil {
+		t.Cleanup(func() { _ = result.file.Close() })
+	}
+	require.NoError(t, result.err,
+		"a stale editor close must not invalidate a file opened by the new session")
+}
+
+type blockAfterOpenScheme struct {
+	schemeapi.Scheme
+	name        string
+	opened      chan struct{}
+	release     chan struct{}
+	openedOnce  sync.Once
+	releaseOnce sync.Once
+}
+
+func (s *blockAfterOpenScheme) OpenFile(
+	name string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	f, err := s.Scheme.OpenFile(name, flag, perm)
+	if err == nil && filepath.Base(name) == s.name {
+		s.openedOnce.Do(func() {
+			close(s.opened)
+			<-s.release
+		})
+	}
+	return f, err
+}
+
+func (s *blockAfterOpenScheme) unblock() {
+	s.releaseOnce.Do(func() { close(s.release) })
 }
 
 // integrationDirCounter ensures each schemeFn(t) call gets its own

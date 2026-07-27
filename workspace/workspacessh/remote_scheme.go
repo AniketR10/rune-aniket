@@ -68,16 +68,23 @@ type connectSchemeFn func(ctx context.Context,
 type state struct {
 	lastSessionError error
 	scheme           schemeapi.Scheme
+	generation       uint64
+}
+
+type remoteFileKey struct {
+	generation uint64
+	fd         uintptr
 }
 
 // wraps another schemeapi.Scheme to be resilient against
 // intermitent connection failures
 type remoteScheme struct {
-	closeChan chan struct{}
-	uri       workspaceapi.URI
-	ctx       context.Context
-	cancelCtx func()
-	currState atomic.Value
+	closeChan  chan struct{}
+	uri        workspaceapi.URI
+	ctx        context.Context
+	cancelCtx  func()
+	currState  atomic.Value
+	generation atomic.Uint64
 
 	// firstAttempt is closed by maintainConnection after the first
 	// connect attempt completes (success or failure). state() blocks on
@@ -139,8 +146,15 @@ func (s *remoteScheme) maintainConnection(
 				s.setError(logger, err)
 			})
 
-			prevState := s.currState.Swap(state{scheme: scheme,
-				lastSessionError: err})
+			generation := s.generation.Load()
+			if err == nil {
+				generation = s.generation.Add(1)
+			}
+			prevState := s.currState.Swap(state{
+				scheme:           scheme,
+				lastSessionError: err,
+				generation:       generation,
+			})
 			if prevState != nil && prevState.(state).scheme != nil {
 				err := prevState.(state).scheme.Close()
 				logger.Tracef("closed previous remote scheme: %v", err)
@@ -246,7 +260,10 @@ func (s *remoteScheme) setError(logger *log.Entry, err error) {
 	if s.closed.Load() {
 		err = ErrRemoteClosed
 	}
-	prevState := s.currState.Swap(state{lastSessionError: err})
+	prevState := s.currState.Swap(state{
+		lastSessionError: err,
+		generation:       s.generation.Load(),
+	})
 	if prevState != nil && prevState.(state).scheme != nil {
 		closeErr := prevState.(state).scheme.Close()
 		logger.Tracef("closed previous remote scheme: %v", closeErr)
@@ -287,6 +304,13 @@ func newRemoteScheme(
 // NOTE: this should only be called from within event loop, otherwhise
 // need to sync first with locker.
 func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:staticcheck
+	scheme, _, err = s.stateWithGeneration()
+	return
+}
+
+func (s *remoteScheme) stateWithGeneration() (
+	scheme schemeapi.Scheme, generation uint64, err error,
+) {
 	select {
 	case <-s.firstAttempt:
 	case <-s.ctx.Done():
@@ -295,20 +319,21 @@ func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:s
 		// down" from a generic context.Canceled (e.g. errors.Is
 		// checks in the VTE reservoir and watcher loops).
 		if s.closed.Load() {
-			return ErrRemoteClosed, nil
+			return nil, s.generation.Load(), ErrRemoteClosed
 		}
-		return s.ctx.Err(), nil
+		return nil, s.generation.Load(), s.ctx.Err()
 	}
 	currState := s.currState.Load().(state)
 	err = currState.lastSessionError
 	scheme = currState.scheme
+	generation = currState.generation
 	return
 }
 
 func (s *remoteScheme) OpenFile(path string, flag int, perm os.FileMode) (
 	workspaceapi.File, error,
 ) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return nil, err
 	}
@@ -321,8 +346,8 @@ func (s *remoteScheme) OpenFile(path string, flag int, perm os.FileMode) (
 	// accross clients of the remote workspace,
 	// as we potentially recycle through reconnections
 	runtime.SetFinalizer(f, nil)
-	rf := newRemoteFile(s, f.Fd(), f.Name())
-	s.files.Store(rf.Fd(), rf)
+	rf := newRemoteFile(s, f.Fd(), f.Name(), generation)
+	s.files.Store(rf.key(), rf)
 	return rf, nil
 }
 
@@ -383,7 +408,11 @@ func (s *remoteScheme) Open(filename string) (workspaceapi.File, error) {
 }
 
 func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
-	f, _ := s.files.Load(fd)
+	_, generation, err := s.stateWithGeneration()
+	if err != nil {
+		return nil
+	}
+	f, _ := s.files.Load(remoteFileKey{generation: generation, fd: fd})
 	if f == nil {
 		return nil
 	}
@@ -437,26 +466,26 @@ func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
 func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return 0, err
 	}
 	ctx, cancelFn := bluectx.First(s.ctx, ctx)
 	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
 	if remoteFile, ok := cmd.Stdin.(*remoteFile); ok {
-		cmd.Stdin, err = remoteFile.newFile()
+		cmd.Stdin, err = remoteFile.newFileForState(scheme, generation)
 		if err != nil {
 			return 0, fmt.Errorf("unwrap remote file: %v", err)
 		}
 	}
 	if remoteFile, ok := cmd.Stdout.(*remoteFile); ok {
-		cmd.Stdout, err = remoteFile.newFile()
+		cmd.Stdout, err = remoteFile.newFileForState(scheme, generation)
 		if err != nil {
 			return 0, fmt.Errorf("unwrap remote file: %v", err)
 		}
 	}
 	if remoteFile, ok := cmd.Stderr.(*remoteFile); ok {
-		cmd.Stderr, err = remoteFile.newFile()
+		cmd.Stderr, err = remoteFile.newFileForState(scheme, generation)
 		if err != nil {
 			return 0, fmt.Errorf("unwrap remote file: %v", err)
 		}
@@ -473,7 +502,7 @@ func (s *remoteScheme) Signal(p workspaceapi.Pid, signal syscall.Signal) error {
 }
 
 func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
@@ -485,13 +514,13 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	pty, err := scheme.NewPty(ctx)
 	if err == nil {
 		runtime.SetFinalizer(pty.Master, nil)
-		master := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name())
-		s.files.Store(master.Fd(), master)
+		master := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name(), generation)
+		s.files.Store(master.key(), master)
 		pty.Master = master
 
 		runtime.SetFinalizer(pty.Slave, nil)
-		slave := newRemoteFile(s, pty.Slave.Fd(), pty.Slave.Name())
-		s.files.Store(slave.Fd(), slave)
+		slave := newRemoteFile(s, pty.Slave.Fd(), pty.Slave.Name(), generation)
+		s.files.Store(slave.key(), slave)
 		pty.Slave = slave
 	}
 	return pty, err
@@ -532,9 +561,15 @@ func (s *remoteScheme) StopWatch(id int) error {
 }
 
 func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return err
+	}
+	if master, ok := pty.Master.(*remoteFile); ok && master.generation != generation {
+		return errInvalidFd
+	}
+	if slave, ok := pty.Slave.(*remoteFile); ok && slave.generation != generation {
+		return errInvalidFd
 	}
 	// unwrap for underlying scheme to avoid unexpected type assertions panics
 	pty.Master = scheme.NewFile(pty.Master.Fd(), pty.Master.Name())
@@ -553,7 +588,10 @@ func (s *remoteScheme) Close() (ret error) {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	prevState := s.currState.Swap(state{lastSessionError: ErrRemoteClosed})
+	prevState := s.currState.Swap(state{
+		lastSessionError: ErrRemoteClosed,
+		generation:       s.generation.Load(),
+	})
 	if prevState != nil && prevState.(state).scheme != nil {
 		// no need to close files before closing scheme to avoid
 		// closing connection before telling the remote workspace to close

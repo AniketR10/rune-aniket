@@ -194,6 +194,61 @@ func TestRemoteScheme(t *testing.T) {
 		require.Nil(t, f)
 	})
 
+	t.Run("stale close preserves reused descriptor", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		first := schemetest.NewMockScheme(ctrl)
+		second := schemetest.NewMockScheme(ctrl)
+		connections := make(chan schemeapi.Scheme, 2)
+		connections <- first
+		connections <- second
+		closeHooks := make(chan func(error), 2)
+		scheme := newRemoteScheme(context.Background(), func(
+			_ context.Context, _ workspaceapi.URI, closeHook func(error),
+		) (schemeapi.Scheme, error) {
+			closeHooks <- closeHook
+			return <-connections, nil
+		}, uri)
+		t.Cleanup(func() {
+			second.EXPECT().Close().Return(nil).AnyTimes()
+			require.NoError(t, scheme.Close())
+		})
+
+		oldRPCFile := workspaceapitest.NewMockFile(ctrl)
+		oldRPCFile.EXPECT().Fd().Return(uintptr(42))
+		oldRPCFile.EXPECT().Name().Return("old.txt")
+		first.EXPECT().OpenFile("old.txt", os.O_RDONLY, os.FileMode(0)).
+			Return(oldRPCFile, nil)
+		oldFile, err := scheme.OpenFile("old.txt", os.O_RDONLY, 0)
+		require.NoError(t, err)
+
+		first.EXPECT().Close().Return(nil)
+		firstCloseHook := <-closeHooks
+		firstCloseHook(errors.New("connection reset"))
+		<-closeHooks
+		require.Eventually(t, func() bool {
+			return scheme.(*remoteScheme).currState.Load().(state).scheme == second
+		}, time.Second, time.Millisecond)
+
+		newRPCFile := workspaceapitest.NewMockFile(ctrl)
+		newRPCFile.EXPECT().Fd().Return(uintptr(42))
+		newRPCFile.EXPECT().Name().Return("new.txt")
+		second.EXPECT().OpenFile("new.txt", os.O_RDONLY, os.FileMode(0)).
+			Return(newRPCFile, nil)
+		newFile, err := scheme.OpenFile("new.txt", os.O_RDONLY, 0)
+		require.NoError(t, err)
+
+		require.NoError(t, oldFile.Close())
+		require.Same(t, newFile, scheme.NewFile(42, "new.txt"))
+
+		transient := workspaceapitest.NewMockFile(ctrl)
+		second.EXPECT().NewFile(uintptr(42), "new.txt").Return(transient)
+		transient.EXPECT().Read(gomock.Any()).Return(1, nil)
+		_, err = newFile.Read(make([]byte, 1))
+		require.NoError(t, err)
+	})
+
 	// Reproducer: closeHook(nil) — which fires when the remote
 	// process exits cleanly or s.ctx is cancelled before any
 	// transport error — used to store (scheme=nil, err=nil) into
