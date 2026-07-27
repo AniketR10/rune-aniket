@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2501,15 +2503,15 @@ func TestExEmacsMetaLayoutBindingsReachCommandLayer(t *testing.T) {
 		{"<shift-meta-b>", "moveleft"},
 		{"<shift-meta-n>", "movedown"},
 		{"<shift-meta-f>", "moveright"},
-		{"<ctrl-alt-meta-up>", "resizeup"},
-		{"<ctrl-alt-meta-left>", "resizeleft"},
-		{"<ctrl-alt-meta-down>", "resizedown"},
-		{"<ctrl-alt-meta-right>", "resizeright"},
-		{"<ctrl-x>0", "closewindow"},
-		{"<ctrl-x>1", "closeotherwindows"},
-		{"<ctrl-x>2", "splitbelow"},
-		{"<ctrl-x>3", "splitright"},
-		{"<ctrl-x>9", "togglemaximize"},
+		{"<meta-up>", "resizeup"},
+		{"<meta-left>", "resizeleft"},
+		{"<meta-down>", "resizedown"},
+		{"<meta-right>", "resizeright"},
+		{"<meta-d>", "splitbelow"},
+		{"<meta-r>", "splitright"},
+		{"<shift-meta-w>", "closewindow"},
+		{"<meta-k>", "closeotherwindows"},
+		{"<meta-e>", "togglemaximize"},
 		{"<meta-w>", "closetab"},
 		{"<ctrl-tab>", "nexttab"},
 		{"<ctrl-shift-tab>", "previoustab"},
@@ -2586,6 +2588,94 @@ func TestExEmacsMetaLayoutBindingsReachCommandLayer(t *testing.T) {
 		want[i] = binding.command
 	}
 	require.Equal(t, want, h.firedCommands())
+}
+
+func TestExEmacsLifecycleBindingsReachCommandLayerFromTerminal(t *testing.T) {
+	runeStar := readRuneStar(t)
+	base, err := decodeDefaultConfig(DefaultConfig{
+		src: string(runeStar), modal: true, tui: false,
+	})
+	require.NoError(t, err)
+	overlay, err := os.ReadFile("../cmd/rune/override_emacs.yaml")
+	require.NoError(t, err)
+	cfg, err := decodeOverlayConfigFile(
+		bytes.NewReader(overlay), "override_emacs.yaml", base)
+	require.NoError(t, err)
+	mappings := (&ideConfig{cfg: cfg, errors: map[string]error{}}).commandKeyMappings()
+
+	wantBindings := map[string]string{
+		"<meta-up>":      "windowresize increase height",
+		"<meta-left>":    "windowresize decrease width",
+		"<meta-down>":    "windowresize decrease height",
+		"<meta-right>":   "windowresize increase width",
+		"<meta-d>":       "windownew down",
+		"<meta-r>":       "windownew right",
+		"<shift-meta-w>": "windowclose",
+		"<meta-k>":       "windowcloseall",
+		"<meta-e>":       "windowtogglemaximize",
+	}
+	for key, command := range wantBindings {
+		seq := mustParseBindingKey(t, key)
+		require.Equalf(t, [][]string{strings.Split(command, " ")}, mappings[seq],
+			"%s must run %q", key, command)
+	}
+	for _, key := range []string{"<ctrl-x>0", "<ctrl-x>1", "<ctrl-x>2", "<ctrl-x>3", "<ctrl-x>9"} {
+		_, ok := mappings[mustParseBindingKey(t, key)]
+		require.Falsef(t, ok, "%s must not remain as a terminal-inaccessible alias", key)
+	}
+
+	keyBindings := make(map[term.KeyComb][][]string, len(wantBindings))
+	ordered := make([]term.KeyComb, 0, len(wantBindings))
+	for key := range wantBindings {
+		seq := mustParseBindingKey(t, key)
+		ordered = append(ordered, seq.First)
+	}
+	slices.SortFunc(ordered, func(a, b term.KeyComb) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	for i, key := range ordered {
+		keyBindings[key] = [][]string{{fmt.Sprintf("layoutcommand%d", i)}}
+	}
+	h := newExSequencerHarness(t, nil, keyBindings, nil, 20*time.Millisecond)
+	for i, key := range ordered {
+		got, ok := h.ex.comp.CommandKeyBinding(key)
+		require.Truef(t, ok, "%s must be installed in the command layer", key.String())
+		require.Equal(t, [][]string{{fmt.Sprintf("layoutcommand%d", i)}}, got)
+	}
+	terminalRoot, err := workspaceapi.ParseURI("file://" + t.TempDir())
+	require.NoError(t, err)
+	fileScheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), terminalRoot)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fileScheme.Close()) })
+	vteCfg := vte.DefaultConfig()
+	vteCfg.Modal = false
+	vteCfg.CommandAndArgs = []string{"sh", "-c", "sleep 30"}
+	vteHandler, err := vte.NewHandler(h.ex.Browser(), h.ex.Browser(),
+		fileScheme, fileScheme, h.ex.tm, vteCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, vteHandler.Close()) })
+	require.NoError(t, h.ex.invokeWindow().SetContent(vteHandler))
+
+	ctrlX := term.KeyComb{Ch: 'x', Mod: term.ModCtrl}
+	_, handled := h.ex.Handle(term.Event{
+		Type: term.EventKey, Ch: ctrlX.Ch, Mod: ctrlX.Mod, Raw: []byte{0x18},
+	})
+	require.True(t, handled, "the terminal must retain Ctrl-X as PTY input")
+	require.Empty(t, h.firedCommands())
+
+	for i, key := range ordered {
+		_, _ = h.ex.Handle(term.Event{
+			Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch,
+		})
+		require.Lenf(t, h.firedCommands(), i+1,
+			"%s must dispatch through Rune from a terminal", key.String())
+	}
+	wantFired := make([]string, len(ordered))
+	for i := range ordered {
+		wantFired[i] = fmt.Sprintf("layoutcommand%d", i)
+	}
+	require.Equal(t, wantFired, h.firedCommands())
 }
 
 func nonEmpty(s []string) []string {

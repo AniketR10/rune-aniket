@@ -74,6 +74,21 @@ func TestRenderOverride(t *testing.T) {
 		"the emacs choice must switch the editor into emacs")
 	require.Contains(t, ema, `"<m-f>": "windowfocus right"`,
 		"emacs must use the PNBF direction layer for window focus")
+	for _, binding := range []string{
+		`"<m-d>": "windownew down"`,
+		`"<m-r>": "windownew right"`,
+		`"<s-m-w>": windowclose`,
+		`"<m-k>": windowcloseall`,
+		`"<m-e>": windowtogglemaximize`,
+		`"<m-left>": "windowresize decrease width"`,
+	} {
+		require.Contains(t, ema, binding,
+			"emacs layout bindings must remain reachable from terminals")
+	}
+	for _, key := range []string{`"<c-x>0"`, `"<c-x>1"`, `"<c-x>2"`, `"<c-x>3"`, `"<c-x>9"`} {
+		require.NotContains(t, ema, key,
+			"terminal-inaccessible C-x lifecycle bindings must not return")
+	}
 	require.NotContains(t, ema,
 		`"<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>`,
 		"the displaced function search binding must remain prompt-only")

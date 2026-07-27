@@ -1043,9 +1043,8 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 // command sharing one of those would be shadowed and unreachable — every base
 // <alt> command binding is therefore explicitly unbound. <meta> is free of
 // editor bindings, so frequent directional operations live there and remain
-// available when terminal programs intercept <c-x>. GNU-compatible lifecycle,
-// file, and session commands use C-x: the editor ignores the prefix, and the
-// second key of a configured sequence bypasses the editor entirely.
+// available when terminal programs intercept <c-x>. GNU-compatible file and
+// session commands can still use C-x, but layout management remains global.
 func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
@@ -1127,16 +1126,17 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<s-m-n>": "windowmove down",
 		"<s-m-f>": "windowmove right",
 
-		"<c-a-m-up>":    "windowresize increase height",
-		"<c-a-m-left>":  "windowresize decrease width",
-		"<c-a-m-down>":  "windowresize decrease height",
-		"<c-a-m-right>": "windowresize increase width",
+		"<m-up>":    "windowresize increase height",
+		"<m-left>":  "windowresize decrease width",
+		"<m-down>":  "windowresize decrease height",
+		"<m-right>": "windowresize increase width",
 
-		"<c-x>0": "windowclose",
-		"<c-x>1": "windowcloseall",
-		"<c-x>2": "windownew down",
-		"<c-x>3": "windownew right",
-		"<c-x>9": "windowtogglemaximize",
+		"<m-d>":   "windownew down",
+		"<m-r>":   "windownew right",
+		"<s-m-w>": "windowclose",
+		"<m-k>":   "windowcloseall",
+		"<m-e>":   "windowtogglemaximize",
+		"<s-m-r>": "history",
 
 		"<c-m-h>":   "windowdefaultsplit h",
 		"<c-m-v>":   "windowdefaultsplit v",
@@ -1169,15 +1169,16 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"windowmove left":              "<shift-meta-b>",
 		"windowmove down":              "<shift-meta-n>",
 		"windowmove right":             "<shift-meta-f>",
-		"windowresize increase height": "<ctrl-alt-meta-up>",
-		"windowresize decrease width":  "<ctrl-alt-meta-left>",
-		"windowresize decrease height": "<ctrl-alt-meta-down>",
-		"windowresize increase width":  "<ctrl-alt-meta-right>",
-		"windowclose":                  "<ctrl-x>0",
-		"windowcloseall":               "<ctrl-x>1",
-		"windownew down":               "<ctrl-x>2",
-		"windownew right":              "<ctrl-x>3",
-		"windowtogglemaximize":         "<ctrl-x>9",
+		"windowresize increase height": "<meta-up>",
+		"windowresize decrease width":  "<meta-left>",
+		"windowresize decrease height": "<meta-down>",
+		"windowresize increase width":  "<meta-right>",
+		"windowclose":                  "<shift-meta-w>",
+		"windowcloseall":               "<meta-k>",
+		"windownew down":               "<meta-d>",
+		"windownew right":              "<meta-r>",
+		"windowtogglemaximize":         "<meta-e>",
+		"history":                      "<shift-meta-r>",
 		"cursorhistory prev":           "<alt-,>",
 		"cursorhistory next":           "<ctrl-alt-,>",
 		"cursorhistory jump":           "<meta-j>",
@@ -1209,13 +1210,13 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		"<m-h>", "<m-k>", "<m-l>", "<m-e>",
+		"<m-h>", "<m-l>",
 		"<s-m-j>", "<s-m-k>", "<s-m-l>",
 		"<alt-meta-h>", "<alt-meta-j>", "<alt-meta-k>", "<alt-meta-l>",
 		"<c-m-i>", "<c-m-j>", "<c-m-k>", "<c-m-l>",
 		"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
 		"<c-a-m-i>", "<c-a-m-j>", "<c-a-m-k>", "<c-a-m-l>",
-		"<s-m-w>",
+		"<c-a-m-up>", "<c-a-m-left>", "<c-a-m-down>", "<c-a-m-right>",
 		"<c-o>", "<c-i>", "<s-tab>", "<f2>",
 	} {
 		seq := mustParseBindingKey(t, key)
@@ -1223,6 +1224,14 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 			require.Equalf(t, [][]string{{""}}, got,
 				"%s is a stale HJKL layout chord", key)
 		}
+	}
+
+	for _, key := range []string{
+		"<c-x>0", "<c-x>1", "<c-x>2", "<c-x>3", "<c-x>9",
+	} {
+		_, ok := mappings[mustParseBindingKey(t, key)]
+		require.Falsef(t, ok,
+			"%s must not remain as a terminal-inaccessible layout binding", key)
 	}
 
 	for _, key := range []string{

@@ -29,8 +29,6 @@ editor:
     attr: {fg: default, bg: default}
     bar_attr: {fg: default, bg: default}
     search_attr: {fg: grey, bg: yellow}
-  status_bar:
-    layout: '██▓▒░  {{ .Filepath }}  {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  ░▒▓██'
 terminal:
   modal: false
 command:

@@ -192,11 +192,12 @@ Rune keeps `<ctrl-p>` / `<ctrl-n>` and `<ctrl-b>` / `<ctrl-f>` available for
 editing. Rather than teach a second direction map, Rune changes the target:
 hold `<meta>` with the same PNBF directions to focus windows, then add `<shift>`
 to move window content instead. Reusing that muscle memory keeps repeated
-layout actions fast.
+layout actions fast, and the host Meta layer stays reachable from terminals.
 
 - """ + keylabel("windowclose") + """ closes a window, """ + keylabel("windowcloseall") + """ closes the others,
   """ + keylabel("windownew", "down") + """ / """ + keylabel("windownew", "right") + """ split below or right, and
   """ + keylabel("windowtogglemaximize") + """ toggles maximization.
+- """ + keylabel("tabclose") + """ closes a tab; adding `<shift>` escalates from the tab to the whole window.
 - """ + keylabel("tabprevious") + """ / """ + keylabel("tabnext") + """ cycle tabs, while
   """ + keylabel("tabmove", "left") + """ / """ + keylabel("tabmove", "right") + """ reorder the current tab.
 
@@ -315,7 +316,8 @@ Split the focused window into two: """ + keypress("windownew", *split_window_arg
 """
 
 emacs_split_right_md = """\
-""" + keylabel("windownew", "down") + """ split below, matching GNU Emacs. Its familiar neighbor
+Emacs mode keeps window creation on Rune's host Meta layer so it works from
+terminals too: """ + keylabel("windownew", "down") + """ splits below and
 """ + keylabel("windownew", "right") + """ splits to the right.
 
 Split right now: """ + keypress("windownew", "right") + """.
@@ -382,9 +384,9 @@ resize_direction_md = ("""\
 Window resizing keeps the IJKL directions: `I` makes the window taller, `J`
 narrower, `K` shorter, and `L` wider.
 """ if mode == "standard" else ("""\
-Resize is less frequent, so Emacs mode keeps it on modified arrows instead of
-taking more editing letters: up makes the window taller, left narrower, down
-shorter, and right wider.
+Emacs mode keeps resize on host-Meta arrows instead of taking more editing
+letters: up makes the window taller, left narrower, down shorter, and right
+wider. These work from terminals as well as editors.
 """ if mode == "emacs" else """\
 Window resizing uses matching arrow directions: up makes the window taller,
 left narrower, down shorter, and right wider.
@@ -416,8 +418,10 @@ To close the split you just made, """ + keypress("windowclose") + """.
 """
 
 emacs_close_others_md = """\
-You used """ + keylabel("windowclose") + """ to close one window. """ + keylabel("windowcloseall") + """ keeps the
-focused window and closes every other split, just as it does in GNU Emacs.
+You used """ + keylabel("windowclose") + """ to close one window. It mirrors the familiar
+browser pattern where """ + keylabel("tabclose") + """ closes a tab and adding `<shift>` closes
+the whole window. """ + keylabel("windowcloseall") + """ keeps the focused window and closes
+every other split.
 
 Keep only this window: """ + keypress("windowcloseall") + """.
 """
@@ -980,4 +984,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "42", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "43", entry = run)

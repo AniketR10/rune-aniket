@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "42", tut.Version())
+	assert.Equal(t, "43", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "42", tut.Version())
+	assert.Equal(t, "43", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -128,9 +128,11 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 				"hold <meta> with the same PNBF directions to focus windows",
 				"add <shift> to move window content instead",
 				"Reusing that muscle memory keeps repeated layout actions fast",
-				"<ctrl-x>0 closes a window, <ctrl-x>1 closes the others",
-				"<ctrl-x>2 / <ctrl-x>3 split below or right",
-				"<ctrl-x>9 toggles maximization",
+				"host Meta layer stays reachable from terminals",
+				"<shift-meta-w> closes a window, <meta-k> closes the others",
+				"<meta-d> / <meta-r> split below or right",
+				"<meta-e> toggles maximization",
+				"<meta-w> closes a tab; adding <shift> escalates",
 				"<meta-[> / <meta-]> cycle tabs",
 				"<shift-meta-[> / <shift-meta-]> reorder the current tab",
 			},
@@ -157,24 +159,25 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			keyFor := func(cmd string, args []string) string {
 				keys := map[string]string{
-					"windowfocus left":     "<alt-j>",
-					"windowmove left":      "<alt-shift-j>",
-					"windownew down":       "<ctrl-x>2",
-					"windownew right":      "<ctrl-x>3",
-					"tabprevious":          "<alt-[>",
-					"tabnext":              "<alt-]>",
-					"tabmove left":         "<alt-shift-[>",
-					"tabmove right":        "<alt-shift-]>",
-					"windownew":            "<alt-n>",
-					"terminalneworsplit":   "<alt-enter>",
-					"windowclose":          "<alt-q>",
-					"windowcloseall":       "<ctrl-x>1",
-					"windowtogglemaximize": "<ctrl-x>9",
-					"tabnew":               "<alt-t>",
-					"tabclose":             "<alt-w>",
+					"windowfocus left":   "<alt-j>",
+					"windowmove left":    "<alt-shift-j>",
+					"tabprevious":        "<alt-[>",
+					"tabnext":            "<alt-]>",
+					"tabmove left":       "<alt-shift-[>",
+					"tabmove right":      "<alt-shift-]>",
+					"windownew":          "<alt-n>",
+					"terminalneworsplit": "<alt-enter>",
+					"windowclose":        "<alt-q>",
+					"tabnew":             "<alt-t>",
+					"tabclose":           "<alt-w>",
 				}
 				if tt.mode == "emacs" {
-					keys["windowclose"] = "<ctrl-x>0"
+					keys["windownew down"] = "<meta-d>"
+					keys["windownew right"] = "<meta-r>"
+					keys["windowclose"] = "<shift-meta-w>"
+					keys["windowcloseall"] = "<meta-k>"
+					keys["windowtogglemaximize"] = "<meta-e>"
+					keys["tabclose"] = "<meta-w>"
 					keys["tabprevious"] = "<meta-[>"
 					keys["tabnext"] = "<meta-]>"
 					keys["tabmove left"] = "<shift-meta-[>"
@@ -1130,5 +1133,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "42", tut.Version())
+	assert.Equal(t, "43", tut.Version())
 }

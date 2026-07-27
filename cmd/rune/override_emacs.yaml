@@ -6,8 +6,6 @@ editor:
     attr: {fg: default, bg: default}
     bar_attr: {fg: default, bg: default}
     search_attr: {fg: grey, bg: yellow}
-  status_bar:
-    layout: '██▓▒░  {{ .Filepath }}  {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  ░▒▓██'
 terminal:
   modal: false
 command:
@@ -27,12 +25,11 @@ command:
     "<s-m-b>": "windowmove left"
     "<s-m-n>": "windowmove down"
     "<s-m-f>": "windowmove right"
-    # C-x 0/1/2/3 keeps GNU Emacs's window lifecycle meanings.
-    "<c-x>0": windowclose
-    "<c-x>1": windowcloseall
-    "<c-x>2": "windownew down"
-    "<c-x>3": "windownew right"
-    "<c-x>9": windowtogglemaximize
+    "<m-d>": "windownew down"
+    "<m-r>": "windownew right"
+    "<s-m-r>": history
+    "<m-k>": windowcloseall
+    "<m-e>": windowtogglemaximize
     "<c-m-i>": ""
     "<c-m-j>": ""
     "<c-m-k>": ""
@@ -43,10 +40,8 @@ command:
     "<c-s-m-l>": ""
     "<m-h>": ""
     "<m-j>": "cursorhistory jump"
-    "<m-k>": ""
     "<m-l>": ""
     "<m-i>": "lsp implementation"
-    "<m-e>": ""
     "<m-g>": "jumptolocation next search"
     "<s-m-g>": "jumptolocation prev search"
     "<s-m-h>": "echo {prompt}lsp<space>hover<space>"
@@ -54,15 +49,19 @@ command:
     "<s-m-k>": ""
     "<s-m-l>": ""
     "<s-m-i>": "echo {prompt}lsp<space>implementation<space>"
-    # Resize stays on modified arrows instead of consuming Emacs editing letters.
+    # Host-Meta arrows resize without consuming Emacs editing letters.
     "<c-a-m-i>": ""
     "<c-a-m-j>": ""
     "<c-a-m-k>": ""
     "<c-a-m-l>": ""
-    "<c-a-m-up>": "windowresize increase height"
-    "<c-a-m-left>": "windowresize decrease width"
-    "<c-a-m-down>": "windowresize decrease height"
-    "<c-a-m-right>": "windowresize increase width"
+    "<c-a-m-up>": ""
+    "<c-a-m-left>": ""
+    "<c-a-m-down>": ""
+    "<c-a-m-right>": ""
+    "<m-up>": "windowresize increase height"
+    "<m-left>": "windowresize decrease width"
+    "<m-down>": "windowresize decrease height"
+    "<m-right>": "windowresize increase width"
     "<s-m-up>": ""
     "<s-m-left>": ""
     "<s-m-down>": ""
@@ -77,7 +76,7 @@ command:
     "<c-tab>": tabnext
     "<c-s-tab>": tabprevious
     "<m-w>": tabclose
-    "<s-m-w>": ""
+    "<s-m-w>": windowclose
     "<s-m-]>": "tabmove right"
     "<s-m-[>": "tabmove left"
     # M-, / C-M-, follows GNU xref history; C-x C-x exchanges point and mark.
