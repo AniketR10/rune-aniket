@@ -980,4 +980,4 @@ def run():
     teach_console()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "41", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "42", entry = run)

@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "41", tut.Version())
+	assert.Equal(t, "42", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "41", tut.Version())
+	assert.Equal(t, "42", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -316,6 +316,7 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 		"windowresize decrease width",
 		"windowresize decrease height",
 		"windowresize increase width",
+		"windowdefaultsplit h",
 		"tabnext",
 		"tabprevious",
 		"tabmove left",
@@ -1129,5 +1130,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "41", tut.Version())
+	assert.Equal(t, "42", tut.Version())
 }

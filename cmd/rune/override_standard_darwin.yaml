@@ -94,16 +94,21 @@ command:
     "<a-s-[>": "tabmove left"
     "<a-s-]>": "tabmove right"
     "<a-s-h>": ""
-    "<c-m-h>": "windowdefaultsplit h"
-    "<c-m-v>": "windowdefaultsplit v"
+    "<a-h>": "windowdefaultsplit h"
+    "<a-v>": "windowdefaultsplit v"
+    "<c-m-h>": ""
+    "<c-m-v>": ""
     # Ctrl-Meta I/K visits Git changes; J/L visits diagnostics.
     "<c-m-i>": gitprevchange
     "<c-m-k>": gitnextchange
     "<c-m-j>": lspprevdiagnostic
     "<c-m-l>": lspnextdiagnostic
-    "<a-h>": "lsp hover"
+    "<a-s-t>": ""
+    "<c-a-h>": "lsp hover"
+    "<c-s-a-h>": "echo {prompt}lsp<space>hover<space>"
     "<c-a-i>": "lsp implementation"
     "<c-s-a-i>": "echo {prompt}lsp<space>implementation<space>"
+    "<c-a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
     "<c-i>": ""
     "<c-k>": ""
     "<s-m-r>": history

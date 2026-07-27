@@ -769,8 +769,8 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<ctrl-alt-meta-down>":  "windowresize decrease height",
 		"<ctrl-alt-meta-right>": "windowresize increase width",
 
-		"<ctrl-meta-h>": "windowdefaultsplit h",
-		"<ctrl-meta-v>": "windowdefaultsplit v",
+		"<alt-h>": "windowdefaultsplit h",
+		"<alt-v>": "windowdefaultsplit v",
 
 		"<alt-n>":           "windownew",
 		"<alt-enter>":       "terminalneworsplit",
@@ -784,9 +784,11 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<alt-shift-[>":     "tabmove left",
 		"<alt-shift-]>":     "tabmove right",
 
-		"<alt-h>":            "lsp hover",
+		"<ctrl-alt-h>":       "lsp hover",
+		"<ctrl-shift-alt-h>": "echo {prompt}lsp<space>hover<space>",
 		"<ctrl-alt-i>":       "lsp implementation",
 		"<ctrl-shift-alt-i>": "echo {prompt}lsp<space>implementation<space>",
+		"<ctrl-alt-v>":       "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
 
 		"<ctrl-meta-i>": "gitprevchange",
 		"<ctrl-meta-k>": "gitnextchange",
@@ -863,7 +865,9 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 				"lspnextdiagnostic":            "<ctrl-meta-l>",
 				"gitprevchange":                "<ctrl-meta-i>",
 				"gitnextchange":                "<ctrl-meta-k>",
-				"lsp hover":                    "<alt-h>",
+				"windowdefaultsplit h":         "<alt-h>",
+				"windowdefaultsplit v":         "<alt-v>",
+				"lsp hover":                    "<ctrl-alt-h>",
 				"lsp implementation":           "<ctrl-alt-i>",
 				"windowtogglemaximize":         "<alt-m>",
 			} {
@@ -893,6 +897,13 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 				if got, ok := mappings[seq]; ok {
 					require.Equalf(t, [][]string{{""}}, got,
 						"%s must not carry a stale Standard layout command", key)
+				}
+			}
+			for _, key := range []string{"<ctrl-meta-h>", "<ctrl-meta-v>", "<alt-shift-t>"} {
+				seq := mustParseBindingKey(t, key)
+				if got, ok := mappings[seq]; ok {
+					require.Equalf(t, [][]string{{""}}, got,
+						"%s must not retain its superseded Standard binding", key)
 				}
 			}
 		})
@@ -1009,7 +1020,8 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		"<alt-shift-j>":  {"windowmove", "left"},
 		"<alt-j>":        {"windowfocus", "left"},
 		"<alt-meta-j>":   {"windowresize", "decrease", "width"},
-		"<ctrl-meta-h>":  {"windowdefaultsplit", "h"},
+		"<alt-h>":        {"windowdefaultsplit", "h"},
+		"<alt-v>":        {"windowdefaultsplit", "v"},
 		"<alt-shift-[>":  {"tabmove", "left"},
 		"<alt-]>":        {"tabnext"},
 		"<alt-[>":        {"tabprevious"},
