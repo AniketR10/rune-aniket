@@ -1086,8 +1086,6 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<a-s-/>":    "lsp references",
 		"<c-a-.>":    "echo {prompt}lsp<space>definition<space>",
 		"<c-s-a-/>":  "echo {prompt}lsp<space>references<space>",
-		"<c-x>d":     "fexplorer",
-		"<c-x>b":     "tabsearch",
 		"<c-x>j": "echo {prompt}jumptoast<space>locals.scm<space>" +
 			"local.definition.method|local.definition.function<space>",
 		"<a-s>o":     "searchtext",
@@ -1153,6 +1151,9 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<m-[>":     "tabprevious",
 		"<s-m-]>":   "tabmove right",
 		"<s-m-[>":   "tabmove left",
+
+		"<s-m-d>": "fexplorer",
+		"<s-m-t>": "tabsearch",
 	}
 	for key, wantCmd := range wantLive {
 		seq := mustParseBindingKey(t, key)
@@ -1194,8 +1195,8 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"searchtext":                   "<alt-s>o",
 		"jumptolocation next search":   "<meta-g>",
 		"jumptolocation prev search":   "<shift-meta-g>",
-		"fexplorer":                    "<ctrl-x>d",
-		"tabsearch":                    "<ctrl-x>b",
+		"fexplorer":                    "<shift-meta-d>",
+		"tabsearch":                    "<shift-meta-t>",
 		"lsp complete":                 "<ctrl-alt-i>",
 		"tabclose":                     "<meta-w>",
 		"tabprevious":                  "<meta-[>",
@@ -1231,6 +1232,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 
 	for _, key := range []string{
 		"<c-x>0", "<c-x>1", "<c-x>2", "<c-x>3", "<c-x>9",
+		"<c-x>d", "<c-x>b",
 	} {
 		_, ok := mappings[mustParseBindingKey(t, key)]
 		require.Falsef(t, ok,

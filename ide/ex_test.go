@@ -2522,8 +2522,8 @@ func TestExEmacsMetaLayoutBindingsReachCommandLayer(t *testing.T) {
 		{"<alt-shift-/>", "references"},
 		{"<ctrl-alt-.>", "definitionbyname"},
 		{"<ctrl-shift-alt-/>", "referencesbyname"},
-		{"<ctrl-x>d", "explorer"},
-		{"<ctrl-x>b", "tabpicker"},
+		{"<shift-meta-d>", "explorer"},
+		{"<shift-meta-t>", "tabpicker"},
 		{"<ctrl-x>j", "symbolpicker"},
 		{"<alt-s>o", "searchtext"},
 		{"<meta-g>", "nextsearch"},
@@ -2613,13 +2613,18 @@ func TestExEmacsLifecycleBindingsReachCommandLayerFromTerminal(t *testing.T) {
 		"<shift-meta-w>": "windowclose",
 		"<meta-k>":       "windowcloseall",
 		"<meta-e>":       "windowtogglemaximize",
+		"<shift-meta-d>": "fexplorer",
+		"<shift-meta-t>": "tabsearch",
 	}
 	for key, command := range wantBindings {
 		seq := mustParseBindingKey(t, key)
 		require.Equalf(t, [][]string{strings.Split(command, " ")}, mappings[seq],
 			"%s must run %q", key, command)
 	}
-	for _, key := range []string{"<ctrl-x>0", "<ctrl-x>1", "<ctrl-x>2", "<ctrl-x>3", "<ctrl-x>9"} {
+	for _, key := range []string{
+		"<ctrl-x>0", "<ctrl-x>1", "<ctrl-x>2", "<ctrl-x>3", "<ctrl-x>9",
+		"<ctrl-x>d", "<ctrl-x>b",
+	} {
 		_, ok := mappings[mustParseBindingKey(t, key)]
 		require.Falsef(t, ok, "%s must not remain as a terminal-inaccessible alias", key)
 	}
