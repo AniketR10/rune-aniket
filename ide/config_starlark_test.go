@@ -332,7 +332,7 @@ func TestRuneStarFixture(t *testing.T) {
 				search := editor["standard"].(map[string]any)["search"].(map[string]any)
 				assertStandardSearchMap(t, search, "default")
 				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, search["match_attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, search["status_attr"])
+				assert.NotContains(t, search, "status_attr")
 				statusLayout := editor["status_bar"].(map[string]any)["layout"].(string)
 				assert.Contains(t, statusLayout, "{{ .Status | bg \"red\" | fg \"white\" | bold }}")
 				// GUI-specific window manager frame charset should use the
@@ -365,7 +365,9 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.Equal(t, map[string]any{
 					"fg": "default", "bg": "#1e1e1e", "flags": "reverse",
 				}, search["match_attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "#1e1e1e"}, search["status_attr"])
+				// status_attr is intentionally unset so the status bar layout
+				// owns the find prompt styling.
+				assert.NotContains(t, search, "status_attr")
 			},
 		},
 	}
@@ -389,7 +391,7 @@ func assertStandardSearchMap(t *testing.T, search map[string]any, bg string) {
 	assert.Equal(t, "<m-r>", search["replace_key"])
 	for _, key := range []string{
 		"attr", "input_attr", "placeholder_attr", "frame_attr", "focus_frame_attr",
-		"button_attr", "button_hover_attr", "match_attr", "current_match_attr", "status_attr",
+		"button_attr", "button_hover_attr", "match_attr", "current_match_attr",
 	} {
 		assert.Contains(t, search, key)
 	}

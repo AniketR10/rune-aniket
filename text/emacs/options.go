@@ -42,7 +42,6 @@ type emacsConfig struct {
 	ruler              int
 	attr               term.Attributes
 	barAttr            term.Attributes
-	barAttrSet         bool
 	messageBarLayout   handler.LessMessageLayout
 	resAttr            term.Attributes
 	comments           text.CommentConfig
@@ -117,11 +116,10 @@ func WithResAttr(attr term.Attributes) Option {
 	}
 }
 
-// WithBarAttr sets the incremental-search status attributes.
+// WithBarAttr sets the echo-area bar attributes.
 func WithBarAttr(attr term.Attributes) Option {
 	return func(cfg *emacsConfig) {
 		cfg.barAttr = attr
-		cfg.barAttrSet = true
 	}
 }
 

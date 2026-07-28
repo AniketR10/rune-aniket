@@ -184,10 +184,10 @@ command:
 # ---------------------------------------------------------------------------
 # Editor message bar (echo area: search prompts and echoed messages)
 #
-# `attr` sets the base attributes of the bar and of the transient mode label
-# (ISEARCH, QUERY, ...) shown in the status bar. `layout` is a Go
-# text/template string with a single Message component and the same pipe
-# operators as the status bar; its styling wins over `attr`.
+# `attr` sets the base attributes of the bar. `layout` is a Go text/template
+# string with a single Message component and the same pipe operators as the
+# status bar; its styling wins over `attr`. The transient mode label
+# (ISEARCH, QUERY, ...) is styled by `editor.status_bar.layout` instead.
 # ---------------------------------------------------------------------------
 # editor:
 #   emacs:

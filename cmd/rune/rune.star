@@ -348,7 +348,6 @@ config = {
                 "button_hover_attr": attr(fg = "default", bg = "blue"),
                 "match_attr":        attr(fg = "grey", bg = "yellow"),
                 "current_match_attr": attr(fg = "default", bg = "default"),
-                "status_attr":       attr(fg = "default", bg = "purple"),
             },
         },
         "emacs": {
@@ -842,7 +841,6 @@ if tui:
                     "button_hover_attr": attr(fg = "default", bg = "blue"),
                     "match_attr":        attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
                     "current_match_attr": attr(fg = "default", bg = "#1e1e1e"),
-                    "status_attr":       attr(fg = "default", bg = "#1e1e1e"),
                 },
             },
             "aux_bar": {

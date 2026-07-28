@@ -290,11 +290,9 @@ func (h *standardHandler) setFindPrompt(prompt string) {
 	if !h.find.legacyPrompt && prompt != "" {
 		return
 	}
-	attr := h.cfg.search.StatusAttr
-	if attr == (term.Attributes{}) {
-		attr = h.cfg.attr
-	}
-	h.statusBar.SetStatus(prompt, attr)
+	// When status_attr is unset the zero value hands the slot back to the
+	// status bar layout; the editor attributes must not leak into it.
+	h.statusBar.SetStatus(prompt, h.cfg.search.StatusAttr)
 }
 
 func (h *standardHandler) handleFindKey(ev term.Event) (rehandle bool) {

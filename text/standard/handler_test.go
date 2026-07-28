@@ -1956,6 +1956,10 @@ func TestStandardFindCurrentMatchInvertsDefaultAttributes(t *testing.T) {
 	}
 }
 
+// statusLayoutAttr is the status slot styling supplied by the status bar
+// layout; it must survive find prompts that do not configure status_attr.
+var statusLayoutAttr = term.Attributes{Fg: term.ColorWhite, Bg: term.ColorPurple}
+
 func TestStandardFindStatusAttributes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1971,9 +1975,9 @@ func TestStandardFindStatusAttributes(t *testing.T) {
 			want: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorWhite},
 		},
 		{
-			name: "unconfigured status inherits editor attributes",
+			name: "unconfigured status keeps layout attributes",
 			opts: []Option{WithAttr(term.Attributes{Bg: term.ColorRed})},
-			want: term.Attributes{Bg: term.ColorRed},
+			want: statusLayoutAttr,
 		},
 	}
 
@@ -2015,8 +2019,9 @@ func newStandardFindHandler(t *testing.T, content string, opts ...Option) (text.
 		Publisher:        &texttest.TestEditor{},
 		ScheduleNextTick: func(fn func()) bool { fn(); return true },
 		Layout: []text.StatusBarComponent{{
-			Type:     text.StatusBarStatus,
-			Template: "%s",
+			Type:       text.StatusBarStatus,
+			Template:   "%s",
+			Attributes: statusLayoutAttr,
 		}},
 	})
 	root.setStatusBar(bar)

@@ -1606,6 +1606,27 @@ func TestEmacsTransientModesUpdateStatusBar(t *testing.T) {
 	}
 }
 
+// The status slot is owned by the status bar layout: emacs must not push the
+// echo-area or editor attributes into it, otherwise the layout's configured
+// colors are permanently replaced on the first transient mode.
+func TestEmacsTransientModeStatusKeepsLayoutAttributes(t *testing.T) {
+	h, _ := newEmacsHandler(t, "alpha beta",
+		WithBarAttr(term.Attributes{Fg: term.ColorBlack, Bg: term.ColorWhite}),
+		WithAttr(term.Attributes{Bg: term.ColorGray}),
+	)
+	root := h.(*emacsHandler)
+	bar := new(testStatusBar)
+	root.setStatusBar(bar)
+
+	require.True(t, runEvent(h, ctrl('s')))
+	require.Equal(t, "ISEARCH", bar.status)
+	require.Equal(t, term.Attributes{}, bar.attrs)
+
+	require.True(t, runEvent(h, key(term.KeyEnter)))
+	require.Empty(t, bar.status)
+	require.Equal(t, term.Attributes{}, bar.attrs)
+}
+
 func TestPasteFromClipboardHistory(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///myfile")
 	require.NoError(t, err)

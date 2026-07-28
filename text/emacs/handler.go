@@ -623,11 +623,9 @@ func (h *emacsHandler) renderPrompt() {
 }
 
 func (h *emacsHandler) setTransientMode(mode string) {
-	attr := h.cfg.barAttr
-	if !h.cfg.barAttrSet {
-		attr = h.cfg.attr
-	}
-	h.statusBar.SetStatus(mode, attr)
+	// Zero attributes let the status bar layout own the slot styling; the
+	// echo-area attributes must not leak into the status bar.
+	h.statusBar.SetStatus(mode, term.Attributes{})
 }
 
 // startGotoLine opens the go-to-line prompt (M-g g). On submit it moves point

@@ -2896,7 +2896,6 @@ func (c ideConfig) standardSearchConfig(wm standard.SearchWindowManager) standar
 		ButtonHoverAttr:  standardAttr,
 		MatchAttr:        c.standardResultAttr(),
 		CurrentMatchAttr: standardAttr,
-		StatusAttr:       standardAttr,
 	}
 	ret.PlaceholderAttr.Fg = term.ColorGray
 	ret.FrameAttr.Fg = term.ColorGray
