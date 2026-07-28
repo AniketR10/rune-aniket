@@ -294,3 +294,57 @@ func BenchmarkCellToBuffer1000(b *testing.B) {
 func BenchmarkCellToBuffer10000(b *testing.B) {
 	benchmarkCellToBuffer(b, 10000)
 }
+
+// TestByteCountsMatchesCellConverters guards that the compact
+// ByteCounts snapshot produces identical conversions to the full
+// cell-based converters, including multi-byte and grapheme-cluster
+// content where Cell.Bytes spans several codepoints.
+func TestByteCountsMatchesCellConverters(t *testing.T) {
+	buf := NewBuffer()
+	_, err := buf.ReadFrom(strings.NewReader(
+		"plain line\n\t中国 wide\n💥 emoji\n\nshort"))
+	require.NoError(t, err)
+	cells := buf.RawCells()
+	counts := NewByteCounts(nil, cells)
+
+	var total int
+	for _, row := range cells {
+		for _, c := range row {
+			total += int(c.Bytes)
+		}
+		total++ // \n
+	}
+
+	for offset := 0; offset <= total; offset++ {
+		want, wok := ConvertByteOffsetToCoordinates(cells, offset)
+		got, gok := counts.ByteOffsetToCoordinates(offset)
+		require.Equal(t, wok, gok, "offset %d", offset)
+		require.Equal(t, want, got, "offset %d", offset)
+	}
+
+	for y := 0; y <= len(cells); y++ {
+		maxX := 0
+		if y < len(cells) {
+			maxX = len(cells[y])
+		}
+		for x := 0; x <= maxX+1; x++ {
+			pos := term.Coordinates{Y: y, X: x}
+
+			wantOff, wok := ConvertCoordinatesToByteOffset(cells, pos)
+			gotOff, gok := counts.CoordinatesToByteOffset(pos)
+			require.Equal(t, wok, gok, "pos %v", pos)
+			require.Equal(t, wantOff, gotOff, "pos %v", pos)
+
+			wy, wx, wok2 := ConvertCoordinatesToRunePos(cells, pos)
+			gy, gx, gok2 := counts.CoordinatesToRunePos(pos)
+			require.Equal(t, wok2, gok2, "pos %v", pos)
+			require.Equal(t, wy, gy, "pos %v", pos)
+			require.Equal(t, wx, gx, "pos %v", pos)
+
+			want, wok3 := ConvertRunePosToCoordinates(cells, y, x)
+			got, gok3 := counts.RunePosToCoordinates(y, x)
+			require.Equal(t, wok3, gok3, "rune pos y=%d x=%d", y, x)
+			require.Equal(t, want, got, "rune pos y=%d x=%d", y, x)
+		}
+	}
+}

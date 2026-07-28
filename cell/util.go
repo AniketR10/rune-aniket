@@ -56,6 +56,26 @@ func CellsToBufferPerformance(c [][]term.Cell, fillInChar rune) *Buffer {
 	return cellsToBuffer(c, fillInChar, true)
 }
 
+// AdoptCellsToBuffer returns a Buffer that takes ownership of c as its
+// underlying matrix without copying. The caller must not retain, alias
+// or mutate c or its rows after the call. Use when the rows were built
+// specifically for the Buffer (e.g. decoded from an RPC payload) and a
+// defensive copy would only add allocation churn.
+func AdoptCellsToBuffer(c [][]term.Cell) *Buffer {
+	cells := new(rawCells)
+	cells.fillInChar = ' '
+	cells.columnCap = defColumnCap
+	cells.rowCap = defRowCap
+	cells.cells = c
+	// rawCells has the property that there's always at least one row.
+	if cells.Rows() == 0 {
+		cells.fillInRows(0)
+	}
+	ret := new(Buffer)
+	ret.initWithCells(cells)
+	return ret
+}
+
 func cellsToBuffer(c [][]term.Cell, fillInChar rune, performance bool) *Buffer {
 	cells := new(rawCells)
 	cells.fillInChar = fillInChar
@@ -129,6 +149,90 @@ func copyCellsContiguous(dst [][]term.Cell, src [][]term.Cell) [][]term.Cell {
 func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	ret term.Coordinates, ok bool,
 ) {
+	return runePosToCoordinates(cells, cellByteCount, y, x)
+}
+
+// ConvertCoordinatesToRunePos converts the given coordinates, which
+// represent code point coordinates into row, column position in numbers of bytes.
+func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
+	y, x int, ok bool,
+) {
+	return coordinatesToRunePos(cells, cellByteCount, c)
+}
+
+// ConvertByteOffsetToCoordinates converts the given byte offsets to term.Coordinates.
+// It returns false if it's out of bounds.
+func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
+	ret term.Coordinates, ok bool,
+) {
+	return byteOffsetToCoordinates(cells, cellByteCount, offset)
+}
+
+// ConvertCoordinatesToByteOffset converts the given coordinates to a byte offset.
+// It returns false if it's out of bounds.
+func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
+	offset int, ok bool,
+) {
+	return coordinatesToByteOffset(cells, cellByteCount, c)
+}
+
+// ByteCounts is a compact snapshot of a cell matrix retaining only each
+// cell's byte size (term.Cell.Bytes). It supports the same
+// coordinate/byte-offset conversions as a full [][]term.Cell at 1 byte
+// per cell instead of 24, for holders that must keep a point-in-time
+// copy of the buffer's shape (e.g. syntax trees) without duplicating
+// the whole cell matrix.
+type ByteCounts [][]uint8
+
+// NewByteCounts snapshots cells into dst, reusing dst's outer slice
+// capacity. Rows are carved exact-size out of a single slab.
+func NewByteCounts(dst ByteCounts, cells [][]term.Cell) ByteCounts {
+	dst = dst[:0]
+	var total int
+	for _, r := range cells {
+		total += len(r)
+	}
+	slab := make([]uint8, total)
+	var off int
+	for _, r := range cells {
+		n := len(r)
+		row := slab[off : off+n : off+n]
+		off += n
+		for x := range r {
+			row[x] = r[x].Bytes
+		}
+		dst = append(dst, row)
+	}
+	return dst
+}
+
+// RunePosToCoordinates is the ByteCounts form of ConvertRunePosToCoordinates.
+func (b ByteCounts) RunePosToCoordinates(y, x int) (term.Coordinates, bool) {
+	return runePosToCoordinates(b, uint8ByteCount, y, x)
+}
+
+// CoordinatesToRunePos is the ByteCounts form of ConvertCoordinatesToRunePos.
+func (b ByteCounts) CoordinatesToRunePos(c term.Coordinates) (y, x int, ok bool) {
+	return coordinatesToRunePos(b, uint8ByteCount, c)
+}
+
+// ByteOffsetToCoordinates is the ByteCounts form of ConvertByteOffsetToCoordinates.
+func (b ByteCounts) ByteOffsetToCoordinates(offset int) (term.Coordinates, bool) {
+	return byteOffsetToCoordinates(b, uint8ByteCount, offset)
+}
+
+// CoordinatesToByteOffset is the ByteCounts form of ConvertCoordinatesToByteOffset.
+func (b ByteCounts) CoordinatesToByteOffset(c term.Coordinates) (int, bool) {
+	return coordinatesToByteOffset(b, uint8ByteCount, c)
+}
+
+func cellByteCount(c term.Cell) int { return int(c.Bytes) }
+
+func uint8ByteCount(b uint8) int { return int(b) }
+
+func runePosToCoordinates[T any](cells [][]T, bytes func(T) int, y, x int) (
+	ret term.Coordinates, ok bool,
+) {
 	if len(cells) == 0 {
 		return
 	}
@@ -143,10 +247,9 @@ func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 		return
 	}
 
-	line := cells[ret.Y]
-	cellView := [1][]term.Cell{line}
+	cellView := [1][]T{cells[ret.Y]}
 	var bret term.Coordinates
-	bret, ok = ConvertByteOffsetToCoordinates(cellView[:], x)
+	bret, ok = byteOffsetToCoordinates(cellView[:], bytes, x)
 	if !ok {
 		return
 	}
@@ -154,9 +257,7 @@ func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	return
 }
 
-// ConvertCoordinatesToRunePos converts the given coordinates, which
-// represent code point coordinates into row, column position in numbers of bytes.
-func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
+func coordinatesToRunePos[T any](cells [][]T, bytes func(T) int, c term.Coordinates) (
 	y, x int, ok bool,
 ) {
 	if c.Y < 0 || c.X < 0 {
@@ -179,9 +280,9 @@ func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	if c.X > len(line) {
 		c.X = len(line)
 	}
-	cellView := [1][]term.Cell{line}
+	cellView := [1][]T{line}
 	var bretX int
-	bretX, ok = ConvertCoordinatesToByteOffset(cellView[:], term.Coordinates{X: c.X})
+	bretX, ok = coordinatesToByteOffset(cellView[:], bytes, term.Coordinates{X: c.X})
 	if !ok {
 		return
 	}
@@ -189,9 +290,7 @@ func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	return
 }
 
-// ConvertByteOffsetToCoordinates converts the given byte offsets to term.Coordinates.
-// It returns false if it's out of bounds.
-func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
+func byteOffsetToCoordinates[T any](cells [][]T, bytes func(T) int, offset int) (
 	ret term.Coordinates, ok bool,
 ) {
 	if offset < 0 {
@@ -205,8 +304,8 @@ func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
 		if pos >= offset {
 			return term.Coordinates{X: 0, Y: y}, true
 		}
-		for x, cell := range row {
-			pos += int(cell.Bytes)
+		for x := range row {
+			pos += bytes(row[x])
 			if pos >= offset {
 				return term.Coordinates{X: x + 1, Y: y}, true
 			}
@@ -221,9 +320,7 @@ func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
 	return term.Coordinates{X: 0, Y: len(cells)}, true
 }
 
-// ConvertCoordinatesToByteOffset converts the given coordinates to a byte offset.
-// It returns false if it's out of bounds.
-func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
+func coordinatesToByteOffset[T any](cells [][]T, bytes func(T) int, c term.Coordinates) (
 	offset int, ok bool,
 ) {
 	if c.Y < 0 || c.X < 0 {
@@ -232,7 +329,7 @@ func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
 	if c == (term.Coordinates{}) {
 		return 0, len(cells) >= 1
 	}
-	var row []term.Cell
+	var row []T
 	if c.Y >= len(cells) {
 		c.Y = len(cells)
 	} else {
@@ -243,12 +340,12 @@ func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
 	}
 	for y := 0; y < c.Y; y++ {
 		for _, cell := range cells[y] {
-			offset += int(cell.Bytes)
+			offset += bytes(cell)
 		}
 		offset++ // \n
 	}
 	for x := 0; x < c.X; x++ {
-		offset += int(row[x].Bytes)
+		offset += bytes(row[x])
 	}
 	return offset, true
 }
