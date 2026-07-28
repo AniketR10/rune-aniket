@@ -26,7 +26,6 @@ package cell
 import (
 	"context"
 	"io"
-	"math"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -118,9 +117,13 @@ func (b *Buffer) InitPerformance(rowCapacity, columnCapacity int, fillInChar run
 	b.initPerformanceWithCells(cells)
 }
 
-// ResetCapacity resets the capacity given to new rows.
+// ResetCapacity resets the capacity given to new rows. Non-positive
+// values fall back to the default capacity.
 func (b *Buffer) ResetCapacity(capacity int) {
-	b.cells.columnCap = int(math.Max(float64(defColumnCap), float64(capacity)))
+	if capacity <= 0 {
+		capacity = defColumnCap
+	}
+	b.cells.columnCap = capacity
 }
 
 // ResetPerformanceCapacity releases the current backing storage and resets this

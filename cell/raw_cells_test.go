@@ -855,3 +855,86 @@ func BenchmarkBufferReadFrom10000(b *testing.B) {
 // func BenchmarkBufferReadFrom100MB(b *testing.B) {
 // 	benchmarkBufferReadFrom(b, 1000000)
 // }
+
+// TestReadFromSlabRows guards the exact-size slab row contract: rows
+// loaded via ReadFrom must not retain columnCap-sized backing arrays,
+// and a later edit to one row must copy it out of the slab instead of
+// clobbering its neighbours.
+func TestReadFromSlabRows(t *testing.T) {
+	t.Run("rows are exact size", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		content := "short\n\nlonger line of content\nx"
+		_, err := c.ReadFrom(strings.NewReader(content))
+		require.NoError(t, err)
+		require.Equal(t, 4, c.Rows())
+		for y, row := range c.cells {
+			assert.Equal(t, len(row), cap(row), "row %d must have cap==len", y)
+		}
+		assert.Equal(t, content, c.String())
+	})
+
+	t.Run("edit copies row out of the slab", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		_, err := c.ReadFrom(strings.NewReader("aaaa\nbbbb\ncccc"))
+		require.NoError(t, err)
+
+		c.insertAtPerf(term.Coordinates{Y: 1, X: 2}, 'X', 1, 1)
+
+		assert.Equal(t, "aaaa\nbbXbb\ncccc", c.String(),
+			"neighbouring slab rows must be unaffected by the edit")
+	})
+
+	t.Run("append after load preserves prior content", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		_, err := c.ReadFrom(strings.NewReader("one\ntwo"))
+		require.NoError(t, err)
+		_, err = c.ReadFrom(strings.NewReader(" three\nfour"))
+		require.NoError(t, err)
+		assert.Equal(t, "one\ntwo three\nfour", c.String())
+	})
+
+	t.Run("empty read leaves buffer untouched", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		row := c.cells[0]
+		_, err := c.ReadFrom(strings.NewReader(""))
+		require.NoError(t, err)
+		assert.Equal(t, defColumnCap, cap(c.cells[0]))
+		assert.Equal(t, cap(row), cap(c.cells[0]))
+	})
+}
+
+// TestResetWithCapHonorsSmallCaps guards that explicitly requested
+// small capacities are not clamped up to the defaults: narrow bars
+// (auxbar, locbar) request 3-10 wide rows and must not pay for
+// 64-cell backing arrays per row.
+func TestResetWithCapHonorsSmallCaps(t *testing.T) {
+	var c rawCells
+	c.initWithCap(2, 3, ' ')
+	assert.Equal(t, 2, cap(c.cells))
+	assert.Equal(t, 3, cap(c.cells[0]))
+
+	c.fillInRows(1)
+	assert.Equal(t, 3, cap(c.cells[1]))
+
+	// non-positive caps fall back to the defaults
+	c.resetWithCap(0, -1)
+	assert.Equal(t, defRowCap, cap(c.cells))
+	assert.Equal(t, defColumnCap, cap(c.cells[0]))
+}
+
+func TestResetCapacityHonorsSmallCaps(t *testing.T) {
+	var b Buffer
+	b.InitPerformance(2, 3, ' ')
+
+	b.ResetCapacity(5)
+	b.cells.fillInRows(1)
+	assert.Equal(t, 5, cap(b.cells.cells[1]))
+
+	b.ResetCapacity(0)
+	b.cells.fillInRows(2)
+	assert.Equal(t, defColumnCap, cap(b.cells.cells[2]))
+}

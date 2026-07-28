@@ -153,9 +153,9 @@ func TestResetPerformanceCapacityDropsBackingStorage(t *testing.T) {
 	b.ResetPerformanceCapacity(3, 4)
 
 	assert.Equal(t, 1, b.Rows())
-	assert.Equal(t, 64, cap(b.cells.cells))
+	assert.Equal(t, 3, cap(b.cells.cells))
 	assert.Equal(t, 0, len(b.cells.cells[0]))
-	assert.Equal(t, 64, cap(b.cells.cells[0]))
+	assert.Equal(t, 4, cap(b.cells.cells[0]))
 	assert.Equal(t, '.', b.cells.fillInChar)
 }
 

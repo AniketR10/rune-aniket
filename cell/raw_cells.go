@@ -39,6 +39,13 @@ import (
 const (
 	defColumnCap int = 64
 	defRowCap    int = 64
+	// readFromWithView carves exact-size rows out of shared backing
+	// slabs. Slabs grow geometrically from init to max so small buffers
+	// do not retain a large mostly-unused slab (rows pin their slab for
+	// the lifetime of the buffer), while large loads settle on ~384KiB
+	// slabs (at 24 bytes per cell).
+	readSlabInitCells int = 256
+	readSlabMaxCells  int = 16 * 1024
 )
 
 // rawCells is a matrix of term.Cell.
@@ -67,8 +74,14 @@ func (c *rawCells) reset() {
 }
 
 func (c *rawCells) resetWithCap(rowCap, columnCap int) {
-	c.columnCap = int(math.Max(float64(columnCap), float64(defColumnCap)))
-	c.rowCap = int(math.Max(float64(rowCap), float64(defRowCap)))
+	if columnCap <= 0 {
+		columnCap = defColumnCap
+	}
+	if rowCap <= 0 {
+		rowCap = defRowCap
+	}
+	c.columnCap = columnCap
+	c.rowCap = rowCap
 	c.cells = make([][]term.Cell, 1, c.rowCap)
 	c.cells[0] = makeNewRow(0, c.columnCap)
 	c.zwj = false
@@ -756,6 +769,30 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 	rowY := nextWrite(view).Y
 	reader := bufio.NewReader(r)
 	n := int64(0)
+
+	// Each line accumulates in scratch and is committed as an exact-size
+	// (cap==len) sub-slice of a shared slab, so short rows do not retain
+	// columnCap-sized backing arrays for the lifetime of the buffer. The
+	// 3-index slice means a later append to a committed row copies it
+	// back out of the slab instead of clobbering its neighbour.
+	scratch := c.cells[rowY]
+	var slab []term.Cell
+	var slabOff int
+	slabSize := readSlabInitCells
+	touched := false
+	commit := func() {
+		m := len(scratch)
+		if slab == nil || cap(slab)-slabOff < m {
+			slab = make([]term.Cell, max(slabSize, m))
+			slabSize = min(slabSize*2, readSlabMaxCells)
+			slabOff = 0
+		}
+		row := slab[slabOff : slabOff+m : slabOff+m]
+		slabOff += m
+		copy(row, scratch)
+		c.cells[rowY] = row
+		scratch = scratch[:0]
+	}
 	for {
 		str, err := reader.ReadString('\n')
 		state := -1
@@ -763,6 +800,7 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 		var width, byteCount uint8
 		n += int64(len([]byte(str)))
 		for len(str) > 0 {
+			touched = true
 			// NOTE: this is significantly slower than, just ignoring grapheme clusters
 			// but it should be ok as it's done once per file, and because calculating the width
 			// is front loaded, it should amortize over long interactions on a particular file.
@@ -774,7 +812,8 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 				byteCount = 1
 				switch cluster[0] {
 				case '\n':
-					c.cells = append(c.cells, makeNewRow(0, c.columnCap))
+					commit()
+					c.cells = append(c.cells, nil)
 					rowY++
 				default:
 					cell := term.Cell{
@@ -782,14 +821,15 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 						Width: width,
 						Bytes: byteCount,
 					}
-					c.cells[rowY] = append(c.cells[rowY], cell)
+					scratch = append(scratch, cell)
 				}
 			} else {
 				byteCount = uint8(len([]byte(cluster)))
 				r := []rune(cluster)
 				switch r[0] {
 				case '\n':
-					c.cells = append(c.cells, makeNewRow(0, c.columnCap))
+					commit()
+					c.cells = append(c.cells, nil)
 					rowY++
 				default:
 					cell := term.Cell{
@@ -800,13 +840,16 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 					if len(r) > 1 {
 						cell.SetCombining(r[1:])
 					}
-					c.cells[rowY] = append(c.cells[rowY], cell)
+					scratch = append(scratch, cell)
 				}
 			}
 		}
 		if err != nil {
 			if err == io.EOF {
 				err = nil
+			}
+			if touched {
+				commit()
 			}
 			return n, err
 		}
