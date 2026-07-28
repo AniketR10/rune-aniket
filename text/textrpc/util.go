@@ -24,8 +24,6 @@
 package textrpc
 
 import (
-	"context"
-
 	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -71,25 +69,31 @@ func NewRawCellsResponse(cells [][]term.Cell) *textrpc.RawCellsResponse {
 }
 
 func rowsToBuffer(in []*termrpc.CellRow) *cell.Buffer {
-	var maxWidth int
+	var total int
 	for _, row := range in {
-		if len(row.Cells) > maxWidth {
-			maxWidth = len(row.Cells)
-		}
+		total += len(row.Cells)
 	}
 
-	var w cell.BufferWriter
-	w.Init(context.Background(), maxWidth, len(in))
-
-	for y, rows := range in {
-		for x, cell := range rows.Cells {
-			w.SetCell(term.Coordinates{X: x, Y: y}, cell.ToModel())
+	// Rows are carved exact-size (cap==len) out of one contiguous slab:
+	// a height x maxWidth rectangle here would be retained for the
+	// lifetime of the buffer, which is quadratic-ish waste when a single
+	// long line meets many short ones.
+	rows := make([][]term.Cell, len(in))
+	slab := make([]term.Cell, total)
+	var off int
+	for y, row := range in {
+		n := len(row.Cells)
+		if n == 0 {
+			continue
 		}
+		r := slab[off : off+n : off+n]
+		off += n
+		for x, c := range row.Cells {
+			r[x] = c.ToModel()
+		}
+		rows[y] = r
 	}
-
-	ret := new(cell.Buffer)
-	w.ToBuffer(ret)
-	return ret
+	return cell.AdoptCellsToBuffer(rows)
 }
 
 func rawCellsToProtoCells(cells [][]term.Cell) []*termrpc.CellRow {

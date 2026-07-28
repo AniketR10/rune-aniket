@@ -72,6 +72,23 @@ func TestBufferEditRequest(t *testing.T) {
 	}
 }
 
+// TestRowsToBufferRowsAreExactSize guards against rowsToBuffer
+// materializing a height x maxWidth rectangle: one long line among
+// many short ones must not make every row retain a maxWidth-sized
+// backing array for the lifetime of the buffer.
+func TestRowsToBufferRowsAreExactSize(t *testing.T) {
+	content := strings.Repeat("x", 4096) + "\na\nbb\n\nccc"
+	buf := cell.NewBuffer()
+	buf.WriteString(content)
+	req := NewEditRequest(workspaceapi.URI{}, buf, false, false)
+
+	out := EditRequestToBuffer(&req)
+	assert.Equal(t, content, out.String())
+	for y, row := range out.RawCells() {
+		assert.Equal(t, len(row), cap(row), "row %d must have cap==len", y)
+	}
+}
+
 func benchmarkEditRequest(b *testing.B, width, height int) {
 	var str strings.Builder
 	for range width {
