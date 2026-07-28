@@ -438,7 +438,7 @@ tutorial(entry=run)
 }
 
 // TestWaitCommandHintRendersAsFramedBox asserts that the
-// wait_command hint renders as a browser window near the top of the
+// wait_command hint renders as a browser window at the bottom of the
 // screen with markdown body. The prefix line ("Waiting for you …")
 // must be present and the configured command key must be expanded
 // in place of the `<cmd>` token.
@@ -459,9 +459,9 @@ tutorial(entry=run)
 	tut.Draw(g)
 	tut.winOverlay.Draw(g)
 
-	pos, _, _ := activeWindowRect(t, tut)
-	assert.Equal(t, 1, pos.Y,
-		"hint window must sit just below the top of the screen")
+	pos, _, h := activeWindowRect(t, tut)
+	assert.Equal(t, screenH, pos.Y+h,
+		"hint window must sit flush against the bottom of the screen")
 	fcs := component.FrameCharSetDefault()
 	bottomFound := false
 	for y := range screenH {
@@ -599,11 +599,12 @@ tutorial(entry=run)
 		"hint must mention the command's bound key")
 }
 
-// TestWaitCommandHintCapsAboveCommandPrompt asserts that a long hint
-// body does not grow the window past the command prompt's anchor row
-// (0.2*height) by more than hintBoxMaxHeightSlack rows, so the prompt
-// the user is told to open stays visible below the hint.
-func TestWaitCommandHintCapsAboveCommandPrompt(t *testing.T) {
+// TestWaitCommandHintStaysClearOfCommandPrompt asserts that a hint
+// window never covers the command prompt the step asks the user to
+// open. The prompt anchors at 0.2*height, so the hint must start
+// below that row — including on short screens, where a long hint body
+// used to spill over the prompt.
+func TestWaitCommandHintStaysClearOfCommandPrompt(t *testing.T) {
 	t.Parallel()
 	longHint := strings.Repeat("This is a long recovery hint line. ", 40)
 	src := `
@@ -611,34 +612,34 @@ def run():
     wait_command(command="wopen", on_error="` + longHint + `")
 tutorial(entry=run)
 `
-	tut, _ := newTutorial(t, src)
-	const screenW, screenH = 80, 50
-	tut.Resize(screenW, screenH)
-	resetAndWait(t, tut, time.Second)
-	defer tut.Stop()
+	for _, screenH := range []int{24, 50} {
+		t.Run(fmt.Sprintf("height-%d", screenH), func(t *testing.T) {
+			t.Parallel()
+			tut, _ := newTutorial(t, src)
+			const screenW = 80
+			tut.Resize(screenW, screenH)
+			resetAndWait(t, tut, time.Second)
+			defer tut.Stop()
 
-	// Swap in the (long) on_error hint by simulating a failed dispatch.
-	tut.ObserveCommand("wopen", "wopen", nil,
-		fmt.Errorf("missing argument"))
+			// Swap in the (long) on_error hint by simulating a
+			// failed dispatch.
+			tut.ObserveCommand("wopen", "wopen", nil,
+				fmt.Errorf("missing argument"))
 
-	g := newAttrGridWriter(screenW, screenH)
-	tut.Draw(g)
-	tut.winOverlay.Draw(g)
+			g := newAttrGridWriter(screenW, screenH)
+			tut.Draw(g)
+			tut.winOverlay.Draw(g)
 
-	fcs := component.FrameCharSetDefault()
-	bottomY := -1
-	for y := range screenH {
-		if strings.ContainsRune(g.rowRunes(y), fcs.BottomLeft) {
-			bottomY = y
-		}
+			pos, _, h := activeWindowRect(t, tut)
+			promptTopY := int(float64(screenH) * commandPromptTopFraction)
+			assert.Greater(t, pos.Y, promptTopY,
+				"hint window top (row %d) must stay below the command "+
+					"prompt anchor (row %d) so the prompt stays visible",
+				pos.Y, promptTopY)
+			assert.LessOrEqual(t, pos.Y+h, screenH,
+				"hint window must stay on screen")
+		})
 	}
-	require.NotEqual(t, -1, bottomY, "hint window must render a bottom edge")
-
-	promptTopY := int(float64(screenH) * commandPromptTopFraction)
-	assert.LessOrEqual(t, bottomY, promptTopY+hintBoxMaxHeightSlack,
-		"hint window bottom (row %d) must stay at or above the command "+
-			"prompt anchor (row %d) plus slack so the prompt stays visible",
-		bottomY, promptTopY)
 }
 
 // TestConfirmOverlayMeetsMinimumSize asserts that even with a very

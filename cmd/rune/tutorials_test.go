@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "43", tut.Version())
+	assert.Equal(t, "44", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "43", tut.Version())
+	assert.Equal(t, "44", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -605,9 +605,12 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 
 func TestTutorialPackageInstallOwnership(t *testing.T) {
 	t.Parallel()
-	assert.Contains(t, basicsTutorial, "pkg install fuzzy-search")
-	assert.NotContains(t, basicsTutorial, "pkg install rune-agent")
-	assert.NotContains(t, agentTutorial, "console_intro_md")
+	// The basics tutorial installs nothing and never sends the user to
+	// the console; the agent tutorial owns both the console introduction
+	// and the only package install of the playlist.
+	assert.NotContains(t, basicsTutorial, "pkg install")
+	assert.NotContains(t, basicsTutorial, `command  = "console"`)
+	assert.Contains(t, agentTutorial, "Rune console")
 	assert.Contains(t, agentTutorial, "pkg install rune-agent")
 }
 
@@ -673,6 +676,12 @@ func TestNavigationTutorialFlow(t *testing.T) {
 		require.True(t, tut.WaitActive("wait_event", 2*time.Second),
 			"expected a wait_event step")
 	}
+
+	// Layout cleanup comes first so the tutorial starts on a clean screen.
+	waitFW()
+	dismiss()
+	waitCmd()
+	tut.ObserveCommand("windowcloseall", "windowcloseall", nil, nil)
 
 	// Intro window.
 	waitFW()
@@ -745,6 +754,7 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	// emits. Definition-under-cursor precedes definition-by-name and the
 	// cursor history is walked back then forward.
 	assert.Equal(t, []string{
+		"Layout cleared.",
 		"You found a file by name.",
 		"You found text across the workspace.",
 		"You jumped to a function in the current file.",
@@ -910,6 +920,10 @@ func advanceToDefinitionWindow(t *testing.T, mode string) *starlarktutorial.Tuto
 		require.True(t, tut.WaitActive("wait_event", 2*time.Second))
 	}
 
+	fw() // clear the layout
+	dismiss()
+	cmd()
+	tut.ObserveCommand("windowcloseall", "windowcloseall", nil, nil)
 	fw() // intro
 	dismiss()
 	fw() // searchfile
@@ -1002,7 +1016,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "9", tut.Version())
+	assert.Equal(t, "10", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1023,7 +1037,7 @@ func TestAgentTutorialParses(t *testing.T) {
 	require.NotNil(t, tut)
 	assert.Equal(t, "agent", tut.ID())
 	assert.Equal(t, "Rune Agent", tut.Title())
-	assert.Equal(t, "1", tut.Version())
+	assert.Equal(t, "2", tut.Version())
 }
 
 func TestEmbeddedTutorialPlaylist(t *testing.T) {
@@ -1068,7 +1082,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "9", tut.Version())
+	assert.Equal(t, "10", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1094,7 +1108,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "9", tut.Version())
+	assert.Equal(t, "10", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
@@ -1133,5 +1147,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "43", tut.Version())
+	assert.Equal(t, "44", tut.Version())
 }

@@ -50,12 +50,19 @@ agent_install_md = """\
 The **Rune Agent** is Rune's builtin AI coding assistant. It ships as a
 package you install on demand, so the first step is to install it.
 
-First, open Rune's console:
+Packages are installed from the **Rune console**, which is not the
+command prompt you have been using. The prompt (`""" + ck + """`) is the
+one-line prompt that closes again as soon as the command runs. The
+console is a separate, durable tab with its own REPL, wired with the
+commands that want a persistent output window, like installing a package
+or checking an extension's status.
+
+The console **sets up** Rune, the prompt **drives** it.
+
+Open the console now:
 
 1. Press `""" + ck + """` to open the command prompt.
 2. Type `console` and press Enter.
-
-Press `<enter>` or `<space>` to continue.
 """
 
 agent_pkg_install_md = """\
@@ -231,4 +238,4 @@ def run():
     teach_agent()
     teach_help()
 
-tutorial(id = "agent", title = "Rune Agent", version = "1", entry = run)
+tutorial(id = "agent", title = "Rune Agent", version = "2", entry = run)

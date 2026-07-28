@@ -208,9 +208,10 @@ func (t *Tutorial) openPromptWindow(r *request) {
 }
 
 // openHintWindow opens the non-modal hint window for a wait_* request
-// near the top of the screen. Keys are never routed to it — they fall
-// through to the IDE root while the request is armed — but the user
-// can drag it aside, scroll it, or close it via the window bar
+// at the bottom of the screen, clear of the command prompt the step
+// usually asks the user to open. Keys are never routed to it — they
+// fall through to the IDE root while the request is armed — but the
+// user can drag it aside, scroll it, or close it via the window bar
 // without resolving the step.
 func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	if t.winOverlay == nil {
@@ -226,7 +227,7 @@ func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	content.hint = true
 	r.winContent = content
 	r.win = t.winOverlay.Floating(content, browserapi.FloatingConfig{
-		Alignment: component.AlignmentTop |
+		Alignment: component.AlignmentBottom |
 			component.AlignmentHorizontallyCentered,
 		Title: floatingWindowTitle(r),
 	})

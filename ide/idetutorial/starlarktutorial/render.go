@@ -82,9 +82,9 @@ func drawBanner(
 
 // commandPromptTopFraction mirrors the command prompt's vertical
 // anchor: the IDE opens the prompt at Y = 0.2 * height (see
-// (*ex).newCommandPrompt). The wait hint window caps its height to end
-// above that row so the prompt the user is asked to open stays visible
-// beneath it.
+// (*ex).newCommandPrompt). The bottom-anchored wait hint window caps
+// its height against that row so it never grows up into the prompt the
+// user is asked to open.
 const commandPromptTopFraction = 0.2
 
 // hintBoxMinInnerH keeps the hint window tall enough to show its

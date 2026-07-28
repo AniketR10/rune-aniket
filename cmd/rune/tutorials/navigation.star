@@ -73,6 +73,14 @@ def dismiss_for(cmd, *args):
     k = key_for(cmd, *args)
     return [ck, k] if k else [ck]
 
+cleanup_md = """\
+The last tutorial left splits and floating windows behind. `windowcloseall`
+keeps the focused window and closes every other one, so you start this
+one with a clean screen.""" + keyhint("windowcloseall") + """
+
+Clear the layout: """ + keypress("windowcloseall") + """.
+"""
+
 intro_md = """\
 You already know how to open files and move windows. This tutorial is
 about moving around **code**: jumping between files, symbols, and
@@ -227,6 +235,17 @@ replay this walkthrough.
 Press `<enter>` or `<space>` to continue.
 """
 
+def teach_cleanup():
+    floating_window(title = "Clear the layout", text = cleanup_md,
+                    dismiss_keys = dismiss_for("windowcloseall"))
+    wait_command(
+        title    = "Clear the layout",
+        command  = "windowcloseall",
+        on_error = "Close every window except the focused one with `<cmd>windowcloseall`.",
+    )
+    notify(level = success, message = "Layout cleared.")
+
+
 def teach_searchfile():
     if not key_for("searchfile"):
         floating_window(title = "Find a file by name", text = searchfile_missing_md,
@@ -362,6 +381,8 @@ def run():
              "automatically.")
         return
 
+    teach_cleanup()
+
     floating_window(title = "Navigate code", text = intro_md, dismiss_keys = [ck])
 
     teach_searchfile()
@@ -377,4 +398,4 @@ def run():
                     alignment = "top", dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "9", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "10", entry = run)

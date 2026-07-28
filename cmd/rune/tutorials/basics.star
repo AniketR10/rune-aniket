@@ -555,43 +555,6 @@ you want by default.
 Press `<enter>` or `<space>` to continue.
 """
 
-console_intro_md = """\
-The **Rune console** is not the command prompt you have been using.
-
-The **command prompt** (`""" + ck + """`) is the one-line prompt you
-open, type one command into, and watch close again once it runs. Good
-for one-off actions like opening a file, splitting a window, or
-jumping to a definition.
-
-The **console** is a separate, durable tab with its own REPL. It is
-wired with commands that benefit from a persistent output window, such
-as checking an extension's status or installing a new package.
-
-The console is used to **set up** Rune, the prompt is used to **drive** it.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
-fuzzy_search_open_md = """\
-Let's use the console to install **fuzzy-search**. This package provides
-the `searchfile` and `searchtext` commands used in the navigation
-tutorial.
-
-First, open Rune's console:
-
-1. Press `""" + ck + """` to open the command prompt.
-2. Type `console` and press Enter.
-"""
-
-fuzzy_search_install_md = """\
-Install the fuzzy-search package from the console:
-
-1. Type `pkg install fuzzy-search`.
-2. Press Enter and wait for the install to finish.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
 cheatsheet_md = """\
 There's a `cheatsheet` command that condenses all of this tutorial's
 learnings and more into a single cheat sheet you can pull up any time.
@@ -917,26 +880,6 @@ def teach_guicommands():
                     dismiss_keys = [ck])
 
 
-def teach_console():
-    floating_window(title = "The Rune console", text = console_intro_md)
-
-    floating_window(title = "Install fuzzy search", text = fuzzy_search_open_md,
-                    dismiss_keys = [ck])
-    wait_command(
-        title    = "Install fuzzy search",
-        command  = "console",
-        on_error = "Open Rune's console with the `<cmd>console` command.",
-    )
-
-    floating_window(title = "Install fuzzy search", text = fuzzy_search_install_md)
-    wait_shell(
-        title    = "Install fuzzy search",
-        args     = ["pkg", "install", "fuzzy-search"],
-        on_error = "In Rune's console, run `pkg install fuzzy-search`.",
-    )
-    notify(level = success, message = "Fuzzy search installed.")
-
-
 def run():
     floating_window(
         title = "Welcome",
@@ -981,7 +924,5 @@ def run():
 
     teach_cheatsheet()
 
-    teach_console()
 
-
-tutorial(id = "basics", title = "Rune basics", version = "43", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "44", entry = run)
