@@ -36,15 +36,15 @@ import (
 // NewExtension returns an extension and its metadata.
 func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 	return &workspaceExtension{}, extensionapi.Metadata{
-			DeveloperID:    "Unstable Build",
-			DeveloperEmail: "it@unstable.build",
-			DeveloperKey:   "064D4ABCFA6D9338",
-			ExtensionID:    "rune-agent",
-			ExtensionName:  "Rune Agent",
-			Permissions: extensionapi.NewPermissions(
-				permissions...,
-			),
-		}
+		DeveloperID:    "Unstable Build",
+		DeveloperEmail: "it@unstable.build",
+		DeveloperKey:   "064D4ABCFA6D9338",
+		ExtensionID:    "rune-agent",
+		ExtensionName:  "Rune Agent",
+		Permissions: extensionapi.NewPermissions(
+			permissions...,
+		),
+	}
 }
 
 var (

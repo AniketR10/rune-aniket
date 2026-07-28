@@ -37,9 +37,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // stubConversationStore is a minimal in-memory Store for testing the

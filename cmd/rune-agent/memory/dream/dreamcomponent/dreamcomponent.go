@@ -37,7 +37,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"

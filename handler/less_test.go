@@ -596,11 +596,11 @@ func TestLessMessageLayoutAttributes(t *testing.T) {
 			wantAttr: term.Attributes{Bg: term.ColorGray, Fg: term.ColorWhite},
 		},
 		{
-			name:    "layout styling wins over the bar attributes",
-			layout:  `░▒▓█ {{ .Message | bg "red" | fg "white" }} `,
-			config:  LessConfig{SuperimposeMessage: true, BarAttr: term.Attributes{Bg: term.ColorGray}},
-			message: "QUERY",
-			column:  15,
+			name:     "layout styling wins over the bar attributes",
+			layout:   `░▒▓█ {{ .Message | bg "red" | fg "white" }} `,
+			config:   LessConfig{SuperimposeMessage: true, BarAttr: term.Attributes{Bg: term.ColorGray}},
+			message:  "QUERY",
+			column:   15,
 			wantAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
 		},
 	}

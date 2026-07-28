@@ -145,6 +145,35 @@ func TestStandardPresetsKeepMetaSlashForLineComments(t *testing.T) {
 	}
 }
 
+func TestStandardPresetsAvoidEditorKeyConflicts(t *testing.T) {
+	tests := []struct {
+		path        string
+		explorerKey string
+	}{
+		{"preset_standard_darwin.yaml", "<s-m-e>"},
+		{"preset_standard_linux.yaml", "<c-s-e>"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			bindings := bindingsOfFile(t, tc.path)
+			require.Equal(t, "fexplorer", bindings[tc.explorerKey])
+			require.Equal(t, "cursorhistory prev", bindings["<c-a-j>"])
+			require.Equal(t, "cursorhistory next", bindings["<c-a-l>"])
+			require.Equal(t, "lsp hover", bindings["<c-m-q>"])
+			require.Equal(t,
+				"echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
+				bindings["<c-s-a-v>"])
+
+			for _, stale := range []string{
+				"<shift-tab>", "<ctrl-->", "<ctrl-shift-->", "<c-a-h>", "<c-a-v>",
+			} {
+				require.NotContains(t, bindings, stale)
+			}
+		})
+	}
+}
+
 func TestMigrateConfigKeyBindingsSelectsPresetByEditor(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

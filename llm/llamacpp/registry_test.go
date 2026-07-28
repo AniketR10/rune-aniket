@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package llamacpp_test
 
 import (
@@ -35,11 +34,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm/llamacpp"
 	"unstable.build/go-tui/llm/llamacpp/ociregistry"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // digestBytes returns the sha256: digest used by the OCI cache layout.

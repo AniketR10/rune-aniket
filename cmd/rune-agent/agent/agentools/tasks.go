@@ -28,9 +28,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // NewTaskTools returns the four task tracking tools: TaskCreate, TaskUpdate,

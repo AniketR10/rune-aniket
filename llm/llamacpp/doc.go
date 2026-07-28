@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package llamacpp maintains the on-disk catalog of locally-cached GGUF
 // models. It downloads models from OCI/HuggingFace registries (see the
 // ociregistry subpackage), tracks them under a cache directory, and exposes

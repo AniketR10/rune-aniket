@@ -38,10 +38,10 @@ import (
 // the lifecycle context is cancelled, and drives each Cmd's Watcher on
 // exit — matching the contract the pool relies on in production.
 type realExecutor struct {
-	mu       sync.Mutex
-	next     workspaceapi.Pid
-	procs    map[workspaceapi.Pid]*exec.Cmd
-	wg       sync.WaitGroup
+	mu    sync.Mutex
+	next  workspaceapi.Pid
+	procs map[workspaceapi.Pid]*exec.Cmd
+	wg    sync.WaitGroup
 }
 
 func (e *realExecutor) StartCommand(

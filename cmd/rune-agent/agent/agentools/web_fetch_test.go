@@ -29,9 +29,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type stubFetcher struct {

@@ -71,7 +71,7 @@ type logCollector struct {
 	// line. WithFields and TextFormatter.Format both consume it
 	// without retaining a reference, so we can reuse it across
 	// Write iterations to avoid one map allocation per line.
-	fields log.Fields
+	fields      log.Fields
 	writeErrLog bool
 }
 

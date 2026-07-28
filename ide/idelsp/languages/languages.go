@@ -656,8 +656,8 @@ var extensionToLanguageID = map[string]string{
 	".Xresources": "xresources",
 
 	// YAML
-	".yaml":   "yaml",
-	".yml":    "yaml",
+	".yaml": "yaml",
+	".yml":  "yaml",
 
 	// Ziggy Schema
 	".ziggy-schema": "ziggy_schema",

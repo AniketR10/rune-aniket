@@ -31,9 +31,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

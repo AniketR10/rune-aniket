@@ -44,7 +44,7 @@ func validRegisterName(name rune) bool {
 }
 
 // validMarkName reports whether name is accepted as a mark identifier
-// for `'{mark}` / `` `{mark} `` motions. Vim recognizes alphabetic
+// for `'{mark}` / “ `{mark} “ motions. Vim recognizes alphabetic
 // marks (a-z, A-Z) plus the special marks `.` (last change), `<` and
 // `>` (visual selection start/end). Numeric or other special marks
 // (`'`, `^`, `[`, `]`, etc.) are not recognized here yet.

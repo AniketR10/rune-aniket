@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package html provides a TUI handler that fetches and renders HTML pages
 // as markdown with less-like keyboard navigation, mouse text selection,
 // link handling, and fetch cancellation.

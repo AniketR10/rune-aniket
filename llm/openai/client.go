@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package openai
 
 import (
@@ -740,14 +739,14 @@ type completionStreamIterator struct {
 
 	// Rate limit support.
 	pendingWarnings []llmapi.Event // warnings buffered during retries
-	warningIdx      int         // index into pendingWarnings
-	capturedHeaders http.Header // response headers from the last HTTP response
-	isAnthropic     bool        // true when base URL contains "anthropic.com"
+	warningIdx      int            // index into pendingWarnings
+	capturedHeaders http.Header    // response headers from the last HTTP response
+	isAnthropic     bool           // true when base URL contains "anthropic.com"
 
 	// Mid-stream retry support.
 	newStream        func() *ssestream.Stream[openai.ChatCompletionChunk] // factory to recreate stream
 	midStreamRetries int                                                  // remaining mid-stream retry attempts
-	retryEvents      []llmapi.Event                                          // buffered events emitted during a mid-stream retry
+	retryEvents      []llmapi.Event                                       // buffered events emitted during a mid-stream retry
 	retryEventIdx    int                                                  // index into retryEvents
 }
 

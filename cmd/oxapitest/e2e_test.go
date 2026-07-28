@@ -53,8 +53,8 @@ import (
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
-	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 )

@@ -58,8 +58,8 @@ command:
     "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
     "<a-s-c>": "echo {prompt}lsp<space>declaration<space>"
     "<a-g>": "lsp signature-help"
-    "<ctrl-shift-->": "cursorhistory next"
-    "<ctrl-->": "cursorhistory prev"
+    "<c-a-l>": "cursorhistory next"
+    "<c-a-j>": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
     # IJKL points up, left, down, right. <alt> focuses a window;
@@ -101,14 +101,14 @@ command:
     "<c-m-k>": gitnextchange
     "<c-m-j>": lspprevdiagnostic
     "<c-m-l>": lspnextdiagnostic
-    "<c-a-h>": "lsp hover"
+    "<c-m-q>": "lsp hover"
     "<c-s-a-h>": "echo {prompt}lsp<space>hover<space>"
     "<c-a-i>": "lsp implementation"
     "<c-s-a-i>": "echo {prompt}lsp<space>implementation<space>"
-    "<c-a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
+    "<c-s-a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
     "<s-m-r>": history
     # Bindings shared with the other presets.
-    "<shift-tab>": "fexplorer"
+    "<c-s-e>": "fexplorer"
     "<m-,>": "config"
     "<a-/>": "cheatsheet"
     "<m-=>": "guifontsize increase"

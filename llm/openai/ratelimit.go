@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package openai
 
 import (
@@ -31,8 +30,8 @@ import (
 	"time"
 
 	oai "github.com/openai/openai-go/v2"
-	"github.com/unstablebuild/rune-go-sdk/retry"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 	"unstable.build/go-tui/llm/ratelimit"
 )
 

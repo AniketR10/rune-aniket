@@ -46,8 +46,8 @@ func isNoServer(err error) bool {
 }
 
 const (
-	captureScope      = "local.scope"
-	captureReference  = "local.reference"
+	captureScope     = "local.scope"
+	captureReference = "local.reference"
 	// captureDefinition is a dot-terminated prefix matching every
 	// local.definition.* sub-kind without also matching lookalikes.
 	captureDefinition = "local.definition."

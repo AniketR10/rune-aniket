@@ -29,8 +29,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 )
 
 func TestUpdatePlanTool(t *testing.T) {

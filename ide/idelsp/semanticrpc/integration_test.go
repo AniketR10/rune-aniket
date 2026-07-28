@@ -83,8 +83,8 @@ type stubLSP struct {
 	onWorkspaceDiagnostic        func(context.Context, semanticapi.WorkspaceDiagnosticParams) (semanticapi.WorkspaceDiagnosticReport, error)
 	onWorkspaceSymbol            func(context.Context, semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error)
 	onExecuteCommand             func(context.Context, semanticapi.ExecuteCommandParams) (string, error)
-	onExecuteRequest          func(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error)
-	onSendNotification        func(context.Context, semanticapi.NotificationParams) error
+	onExecuteRequest             func(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error)
+	onSendNotification           func(context.Context, semanticapi.NotificationParams) error
 	onPrepareCallHierarchy       func(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error)
 	onCallHierarchyIncomingCalls func(context.Context, semanticapi.CallHierarchyIncomingCallsParams) ([]semanticapi.CallHierarchyIncomingCall, error)
 	onCallHierarchyOutgoingCalls func(context.Context, semanticapi.CallHierarchyOutgoingCallsParams) ([]semanticapi.CallHierarchyOutgoingCall, error)

@@ -32,8 +32,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 func TestExitPlanTool(t *testing.T) {

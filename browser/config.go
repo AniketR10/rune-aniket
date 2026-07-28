@@ -36,16 +36,16 @@ import (
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
-		Wallpaper:           NopWallpaper(),
-		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
-		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
-		FocusTabIconAttr:    term.Attributes{},
-		NonFocusTabIconAttr: term.Attributes{},
+		Wallpaper:             NopWallpaper(),
+		FocusTabAttr:          term.Attributes{Fg: term.ColorWhite},
+		NonFocusTabAttr:       term.Attributes{Fg: term.ColorRed},
+		FocusTabIconAttr:      term.Attributes{},
+		NonFocusTabIconAttr:   term.Attributes{},
 		FocusTabHighlightAttr: term.Attributes{Fg: term.ColorYellow},
 		FocusTabHighlightChar: '━',
-		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
-		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
-		FrameUnion:          handler.DefaultWindowManagerConfig().Frame,
+		FrameUnionCharSet:     component.DefaultFrameUnionCharSet(),
+		WindowManagerConfig:   handler.DefaultWindowManagerConfig(),
+		FrameUnion:            handler.DefaultWindowManagerConfig().Frame,
 		PromptConfig: PromptConfig{
 			TextAttr:       term.Attributes{},
 			HighlightAttr:  term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
@@ -86,21 +86,21 @@ type Config struct {
 	Notifications
 	Wallpaper Wallpaper
 
-	FocusTabAttr        term.Attributes
-	NonFocusTabAttr     term.Attributes
-	FocusTabIconAttr    term.Attributes
-	NonFocusTabIconAttr term.Attributes
+	FocusTabAttr          term.Attributes
+	NonFocusTabAttr       term.Attributes
+	FocusTabIconAttr      term.Attributes
+	NonFocusTabIconAttr   term.Attributes
 	FocusTabHighlightAttr term.Attributes
 	FocusTabHighlightChar rune
 	// TabOverrideIcon, when non-zero, forces every tab icon
 	// rendered by this Component to this rune, regardless of the
 	// icon passed to NewTab by callers.
-	TabOverrideIcon     rune
-	TabBarOffset        int
-	TabBarHeight        int
-	TabNameSeparator    string
-	FrameUnion          bool
-	OnTabsClick         func(int) bool
+	TabOverrideIcon  rune
+	TabBarOffset     int
+	TabBarHeight     int
+	TabNameSeparator string
+	FrameUnion       bool
+	OnTabsClick      func(int) bool
 
 	PromptConfig
 

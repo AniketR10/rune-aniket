@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package markdown
 
 import (
@@ -132,11 +131,11 @@ func applyHighlights(cells [][]term.Cell, hls []textapi.Location, codeBlock term
 				// Preserve the code block background color.
 				if codeBlock.Bg != term.ColorDefault {
 					cells[y][x].Attributes = term.Attributes{
-					Fg:    hl.Attr.Fg,
-					Bg:    codeBlock.Bg,
-					Attrs: hl.Attr.Attrs,
+						Fg:    hl.Attr.Fg,
+						Bg:    codeBlock.Bg,
+						Attrs: hl.Attr.Attrs,
+					}
 				}
-			}
 			}
 		}
 	}

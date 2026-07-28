@@ -32,7 +32,7 @@ import (
 )
 
 type eventRouter struct {
-	publish  func(term.Event) bool
+	publish func(term.Event) bool
 	// focusURI is mirrored from h.focus so workspace-bound publishers
 	// invoked from extension RPC and vte goroutines (which do not hold
 	// h.mu) can compare against the focused workspace without racing.

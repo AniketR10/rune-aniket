@@ -405,12 +405,14 @@ func (f *fakeChildServer) pullDiagnostics(
 func (f *fakeChildServer) initialize(context.Context) (semanticapi.InitializeResult, error) {
 	return semanticapi.InitializeResult{}, nil
 }
-func (f *fakeChildServer) stop(context.Context) error                 { return nil }
-func (f *fakeChildServer) config() langConfig                         { return langConfig{} }
-func (f *fakeChildServer) key() serverKey                             { return serverKey{} }
-func (f *fakeChildServer) name() string                               { return "fake" }
-func (f *fakeChildServer) initResult() semanticapi.InitializeResult   { return semanticapi.InitializeResult{} }
-func (f *fakeChildServer) isAlive() bool                              { return f.started }
+func (f *fakeChildServer) stop(context.Context) error { return nil }
+func (f *fakeChildServer) config() langConfig         { return langConfig{} }
+func (f *fakeChildServer) key() serverKey             { return serverKey{} }
+func (f *fakeChildServer) name() string               { return "fake" }
+func (f *fakeChildServer) initResult() semanticapi.InitializeResult {
+	return semanticapi.InitializeResult{}
+}
+func (f *fakeChildServer) isAlive() bool { return f.started }
 
 // TestMultiLangServerStartOwnership pins the lifecycle contract behind the
 // remote gopls crash: when one child fails to start, multiLangServer.start

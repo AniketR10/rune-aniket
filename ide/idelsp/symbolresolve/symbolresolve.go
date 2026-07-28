@@ -522,7 +522,7 @@ func definitionFiles(
 		return files, nil
 	}
 	iter, err := parser.SearchNode(
-		syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType,
+		syntaxapi.NodeCaptureDefinitionFunc|syntaxapi.NodeCaptureDefinitionType,
 		spec.LangID,
 	)
 	if err != nil {
@@ -594,7 +594,7 @@ func SearchDefinitions(
 	ch chan<- string, keep func(string) bool,
 ) error {
 	iter, err := parser.SearchNode(
-		syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType,
+		syntaxapi.NodeCaptureDefinitionFunc|syntaxapi.NodeCaptureDefinitionType,
 		spec.LangID,
 	)
 	if err != nil {

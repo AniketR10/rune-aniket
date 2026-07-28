@@ -36,10 +36,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 var errReadOnly = errors.New("claudememory: read-only store")

@@ -29,10 +29,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 const (
@@ -75,8 +75,8 @@ func NewExecCommand(
 	cfg configedit.Config,
 ) agent.Tool {
 	return &execCommandTool{
-		mgr: mgr,
-		cwd: cwd,
+		mgr:   mgr,
+		cwd:   cwd,
 		guard: newGrepGuard(cfg),
 	}
 }

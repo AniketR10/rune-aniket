@@ -30,11 +30,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/applypatch"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type applyPatchTool struct {

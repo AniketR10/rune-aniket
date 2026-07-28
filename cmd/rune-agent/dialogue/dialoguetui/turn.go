@@ -29,7 +29,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )

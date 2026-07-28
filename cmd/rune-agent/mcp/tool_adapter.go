@@ -32,8 +32,8 @@ import (
 	"time"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 // ToolStats tracks execution metrics for a single MCP tool.

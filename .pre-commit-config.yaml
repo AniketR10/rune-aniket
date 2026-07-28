@@ -32,6 +32,17 @@ repos:
 
 -   repo: local
     hooks:
+    -   id: validate_format
+        language: system
+        files: \.go$
+        name: validate_format
+        # if make format changes any files, then pre-commit
+        # automatically fails
+        entry: make format
+        pass_filenames: false
+
+-   repo: local
+    hooks:
     -   id: make_test
         language: system
         name: make_test

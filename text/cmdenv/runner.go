@@ -45,7 +45,7 @@ type Runner struct {
 	Executor schemeapi.Executor
 	// EnvSource resolves the parent shell environment. May be nil.
 	EnvSource Source
-	Dir string
+	Dir       string
 	// Stdin/Stdout/Stderr are passed to interp; nil Stdout/Stderr is
 	// treated as io.Discard.
 	Stdin          io.Reader

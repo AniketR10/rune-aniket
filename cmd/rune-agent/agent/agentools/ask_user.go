@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"strings"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 type askUserTool struct {

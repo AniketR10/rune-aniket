@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package llamacpp
 
 import (
@@ -34,10 +33,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm/llamacpp/ociregistry"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // defaultContextWindow is reported on a ModelEntry when we cannot read

@@ -33,9 +33,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // ExitPlanTool implements the exit_plan_mode tool that persists the

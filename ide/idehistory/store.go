@@ -100,7 +100,7 @@ type Snapshotter interface {
 // Store is not safe for concurrent use. It expects to be called from
 // a single goroutine (typically the IDE event loop).
 type Store struct {
-	storage storageapi.Service
+	storage  storageapi.Service
 	trackers map[string]*tracker
 }
 

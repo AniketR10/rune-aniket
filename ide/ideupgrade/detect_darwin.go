@@ -83,7 +83,7 @@ func detectRunningInstallOS(real string, cfg Config) (detectedInstall, error) {
 	}
 	if !strings.HasPrefix(filepath.ToSlash(rel), "Contents/MacOS/") {
 		return detectedInstall{}, &ErrUpgradeNotSupported{
-			Path:   real,
+			Path: real,
 			Reason: fmt.Errorf(
 				"running binary %s does not live under Contents/MacOS/ inside %s",
 				real, app),

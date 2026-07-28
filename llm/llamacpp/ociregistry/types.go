@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ociregistry
 
 import "encoding/json"
@@ -38,13 +37,13 @@ const (
 	// MediaTypeOllamaModel is the layer type used for GGUF weight blobs by
 	// both ollama.com and Hugging Face's OCI endpoint. The other Ollama
 	// media types (template, params, system) are exposed for completeness.
-	MediaTypeOllamaModel    = "application/vnd.ollama.image.model"
+	MediaTypeOllamaModel     = "application/vnd.ollama.image.model"
 	MediaTypeOllamaProjector = "application/vnd.ollama.image.projector"
-	MediaTypeOllamaTemplate = "application/vnd.ollama.image.template"
-	MediaTypeOllamaParams   = "application/vnd.ollama.image.params"
-	MediaTypeOllamaSystem   = "application/vnd.ollama.image.system"
-	MediaTypeOllamaAdapter  = "application/vnd.ollama.image.adapter"
-	MediaTypeOllamaLicense  = "application/vnd.ollama.image.license"
+	MediaTypeOllamaTemplate  = "application/vnd.ollama.image.template"
+	MediaTypeOllamaParams    = "application/vnd.ollama.image.params"
+	MediaTypeOllamaSystem    = "application/vnd.ollama.image.system"
+	MediaTypeOllamaAdapter   = "application/vnd.ollama.image.adapter"
+	MediaTypeOllamaLicense   = "application/vnd.ollama.image.license"
 )
 
 // Descriptor describes a blob referenced by a manifest.

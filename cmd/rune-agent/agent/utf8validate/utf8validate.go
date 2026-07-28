@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package utf8validate provides small helpers used by the agent and
 // its tools to keep model-facing strings valid UTF-8: sanitisation,
 // invalid-byte counting, binary-content detection, and the canonical

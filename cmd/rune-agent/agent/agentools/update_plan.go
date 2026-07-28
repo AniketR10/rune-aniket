@@ -29,9 +29,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // updatePlanTool is a Codex-style checklist/progress tool. It updates the

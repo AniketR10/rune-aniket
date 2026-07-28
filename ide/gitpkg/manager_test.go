@@ -35,9 +35,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	git "github.com/go-git/go-git/v6"
 	backendhttp "github.com/go-git/go-git/v6/backend/http"
-	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/stretchr/testify/assert"

@@ -34,9 +34,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // nopFileSystem and osFileSystem are defined in agent_test.go (same package).
@@ -347,7 +347,9 @@ func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
 
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -476,7 +478,9 @@ func TestGoroutineSpawner_Run_no_tool_deadline(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -532,7 +536,9 @@ func TestGoroutineSpawner_Run_caller_cancel_propagates(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -588,7 +594,9 @@ func TestGoroutineSpawner_RunWithLabel(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -658,7 +666,9 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
 		return NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+				return svc, llmapi.ModelEntry{Name: "test"}, nil
+			},
 			baseCfg, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -719,7 +729,9 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+				return svc, llmapi.ModelEntry{Name: "test"}, nil
+			},
 			restrictedCfg, reg, NoMemory(), "", "s1", "parent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -741,7 +753,9 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("config-reply")}}
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+				return svc, llmapi.ModelEntry{Name: "test"}, nil
+			},
 			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -769,7 +783,9 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 
 	spawner := NewGoroutineSpawner(
 		store,
-		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",

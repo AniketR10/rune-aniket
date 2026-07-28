@@ -48,21 +48,21 @@ func auditDialogueIDFrom(ctx context.Context) string {
 // The JSON tags match the previous llm.AuditEntry layout so old entries
 // continue to deserialize.
 type Entry struct {
-	StartedAt       time.Time          `json:"StartedAt"`
-	Duration        time.Duration      `json:"Duration"`
-	Model           string             `json:"Model,omitempty"`
-	Provider        string             `json:"Provider,omitempty"`
-	Messages        []llmapi.Message   `json:"Messages"`
-	Tools           int                `json:"Tools"`
-	ToolNames       []string           `json:"ToolNames,omitempty"`
-	ReasoningEffort string             `json:"ReasoningEffort,omitempty"`
-	MaxOutputTokens int                `json:"MaxOutputTokens,omitempty"`
-	EstimatedTokens int                `json:"EstimatedTokens"`
-	ContextWindow   int                `json:"ContextWindow"`
-	Response        *llmapi.Message    `json:"Response,omitempty"`
-	Usage           llmapi.Usage       `json:"Usage"`
+	StartedAt       time.Time           `json:"StartedAt"`
+	Duration        time.Duration       `json:"Duration"`
+	Model           string              `json:"Model,omitempty"`
+	Provider        string              `json:"Provider,omitempty"`
+	Messages        []llmapi.Message    `json:"Messages"`
+	Tools           int                 `json:"Tools"`
+	ToolNames       []string            `json:"ToolNames,omitempty"`
+	ReasoningEffort string              `json:"ReasoningEffort,omitempty"`
+	MaxOutputTokens int                 `json:"MaxOutputTokens,omitempty"`
+	EstimatedTokens int                 `json:"EstimatedTokens"`
+	ContextWindow   int                 `json:"ContextWindow"`
+	Response        *llmapi.Message     `json:"Response,omitempty"`
+	Usage           llmapi.Usage        `json:"Usage"`
 	FinishReason    llmapi.FinishReason `json:"FinishReason,omitempty"`
-	Err             string             `json:"Err,omitempty"`
+	Err             string              `json:"Err,omitempty"`
 }
 
 // auditDocument is the persisted document for a dialogue's audit log.

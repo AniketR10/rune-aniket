@@ -124,8 +124,8 @@ func TestNewCommandSubstResolver(t *testing.T) {
 			want: "echo $((1+1))",
 		},
 		{
-			name: "parse error surfaces as error",
-			line: "echo $(",
+			name:    "parse error surfaces as error",
+			line:    "echo $(",
 			wantErr: true,
 		},
 		{
@@ -189,8 +189,8 @@ func TestCommandSubstRecordedDispatches(t *testing.T) {
 			wantLine: "echo ok",
 		},
 		{
-			name: "nested resolves inner before outer",
-			line: "echo $(outer $(inner one))",
+			name:   "nested resolves inner before outer",
+			line:   "echo $(outer $(inner one))",
 			stdout: "X",
 			wantArgv: [][]string{
 				{"inner", "one"},
@@ -458,7 +458,6 @@ func (e *osExecutor) NewPty(context.Context) (workspaceapi.Pty, error) {
 	return workspaceapi.Pty{}, nil
 }
 func (e *osExecutor) SetPtySize(workspaceapi.Pty, int, int) error { return nil }
-
 
 // recursiveExecutor returns a different canned stdout per call.
 // Calls past len(responses) error.

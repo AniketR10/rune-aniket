@@ -59,11 +59,11 @@ func FuzzExpand(f *testing.F) {
 		`'$FOO'`,
 		"$1 $2 $9",
 		"prefix $A middle $B suffix",
-		"$(echo hi)",  // rejected: command substitution
-		"`echo hi`",   // rejected: backticks
-		"${",          // truncated
-		"$",           // bare dollar
-		"${UNCLOSED",  // unclosed brace
+		"$(echo hi)", // rejected: command substitution
+		"`echo hi`",  // rejected: backticks
+		"${",         // truncated
+		"$",          // bare dollar
+		"${UNCLOSED", // unclosed brace
 		"${FOO:-${BAR:-baz}}",
 	}
 	for _, s := range seeds {

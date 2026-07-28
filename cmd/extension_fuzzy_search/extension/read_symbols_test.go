@@ -26,8 +26,8 @@ package extension
 import (
 	"testing"
 
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 // TestMakeSymbolItemEndOfBufferRow reproduces a crash where a tree-sitter

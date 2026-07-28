@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package html provides a TUI component that fetches HTML content from
 // a URL, converts it to markdown using html-to-markdown, and renders it
 // using the markdown component.

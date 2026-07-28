@@ -789,11 +789,14 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<alt-shift-[>":     "tabmove left",
 		"<alt-shift-]>":     "tabmove right",
 
-		"<ctrl-alt-h>":       "lsp hover",
+		"<ctrl-meta-q>":      "lsp hover",
 		"<ctrl-shift-alt-h>": "echo {prompt}lsp<space>hover<space>",
 		"<ctrl-alt-i>":       "lsp implementation",
 		"<ctrl-shift-alt-i>": "echo {prompt}lsp<space>implementation<space>",
-		"<ctrl-alt-v>":       "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
+		"<ctrl-shift-alt-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
+
+		"<ctrl-alt-j>": "cursorhistory prev",
+		"<ctrl-alt-l>": "cursorhistory next",
 
 		"<ctrl-meta-i>": "gitprevchange",
 		"<ctrl-meta-k>": "gitnextchange",
@@ -813,7 +816,6 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 			name: "linux",
 			file: "preset_standard_linux.yaml",
 			unbound: []string{
-				"<c-a-j>", "<c-a-l>",
 				"<c-s-a-j>", "<c-s-a-l>",
 				"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
 			},
@@ -872,7 +874,7 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 				"gitnextchange":                "<ctrl-meta-k>",
 				"windowdefaultsplit h":         "<alt-h>",
 				"windowdefaultsplit v":         "<alt-v>",
-				"lsp hover":                    "<ctrl-alt-h>",
+				"lsp hover":                    "<ctrl-meta-q>",
 				"lsp implementation":           "<ctrl-alt-i>",
 				"windowtogglemaximize":         "<alt-m>",
 			} {
@@ -999,17 +1001,22 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 
 	// The stale modal chords must no longer run their old commands.
 	staleUnbound := map[string]string{
-		"<m-h>":        "windowfocus left",
-		"<m-j>":        "windowfocus down",
-		"<m-k>":        "windowfocus up",
-		"<s-m-h>":      "windowmove left",
-		"<s-m-j>":      "windowmove down",
-		"<s-m-k>":      "windowmove up",
-		"<alt-meta-h>": "windowresize decrease width",
-		"<a-s-h>":      "tabmove left",
-		"<a-h>":        "tabprevious",
-		"<c-o>":        "cursorhistory prev",
-		"<c-i>":        "cursorhistory next",
+		"<m-h>":          "windowfocus left",
+		"<m-j>":          "windowfocus down",
+		"<m-k>":          "windowfocus up",
+		"<s-m-h>":        "windowmove left",
+		"<s-m-j>":        "windowmove down",
+		"<s-m-k>":        "windowmove up",
+		"<alt-meta-h>":   "windowresize decrease width",
+		"<a-s-h>":        "tabmove left",
+		"<a-h>":          "tabprevious",
+		"<c-o>":          "cursorhistory prev",
+		"<c-i>":          "cursorhistory next",
+		"<shift-tab>":    "fexplorer",
+		"<ctrl-->":       "cursorhistory prev",
+		"<ctrl-shift-->": "cursorhistory next",
+		"<ctrl-alt-h>":   "lsp hover",
+		"<ctrl-alt-v>":   "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
 	}
 	for key, oldCmd := range staleUnbound {
 		seq := mustParseBindingKey(t, key)
@@ -1022,16 +1029,16 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	// The reverse lookup must resolve to one deterministic standard chord.
 	lookup := c.commandKeyBindingLookup()
 	wantResolved := map[string][]string{
-		"<alt-shift-j>":  {"windowmove", "left"},
-		"<alt-j>":        {"windowfocus", "left"},
-		"<alt-meta-j>":   {"windowresize", "decrease", "width"},
-		"<alt-h>":        {"windowdefaultsplit", "h"},
-		"<alt-v>":        {"windowdefaultsplit", "v"},
-		"<alt-shift-[>":  {"tabmove", "left"},
-		"<alt-]>":        {"tabnext"},
-		"<alt-[>":        {"tabprevious"},
-		"<ctrl-shift-->": {"cursorhistory", "next"},
-		"<ctrl-->":       {"cursorhistory", "prev"},
+		"<alt-shift-j>": {"windowmove", "left"},
+		"<alt-j>":       {"windowfocus", "left"},
+		"<alt-meta-j>":  {"windowresize", "decrease", "width"},
+		"<alt-h>":       {"windowdefaultsplit", "h"},
+		"<alt-v>":       {"windowdefaultsplit", "v"},
+		"<alt-shift-[>": {"tabmove", "left"},
+		"<alt-]>":       {"tabnext"},
+		"<alt-[>":       {"tabprevious"},
+		"<ctrl-alt-l>":  {"cursorhistory", "next"},
+		"<ctrl-alt-j>":  {"cursorhistory", "prev"},
 	}
 	for wantKey, cmd := range wantResolved {
 		got := lookup(cmd[0], cmd[1:])

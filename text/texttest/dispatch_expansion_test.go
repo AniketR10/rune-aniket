@@ -172,7 +172,7 @@ func TestDispatchCommandExpansion(t *testing.T) {
 			wantOK:        true,
 		},
 		{
-			name: "alias ${VAR:-default} uses default when unset",
+			name:          "alias ${VAR:-default} uses default when unset",
 			alias:         "echo ${MISSING_VAR_FOR_DISPATCH_TEST:-fallback}",
 			aliasName:     "fb",
 			wantArgs:      []string{"fallback"},
@@ -180,7 +180,7 @@ func TestDispatchCommandExpansion(t *testing.T) {
 			wantOK:        true,
 		},
 		{
-			name: "alias ${VAR:?msg} errors when unset",
+			name:            "alias ${VAR:?msg} errors when unset",
 			alias:           "echo ${MISSING_VAR_FOR_DISPATCH_TEST:?required}",
 			aliasName:       "needit",
 			wantSinkCalls:   0,
@@ -246,10 +246,10 @@ func TestDispatchCommandExpansion(t *testing.T) {
 		},
 		// ---- env precedence ------------------------------------
 		{
-			name:          "alias builtin overrides user env for FILE",
-			alias:         "echo $FILE",
-			aliasName:     "ovr",
-			open:          "file:///root/main.go",
+			name:      "alias builtin overrides user env for FILE",
+			alias:     "echo $FILE",
+			aliasName: "ovr",
+			open:      "file:///root/main.go",
 			envSource: func(name string) (string, bool) {
 				if name == "FILE" {
 					return "user-wins-not", true
@@ -289,9 +289,9 @@ func TestDispatchCommandExpansion(t *testing.T) {
 			wantOK:        true,
 		},
 		{
-			name:          "alias source with empty value yields empty field",
-			alias:         "echo [$EMPTY_BUT_SET]",
-			aliasName:     "empty",
+			name:      "alias source with empty value yields empty field",
+			alias:     "echo [$EMPTY_BUT_SET]",
+			aliasName: "empty",
 			envSource: func(name string) (string, bool) {
 				if name == "EMPTY_BUT_SET" {
 					return "", true

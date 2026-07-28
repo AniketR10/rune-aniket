@@ -400,7 +400,7 @@ func (e *mockEditor) SetCursor(h textapi.Handler, c term.Coordinates) error {
 	e.cursors[h] = c
 	return nil
 }
-func (e *mockEditor) CellView(_ textapi.Handler) textapi.CellView           { return nil }
+func (e *mockEditor) CellView(_ textapi.Handler) textapi.CellView { return nil }
 
 func (e *mockEditor) CellEditor(h textapi.Handler) textapi.CellEditor {
 	e.mu.Lock()

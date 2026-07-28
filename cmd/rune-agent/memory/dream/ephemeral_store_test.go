@@ -29,9 +29,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestEphemeralStore(t *testing.T) {

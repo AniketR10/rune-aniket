@@ -33,10 +33,10 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package llmshell
 
 import (
@@ -58,9 +57,9 @@ func TestScaleProgressBytes(t *testing.T) {
 		downloaded int64
 		total      int64
 	}{
-		{0, 1024},                  // sub-100 -> B
-		{500, 200 * 1024},          // KiB
-		{1024 * 1024, 250 * 1024 * 1024}, // MiB
+		{0, 1024},                               // sub-100 -> B
+		{500, 200 * 1024},                       // KiB
+		{1024 * 1024, 250 * 1024 * 1024},        // MiB
 		{1024 * 1024, 250 * 1024 * 1024 * 1024}, // GiB
 	}
 	for _, tc := range cases {
