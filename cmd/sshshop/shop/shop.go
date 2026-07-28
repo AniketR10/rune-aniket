@@ -250,12 +250,10 @@ func (r *Root) openPalette() {
 	handler := browser.FuncFloating(
 		browser.FuncHandler(
 			rhandler.WithComponent(prompt,
-				component.WithBackground(prompt, term.Cell{
-					Attributes: term.Attributes{
-						Bg:    cfg.ElementAttr.Bg,
-						Attrs: cfg.ElementAttr.Attrs,
-					},
-				}),
+				component.WithBackground(prompt, term.NewCell(0, 0, term.Attributes{
+					Bg:    cfg.ElementAttr.Bg,
+					Attrs: cfg.ElementAttr.Attrs,
+				})),
 			),
 			func() error {
 				err := prompt.Close()

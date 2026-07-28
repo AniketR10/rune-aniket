@@ -89,12 +89,10 @@ func newCommandPromptHandler(
 		PadHorizontal:    2,
 		ContentAlignment: component.AlignmentCentered,
 	})
-	bg := component.NewBackground(padded, term.Cell{
-		Attributes: term.Attributes{
-			Bg:    e.config.CommandOverlay.ElementAttr.Bg,
-			Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
-		},
-	})
+	bg := component.NewBackground(padded, term.NewCell(0, 0, term.Attributes{
+		Bg:    e.config.CommandOverlay.ElementAttr.Bg,
+		Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
+	}))
 	if !e.config.WindowManagerConfig.Frame {
 		return browser.FuncFloating(
 			browser.FuncHandler(
@@ -149,22 +147,14 @@ func (s *promptStitcher) Draw(w term.Writer) {
 	if y <= 0 || y >= s.height-1 {
 		return
 	}
-	w.SetCell(term.Coordinates{X: 0, Y: y}, term.Cell{
-		Ch:         s.separator.Left,
-		Attributes: s.framed.Attributes,
-	})
-	w.SetCell(term.Coordinates{X: 1, Y: y}, term.Cell{
-		Ch:         s.separator.HorizontalLeft,
-		Attributes: s.framed.Attributes,
-	})
-	w.SetCell(term.Coordinates{X: s.width - 2, Y: y}, term.Cell{
-		Ch:         s.separator.HorizontalRight,
-		Attributes: s.framed.Attributes,
-	})
-	w.SetCell(term.Coordinates{X: s.width - 1, Y: y}, term.Cell{
-		Ch:         s.separator.Right,
-		Attributes: s.framed.Attributes,
-	})
+	w.SetCell(term.Coordinates{X: 0, Y: y},
+		term.NewCell(s.separator.Left, 0, s.framed.Attributes))
+	w.SetCell(term.Coordinates{X: 1, Y: y},
+		term.NewCell(s.separator.HorizontalLeft, 0, s.framed.Attributes))
+	w.SetCell(term.Coordinates{X: s.width - 2, Y: y},
+		term.NewCell(s.separator.HorizontalRight, 0, s.framed.Attributes))
+	w.SetCell(term.Coordinates{X: s.width - 1, Y: y},
+		term.NewCell(s.separator.Right, 0, s.framed.Attributes))
 }
 
 func (s *promptStitcher) Handle(ev term.Event) (bool, bool) {

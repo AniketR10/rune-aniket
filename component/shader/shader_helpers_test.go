@@ -32,11 +32,8 @@ func makeCharCells(cols, rows int) [][]term.Cell {
 	for y := range rows {
 		out[y] = make([]term.Cell, cols)
 		for x := range cols {
-			out[y][x] = term.Cell{
-				Ch:         'A',
-				Width:      1,
-				Attributes: term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack},
-			}
+			out[y][x] = term.NewCell('A', 1,
+				term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack})
 		}
 	}
 	return out
@@ -47,11 +44,8 @@ func makeBlankCells(cols, rows int) [][]term.Cell {
 	for y := range rows {
 		out[y] = make([]term.Cell, cols)
 		for x := range cols {
-			out[y][x] = term.Cell{
-				Ch:         ' ',
-				Width:      1,
-				Attributes: term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack},
-			}
+			out[y][x] = term.NewCell(' ', 1,
+				term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack})
 		}
 	}
 	return out

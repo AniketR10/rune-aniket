@@ -270,7 +270,7 @@ func (i *searchInput) Draw(w term.Writer) {
 		if y >= i.height || x >= i.width {
 			break
 		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: uint8(cw), Attributes: attr})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, uint8(cw), attr))
 		logical := term.Coordinates{X: logicalX, Y: logicalY}
 		if selected && coordinatesInRange(logical, from, to) {
 			for dx := range cw {
@@ -519,7 +519,7 @@ func (f *searchFloating) drawButton(w term.Writer, r searchRect, label string, b
 	x := r.x
 	for _, ch := range label {
 		w.SetCell(term.Coordinates{X: x, Y: r.y - f.seek},
-			term.Cell{Ch: ch, Width: 1, Attributes: attr})
+			term.NewCell(ch, 1, attr))
 		x++
 	}
 }

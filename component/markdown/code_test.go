@@ -120,11 +120,11 @@ func TestCodeBlockHighlights(t *testing.T) {
 
 	require.Len(t, cb.cells, 1)
 	for x := 0; x < 4; x++ {
-		assert.Equal(t, green, cb.cells[0][x].Attributes,
+		assert.Equal(t, green, cb.cells[0][x].Attributes(),
 			"cell [0][%d] should be green", x)
 	}
 	for x := 5; x < 9; x++ {
-		assert.Equal(t, blue, cb.cells[0][x].Attributes,
+		assert.Equal(t, blue, cb.cells[0][x].Attributes(),
 			"cell [0][%d] should be blue", x)
 	}
 }
@@ -195,7 +195,7 @@ func TestCodeBlockDrawWithoutParser(t *testing.T) {
 	assert.Equal(t, "hello     \n          ", w.String())
 
 	for x := range 5 {
-		assert.Equal(t, cfg.CodeBlock, cb.cells[0][x].Attributes,
+		assert.Equal(t, cfg.CodeBlock, cb.cells[0][x].Attributes(),
 			"cell [0][%d] should have CodeBlock attrs", x)
 	}
 }
@@ -269,7 +269,7 @@ func TestCodeBlockDrawEmptyLanguage(t *testing.T) {
 	cb := newCodeBlock("", "hello\n", &cfg)
 
 	for x := range 5 {
-		assert.Equal(t, cfg.CodeBlock, cb.cells[0][x].Attributes)
+		assert.Equal(t, cfg.CodeBlock, cb.cells[0][x].Attributes())
 	}
 }
 
@@ -590,14 +590,14 @@ func TestCodeBlockHighlightsAsync(t *testing.T) {
 
 	// Before the callback runs, cells should have base style.
 	require.Len(t, cb.cells, 1)
-	assert.Equal(t, cfg.CodeBlock, cb.cells[0][0].Attributes)
+	assert.Equal(t, cfg.CodeBlock, cb.cells[0][0].Attributes())
 
 	// Run the scheduled callback.
 	drain()
 
 	// Now cells should reflect the highlight.
-	assert.Equal(t, green, cb.cells[0][0].Attributes)
-	assert.Equal(t, green, cb.cells[0][1].Attributes)
+	assert.Equal(t, green, cb.cells[0][0].Attributes())
+	assert.Equal(t, green, cb.cells[0][1].Attributes())
 }
 
 // blockingIterator yields one Location then blocks on Next until the

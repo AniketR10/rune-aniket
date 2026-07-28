@@ -2934,7 +2934,7 @@ func hintFgAt(t *testing.T, w *term.StringWriter, width int, prefix string) term
 		for x := width - 1; x >= 0; x-- {
 			c := cells[y*width+x]
 			if c.Ch != 0 && c.Ch != ' ' {
-				return c.Attributes.Fg
+				return c.Fg
 			}
 		}
 	}

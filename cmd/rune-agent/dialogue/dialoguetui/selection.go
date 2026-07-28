@@ -248,10 +248,7 @@ func drawText(
 		if col >= maxWidth {
 			break
 		}
-		w.SetCell(term.Coordinates{X: x + col, Y: y}, term.Cell{
-			Ch:         ch,
-			Attributes: attr,
-		})
+		w.SetCell(term.Coordinates{X: x + col, Y: y}, term.NewCell(ch, 0, attr))
 		col++
 	}
 }

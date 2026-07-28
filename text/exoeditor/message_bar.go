@@ -73,7 +73,7 @@ func (b *messageBar) Draw(w term.Writer) {
 			break
 		}
 		w.SetCell(term.Coordinates{X: x, Y: y},
-			term.Cell{Ch: r, Attributes: attrs})
+			term.NewCell(r, 0, attrs))
 		x++
 		if x >= b.width {
 			x = 0
@@ -83,7 +83,7 @@ func (b *messageBar) Draw(w term.Writer) {
 	for ; y < b.height; y++ {
 		for ; x < b.width; x++ {
 			w.SetCell(term.Coordinates{X: x, Y: y},
-				term.Cell{Ch: ' ', Attributes: attrs})
+				term.NewCell(' ', 0, attrs))
 		}
 		x = 0
 	}

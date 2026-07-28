@@ -45,11 +45,7 @@ func TestRadarFrameLeavesNonFrameCharsUntouched(t *testing.T) {
 	fc := guiFrameCharset()
 	origFg := term.NewRGBColor(10, 20, 30)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: origFg},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: origFg})
 	}
 
 	cells := [][]term.Cell{
@@ -79,11 +75,7 @@ func TestRadarFramePeakIsFullColor(t *testing.T) {
 	fc := guiFrameCharset()
 	target := term.NewRGBColor(255, 0, 0)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: term.NewRGBColor(10, 20, 30)},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: term.NewRGBColor(10, 20, 30)})
 	}
 
 	// Rectangular 11x5 frame. At frame 0 of 1 cycle the wedge points
@@ -141,11 +133,7 @@ func TestRadarFrameFadesAtEdges(t *testing.T) {
 	origFg := term.NewRGBColor(0, 0, 0)
 	target := term.NewRGBColor(255, 255, 255)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: origFg},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: origFg})
 	}
 
 	// Tall narrow frame so the top and bottom edges are at clearly
@@ -214,11 +202,7 @@ func TestRadarFrameRotates(t *testing.T) {
 	origFg := term.NewRGBColor(0, 0, 0)
 	target := term.NewRGBColor(255, 255, 255)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: origFg},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: origFg})
 	}
 	makeCells := func() [][]term.Cell {
 		return [][]term.Cell{

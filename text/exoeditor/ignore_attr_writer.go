@@ -30,10 +30,8 @@ type ignoreAttrWriter struct {
 }
 
 func (w ignoreAttrWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	c.Attributes = term.Attributes{
-		Bg:    c.Attributes.Bg,
-		Attrs: c.Attributes.Attrs & term.AttrReverse,
-	}
+	c.Fg = 0
+	c.Attrs &= term.AttrReverse
 	w.Writer.SetCell(pos, c)
 }
 

@@ -554,11 +554,7 @@ func (wm *WindowManager) drawWindowBar(f *floatingNode, w term.Writer) {
 		attr.Bg = barAttr.Fg
 		pos := f.realOffset
 		pos.X += WindowBarCloseIconX
-		w.SetCell(pos, term.Cell{
-			Width:      1,
-			Ch:         wm.config.CloseIcon,
-			Attributes: attr,
-		})
+		w.SetCell(pos, term.NewCell(wm.config.CloseIcon, 1, attr))
 	}
 	wm.drawWindowTitle(f, barAttr, w)
 }
@@ -585,7 +581,7 @@ func (wm *WindowManager) drawWindowTitle(
 	start := f.realOffset.X + minX + (avail-len(title))/2
 	for i, r := range title {
 		w.SetCell(term.Coordinates{X: start + i, Y: f.realOffset.Y},
-			term.Cell{Width: 1, Ch: r, Attributes: attr})
+			term.NewCell(r, 1, attr))
 	}
 }
 
@@ -759,37 +755,17 @@ func (wm *WindowManager) drawMinimizedTop(
 		frameAttr = attr.SetAttr(term.Attributes{})
 		attr.SetAttr(frameAttr)
 	}
-	w.SetCell(pos, term.Cell{
-		Width:      1,
-		Ch:         wm.config.TopLeft,
-		Attributes: frameAttr,
-	})
+	w.SetCell(pos, term.NewCell(wm.config.TopLeft, 1, frameAttr))
 	for x := 1; x < length-1; x++ {
-		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalTop,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.NewCell(wm.config.HorizontalTop, 1, frameAttr))
 	}
-	w.SetCell(term.Coordinates{X: length - 1, Y: pos.Y}, term.Cell{
-		Width:      1,
-		Ch:         wm.config.TopRight,
-		Attributes: frameAttr,
-	})
+	w.SetCell(term.Coordinates{X: length - 1, Y: pos.Y}, term.NewCell(wm.config.TopRight, 1, frameAttr))
 	if f.minimizedPadding == 0 {
 		return
 	}
 	for y := pos.Y + 1; y < pos.Y+1+f.minimizedPadding; y++ {
-		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalRight,
-			Attributes: frameAttr,
-		})
-		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalLeft,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.NewCell(wm.config.VerticalRight, 1, frameAttr))
+		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.NewCell(wm.config.VerticalLeft, 1, frameAttr))
 	}
 	at := pos
 	if wm.config.Frame {
@@ -808,37 +784,17 @@ func (wm *WindowManager) drawMinimizedBottom(
 		attr.SetAttr(frameAttr)
 	}
 	bottomFramePos := pos.Y + f.minimizedPadding
-	w.SetCell(term.Coordinates{X: pos.X, Y: bottomFramePos}, term.Cell{
-		Width:      1,
-		Ch:         wm.config.BottomLeft,
-		Attributes: frameAttr,
-	})
+	w.SetCell(term.Coordinates{X: pos.X, Y: bottomFramePos}, term.NewCell(wm.config.BottomLeft, 1, frameAttr))
 	for x := 1; x < length-1; x++ {
-		w.SetCell(term.Coordinates{X: x, Y: bottomFramePos}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalBottom,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: bottomFramePos}, term.NewCell(wm.config.HorizontalBottom, 1, frameAttr))
 	}
-	w.SetCell(term.Coordinates{X: length - 1, Y: bottomFramePos}, term.Cell{
-		Width:      1,
-		Ch:         wm.config.BottomRight,
-		Attributes: frameAttr,
-	})
+	w.SetCell(term.Coordinates{X: length - 1, Y: bottomFramePos}, term.NewCell(wm.config.BottomRight, 1, frameAttr))
 	if f.minimizedPadding == 0 {
 		return
 	}
 	for y := pos.Y; y < pos.Y+f.minimizedPadding; y++ {
-		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalRight,
-			Attributes: frameAttr,
-		})
-		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalLeft,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.NewCell(wm.config.VerticalRight, 1, frameAttr))
+		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.NewCell(wm.config.VerticalLeft, 1, frameAttr))
 	}
 	at := pos
 	if wm.config.Frame {
@@ -858,37 +814,17 @@ func (wm *WindowManager) drawMinimizedLeft(
 		attr.SetAttr(frameAttr)
 	}
 	yOffset := wm.minimizedOffset.Y
-	w.SetCell(pos, term.Cell{
-		Width:      1,
-		Ch:         wm.config.TopLeft,
-		Attributes: frameAttr,
-	})
+	w.SetCell(pos, term.NewCell(wm.config.TopLeft, 1, frameAttr))
 	for y := 1 + yOffset; y < yOffset+length-1; y++ {
-		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalLeft,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.NewCell(wm.config.VerticalLeft, 1, frameAttr))
 	}
-	w.SetCell(term.Coordinates{X: pos.X, Y: yOffset + length - 1}, term.Cell{
-		Width:      1,
-		Ch:         wm.config.BottomLeft,
-		Attributes: frameAttr,
-	})
+	w.SetCell(term.Coordinates{X: pos.X, Y: yOffset + length - 1}, term.NewCell(wm.config.BottomLeft, 1, frameAttr))
 	if f.minimizedPadding == 0 {
 		return
 	}
 	for x := pos.X + 1; x < pos.X+1+f.minimizedPadding; x++ {
-		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalTop,
-			Attributes: frameAttr,
-		})
-		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalBottom,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.NewCell(wm.config.HorizontalTop, 1, frameAttr))
+		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.NewCell(wm.config.HorizontalBottom, 1, frameAttr))
 	}
 	at := pos
 	if wm.config.Frame {
@@ -908,38 +844,18 @@ func (wm *WindowManager) drawMinimizedRight(
 	}
 	yOffset := wm.minimizedOffset.Y
 	rightFramePos := pos.X + f.minimizedPadding
-	w.SetCell(term.Coordinates{X: rightFramePos, Y: pos.Y}, term.Cell{
-		Width:      1,
-		Ch:         wm.config.TopRight,
-		Attributes: frameAttr,
-	})
+	w.SetCell(term.Coordinates{X: rightFramePos, Y: pos.Y}, term.NewCell(wm.config.TopRight, 1, frameAttr))
 	for y := 1 + yOffset; y < yOffset+length-1; y++ {
-		w.SetCell(term.Coordinates{X: rightFramePos, Y: y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.VerticalRight,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: rightFramePos, Y: y}, term.NewCell(wm.config.VerticalRight, 1, frameAttr))
 	}
 	w.SetCell(term.Coordinates{X: rightFramePos, Y: yOffset + length - 1},
-		term.Cell{
-			Width:      1,
-			Ch:         wm.config.BottomRight,
-			Attributes: frameAttr,
-		})
+		term.NewCell(wm.config.BottomRight, 1, frameAttr))
 	if f.minimizedPadding == 0 {
 		return
 	}
 	for x := pos.X; x < rightFramePos; x++ {
-		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalTop,
-			Attributes: frameAttr,
-		})
-		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.Cell{
-			Width:      1,
-			Ch:         wm.config.HorizontalBottom,
-			Attributes: frameAttr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.NewCell(wm.config.HorizontalTop, 1, frameAttr))
+		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.NewCell(wm.config.HorizontalBottom, 1, frameAttr))
 	}
 	at := pos
 	if wm.config.Frame {

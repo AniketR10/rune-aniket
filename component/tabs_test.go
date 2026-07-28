@@ -358,12 +358,12 @@ func TestTabsDrawFocusHighlightCharAttr(t *testing.T) {
 		c := cells[x]
 		if x >= 9 && x <= 14 {
 			assert.Equal(t, '▀', c.Ch, "expected highlight rune at x=%d", x)
-			assert.Equal(t, focusFrameAttr, c.Attributes,
+			assert.Equal(t, focusFrameAttr, c.Attributes(),
 				"expected focus-frame attr at x=%d", x)
 		} else {
 			assert.NotEqual(t, '▀', c.Ch,
 				"unexpected highlight at x=%d", x)
-			assert.Equal(t, term.Attributes{}, c.Attributes,
+			assert.Equal(t, term.Attributes{}, c.Attributes(),
 				"expected no attr at x=%d on highlight row", x)
 		}
 	}
@@ -396,7 +396,7 @@ func TestTabsDrawHighlightDisabled(t *testing.T) {
 	for x := 0; x < 20; x++ {
 		assert.Equal(t, rune(0), cells[x].Ch,
 			"highlight row must be empty at x=%d", x)
-		assert.Equal(t, term.Attributes{}, cells[x].Attributes,
+		assert.Equal(t, term.Attributes{}, cells[x].Attributes(),
 			"highlight row must carry no attr at x=%d", x)
 	}
 }
@@ -436,7 +436,7 @@ func TestTabsDrawBottomHighlight(t *testing.T) {
 		if x >= 9 && x <= 14 {
 			assert.Equal(t, '━', c.Ch,
 				"expected highlight rune at x=%d on bottom row", x)
-			assert.Equal(t, focusFrameAttr, c.Attributes,
+			assert.Equal(t, focusFrameAttr, c.Attributes(),
 				"expected focus-frame attr at x=%d on bottom row", x)
 		} else {
 			assert.NotEqual(t, '━', c.Ch,
@@ -467,15 +467,15 @@ func TestTabsDrawIconAttr(t *testing.T) {
 	cells := w.Cells()
 
 	assert.Equal(t, 'A', cells[0].Ch)
-	assert.Equal(t, term.Attributes{}, cells[0].Attributes)
+	assert.Equal(t, term.Attributes{}, cells[0].Attributes())
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, focusAttr, cells[2].Attributes)
+	assert.Equal(t, focusAttr, cells[2].Attributes())
 
 	assert.Equal(t, 'B', cells[9].Ch)
-	assert.Equal(t, iconAttr, cells[9].Attributes)
-	assert.Equal(t, term.Attributes{}, cells[10].Attributes)
+	assert.Equal(t, iconAttr, cells[9].Attributes())
+	assert.Equal(t, term.Attributes{}, cells[10].Attributes())
 	assert.Equal(t, 'b', cells[11].Ch)
-	assert.Equal(t, nonFocusAttr, cells[11].Attributes)
+	assert.Equal(t, nonFocusAttr, cells[11].Attributes())
 }
 
 // TestTabsSetAttrIconAttrs verifies SetAttr's focus/non-focus icon attributes
@@ -503,14 +503,14 @@ func TestTabsSetAttrIconAttrs(t *testing.T) {
 	cells := w.Cells()
 
 	assert.Equal(t, 'A', cells[0].Ch)
-	assert.Equal(t, focusIconAttr, cells[0].Attributes)
+	assert.Equal(t, focusIconAttr, cells[0].Attributes())
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, focusAttr, cells[2].Attributes)
+	assert.Equal(t, focusAttr, cells[2].Attributes())
 
 	assert.Equal(t, 'B', cells[9].Ch)
-	assert.Equal(t, nonFocusIconAttr, cells[9].Attributes)
+	assert.Equal(t, nonFocusIconAttr, cells[9].Attributes())
 	assert.Equal(t, 'b', cells[11].Ch)
-	assert.Equal(t, nonFocusAttr, cells[11].Attributes)
+	assert.Equal(t, nonFocusAttr, cells[11].Attributes())
 }
 
 func TestTabsDrawCustomSeparator(t *testing.T) {

@@ -96,16 +96,16 @@ func TestIgnoreAttrWriterSetCellPreservesBgAndReverse(t *testing.T) {
 			w := ignoreAttrWriter{Writer: rec}
 
 			pos := term.Coordinates{X: 3, Y: 7}
-			in := term.Cell{Ch: 'x', Attributes: tc.in}
+			in := term.NewCell('x', 0, tc.in)
 			w.SetCell(pos, in)
 
 			if assert.Len(t, rec.calls, 1) {
 				got := rec.calls[0]
 				assert.Equal(t, pos, got.pos)
 				assert.Equal(t, in.Ch, got.cell.Ch)
-				assert.Equal(t, tc.wantAttr, got.cell.Attributes.Attrs)
-				assert.Equal(t, term.Color(0), got.cell.Attributes.Fg)
-				assert.Equal(t, tc.wantBg, got.cell.Attributes.Bg)
+				assert.Equal(t, tc.wantAttr, got.cell.Attrs)
+				assert.Equal(t, term.Color(0), got.cell.Fg)
+				assert.Equal(t, tc.wantBg, got.cell.Bg)
 			}
 		})
 	}

@@ -202,7 +202,7 @@ func (b *AltBuffer) WriteAt(
 		return
 	}
 	cell.Ch = c
-	cell.Attributes = b.cursor.attr
+	cell.SetAttributes(b.cursor.attr)
 	cell.Width = uint8(width)
 }
 
@@ -588,13 +588,7 @@ func (b *AltBuffer) resetCellsAt(y int, start, end int, with rune) {
 
 	cells := b.Cells.RawCells()
 	for x := start; x < end; x++ {
-		cells[y][x] = term.Cell{
-			Width: 1,
-			Ch:    with,
-			Attributes: term.Attributes{
-				Bg: b.cursor.attr.Bg,
-			},
-		}
+		cells[y][x] = term.NewCell(with, 1, term.Attributes{Bg: b.cursor.attr.Bg})
 	}
 }
 

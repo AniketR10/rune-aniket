@@ -1100,13 +1100,13 @@ func TestBufferInsertWithAttr(t *testing.T) {
 
 	buf.InsertWithAttr(term.Coordinates{}, 'A', attr)
 	cell := buf.RawCells()[0][0]
-	assert.Equal(t, term.Cell{Ch: 'A', Attributes: attr, Bytes: 1, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'A', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1}, cell)
 
 	buf.InsertWithAttr(term.Coordinates{X: 1}, '\n', attr)
 
 	buf.InsertWithAttr(term.Coordinates{Y: 1}, 'E', attr)
 	cell = buf.RawCells()[1][0]
-	assert.Equal(t, term.Cell{Ch: 'E', Attributes: attr, Bytes: 1, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'E', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1}, cell)
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
@@ -1116,10 +1116,10 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 		buf.InsertStringWithAttr(term.Coordinates{}, "Atza", attr)
 		row := buf.RawCells()[0]
 		assert.Equal(t, []term.Cell{
-			{Ch: 'A', Attributes: attr, Bytes: 1, Width: 1},
-			{Ch: 't', Attributes: attr, Bytes: 1, Width: 1},
-			{Ch: 'z', Attributes: attr, Bytes: 1, Width: 1},
-			{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
+			{Ch: 'A', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+			{Ch: 't', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+			{Ch: 'z', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+			{Ch: 'a', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
 		}, row)
 	})
 	t.Run("insert multi line string", func(t *testing.T) {
@@ -1128,19 +1128,19 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 		cells := buf.RawCells()
 		assert.Equal(t, [][]term.Cell{
 			{
-				{Ch: 'L', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'o', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'l', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'L', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'o', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'l', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'a', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
 			},
 			{
-				{Ch: 'G', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'r', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'n', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'o', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'l', Attributes: attr, Bytes: 1, Width: 1},
-				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'G', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'r', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'a', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'n', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'o', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'l', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
+				{Ch: 'a', Fg: attr.Fg, Bg: attr.Bg, Attrs: attr.Attrs, Bytes: 1, Width: 1},
 			},
 		}, cells)
 	})

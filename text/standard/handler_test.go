@@ -1949,8 +1949,8 @@ func TestStandardFindCurrentMatchInvertsDefaultAttributes(t *testing.T) {
 			h.Draw(w)
 			cells := w.RawCells()[0]
 			for x := range 3 {
-				assert.Equal(t, term.Attributes{Attrs: term.AttrReverse}, cells[tt.currentStart+x].Attributes)
-				assert.Equal(t, term.Attributes{Bg: term.ColorYellow}, cells[tt.inactiveStart+x].Attributes)
+				assert.Equal(t, term.Attributes{Attrs: term.AttrReverse}, cells[tt.currentStart+x].Attributes())
+				assert.Equal(t, term.Attributes{Bg: term.ColorYellow}, cells[tt.inactiveStart+x].Attributes())
 			}
 		})
 	}
@@ -1990,10 +1990,10 @@ func TestStandardFindStatusAttributes(t *testing.T) {
 			h.Draw(w)
 			row := w.RawCells()[9]
 			for x := range len("Find: foo  1/1") {
-				require.Equal(t, tt.want.Fg, row[x].Attributes.Fg, "status fg cell %d", x)
-				require.Equal(t, tt.want.Bg, row[x].Attributes.Bg, "status bg cell %d", x)
+				require.Equal(t, tt.want.Fg, row[x].Fg, "status fg cell %d", x)
+				require.Equal(t, tt.want.Bg, row[x].Bg, "status bg cell %d", x)
 			}
-			assert.NotEqual(t, tt.want.Bg, row[len("Find: foo  1/1")].Attributes.Bg)
+			assert.NotEqual(t, tt.want.Bg, row[len("Find: foo  1/1")].Bg)
 		})
 	}
 }

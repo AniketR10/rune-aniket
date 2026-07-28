@@ -104,19 +104,11 @@ func (hb *headerBlock) Draw(w term.Writer) {
 				if x >= hb.w {
 					break
 				}
-				w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-					Ch:         '#',
-					Width:      1,
-					Attributes: attr,
-				})
+				w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell('#', 1, attr))
 				x++
 			}
 			if x < hb.w {
-				w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-					Ch:         ' ',
-					Width:      1,
-					Attributes: attr,
-				})
+				w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(' ', 1, attr))
 				x++
 			}
 		} else if i > 0 {
@@ -128,11 +120,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 				if x >= hb.w {
 					break
 				}
-				w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-					Ch:         r,
-					Width:      1,
-					Attributes: attr,
-				})
+				w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(r, 1, attr))
 				x++
 			}
 		}

@@ -224,11 +224,7 @@ func TestShineFrameNoMatchingChars(t *testing.T) {
 	fc := guiFrameCharset()
 	origFg := term.NewRGBColor(10, 20, 30)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: origFg},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: origFg})
 	}
 
 	cells := [][]term.Cell{

@@ -59,11 +59,7 @@ func (c *contextHint) Draw(w term.Writer) {
 			if x >= c.width {
 				return
 			}
-			w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
-				Ch:         r,
-				Width:      1,
-				Attributes: seg.attr,
-			})
+			w.SetCell(term.Coordinates{X: x, Y: 0}, term.NewCell(r, 1, seg.attr))
 			x++
 		}
 	}

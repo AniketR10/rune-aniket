@@ -158,11 +158,7 @@ func testCellMatrix(t *testing.T, sh shader.Shader) {
 
 	// regular cell (char, fg and bg are set)
 	cell := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone})
 	}
 
 	// zero-value cell
@@ -188,20 +184,12 @@ func testCellMatrix(t *testing.T, sh shader.Shader) {
 
 	// italic cell (char, fg, bg and italic attr are set)
 	itaCell := func() term.Cell {
-		return term.Cell{
-			Ch:         'C',
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrItalic},
-			Width:      1,
-		}
+		return term.NewCell('C', 1, term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrItalic})
 	}
 
 	// character-less cell, emulates empty spaces on the window
 	cellGap := func() term.Cell {
-		return term.Cell{
-			Ch:         0,
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone},
-			Width:      0,
-		}
+		return term.NewCell(0, 0, term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone})
 	}
 
 	tsuite := []struct {

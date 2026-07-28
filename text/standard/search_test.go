@@ -492,7 +492,7 @@ func TestSearchFloatingMouseStateAndActions(t *testing.T) {
 			assert.Equal(t, tt.button, f.hover)
 			w := term.NewStringWriter(48, 9)
 			f.Draw(w)
-			assert.Equal(t, cfg.ButtonHoverAttr, w.Cells()[r.y*48+r.x].Attributes)
+			assert.Equal(t, cfg.ButtonHoverAttr, w.Cells()[r.y*48+r.x].Attributes())
 			f.Handle(mouseEvent(0, 47, 0))
 			assert.Equal(t, searchButtonNone, f.hover)
 
@@ -659,10 +659,10 @@ func TestSearchFloatingConfiguredAttributesAndPureDraw(t *testing.T) {
 	f.Draw(w)
 	assert.Equal(t, before, *f)
 	cells := w.Cells()
-	assert.Equal(t, cfg.Attr, cells[0].Attributes)
-	assert.Equal(t, cfg.FocusFrameAttr, cells[48+1].Attributes)
-	assert.Equal(t, cfg.PlaceholderAttr, cells[2*48+2].Attributes)
-	assert.Equal(t, cfg.ButtonHoverAttr, cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes)
+	assert.Equal(t, cfg.Attr, cells[0].Attributes())
+	assert.Equal(t, cfg.FocusFrameAttr, cells[48+1].Attributes())
+	assert.Equal(t, cfg.PlaceholderAttr, cells[2*48+2].Attributes())
+	assert.Equal(t, cfg.ButtonHoverAttr, cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes())
 }
 
 func TestSearchFloatingDefaultPaddingAndAttributes(t *testing.T) {
@@ -678,17 +678,17 @@ func TestSearchFloatingDefaultPaddingAndAttributes(t *testing.T) {
 	w := term.NewStringWriter(48, 5)
 	f.Draw(w)
 	cells := w.Cells()
-	assert.Equal(t, cfg.Attr, cells[48].Attributes)
-	assert.Equal(t, cfg.FocusFrameAttr, cells[48+1].Attributes)
+	assert.Equal(t, cfg.Attr, cells[48].Attributes())
+	assert.Equal(t, cfg.FocusFrameAttr, cells[48+1].Attributes())
 	assert.Equal(t, cfg.ButtonAttr,
-		cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes)
+		cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes())
 
 	f.hover = searchButtonUpgrade
 	w = term.NewStringWriter(48, 5)
 	f.Draw(w)
 	cells = w.Cells()
 	assert.Equal(t, cfg.ButtonHoverAttr,
-		cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes)
+		cells[f.layout.upgrade.y*48+f.layout.upgrade.x].Attributes())
 }
 
 func TestSearchFloatingReplacementEditRelayout(t *testing.T) {

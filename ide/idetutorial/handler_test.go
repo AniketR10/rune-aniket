@@ -149,7 +149,7 @@ type trackingShader struct {
 func (s *trackingShader) Shade(_, _ int, cells [][]term.Cell) {
 	s.calls.Add(1)
 	if len(cells) > 0 && len(cells[0]) > 0 {
-		cells[0][0].Attributes = s.tag
+		cells[0][0].SetAttributes(s.tag)
 	}
 }
 
@@ -161,7 +161,7 @@ func (s *taggingShader) Shade(_, _ int, cells [][]term.Cell) {
 	for y := range cells {
 		for x := range cells[y] {
 			if cells[y][x].Ch != 0 {
-				cells[y][x].Attributes = s.tag
+				cells[y][x].SetAttributes(s.tag)
 			}
 		}
 	}
@@ -486,9 +486,9 @@ func TestHandlerShaderWrapsRootAndTutorialOverlay(t *testing.T) {
 		"root must paint its 'R' marker")
 	assert.Equal(t, 'T', cells[1].Ch,
 		"tutorial must paint its 'T' marker on top")
-	assert.Equal(t, sentinel, cells[0].Attributes,
+	assert.Equal(t, sentinel, cells[0].Attributes(),
 		"root cell must carry the shader's sentinel attribute")
-	assert.Equal(t, sentinel, cells[1].Attributes,
+	assert.Equal(t, sentinel, cells[1].Attributes(),
 		"tutorial-drawn cell must also carry the shader's "+
 			"sentinel — the shader must wrap (root + overlay), "+
 			"not just root, so a pulse over the floating_window "+
@@ -523,8 +523,8 @@ func TestHandlerShaderUnderOuterShaderComponentReachesWriter(t *testing.T) {
 		"root marker must reach the writer through the stacked shaders")
 	assert.Equal(t, 'T', cells[1].Ch,
 		"tutorial marker must reach the writer through the stacked shaders")
-	assert.Equal(t, sentinel, cells[0].Attributes,
+	assert.Equal(t, sentinel, cells[0].Attributes(),
 		"root cell sentinel must survive the outer Nop shader")
-	assert.Equal(t, sentinel, cells[1].Attributes,
+	assert.Equal(t, sentinel, cells[1].Attributes(),
 		"tutorial cell sentinel must survive the outer Nop shader")
 }

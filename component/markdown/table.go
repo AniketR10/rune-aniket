@@ -396,20 +396,12 @@ func (t *tableBlock) renderHorizontalBorder(
 	w term.Writer, y int, left, fill, join, right rune,
 ) int {
 	x := 0
-	w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-		Ch:         left,
-		Width:      1,
-		Attributes: t.cfg.Paragraph,
-	})
+	w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(left, 1, t.cfg.Paragraph))
 	x++
 
 	for i, colWidth := range t.colWidths {
 		for j := range colWidth {
-			w.SetCell(term.Coordinates{X: x + j, Y: y}, term.Cell{
-				Ch:         fill,
-				Width:      1,
-				Attributes: t.cfg.Paragraph,
-			})
+			w.SetCell(term.Coordinates{X: x + j, Y: y}, term.NewCell(fill, 1, t.cfg.Paragraph))
 		}
 		x += colWidth
 
@@ -417,11 +409,7 @@ func (t *tableBlock) renderHorizontalBorder(
 		if i == len(t.colWidths)-1 {
 			ch = right
 		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-			Ch:         ch,
-			Width:      1,
-			Attributes: t.cfg.Paragraph,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, t.cfg.Paragraph))
 		x++
 	}
 	return y + 1
@@ -433,11 +421,7 @@ func (t *tableBlock) renderRow(
 ) int {
 	for line := range rowHeight {
 		x := 0
-		w.SetCell(term.Coordinates{X: x, Y: y + line}, term.Cell{
-			Ch:         cs.ColumnSeparator,
-			Width:      1,
-			Attributes: t.cfg.Paragraph,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: y + line}, term.NewCell(cs.ColumnSeparator, 1, t.cfg.Paragraph))
 		x++
 
 		for i, colWidth := range t.colWidths {
@@ -448,11 +432,7 @@ func (t *tableBlock) renderRow(
 			t.renderCell(w, x, y+line, colWidth, lineRun, t.getAlignment(i), isHeader)
 			x += colWidth
 
-			w.SetCell(term.Coordinates{X: x, Y: y + line}, term.Cell{
-				Ch:         cs.ColumnSeparator,
-				Width:      1,
-				Attributes: t.cfg.Paragraph,
-			})
+			w.SetCell(term.Coordinates{X: x, Y: y + line}, term.NewCell(cs.ColumnSeparator, 1, t.cfg.Paragraph))
 			x++
 		}
 	}
@@ -499,11 +479,7 @@ func (t *tableBlock) renderCell(
 				runeIdx = 0
 			}
 		}
-		w.SetCell(term.Coordinates{X: cellX, Y: y}, term.Cell{
-			Ch:         r,
-			Width:      1,
-			Attributes: cellAttr,
-		})
+		w.SetCell(term.Coordinates{X: cellX, Y: y}, term.NewCell(r, 1, cellAttr))
 	}
 }
 

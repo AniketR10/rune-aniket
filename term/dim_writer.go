@@ -42,7 +42,7 @@ func DimWriter(w term.Writer) term.Writer {
 
 func (w dimWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if !graphemecluster.IsBackground(c.Ch) {
-		c.Attributes.Attrs |= term.AttrDim
+		c.Attrs |= term.AttrDim
 	}
 	w.w.SetCell(pos, c)
 }

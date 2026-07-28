@@ -676,11 +676,7 @@ func (t *Turn) drawCollapsedAt(w term.Writer, width int) {
 			childWidth := width - 3
 			if !isLast {
 				for cy := 0; cy < childH; cy++ {
-					w.SetCell(term.Coordinates{X: 0, Y: y + cy}, term.Cell{
-						Attributes: tAttr,
-						Ch:         '│',
-						Width:      1,
-					})
+					w.SetCell(term.Coordinates{X: 0, Y: y + cy}, term.NewCell('│', 1, tAttr))
 				}
 			}
 			childVW := &component.VirtualWriter{
@@ -736,11 +732,7 @@ func writeRuneLineAttr(w term.Writer, x, y int, s string, maxWidth int, attr ter
 		if x >= maxWidth {
 			break
 		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-			Attributes: attr,
-			Ch:         ch,
-			Width:      1,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, attr))
 		x++
 	}
 	return x

@@ -133,11 +133,7 @@ func (l *listBlock) drawAtIndent(w term.Writer, y, indent int) int {
 		bullet := l.getBullet(i, item)
 
 		for j, r := range bullet {
-			w.SetCell(term.Coordinates{X: indent + j, Y: y}, term.Cell{
-				Ch:         r,
-				Width:      1,
-				Attributes: l.cfg.Paragraph,
-			})
+			w.SetCell(term.Coordinates{X: indent + j, Y: y}, term.NewCell(r, 1, l.cfg.Paragraph))
 		}
 
 		lines := wrapTextRun(item.content, effectiveWidth)
@@ -149,11 +145,7 @@ func (l *listBlock) drawAtIndent(w term.Writer, y, indent int) int {
 					if x >= l.w {
 						break
 					}
-					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.Cell{
-						Ch:         r,
-						Width:      1,
-						Attributes: attr,
-					})
+					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.NewCell(r, 1, attr))
 					x++
 				}
 			}

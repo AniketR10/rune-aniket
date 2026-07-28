@@ -1648,7 +1648,7 @@ func (h *forkPickerHandler) drawSeparator(w term.Writer) {
 	attr := term.Attributes{Fg: term.ColorGray}
 	y := h.previewH
 	for x := range h.innerW {
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: 1, Attributes: attr})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, attr))
 	}
 }
 

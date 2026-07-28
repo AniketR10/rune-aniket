@@ -741,9 +741,7 @@ func (s *Scroll) Draw(writer term.Writer) {
 	// setcell background
 	for y := 0; y < s.height; y++ {
 		for x := 0; x < s.width; x++ {
-			writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-				Attributes: s.Attributes,
-			})
+			writer.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(0, 0, s.Attributes))
 		}
 	}
 
@@ -1283,7 +1281,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 				if hideLineIconOffset == s.width {
 					break
 				}
-				cell := term.Cell{Width: 1, Ch: r, Attributes: s.HideAttr}
+				cell := term.NewCell(r, 1, s.HideAttr)
 				writer.SetCell(term.Coordinates{X: hideLineIconOffset, Y: targety}, cell)
 				hideLineIconOffset++
 			}

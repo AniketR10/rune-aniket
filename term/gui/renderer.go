@@ -331,8 +331,8 @@ func (r *renderer) renderCursor(
 	width := math.Max(1, float64(cell.Width))
 
 	useFace := r.font.Regular
-	isBold := cell.Attributes.Attrs&term.AttrBold != 0
-	isItalic := cell.Attributes.Attrs&term.AttrItalic != 0
+	isBold := cell.Attrs&term.AttrBold != 0
+	isItalic := cell.Attrs&term.AttrItalic != 0
 	if isBold && isItalic {
 		useFace = r.font.BoldItalic
 	} else if isBold {

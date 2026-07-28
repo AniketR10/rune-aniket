@@ -1372,11 +1372,7 @@ func (h *Prompt) drawKeyBindingHints(w term.Writer, listHeight int) {
 			attr = h.config.KeyBindingHintFocusAttr
 		}
 		for i, ch := range runes {
-			w.SetCell(term.Coordinates{X: startX + i, Y: y}, term.Cell{
-				Ch:         ch,
-				Attributes: attr,
-				Width:      1,
-			})
+			w.SetCell(term.Coordinates{X: startX + i, Y: y}, term.NewCell(ch, 1, attr))
 		}
 	})
 }
@@ -1677,7 +1673,7 @@ func (h *Prompt) resetManualComponent() {
 
 func newNopAnimation(cfg Config) tui.Component {
 	return component.WithBackground(component.Nop(),
-		term.Cell{Attributes: cfg.ElementAttr})
+		term.NewCell(0, 0, cfg.ElementAttr))
 }
 
 func getManualForCommand(cmd string, commandsBackup []Manual) (Manual, bool) {

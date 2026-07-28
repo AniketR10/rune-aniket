@@ -45,7 +45,7 @@ func drawRow(s string, attrs []term.Attributes) []term.Cell {
 		if attrs != nil && i < len(attrs) {
 			a = attrs[i]
 		}
-		out = append(out, term.Cell{Attributes: a, Ch: r, Width: 1})
+		out = append(out, term.NewCell(r, 1, a))
 		i++
 	}
 	return out

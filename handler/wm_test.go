@@ -82,21 +82,21 @@ func TestWindowManagerDimmedWriter(t *testing.T) {
 	t.Run("dim uses brightness dimming", func(t *testing.T) {
 		wm := &WindowManager{config: WindowManagerConfig{BW: false}}
 		rec := &recordingWMWriter{}
-		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
-			Attributes: term.Attributes{Fg: red}})
-		assert.Equal(t, red, rec.cell.Attributes.Fg)
-		assert.NotZero(t, rec.cell.Attributes.Attrs&term.AttrDim)
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.NewCell('x', 0,
+			term.Attributes{Fg: red}))
+		assert.Equal(t, red, rec.cell.Fg)
+		assert.NotZero(t, rec.cell.Attrs&term.AttrDim)
 	})
 
 	t.Run("bw grayscales colors", func(t *testing.T) {
 		wm := &WindowManager{config: WindowManagerConfig{BW: true}}
 		rec := &recordingWMWriter{}
-		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
-			Attributes: term.Attributes{Fg: red}})
-		r, g, b := rec.cell.Attributes.Fg.RGB()
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.NewCell('x', 0,
+			term.Attributes{Fg: red}))
+		r, g, b := rec.cell.Fg.RGB()
 		assert.Equal(t, r, g)
 		assert.Equal(t, g, b)
-		assert.Zero(t, rec.cell.Attributes.Attrs&term.AttrDim)
+		assert.Zero(t, rec.cell.Attrs&term.AttrDim)
 	})
 
 	t.Run("bw resolves default foreground to defAttr", func(t *testing.T) {
@@ -106,11 +106,11 @@ func TestWindowManagerDimmedWriter(t *testing.T) {
 			defAttr: term.Attributes{Fg: tan},
 		}
 		rec := &recordingWMWriter{}
-		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
-			Attributes: term.Attributes{Fg: term.ColorDefault}})
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.NewCell('x', 0,
+			term.Attributes{Fg: term.ColorDefault}))
 		tr, tg, tb := tan.RGB()
 		lum := int32(math.Round(0.299*float64(tr) + 0.587*float64(tg) + 0.114*float64(tb)))
-		assert.Equal(t, term.NewRGBColor(lum, lum, lum), rec.cell.Attributes.Fg)
+		assert.Equal(t, term.NewRGBColor(lum, lum, lum), rec.cell.Fg)
 	})
 }
 func TestWindowManagerSetFocusNoFrame(t *testing.T) {

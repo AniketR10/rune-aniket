@@ -69,19 +69,19 @@ func TestBWWriterSetCell(t *testing.T) {
 	}{
 		{
 			name:   "rgb fg and bg grayscaled",
-			in:     term.Cell{Ch: 'x', Attributes: term.Attributes{Fg: red, Bg: blue}},
+			in:     term.NewCell('x', 0, term.Attributes{Fg: red, Bg: blue}),
 			wantFg: gray(red),
 			wantBg: gray(blue),
 		},
 		{
 			name:   "default colors unchanged",
-			in:     term.Cell{Ch: 'x', Attributes: term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}},
+			in:     term.NewCell('x', 0, term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}),
 			wantFg: term.ColorDefault,
 			wantBg: term.ColorDefault,
 		},
 		{
 			name:   "background rune grayscales both fg and bg",
-			in:     term.Cell{Ch: '█', Attributes: term.Attributes{Fg: red, Bg: blue}},
+			in:     term.NewCell('█', 0, term.Attributes{Fg: red, Bg: blue}),
 			wantFg: gray(red),
 			wantBg: gray(blue),
 		},
@@ -92,8 +92,8 @@ func TestBWWriterSetCell(t *testing.T) {
 			rec := &recordingWriter{}
 			BWWriter(rec, term.Attributes{}).SetCell(term.Coordinates{X: 2, Y: 3}, tc.in)
 			assert.Equal(t, term.Coordinates{X: 2, Y: 3}, rec.pos)
-			assert.Equal(t, tc.wantFg, rec.cell.Attributes.Fg)
-			assert.Equal(t, tc.wantBg, rec.cell.Attributes.Bg)
+			assert.Equal(t, tc.wantFg, rec.cell.Fg)
+			assert.Equal(t, tc.wantBg, rec.cell.Bg)
 			assert.Equal(t, tc.in.Ch, rec.cell.Ch)
 		})
 	}
@@ -109,12 +109,10 @@ func TestBWWriterResolvesDefaultForeground(t *testing.T) {
 
 	t.Run("SetCell resolves default fg, leaves default bg", func(t *testing.T) {
 		rec := &recordingWriter{}
-		BWWriter(rec, term.Attributes{Fg: tan}).SetCell(term.Coordinates{X: 4, Y: 5}, term.Cell{
-			Ch:         'x',
-			Attributes: term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault},
-		})
-		assert.Equal(t, gray(tan), rec.cell.Attributes.Fg)
-		assert.Equal(t, term.ColorDefault, rec.cell.Attributes.Bg)
+		BWWriter(rec, term.Attributes{Fg: tan}).SetCell(term.Coordinates{X: 4, Y: 5},
+			term.NewCell('x', 0, term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}))
+		assert.Equal(t, gray(tan), rec.cell.Fg)
+		assert.Equal(t, term.ColorDefault, rec.cell.Bg)
 	})
 
 	t.Run("UnionAttributes leaves default fg untouched", func(t *testing.T) {

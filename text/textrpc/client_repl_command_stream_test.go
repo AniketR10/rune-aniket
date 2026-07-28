@@ -36,7 +36,7 @@ func TestResponsiveFromProtoRows_PreservesPerCellAttributes(t *testing.T) {
 	row := &termrpc.CellRow{Cells: make([]*termrpc.Cell, width)}
 	for i := range width {
 		var pc termrpc.Cell
-		pc.FromModel(term.Cell{Attributes: attrs[i], Ch: runes[i], Width: 1})
+		pc.FromModel(term.NewCell(runes[i], 1, attrs[i]))
 		row.Cells[i] = &pc
 	}
 
@@ -49,7 +49,7 @@ func TestResponsiveFromProtoRows_PreservesPerCellAttributes(t *testing.T) {
 	for x := range width {
 		got := w.Cells()[x]
 		assert.Equal(t, runes[x], got.Ch, "cell %d rune", x)
-		assert.Equal(t, attrs[x], got.Attributes,
+		assert.Equal(t, attrs[x], got.Attributes(),
 			"cell %d attributes should round-trip per-cell; "+
 				"if they collapse to the zero value the client side "+
 				"is dropping per-cell colors", x)

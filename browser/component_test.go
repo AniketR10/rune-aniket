@@ -324,13 +324,13 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	expectedFocusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	expectedDefaultIconAttr := term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset}
 	assert.Equal(t, 'A', cells[0].Ch)
-	assert.Equal(t, expectedDefaultIconAttr, cells[0].Attributes)
+	assert.Equal(t, expectedDefaultIconAttr, cells[0].Attributes())
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes())
 	assert.Equal(t, 'B', cells[5].Ch)
-	assert.Equal(t, expectedIconAttr, cells[5].Attributes)
+	assert.Equal(t, expectedIconAttr, cells[5].Attributes())
 	assert.Equal(t, 'b', cells[7].Ch)
-	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes())
 
 	require.True(t, b.FocusLeft())
 	writer = term.NewStringWriter(width, height)
@@ -338,13 +338,13 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cells = writer.Cells()
 
 	assert.Equal(t, 'A', cells[0].Ch)
-	assert.Equal(t, expectedIconAttr, cells[0].Attributes)
+	assert.Equal(t, expectedIconAttr, cells[0].Attributes())
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes())
 	assert.Equal(t, 'B', cells[5].Ch)
-	assert.Equal(t, expectedDefaultIconAttr, cells[5].Attributes)
+	assert.Equal(t, expectedDefaultIconAttr, cells[5].Attributes())
 	assert.Equal(t, 'b', cells[7].Ch)
-	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes())
 }
 
 // TestNewTabHonorsTabOverrideIcon verifies that when
@@ -704,10 +704,10 @@ func TestNonFocusTabAttrRespectedWithFrameFg(t *testing.T) {
 	// NonFocusTabAttr; "b" is bound to the focused window and renders
 	// with FocusTabAttr.
 	assert.Equal(t, 'a', cells[0].Ch)
-	assert.Equal(t, expectedNonFocus, cells[0].Attributes,
+	assert.Equal(t, expectedNonFocus, cells[0].Attributes(),
 		"non-focused tab name must render with NonFocusTabAttr, not frame fg")
 	assert.Equal(t, 'b', cells[3].Ch)
-	assert.Equal(t, expectedFocus, cells[3].Attributes,
+	assert.Equal(t, expectedFocus, cells[3].Attributes(),
 		"focused tab name must render with FocusTabAttr")
 }
 

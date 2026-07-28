@@ -1087,12 +1087,9 @@ func (t *Component) drawSelection(w term.Writer) {
 				posAtScreen.X < 0 || posAtScreen.X >= t.width {
 				continue
 			}
-			w.SetCell(posAtScreen, term.Cell{
-				Ch:         c.Ch,
-				Attributes: t.selectionAttr,
-				Width:      c.Width,
-				Combining:  c.Combining,
-			})
+			cell := *c
+			cell.SetAttributes(t.selectionAttr)
+			w.SetCell(posAtScreen, cell)
 		}
 	}
 }

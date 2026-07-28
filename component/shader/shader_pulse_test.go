@@ -36,10 +36,10 @@ func TestPulseLeavesCycleBoundariesUntouched(t *testing.T) {
 	t.Parallel()
 	defaultAttr := term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack}
 	in := [][]term.Cell{{
-		{Ch: 'x', Attributes: term.Attributes{Fg: term.NewRGBColor(10, 20, 30), Bg: term.NewRGBColor(40, 50, 60)}},
+		term.NewCell('x', 0, term.Attributes{Fg: term.NewRGBColor(10, 20, 30), Bg: term.NewRGBColor(40, 50, 60)}),
 	}}
 	want := [][]term.Cell{{
-		{Ch: 'x', Attributes: term.Attributes{Fg: term.NewRGBColor(10, 20, 30), Bg: term.NewRGBColor(40, 50, 60)}},
+		term.NewCell('x', 0, term.Attributes{Fg: term.NewRGBColor(10, 20, 30), Bg: term.NewRGBColor(40, 50, 60)}),
 	}}
 
 	params := DefaultPulseParams()
@@ -59,10 +59,10 @@ func TestPulsePeakBlendsTowardColor(t *testing.T) {
 	t.Parallel()
 	defaultAttr := term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack}
 	in := [][]term.Cell{{
-		{Ch: 'x', Attributes: term.Attributes{
+		term.NewCell('x', 0, term.Attributes{
 			Fg: term.NewRGBColor(10, 10, 10),
 			Bg: term.NewRGBColor(20, 20, 20),
-		}},
+		}),
 	}}
 	params := DefaultPulseParams()
 	params.Color = term.NewRGBColor(255, 0, 0)
@@ -80,10 +80,10 @@ func TestPulsePeakBlendsTowardColor(t *testing.T) {
 func TestPulseSkipsCellsOutsideAnimation(t *testing.T) {
 	t.Parallel()
 	in := [][]term.Cell{{
-		{Ch: 'x', Attributes: term.Attributes{Fg: term.ColorRed}},
+		term.NewCell('x', 0, term.Attributes{Fg: term.ColorRed}),
 	}}
 	want := [][]term.Cell{{
-		{Ch: 'x', Attributes: term.Attributes{Fg: term.ColorRed}},
+		term.NewCell('x', 0, term.Attributes{Fg: term.ColorRed}),
 	}}
 	Pulse(DefaultPulseParams(), term.Attributes{}).Shade(-1, 1000, in)
 	assert.Equal(t, want, in)

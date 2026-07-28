@@ -533,8 +533,8 @@ func (b *auxBar) rebuildGitRelative(ll textapi.LocationList) {
 				if x >= len(cells[at.Y]) {
 					break
 				}
-				cells[at.Y][x].Attributes = term.AttributesUnion(
-					cells[at.Y][x].Attributes, b.delAttr)
+				cells[at.Y][x].SetAttributes(term.AttributesUnion(
+					cells[at.Y][x].Attributes(), b.delAttr))
 			}
 			continue
 		}
@@ -548,8 +548,8 @@ func (b *auxBar) rebuildGitRelative(ll textapi.LocationList) {
 				if x >= len(cells[at.Y]) {
 					break
 				}
-				cells[at.Y][x].Attributes = term.AttributesUnion(
-					cells[at.Y][x].Attributes, b.addAttr)
+				cells[at.Y][x].SetAttributes(term.AttributesUnion(
+					cells[at.Y][x].Attributes(), b.addAttr))
 			}
 		}
 	}
@@ -571,8 +571,8 @@ func (b *auxBar) rebuildGitAbsolute(ll textapi.LocationList) {
 				if x >= len(cells[at.Y]) {
 					break
 				}
-				cells[at.Y][x].Attributes = term.AttributesUnion(
-					cells[at.Y][x].Attributes, b.delAttr)
+				cells[at.Y][x].SetAttributes(term.AttributesUnion(
+					cells[at.Y][x].Attributes(), b.delAttr))
 			}
 			continue
 		}
@@ -587,8 +587,8 @@ func (b *auxBar) rebuildGitAbsolute(ll textapi.LocationList) {
 				if x >= len(cells[at.Y]) {
 					break
 				}
-				cells[at.Y][x].Attributes = term.AttributesUnion(
-					cells[at.Y][x].Attributes, b.addAttr)
+				cells[at.Y][x].SetAttributes(term.AttributesUnion(
+					cells[at.Y][x].Attributes(), b.addAttr))
 			}
 		}
 	}

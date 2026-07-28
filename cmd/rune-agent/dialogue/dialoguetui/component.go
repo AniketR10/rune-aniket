@@ -210,7 +210,7 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 // Draw satisfies tui.Component.
 func (c *Component) Draw(w term.Writer) {
 	if c.cfg.BackgroundColor != 0 {
-		bg := term.Cell{Attributes: term.Attributes{Bg: c.cfg.BackgroundColor}}
+		bg := term.NewCell(0, 0, term.Attributes{Bg: c.cfg.BackgroundColor})
 		for y := range c.height {
 			for x := range c.width {
 				w.SetCell(term.Coordinates{X: x, Y: y}, bg)

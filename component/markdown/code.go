@@ -53,7 +53,7 @@ func newCodeBlock(language, code string, cfg *Config) *codeBlock {
 	// Apply base CodeBlock attributes to every cell.
 	for y := range cells {
 		for x := range cells[y] {
-			cells[y][x].Attributes = cfg.CodeBlock
+			cells[y][x].SetAttributes(cfg.CodeBlock)
 		}
 	}
 
@@ -127,15 +127,12 @@ func applyHighlights(cells [][]term.Cell, hls []textapi.Location, codeBlock term
 				endX = hl.To.X
 			}
 			for x := startX; x < endX && x < len(cells[y]); x++ {
-				cells[y][x].Attributes = hl.Attr
+				attr := hl.Attr
 				// Preserve the code block background color.
 				if codeBlock.Bg != term.ColorDefault {
-					cells[y][x].Attributes = term.Attributes{
-						Fg:    hl.Attr.Fg,
-						Bg:    codeBlock.Bg,
-						Attrs: hl.Attr.Attrs,
-					}
+					attr.Bg = codeBlock.Bg
 				}
+				cells[y][x].SetAttributes(attr)
 			}
 		}
 	}

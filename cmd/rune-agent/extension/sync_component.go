@@ -53,11 +53,7 @@ type hintSlot struct {
 
 func (s syncComponent) addStatusHint() *statusHint {
 	hint := newStatusHint(s.h.p, s.h.backgroundAttr, s.h.cfg.DurationPrecision, s.comp.TaskActiveForm)
-	bg := component.WithBackground(hint, term.Cell{
-		Attributes: s.h.backgroundAttr,
-		Ch:         ' ',
-		Width:      1,
-	})
+	bg := component.WithBackground(hint, term.NewCell(' ', 1, s.h.backgroundAttr))
 	conf := component.SpanConfig{
 		ContentAlignment: component.AlignmentLeft,
 	}
@@ -85,11 +81,7 @@ func (s syncComponent) setContextHint(ev agent.Event) {
 	hint := &contextHint{
 		segments: buildContextHintSegments(ev, s.h.contextHintCfg, s.h.cfg.DurationPrecision),
 	}
-	bg := component.WithBackground(hint, term.Cell{
-		Attributes: s.h.backgroundAttr,
-		Ch:         ' ',
-		Width:      1,
-	})
+	bg := component.WithBackground(hint, term.NewCell(' ', 1, s.h.backgroundAttr))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

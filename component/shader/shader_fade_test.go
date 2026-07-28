@@ -44,43 +44,43 @@ func TestFade(t *testing.T) {
 			frame: 0,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: 0, Bg: term.ColorBlack}),
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorBlack}),
 			}},
 		},
 		{
 			frame: 10,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: 0, Bg: term.ColorBlack}),
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: 0, Bg: term.ColorBlack}),
 			}},
 		},
 		{
 			frame: 4,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: term.ColorBlack}),
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.NewRGBColor(4, 4, 4), Bg: term.ColorBlack}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.NewRGBColor(4, 4, 4), Bg: term.ColorBlack}),
 			}},
 		},
 		{
 			frame: 4,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: 0}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: 0}),
 			}},
 			// Bg is ColorDefault and defaultAttrs.Bg is also unset, so the
 			// blend has no resolvable starting point and Fg ends up
 			// resolving to ColorDefault.
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.ColorDefault, Bg: 0}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.ColorDefault, Bg: 0}),
 			}},
 		},
 		{
@@ -88,10 +88,10 @@ func TestFade(t *testing.T) {
 			total:        9,
 			defaultAttrs: term.Attributes{Fg: term.NewRGBColor(10, 0, 0), Bg: term.NewRGBColor(0, 0, 10)},
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}),
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: term.NewRGBColor(4, 0, 5), Bg: term.ColorDefault}},
+				term.NewCell(0, 0, term.Attributes{Fg: term.NewRGBColor(4, 0, 5), Bg: term.ColorDefault}),
 			}},
 		},
 	}

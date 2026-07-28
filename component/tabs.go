@@ -114,7 +114,7 @@ func newListFrame(
 	scroll := new(Scroll)
 	scroll.InitPerformance(buf)
 	scroll.Attributes = scrollAttr
-	background := term.Cell{Attributes: term.Attributes{Bg: scroll.Attributes.Bg}}
+	background := term.NewCell(0, 0, term.Attributes{Bg: scroll.Attributes.Bg})
 	spanCfg := component.SpanConfig{
 		ContentAlignment: component.AlignmentCentered,
 		PadVertical:      -1,
@@ -286,11 +286,8 @@ func (t *Tabs) drawFocusHighlight(w term.Writer) {
 				if x < xLeft || x >= xRight {
 					continue
 				}
-				w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-					Width:      1,
-					Ch:         t.focusFrameChar,
-					Attributes: t.focusFrameAttr,
-				})
+				w.SetCell(term.Coordinates{X: x, Y: y},
+					term.NewCell(t.focusFrameChar, 1, t.focusFrameAttr))
 			}
 		}
 		innerX += cell.width

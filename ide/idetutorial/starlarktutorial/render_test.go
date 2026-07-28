@@ -90,7 +90,7 @@ func (g *attrGridWriter) rowAttrs(y int) []term.Attributes {
 	}
 	out := make([]term.Attributes, g.w)
 	for x, c := range g.cells[y] {
-		out[x] = c.Attributes
+		out[x] = c.Attributes()
 	}
 	return out
 }

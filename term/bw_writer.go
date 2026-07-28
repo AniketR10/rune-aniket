@@ -48,8 +48,8 @@ func BWWriter(w term.Writer, defaultAttr term.Attributes) term.Writer {
 }
 
 func (w bwWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	c.Attributes.Fg = grayscaleFg(c.Attributes.Fg, w.defaultFg)
-	c.Attributes.Bg = grayscale(c.Attributes.Bg)
+	c.Fg = grayscaleFg(c.Fg, w.defaultFg)
+	c.Bg = grayscale(c.Bg)
 	w.w.SetCell(pos, c)
 }
 

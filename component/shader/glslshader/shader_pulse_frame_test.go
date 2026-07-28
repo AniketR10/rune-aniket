@@ -44,11 +44,7 @@ func TestPulseFrameOnlyAffectsFrameChars(t *testing.T) {
 	fc := guiFrameCharset()
 	origFg := term.NewRGBColor(10, 20, 30)
 	mk := func(ch rune) term.Cell {
-		return term.Cell{
-			Ch:         ch,
-			Attributes: term.Attributes{Fg: origFg},
-			Width:      1,
-		}
+		return term.NewCell(ch, 1, term.Attributes{Fg: origFg})
 	}
 
 	// 3x3 with frame chars on the border and 'a' in the middle.
@@ -107,11 +103,7 @@ func TestPulseFrameOnlyAffectsFrameChars(t *testing.T) {
 func TestPulseFrameMinIntensityClampsTrough(t *testing.T) {
 	fc := guiFrameCharset()
 	origFg := term.NewRGBColor(10, 20, 30)
-	cells := [][]term.Cell{{{
-		Ch:         fc.TopLeft,
-		Attributes: term.Attributes{Fg: origFg},
-		Width:      1,
-	}}}
+	cells := [][]term.Cell{{term.NewCell(fc.TopLeft, 1, term.Attributes{Fg: origFg})}}
 	params := DefaultPulseFrameParams(fc)
 	params.MinIntensity = 0.5
 	sh := PulseFrame(params, term.Attributes{Fg: term.NewRGBColor(80, 80, 80)})

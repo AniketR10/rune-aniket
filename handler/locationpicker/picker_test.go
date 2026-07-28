@@ -252,7 +252,7 @@ func TestPickerHighlightApplied(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorGreen}
+		p.previewCells[0][x].SetAttributes(term.Attributes{Fg: term.ColorGreen})
 	}
 
 	w, ht := p.Dimensions()
@@ -279,7 +279,7 @@ func TestPickerHighlightUnionWithTargetLine(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorRed}
+		p.previewCells[0][x].SetAttributes(term.Attributes{Fg: term.ColorRed})
 	}
 
 	w, ht := p.Dimensions()
@@ -307,10 +307,10 @@ func TestPickerHighlightMultipleRangesPerLine(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorBlue}
+		p.previewCells[0][x].SetAttributes(term.Attributes{Fg: term.ColorBlue})
 	}
 	for x := 5; x < 9 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorRed}
+		p.previewCells[0][x].SetAttributes(term.Attributes{Fg: term.ColorRed})
 	}
 
 	w, ht := p.Dimensions()
@@ -429,7 +429,7 @@ func TestPickerLoadHighlightsOutOfBoundsIgnored(t *testing.T) {
 	require.NotNil(t, p.previewCells)
 	for i, row := range p.previewCells {
 		for j, c := range row {
-			assert.Equal(t, before[i][j].Attributes, c.Attributes,
+			assert.Equal(t, before[i][j].Attributes(), c.Attributes(),
 				"cell [%d][%d] attrs should be unchanged for out-of-bounds highlight", i, j)
 		}
 	}

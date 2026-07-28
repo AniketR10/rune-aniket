@@ -306,9 +306,9 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{{}},
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
 			{{}},
 		}
 
@@ -380,9 +380,9 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{{}},
-			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
-			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
-			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
+			{term.NewCell(0, 0, term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack})},
+			{term.NewCell(0, 0, term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack})},
+			{term.NewCell(0, 0, term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack})},
 			{{}},
 		}
 
@@ -402,9 +402,9 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 		expected := [][]term.Cell{
 			{{}},
 			{{}},
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
 		}
 		locations := []textapi.Location{
 			{
@@ -433,9 +433,9 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 		c.scroll.SetOffset(term.Coordinates{Y: 10})
 
 		expected := [][]term.Cell{
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
-			{{Attributes: abcAttr}},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
+			{term.NewCell(0, 0, abcAttr)},
 			{{}},
 			{{}},
 		}
@@ -510,8 +510,8 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{{}, {}},
-			{{Attributes: term.Attributes{Bg: term.ColorRed}},
-				{Attributes: term.Attributes{Bg: 0}}},
+			{term.NewCell(0, 0, term.Attributes{Bg: term.ColorRed}),
+				term.NewCell(0, 0, term.Attributes{Bg: 0})},
 			{{}, {}},
 			{{}, {}},
 			{{}, {}},
@@ -545,8 +545,8 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{{}, {}},
-			{{Attributes: term.Attributes{Bg: term.ColorGreen}},
-				{Attributes: term.Attributes{Bg: 0}}},
+			{term.NewCell(0, 0, term.Attributes{Bg: term.ColorGreen}),
+				term.NewCell(0, 0, term.Attributes{Bg: 0})},
 			{{}, {}},
 			{{}, {}},
 			{{}, {}},

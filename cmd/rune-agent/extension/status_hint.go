@@ -181,11 +181,7 @@ func (h *statusHint) Draw(w term.Writer) {
 		if x >= width {
 			break
 		}
-		w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
-			Ch:         r,
-			Width:      1,
-			Attributes: cellAttr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: 0}, term.NewCell(r, 1, cellAttr))
 		x++
 	}
 }

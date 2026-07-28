@@ -74,11 +74,7 @@ func (p *paragraphBlock) Draw(w term.Writer) {
 				if x >= p.w {
 					break
 				}
-				w.SetCell(term.Coordinates{X: x, Y: i}, term.Cell{
-					Ch:         r,
-					Width:      1,
-					Attributes: attr,
-				})
+				w.SetCell(term.Coordinates{X: x, Y: i}, term.NewCell(r, 1, attr))
 				x++
 			}
 		}

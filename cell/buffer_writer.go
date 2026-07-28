@@ -70,8 +70,8 @@ func (w *BufferWriter) UnionAttributes(pos term.Coordinates, attr term.Attribute
 	if pos.X >= w.width || pos.Y >= w.height || pos.X < 0 || pos.Y < 0 {
 		return
 	}
-	w.cells[pos.Y][pos.X].Attributes = term.AttributesUnion(
-		w.cells[pos.Y][pos.X].Attributes, attr)
+	w.cells[pos.Y][pos.X].SetAttributes(term.AttributesUnion(
+		w.cells[pos.Y][pos.X].Attributes(), attr))
 }
 
 // Flush satisfies term.Writer
@@ -83,7 +83,7 @@ func (w *BufferWriter) Flush() error {
 func (w *BufferWriter) Clear(attr term.Attributes) error {
 	for y, row := range w.cells {
 		for x := range row {
-			w.cells[y][x] = term.Cell{Attributes: attr}
+			w.cells[y][x] = term.NewCell(0, 0, attr)
 		}
 	}
 	return nil

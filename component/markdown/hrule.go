@@ -65,11 +65,7 @@ func (hr *horizontalRuleBlock) Draw(w term.Writer) {
 	}
 
 	for x := range hr.w {
-		w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
-			Ch:         ch,
-			Width:      1,
-			Attributes: attr,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: 0}, term.NewCell(ch, 1, attr))
 	}
 }
 

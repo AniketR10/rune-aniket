@@ -1397,7 +1397,7 @@ func (h *Handler) drawSignatureHint(w term.Writer) {
 			break
 		}
 		w.SetCell(term.Coordinates{X: x, Y: y},
-			term.Cell{Ch: r, Attributes: attr})
+			term.NewCell(r, 0, attr))
 		x++
 	}
 }

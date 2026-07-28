@@ -115,11 +115,7 @@ func (b *blockquoteBlock) drawAtIndent(w term.Writer, y, indent int) int {
 	for _, content := range b.content {
 		lines := wrapTextRun(content, effectiveWidth)
 		for lineIdx, line := range lines {
-			w.SetCell(term.Coordinates{X: indent, Y: y + lineIdx}, term.Cell{
-				Ch:         b.cfg.BlockquoteBorder,
-				Width:      1,
-				Attributes: b.cfg.Blockquote,
-			})
+			w.SetCell(term.Coordinates{X: indent, Y: y + lineIdx}, term.NewCell(b.cfg.BlockquoteBorder, 1, b.cfg.Blockquote))
 
 			x := indent + blockquoteIndent
 			for _, sp := range line {
@@ -129,22 +125,14 @@ func (b *blockquoteBlock) drawAtIndent(w term.Writer, y, indent int) int {
 					if x >= b.w {
 						break
 					}
-					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.Cell{
-						Ch:         r,
-						Width:      1,
-						Attributes: attr,
-					})
+					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.NewCell(r, 1, attr))
 					x++
 				}
 			}
 		}
 		y += len(lines)
 		if len(lines) == 0 {
-			w.SetCell(term.Coordinates{X: indent, Y: y}, term.Cell{
-				Ch:         b.cfg.BlockquoteBorder,
-				Width:      1,
-				Attributes: b.cfg.Blockquote,
-			})
+			w.SetCell(term.Coordinates{X: indent, Y: y}, term.NewCell(b.cfg.BlockquoteBorder, 1, b.cfg.Blockquote))
 			y++
 		}
 	}
@@ -152,11 +140,7 @@ func (b *blockquoteBlock) drawAtIndent(w term.Writer, y, indent int) int {
 	if b.nested != nil {
 		nestedHeight := b.nested.drawAtIndent(w, y, indent+blockquoteIndent)
 		for i := 0; i < nestedHeight-1; i++ {
-			w.SetCell(term.Coordinates{X: indent, Y: y + i}, term.Cell{
-				Ch:         b.cfg.BlockquoteBorder,
-				Width:      1,
-				Attributes: b.cfg.Blockquote,
-			})
+			w.SetCell(term.Coordinates{X: indent, Y: y + i}, term.NewCell(b.cfg.BlockquoteBorder, 1, b.cfg.Blockquote))
 		}
 		y += nestedHeight
 	}

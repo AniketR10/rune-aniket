@@ -81,7 +81,7 @@ func extractRowsWithSlab(raw [][]term.Cell, slab *Slab) []extractedRow {
 				ch = ' '
 			}
 			slab.rowRune[runeOff] = ch
-			slab.rowAttr[runeOff] = c.Attributes
+			slab.rowAttr[runeOff] = c.Attributes()
 			runeOff++
 			for k := 0; k < width; k++ {
 				slab.rowCol[colOff] = idx

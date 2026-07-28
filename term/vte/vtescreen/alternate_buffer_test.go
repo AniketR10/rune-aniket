@@ -529,7 +529,7 @@ func TestWriteInsert(t *testing.T) {
 		assertEqualBuf(t, b, "Xa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 
 		cell := b.Cells.RawCells()[0][0]
-		assert.Equal(t, attrs, cell.Attributes)
+		assert.Equal(t, attrs, cell.Attributes())
 	})
 
 	t.Run("maps the character using the given charset index", func(t *testing.T) {

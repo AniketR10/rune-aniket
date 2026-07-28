@@ -265,7 +265,7 @@ func (l *Picker) drawPreview(w term.Writer) {
 				cell = term.Cell{Ch: ' ', Width: 1}
 			}
 			if isTarget {
-				cell.Attributes = term.AttributesUnion(cell.Attributes, l.previewAttr)
+				cell.SetAttributes(term.AttributesUnion(cell.Attributes(), l.previewAttr))
 				if x >= startChar && x < endChar {
 					cell.Attrs |= term.AttrReverse
 				}
@@ -280,7 +280,7 @@ func (l *Picker) drawSeparator(w term.Writer) {
 	attr := term.Attributes{Fg: term.ColorGray}
 	y := l.previewH
 	for x := range l.innerW {
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: 1, Attributes: attr})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, attr))
 	}
 }
 
@@ -338,7 +338,7 @@ func (l *Picker) loadHighlights(
 		}
 		row := highlighted[y]
 		for x := loc.From.X; x < loc.To.X && x < len(row); x++ {
-			row[x].Attributes = loc.Attr
+			row[x].SetAttributes(loc.Attr)
 		}
 	}
 	if err := iter.Err(); err != nil {

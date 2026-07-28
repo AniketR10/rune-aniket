@@ -109,7 +109,7 @@ func TestHTMLWriter(t *testing.T) {
 		for i, tcase := range tsuite {
 			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 				writer := newWriterNoCursor()
-				writer.SetCell(term.Coordinates{}, term.Cell{Ch: 'X', Attributes: tcase.attr})
+				writer.SetCell(term.Coordinates{}, term.NewCell('X', 0, tcase.attr))
 				expectedHTML := fmt.Sprintf(defaultBackgroundNoCursor, tcase.expectedCSS)
 				expectInnerHTMLWithCursor(t, writer, expectedHTML)
 			})

@@ -2261,16 +2261,16 @@ func TestWindowBarAttrs(t *testing.T) {
 
 	icon := rec.cells[term.Coordinates{X: 1 + WindowBarCloseIconX, Y: 1}]
 	assert.Equal(t, '●', icon.Ch)
-	assert.Equal(t, term.ColorRed, icon.Attributes.Fg,
+	assert.Equal(t, term.ColorRed, icon.Fg,
 		"icon keeps the configured foreground")
-	assert.Equal(t, term.ColorBlue, icon.Attributes.Bg,
+	assert.Equal(t, term.ColorBlue, icon.Bg,
 		"icon background is the bar foreground")
 
 	title := rec.cells[term.Coordinates{X: 6, Y: 1}]
 	assert.Equal(t, 'c', title.Ch)
-	assert.Equal(t, term.ColorBlack, title.Attributes.Fg,
+	assert.Equal(t, term.ColorBlack, title.Fg,
 		"title foreground is the frame background")
-	assert.Equal(t, term.ColorBlue, title.Attributes.Bg,
+	assert.Equal(t, term.ColorBlue, title.Bg,
 		"title background is the bar foreground")
 }
 

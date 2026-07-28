@@ -80,7 +80,7 @@ func (w *HTMLWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes)
 		return
 	}
 	idx := pos.Y*w.width + pos.X
-	w.cellbuf[idx].Attributes = term.AttributesUnion(w.cellbuf[idx].Attributes, attr)
+	w.cellbuf[idx].SetAttributes(term.AttributesUnion(w.cellbuf[idx].Attributes(), attr))
 }
 
 func (w *HTMLWriter) convertToCSS(attr term.Attributes, ignoreDefault bool) (
@@ -152,7 +152,7 @@ func (w *HTMLWriter) writeCellStyle(i int, c term.Cell) bool {
 	}
 
 	styleStr, needsFg, needsBg := w.convertToCSS(
-		term.Attributes{Bg: c.Attributes.Bg, Fg: c.Attributes.Fg}, true)
+		term.Attributes{Bg: c.Bg, Fg: c.Fg}, true)
 	if !needsFg && !needsBg {
 		return false
 	}

@@ -188,11 +188,7 @@ func writeRuneLineAttr(w term.Writer, x, y int, s string, maxWidth int, attr ter
 		if x >= maxWidth {
 			break
 		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-			Attributes: attr,
-			Ch:         ch,
-			Width:      1,
-		})
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, attr))
 		x++
 	}
 	return x

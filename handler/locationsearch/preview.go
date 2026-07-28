@@ -96,7 +96,7 @@ func (h *Handler) loadHighlights(
 		}
 		row := highlighted[y]
 		for x := loc.From.X; x < loc.To.X && x < len(row); x++ {
-			row[x].Attributes = loc.Attr
+			row[x].SetAttributes(loc.Attr)
 		}
 	}
 	if err := iter.Err(); err != nil {
@@ -143,7 +143,7 @@ func (h *Handler) drawPreview(w term.Writer) {
 				cell = term.Cell{Ch: ' ', Width: 1}
 			}
 			if isTarget && h.highlightTargetLine {
-				cell.Attributes = term.AttributesUnion(cell.Attributes, h.cfg.PreviewAttr)
+				cell.SetAttributes(term.AttributesUnion(cell.Attributes(), h.cfg.PreviewAttr))
 				if h.targetStartX < h.targetEndX &&
 					x >= h.targetStartX && x < h.targetEndX {
 					cell.Attrs |= term.AttrReverse
@@ -167,7 +167,7 @@ func (h *Handler) drawSeparator(w term.Writer) {
 		y := h.previewH + sy
 		for x := range contentW {
 			w.SetCell(term.Coordinates{X: leftPad + x, Y: y},
-				term.Cell{Ch: ch, Width: 1, Attributes: attr})
+				term.NewCell(ch, 1, attr))
 		}
 	}
 }

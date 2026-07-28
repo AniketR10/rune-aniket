@@ -1472,20 +1472,20 @@ func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
 	cs := c.config.WindowManagerConfig.FocusFrameCharSet
 
 	if topleft == (term.Coordinates{}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopLeft, Attributes: attr}
+		cell := term.NewCell(cs.TopLeft, 1, attr)
 		w.SetCell(mainPos, cell)
 	}
 
 	topright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y}
 	if topright == (term.Coordinates{X: mainWidth, Y: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopRight, Attributes: attr}
+		cell := term.NewCell(cs.TopRight, 1, attr)
 		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y}
 		w.SetCell(pos, cell)
 	}
 
 	bottomleft := term.Coordinates{X: topleft.X, Y: topleft.Y + c.focusWindow.Height()}
 	if bottomleft == (term.Coordinates{Y: mainHeight, X: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomLeft, Attributes: attr}
+		cell := term.NewCell(cs.BottomLeft, 1, attr)
 		pos := term.Coordinates{X: mainPos.X, Y: mainPos.Y + mainHeight - 1}
 		w.SetCell(pos, cell)
 	}
@@ -1495,7 +1495,7 @@ func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
 		Y: topleft.Y + c.focusWindow.Height(),
 	}
 	if bottomright == (term.Coordinates{Y: mainHeight, X: mainWidth}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomRight, Attributes: attr}
+		cell := term.NewCell(cs.BottomRight, 1, attr)
 		pos := term.Coordinates{
 			X: mainPos.X + mainWidth - 1,
 			Y: mainPos.Y + mainHeight - 1,
@@ -1522,7 +1522,7 @@ func (c *Component) wallpaper() browserapi.Handler {
 			// activate override behaviour
 			nonZeroCh := ' '
 			instance = component.NewBackground(instance,
-				term.Cell{Ch: nonZeroCh, Attributes: wallpaper.BackgroundAttr})
+				term.NewCell(nonZeroCh, 0, wallpaper.BackgroundAttr))
 		}
 	}
 	// make wallpaper satisfy Floating to avoid browserContent panic

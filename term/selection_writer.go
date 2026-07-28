@@ -124,7 +124,7 @@ func (g *SelectionWriter) UnionAttributes(pos term.Coordinates, attr term.Attrib
 		return
 	}
 	idx := pos.Y*g.width + pos.X
-	g.cells[idx].Attributes = term.AttributesUnion(g.cells[idx].Attributes, attr)
+	g.cells[idx].SetAttributes(term.AttributesUnion(g.cells[idx].Attributes(), attr))
 }
 
 // Context satisfies term.Writer, returning the context set via
