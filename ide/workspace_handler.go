@@ -298,7 +298,7 @@ func (m visibleWorkspaceManager) RemoveWorkspace(
 func (h *workspaceManagerHandler) newEditor(
 	reloader exoeditor.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace, tm browser.TabManager,
-	cfg ideConfig, svc vctrl.Service,
+	terminal schemeapi.Terminal, cfg ideConfig, svc vctrl.Service,
 ) (text.Editor, error) {
 	switch cfg.editorMode() {
 	case editorModeModal:
@@ -308,7 +308,8 @@ func (h *workspaceManagerHandler) newEditor(
 	case editorModeEmacs:
 		return h.newBuiltinEmacsEditor(cwd, cfg, svc), nil
 	case editorModeExo:
-		return h.newExoFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
+		return h.newExoFallbackEditor(
+			reloader, cwd, ws, tm, terminal, cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
@@ -415,7 +416,8 @@ func (h *workspaceManagerHandler) newBuiltinEmacsEditor(
 func (h *workspaceManagerHandler) newExoFallbackEditor(
 	reloader exoeditor.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace,
-	tm browser.TabManager, cfg ideConfig, svc vctrl.Service,
+	tm browser.TabManager, terminal schemeapi.Terminal,
+	cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	var fallback text.Editor
 	switch cfg.exoFallback() {
@@ -435,7 +437,7 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 		cwd,
 		h.notifications.current(),
 		exoeditor.PublisherFunc(h.events.newPublisher(cwd)),
-		ws, // terminal
+		terminal,
 		ws, // executor
 		tm,
 		cfg.terminalConfig(),
@@ -658,9 +660,11 @@ func (h *workspaceManagerHandler) init(
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	h.empty, err = newEx(
-		func(reloader exoeditor.Reloader) (text.Editor, error) {
+		func(
+			reloader exoeditor.Reloader, terminal schemeapi.Terminal,
+		) (text.Editor, error) {
 			return h.newEditor(reloader, homeDirUri, h.homeWorkspace,
-				tm, cfg, vctrl.NopService())
+				tm, terminal, cfg, vctrl.NopService())
 		},
 		homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
@@ -1699,8 +1703,11 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	ex, err := newEx(
-		func(reloader exoeditor.Reloader) (text.Editor, error) {
-			return h.newEditor(reloader, uri, multicwd, tm, cfg, vctrlService)
+		func(
+			reloader exoeditor.Reloader, terminal schemeapi.Terminal,
+		) (text.Editor, error) {
+			return h.newEditor(reloader, uri, multicwd, tm, terminal,
+				cfg, vctrlService)
 		},
 		multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.events.newPublisher(uri),

@@ -140,6 +140,7 @@ type ex struct {
 	tabAliases               *tabNameAliaser
 	newPluginHandler         func(int, ...string) (pluginHandler, error)
 	workspace                workspace.Workspace
+	terminal                 *asyncTerminal
 	tasks                    *idetask.Manager
 	dispatchOnPreview        map[string]previewFunc
 	filepathCompleter        command.Completer
@@ -218,7 +219,7 @@ type commandObserver interface {
 type previewFunc = func(string, ...string) (component.Responsive, func(), bool)
 
 func newEx(
-	edFactory func(exoeditor.Reloader) (text.Editor, error),
+	edFactory func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error),
 	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,
@@ -247,6 +248,9 @@ func newEx(
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip, macro,
 		dispatchOnPreview, tm, parser, promptEditor, opts...)
 	if err != nil {
+		// The async terminal's worker goroutine outlives a failed
+		// construction otherwise: nothing will ever call Close.
+		e.stopTerminal()
 		return
 	}
 	e.commandObserver = commandObserver
@@ -263,7 +267,7 @@ func newEx(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	edFactory func(exoeditor.Reloader) (text.Editor, error),
+	edFactory func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error),
 	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,
@@ -297,7 +301,7 @@ func (e *ex) init(
 	}
 	e.sched = emulatorConfig.ScheduleNextTick
 	e.flusher = newFlusher(&e.comp, e.notifications, e.sched)
-	ed, err := edFactory(e.flusher)
+	ed, err := edFactory(e.flusher, e.terminal)
 	if err != nil {
 		return err
 	}
@@ -324,7 +328,7 @@ func (e *ex) init(
 	if initialVTECapacity != 0 {
 		e.initialReservoirCapacity = initialVTECapacity
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
-			e.workspace, e.executor, e.tm, e.emulatorConfig, initialVTECapacity)
+			e.terminal, e.executor, e.tm, e.emulatorConfig, initialVTECapacity)
 	}
 	newEmulator := func(cmdAndArgs []string) (
 		vtereservoir.VTE, error,
@@ -338,7 +342,7 @@ func (e *ex) init(
 			cfg.CommandAndArgs = cmdAndArgs
 		}
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.executor, e.tm, cfg)
+			e.terminal, e.executor, e.tm, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +378,7 @@ func (e *ex) init(
 			plugin.WithoutBarCommand())
 	}
 	e.newPluginHandler = func(width int, args ...string) (pluginHandler, error) {
-		h, err := plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
+		h, err := plugin.New(e.Browser(), e.Browser(), e.executor, e.terminal,
 			e.tm, args, width, floatPluginOpts...)
 		if err != nil {
 			// An explicit nil keeps the interface nil-comparable for
@@ -386,7 +390,7 @@ func (e *ex) init(
 	e.dispatchOnPreview = dispatchOnPreview
 	e.macro = macro
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
-	e.tasks = idetask.NewManager(&e.comp, tm, m,
+	e.tasks = idetask.NewManager(&e.comp, tm, m, e.terminal,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.tasks.SetFrameAttr(e.config.FrameAttr)
 	e.tasks.SetFocusFrameAttr(e.config.FocusFrameAttr)
@@ -435,7 +439,7 @@ func (e *ex) setExecutor(
 	if e.reservoir != nil {
 		_ = e.reservoir.Close()
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
-			e.workspace, e.executor, e.tm, e.emulatorConfig,
+			e.terminal, e.executor, e.tm, e.emulatorConfig,
 			e.initialReservoirCapacity)
 	}
 }
@@ -480,6 +484,7 @@ func (e *ex) doInit(
 	e.workspace = m
 	e.container = notifications.New(&e.comp, n.cfg)
 	e.notifications = n.new(uri, e.container)
+	e.terminal = newAsyncTerminal(m, e.notifications)
 	e.publishEvent = publishEvent
 	e.storage = storage
 	e.workspaceURI = uri
@@ -2855,6 +2860,7 @@ func (e *ex) Close() (ret error) {
 	e.closed = true
 	e.extReadyCancel()
 	e.sequencer.Reset()
+	e.stopTerminal()
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
@@ -2904,6 +2910,14 @@ func (e *ex) Close() (ret error) {
 func (e *ex) cleanPartialReissueState() {
 	e.cancelPartialReissue = nil
 	e.ctxPartialReissue = context.Background()
+}
+
+// stopTerminal releases the pty-resize worker. It is safe to call on a
+// partially constructed ex and more than once.
+func (e *ex) stopTerminal() {
+	if e.terminal != nil {
+		e.terminal.Close()
+	}
 }
 
 func (e *ex) focusHandler() tui.Handler {

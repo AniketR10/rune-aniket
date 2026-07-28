@@ -60,6 +60,7 @@ type Manager struct {
 	b                Browser
 	tm               browser.TabManager
 	scheme           schemeapi.Scheme
+	terminal         schemeapi.Terminal
 	pluginOpts       []plugin.Option
 	ctx              context.Context
 	cancelCtx        func()
@@ -81,11 +82,12 @@ type Browser interface {
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(
 	b Browser, tm browser.TabManager, scheme schemeapi.Scheme,
+	terminal schemeapi.Terminal,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) *Manager {
 	m := new(Manager)
-	m.Init(b, tm, scheme, scheduleNextTick, opts...)
+	m.Init(b, tm, scheme, terminal, scheduleNextTick, opts...)
 	return m
 }
 
@@ -103,15 +105,20 @@ func (m *Manager) SetFocusFrameAttr(attr term.Attributes) {
 	m.focusFrameAttr = attr
 }
 
-// Init initializes this Manager with the given browser, scheme and options.
+// Init initializes this Manager with the given browser, scheme,
+// terminal and options. terminal is separate from scheme because task
+// plugins must spawn their pty through the caller-owned terminal
+// decorator rather than the raw workspace.
 func (m *Manager) Init(
 	b Browser, tm browser.TabManager, scheme schemeapi.Scheme,
+	terminal schemeapi.Terminal,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) {
 	m.b = b
 	m.tm = tm
 	m.scheme = scheme
+	m.terminal = terminal
 	m.scheduleNextTick = scheduleNextTick
 	m.pluginOpts = opts
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
@@ -173,7 +180,7 @@ func (m *Manager) RunTask(t Task) error {
 	}
 	t.defaultFrameAttr = m.frameAttr
 	t.focusFrameAttr = m.focusFrameAttr
-	ctx, _, err := t.init(m.ctx, m.b, m.scheme,
+	ctx, _, err := t.init(m.ctx, m.b, m.scheme, m.terminal,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)
 		}, m.scheduleNextTick, m.pluginOpts...)
@@ -275,7 +282,8 @@ func (m *Manager) startWatch(t *Task, ctx context.Context) {
 					icon = " "
 				}
 
-				if !t.tryRunning(m.b, m.scheme, icon+ev.URI().Name()) {
+				if !t.tryRunning(m.b, m.scheme, m.terminal,
+					icon+ev.URI().Name()) {
 					continue
 				}
 
@@ -363,7 +371,7 @@ func (m *Manager) ReplaceTask(spec Task) error {
 	// the user is told to recreate it rather than left with a silent zombie.
 	m.startWatch(task, taskCtx)
 
-	task.tryRunning(m.b, m.scheme, "  task")
+	task.tryRunning(m.b, m.scheme, m.terminal, "  task")
 	return nil
 }
 

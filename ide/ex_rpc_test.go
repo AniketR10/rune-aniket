@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -158,7 +159,7 @@ func newTestRPCBrowser(t *testing.T,
 			[][]string{{"tabprevious"}}))
 		opts = append(opts, otherOpts...)
 		ex.syncCommandPrompt = true
-		err = ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, &testLoader{}, svc, notifications, uri,
+		err = ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return ed, nil }, &testLoader{}, svc, notifications, uri,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(),
 			nopPublishEvent, 0, clip, nil, nil, nil, nil, testPromptEditor(), opts...)
 		if err != nil {

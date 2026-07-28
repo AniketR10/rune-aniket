@@ -123,6 +123,7 @@ type Task struct {
 	lastDuration     time.Duration
 	handler          browser.ScrollableFloating
 	scheme           schemeapi.Scheme
+	terminal         schemeapi.Terminal
 	// don't use mu to check if closed, so StopTask, followed by
 	// browser close handler doesn't deadlock
 	closed *atomic.Bool
@@ -298,7 +299,8 @@ func (t *Task) doClose() (ret error) {
 
 func (t *Task) init(
 	ctx context.Context, b Browser,
-	scheme schemeapi.Scheme, newPlugin pluginBuilder,
+	scheme schemeapi.Scheme, terminal schemeapi.Terminal,
+	newPlugin pluginBuilder,
 	maxWidth, maxHeight int, closeHook func(),
 	scheduleNextTick func(func()) bool,
 	pluginOpts ...plugin.Option,
@@ -306,6 +308,7 @@ func (t *Task) init(
 	t.closeHook = closeHook
 	t.b = b
 	t.scheme = scheme
+	t.terminal = terminal
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
 	t.mu = new(sync.Mutex)
@@ -372,7 +375,7 @@ func (t *Task) init(
 					t.setSuccess()
 				}
 				if restarting {
-					t.tryRunning(t.b, t.scheme, "  task")
+					t.tryRunning(t.b, t.scheme, t.terminal, "  task")
 				} else if paused {
 					t.setPause()
 				}
@@ -384,7 +387,7 @@ func (t *Task) init(
 		}
 	})
 
-	t.tryRunning(b, scheme, "")
+	t.tryRunning(b, scheme, terminal, "")
 	t.mu.Lock()
 	t.minimize()
 	t.mu.Unlock()
@@ -396,7 +399,10 @@ func (t *Task) init(
 	return ctx, cancel, nil
 }
 
-func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason string) bool {
+func (t *Task) tryRunning(
+	b browser.Browser, scheme schemeapi.Scheme,
+	terminal schemeapi.Terminal, reason string,
+) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -437,7 +443,7 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 	cmdAndArgs := t.cmdAndArgs
 	maxWidth := t.maxWidth
 	go debug.CapturePanicReport(func() {
-		h, err := t.newPlugin(b, b, scheme, scheme, b,
+		h, err := t.newPlugin(b, b, scheme, terminal, b,
 			cmdAndArgs, maxWidth, opts...)
 		t.installSpawned(h, err)
 	})
@@ -602,7 +608,7 @@ func (t *Task) restart() {
 	t.restartPending = true
 	t.mu.Unlock()
 	t.pause()
-	t.tryRunning(t.b, t.scheme, "  task")
+	t.tryRunning(t.b, t.scheme, t.terminal, "  task")
 }
 
 func (t *Task) setPause() {

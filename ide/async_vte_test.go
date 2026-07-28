@@ -32,15 +32,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
-	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
@@ -101,29 +96,7 @@ func (w testRemoteWorkspace) WaitConnected(context.Context) error {
 // in place.
 func newAsyncVTETestEx(t *testing.T, ws workspace.Workspace) testEx {
 	t.Helper()
-	e := new(ex)
-	e.syncCommandPrompt = true
-	opts := defCommandKeyBindings()
-	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, text.WithFloatingNoMaxSize(false))
-
-	svc := storagestub.NewInMemoryService()
-	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
-		&workspaceManagerMock{workspace: e})
-
-	uri, err := ws.URI(".")
-	require.NoError(t, err)
-
-	emulatorCfg := vte.DefaultConfig()
-	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, e.init(
-		func(exoeditor.Reloader) (text.Editor, error) {
-			return texttest.NopEditor(), nil
-		}, ws, svc,
-		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		nopPublishEvent, 0, clipboard.NewInMemory(),
-		nil, nil, nil, nil, testPromptEditor(), opts...))
-	return testEx{ex: e, mu: mu, scheduler: scheduler}
+	return newExForTestingVTECapacity(t, ws, 0)
 }
 
 func drawToString(t *testing.T, av *asyncVTE, width, height int) string {

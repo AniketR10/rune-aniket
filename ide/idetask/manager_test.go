@@ -1013,7 +1013,7 @@ func mustTaskInfo(t *testing.T, m *Manager, taskname string) TaskInfo {
 }
 
 func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
-	m := NewManager(b, b, scheme, func(fn func()) bool {
+	m := NewManager(b, b, scheme, scheme, func(fn func()) bool {
 		fn()
 		return true
 	})
@@ -1774,7 +1774,7 @@ func TestRunTaskDoesNotBlockOnSlowSpawn(t *testing.T) {
 	exec := newFakeScheme()
 	gate := make(chan struct{})
 	exec.ptyGate = gate
-	m := NewManager(wm, wm, exec, func(fn func()) bool {
+	m := NewManager(wm, wm, exec, exec, func(fn func()) bool {
 		fn()
 		return true
 	}, plugin.WithVTEConfig(vte.DefaultConfig()))
@@ -1809,7 +1809,7 @@ func TestStopTaskDuringFailingSpawnDoesNotPanic(t *testing.T) {
 	gate := make(chan struct{})
 	exec.ptyGate = gate
 	exec.ptyErr = errors.New("transport wedged")
-	m := NewManager(wm, wm, exec, func(fn func()) bool {
+	m := NewManager(wm, wm, exec, exec, func(fn func()) bool {
 		fn()
 		return true
 	}, plugin.WithVTEConfig(vte.DefaultConfig()))

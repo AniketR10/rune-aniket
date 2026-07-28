@@ -2054,7 +2054,7 @@ func TestExKeySequence(t *testing.T) {
 			storagestub.NewInMemoryService(), notificationsConfig(),
 			&workspaceManagerMock{workspace: ex})
 		ex.syncCommandPrompt = true
-		require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, &testLoader{},
+		require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return texttest.NopEditor(), nil }, &testLoader{},
 			storagestub.NewInMemoryService(), notifications, file2,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
@@ -2197,7 +2197,7 @@ func newExSequencerHarness(
 		seen:       editorSaw,
 	}
 	require.NoError(t, ex.init(
-		func(exoeditor.Reloader) (text.Editor, error) { return editor, nil },
+		func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return editor, nil },
 		&testLoader{}, svc, notifications, file,
 		vte.DefaultConfig(), plugin.DefaultBarConfig(),
 		func(ev term.Event) bool {
@@ -3196,11 +3196,137 @@ func newExForTestingTerminal(
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, barCfg, publishEvent,
 		0, clipboard.NewInMemory(), nil, nil, nil, nil, testPromptEditor(), opts...))
 	ex.subscribeCommands()
 	return testEx{ex: ex, mu: mu, scheduler: scheduler}
+}
+
+// newExForTestingVTECapacity builds an ex through the production init
+// path (no newEmulatorHandler override) with an explicit initial VTE
+// reservoir capacity.
+func newExForTestingVTECapacity(
+	t *testing.T, ws workspace.Workspace, initialVTECapacity int,
+) testEx {
+	t.Helper()
+	e := new(ex)
+	e.syncCommandPrompt = true
+	opts := defCommandKeyBindings()
+	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	opts = append(opts, text.WithFloatingNoMaxSize(false))
+
+	svc := storagestub.NewInMemoryService()
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		&workspaceManagerMock{workspace: e})
+
+	uri, err := ws.URI(".")
+	require.NoError(t, err)
+
+	emulatorCfg := vte.DefaultConfig()
+	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
+	require.NoError(t, e.init(
+		func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) {
+			return texttest.NopEditor(), nil
+		}, ws, svc,
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
+		nopPublishEvent, initialVTECapacity, clipboard.NewInMemory(),
+		nil, nil, nil, nil, testPromptEditor(), opts...))
+	return testEx{ex: e, mu: mu, scheduler: scheduler}
+}
+
+// blockingResizeWorkspace parks SetPtySize once armed, standing in for
+// a transport that is wedged but has not surfaced a disconnect.
+type blockingResizeWorkspace struct {
+	*testLoader
+	armed   atomic.Bool
+	entered chan [2]int
+	release chan struct{}
+}
+
+func newBlockingResizeWorkspace() *blockingResizeWorkspace {
+	return &blockingResizeWorkspace{
+		testLoader: &testLoader{},
+		entered:    make(chan [2]int, 64),
+		release:    make(chan struct{}),
+	}
+}
+
+func (w *blockingResizeWorkspace) SetPtySize(
+	_ workspaceapi.Pty, width, height int,
+) error {
+	if !w.armed.Load() {
+		return nil
+	}
+	select {
+	case w.entered <- [2]int{width, height}:
+	default:
+	}
+	<-w.release
+	return nil
+}
+
+func (w *blockingResizeWorkspace) waitEntered(t *testing.T) [2]int {
+	t.Helper()
+	select {
+	case got := <-w.entered:
+		return got
+	case <-time.After(10 * time.Second):
+		t.Fatal("the pty resize never reached the workspace transport")
+		return [2]int{}
+	}
+}
+
+// TestExResizeDoesNotBlockOnPtyResize reproduces the IDE freeze where a
+// window resize fanned out to every live VTE and each
+// vte.Component.Resize called SetPtySize inline on the event loop, so a
+// single stalled transport RPC hung the whole UI.
+func TestExResizeDoesNotBlockOnPtyResize(t *testing.T) {
+	assertResizeReturns := func(t *testing.T, b testEx) {
+		t.Helper()
+		done := make(chan struct{})
+		go debug.CapturePanicReport(func() {
+			defer close(done)
+			b.Resize(80, 24)
+		})
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("ex.Resize blocked on the pty resize RPC")
+		}
+	}
+
+	t.Run("installed terminal", func(t *testing.T) {
+		ws := newBlockingResizeWorkspace()
+		defer close(ws.release)
+		b := newExForTestingVTECapacity(t, ws, 0)
+		defer b.Close()
+
+		b.Resize(100, 40)
+		require.NoError(t, b.terminalnewtab(context.Background()))
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		ws.armed.Store(true)
+		assertResizeReturns(t, b)
+		got := ws.waitEntered(t)
+		assert.Positive(t, got[0])
+		assert.Positive(t, got[1])
+	})
+
+	t.Run("reservoir warm terminals", func(t *testing.T) {
+		ws := newBlockingResizeWorkspace()
+		defer close(ws.release)
+		b := newExForTestingVTECapacity(t, ws, 1)
+		defer b.Close()
+
+		require.NotNil(t, b.reservoir)
+		b.reservoir.WaitForInitialFill()
+
+		ws.armed.Store(true)
+		assertResizeReturns(t, b)
+		assert.Equal(t, [2]int{80, 24}, ws.waitEntered(t))
+	})
 }
 
 func newExForTestingWithWorkspace(
@@ -3227,7 +3353,7 @@ func newExForTestingWithWorkspace(
 	require.NoError(t, err)
 
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
@@ -3266,7 +3392,7 @@ func newExForTestingCommandsPreview(
 	require.NoError(t, err)
 
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, previews, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
@@ -3316,7 +3442,7 @@ func newExForTestingWithStorage(
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
 
-	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
@@ -4647,7 +4773,7 @@ func newExForReservoirTesting(
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
 		&workspaceManagerMock{workspace: e})
 
-	require.NoError(t, e.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, ws, svc,
+	require.NoError(t, e.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return texttest.NopEditor(), nil }, ws, svc,
 		notifications, uri, emCfg, plugin.DefaultBarConfig(),
 		nopPublishEvent, initialCapacity, clipboard.NewInMemory(),
 		nil, nil, nil, nil, testPromptEditor(), finalOpts...))
@@ -4826,7 +4952,7 @@ func TestExUsesSharedIDEStorage(t *testing.T) {
 		notificationsConfig(), &workspaceManagerMock{workspace: ex})
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
-	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, workspace, storage,
+	require.NoError(t, ex.init(func(exoeditor.Reloader, schemeapi.Terminal) (text.Editor, error) { return texttest.NopEditor(), nil }, workspace, storage,
 		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
 		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil, nil, testPromptEditor()))
 
