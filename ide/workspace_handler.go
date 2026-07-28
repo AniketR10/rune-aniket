@@ -322,6 +322,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	viOpts := append([]vi.Option{},
 		vi.WithResAttr(cfg.modalResultAttr()),
+		vi.WithBarAttr(cfg.modalMessageBarAttr()),
 		vi.WithMessageBarLayout(cfg.modalMessageBarLayout()),
 		vi.WithTabspaces(cfg.editorTabspaces()),
 		vi.WithIndents(cfg.editorIndents()),
@@ -387,7 +388,7 @@ func (h *workspaceManagerHandler) newBuiltinEmacsEditor(
 	return emacs.Editor(
 		emacs.WithCommandBar(true),
 		emacs.WithResAttr(cfg.emacsResultAttr()),
-		emacs.WithBarAttr(cfg.emacsBarAttr()),
+		emacs.WithBarAttr(cfg.emacsMessageBarAttr()),
 		emacs.WithMessageBarLayout(cfg.emacsMessageBarLayout()),
 		emacs.WithTabspaces(cfg.editorTabspaces()),
 		emacs.WithIndents(cfg.editorIndents()),

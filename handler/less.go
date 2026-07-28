@@ -224,7 +224,7 @@ func (l *Less) Draw(w term.Writer) {
 	// if attrs were changed dynamically, ensure attributes of superimposed message
 	// match those of the Scroll.
 	if l.config.SuperimposeMessage &&
-		(l.config.MessageLayout.Template == "" || l.config.MessageLayout.Attributes.Bg == 0) &&
+		l.config.BarAttr.Bg == 0 && l.config.MessageLayout.Attributes.Bg == 0 &&
 		l.usedMsgBarAttr.Bg != l.scroll.Attributes.Bg {
 		l.setMessage(l.msgStr)
 		cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
@@ -412,13 +412,12 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 
 func (l *Less) setMessage(msg string) {
 	layout := l.config.MessageLayout
-	configuredLayout := layout.Template != ""
 	if layout.Template == "" {
 		layout.Template = "%s"
-		layout.Attributes = l.config.BarAttr
 	}
-	attr := layout.Attributes
-	if l.config.SuperimposeMessage && (!configuredLayout || attr.Bg == 0) {
+	// The layout's own styling wins over the bar's base attributes.
+	attr := term.AttributesUnion(l.config.BarAttr, layout.Attributes)
+	if l.config.SuperimposeMessage && attr.Bg == 0 {
 		attr.Bg = l.scroll.Attributes.Bg
 	}
 	formatted := ""

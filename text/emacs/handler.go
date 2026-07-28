@@ -121,6 +121,7 @@ func (h *emacsHandler) Init(
 		NoBar:              !h.cfg.commandBar,
 		SuperimposeMessage: true,
 		ResAttr:            h.cfg.resAttr,
+		BarAttr:            h.cfg.barAttr,
 		MessageLayout:      h.cfg.messageBarLayout,
 		Attributes:         h.cfg.attr,
 	})

@@ -27,7 +27,6 @@ editor:
   auto_pair: true
   standard:
     attr: {fg: default, bg: default}
-    bar_attr: {fg: default, bg: default}
     search_attr: {fg: grey, bg: yellow}
 terminal:
   modal: false

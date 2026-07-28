@@ -320,12 +320,12 @@ config = {
         "modal": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),
-            # Search and message bar attributes.
-            "bar_attr":    attr(fg = "default", bg = "default"),
-            # Layout of the superimposed message bar shown while searching.
-            # The Message component supports the same styling operators as
-            # status-bar components.
             "message_bar": {
+                # Base attributes of the message bar and the search prompt.
+                "attr":   attr(fg = "default", bg = "gray"),
+                # Layout of the superimposed message bar shown while
+                # searching. The Message component supports the same styling
+                # operators as status-bar components.
                 "layout": '░▒▓█ {{ .Message | fg "white" }} ',
             },
             # Search result attributes.
@@ -334,8 +334,6 @@ config = {
         "standard": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),
-            # Incremental-find status attributes.
-            "bar_attr":    attr(fg = "default", bg = "purple"),
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
             "search": {
@@ -356,11 +354,13 @@ config = {
         "emacs": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),
-            # Incremental-search status attributes.
-            "bar_attr":    attr(fg = "default", bg = "purple"),
-            # Layout of the overlaid Emacs echo area. The Message component
-            # supports the same styling operators as status-bar components.
             "message_bar": {
+                # Base attributes of the echo area and of the transient mode
+                # label (ISEARCH, QUERY, ...) shown in the status bar.
+                "attr":   attr(fg = "default", bg = "gray"),
+                # Layout of the overlaid Emacs echo area. The Message
+                # component supports the same styling operators as status-bar
+                # components.
                 "layout": '░▒▓█ {{ .Message | fg "white" }} ',
             },
             # Search result attributes.
@@ -923,12 +923,11 @@ if tui:
         "editor": {
             "modal": {
                 "attr":        attr(fg = "default", bg = "#1e1e1e"),
-                "bar_attr":    attr(fg = "default", bg = "#1e1e1e"),
+                "message_bar": {"attr": attr(fg = "default", bg = "#1e1e1e")},
                 "search_attr": attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
             },
             "standard": {
                 "attr":        attr(fg = "default", bg = "#1e1e1e"),
-                "bar_attr":    attr(fg = "default", bg = "#1e1e1e"),
                 "search_attr": attr(fg = "default", bg = "#1e1e1e", flags = "reverse"),
                 "search": {
                     "find_key":          "<m-f>",

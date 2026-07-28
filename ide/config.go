@@ -2498,6 +2498,14 @@ func (c ideConfig) modalMessageBarLayout() handler.LessMessageLayout {
 	return c.messageBarLayout(cfg, "editor.modal")
 }
 
+func (c ideConfig) modalMessageBarAttr() term.Attributes {
+	cfg, ok := c.modal()
+	if !ok {
+		return term.Attributes{}
+	}
+	return c.messageBarAttr(cfg, "editor.modal")
+}
+
 func (c ideConfig) initialFolds() bool {
 	cfg, ok := c.editor()
 	if !ok {
@@ -2859,22 +2867,6 @@ func (c ideConfig) standardResultAttr() (attr term.Attributes) {
 	return attr
 }
 
-func (c ideConfig) standardBarAttr() (attr term.Attributes) {
-	attr = c.standardAttr()
-	cfg, path, ok := c.standard()
-	if !ok {
-		return
-	}
-	barAttr, err := config.GetAttributes(cfg, "bar_attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors[path+".bar_attr"] = err
-		}
-		return attr
-	}
-	return barAttr
-}
-
 func (c ideConfig) standardAttr() (attr term.Attributes) {
 	cfg, path, ok := c.standard()
 	if !ok {
@@ -2904,7 +2896,7 @@ func (c ideConfig) standardSearchConfig(wm standard.SearchWindowManager) standar
 		ButtonHoverAttr:  standardAttr,
 		MatchAttr:        c.standardResultAttr(),
 		CurrentMatchAttr: standardAttr,
-		StatusAttr:       c.standardBarAttr(),
+		StatusAttr:       standardAttr,
 	}
 	ret.PlaceholderAttr.Fg = term.ColorGray
 	ret.FrameAttr.Fg = term.ColorGray
@@ -2979,28 +2971,42 @@ func (c ideConfig) emacsResultAttr() term.Attributes {
 	return configured
 }
 
-func (c ideConfig) emacsBarAttr() term.Attributes {
-	attr := c.standardBarAttr()
-	cfg, ok := c.emacs()
-	if !ok {
-		return attr
-	}
-	configured, err := config.GetAttributes(cfg, "bar_attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.emacs.bar_attr"] = err
-		}
-		return attr
-	}
-	return configured
-}
-
 func (c ideConfig) emacsMessageBarLayout() (ret handler.LessMessageLayout) {
 	cfg, ok := c.emacs()
 	if !ok {
 		return handler.DefaultLessMessageLayout()
 	}
 	return c.messageBarLayout(cfg, "editor.emacs")
+}
+
+func (c ideConfig) emacsMessageBarAttr() term.Attributes {
+	cfg, ok := c.emacs()
+	if !ok {
+		return term.Attributes{}
+	}
+	return c.messageBarAttr(cfg, "editor.emacs")
+}
+
+// messageBarAttr reads the base `message_bar.attr` attributes of an editor
+// section, which the layout template styling composes over.
+func (c ideConfig) messageBarAttr(
+	editor config.Config, path string,
+) (attr term.Attributes) {
+	cfg, err := editor.GetConfig("message_bar")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[path+".message_bar"] = err
+		}
+		return
+	}
+	attr, err = config.GetAttributes(cfg, "attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[path+".message_bar.attr"] = err
+		}
+		return term.Attributes{}
+	}
+	return
 }
 
 // messageBarLayout reads the `message_bar.layout` template of an editor

@@ -38,6 +38,7 @@ import (
 type viConfig struct {
 	attr               term.Attributes
 	resAttr            term.Attributes
+	barAttr            term.Attributes
 	messageBarLayout   handler.LessMessageLayout
 	comments           text.CommentConfig
 	clipboard          clipboard.Register
@@ -147,6 +148,13 @@ func WithResAttr(attr term.Attributes) Option {
 func WithMessageBarLayout(layout handler.LessMessageLayout) Option {
 	return func(cfg *viConfig) {
 		cfg.messageBarLayout = layout
+	}
+}
+
+// WithBarAttr sets the base attributes of the superimposed message bar.
+func WithBarAttr(attr term.Attributes) Option {
+	return func(cfg *viConfig) {
+		cfg.barAttr = attr
 	}
 }
 

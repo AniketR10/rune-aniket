@@ -113,6 +113,9 @@ editor:
             bg: red
             fg: "#f0f0f0"
         message_bar:
+            attr:
+                bg: navy
+                fg: silver
             layout: '▓▒░ {{ .Message | bg "navy" | fg "silver" | italic }} '
         debug: true
         wrap: true
@@ -120,9 +123,6 @@ editor:
         attr:
             bg: green
             fg: "#f9f9f9"
-        bar_attr:
-            bg: white
-            fg: black
         search_attr:
             bg: red
             fg: "#f1f1f1"
@@ -131,10 +131,10 @@ editor:
         attr:
             bg: blue
             fg: "#f8f8f8"
-        bar_attr:
-            bg: teal
-            fg: white
         message_bar:
+            attr:
+                bg: teal
+                fg: white
             layout: ' {{ .Message | bg "red" | fg "white" | bold }} █▓▒░'
         search_attr:
             bg: maroon
@@ -441,10 +441,10 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
 		cfg.standardResultAttr())
-	assert.Equal(t, term.Attributes{}, cfg.standardBarAttr())
 	assert.Equal(t, term.Attributes{}, cfg.standardAttr())
 	assert.Equal(t, cfg.standardResultAttr(), cfg.emacsResultAttr())
-	assert.Equal(t, cfg.standardBarAttr(), cfg.emacsBarAttr())
+	assert.Equal(t, term.Attributes{}, cfg.emacsMessageBarAttr())
+	assert.Equal(t, term.Attributes{}, cfg.modalMessageBarAttr())
 	assert.Equal(t, cfg.standardAttr(), cfg.emacsAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.True(t, cfg.autoRestore())
@@ -563,9 +563,9 @@ func TestStandardSearchConfigNestedOverrides(t *testing.T) {
 	}
 	cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
 		"standard": map[string]any{
-			"attr":     map[string]any{"bg": "black"},
-			"bar_attr": map[string]any{"bg": "red"}, "search_attr": map[string]any{"bg": "yellow"},
-			"search": search,
+			"attr":        map[string]any{"bg": "black"},
+			"search_attr": map[string]any{"bg": "yellow"},
+			"search":      search,
 		},
 	}}, errors: map[string]error{}}
 
@@ -590,13 +590,12 @@ func TestStandardSearchConfigIgnoresModelessNamespaceAndEmacsUnchanged(t *testin
 	cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
 		"modeless": map[string]any{
 			"attr":        map[string]any{"fg": "green"},
-			"bar_attr":    map[string]any{"fg": "blue"},
 			"search_attr": map[string]any{"fg": "yellow"},
 			"search":      map[string]any{"input_attr": map[string]any{"fg": "red"}},
 		},
 		"emacs": map[string]any{
 			"attr":        map[string]any{"fg": "purple"},
-			"bar_attr":    map[string]any{"fg": "teal"},
+			"message_bar": map[string]any{"attr": map[string]any{"fg": "teal"}},
 			"search_attr": map[string]any{"fg": "maroon"},
 		},
 	}}, errors: map[string]error{}}
@@ -607,7 +606,7 @@ func TestStandardSearchConfigIgnoresModelessNamespaceAndEmacsUnchanged(t *testin
 	assert.Equal(t, term.Attributes{}, actual.StatusAttr)
 	assert.Equal(t, term.Attributes{}, actual.InputAttr)
 	assert.Equal(t, term.Attributes{Fg: term.ColorMaroon}, cfg.emacsResultAttr())
-	assert.Equal(t, term.Attributes{Fg: term.ColorTeal}, cfg.emacsBarAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorTeal}, cfg.emacsMessageBarAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorPurple}, cfg.emacsAttr())
 	assert.Empty(t, cfg.errors)
 }
@@ -1344,12 +1343,12 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
 		Fg: term.GetColor("#f1f1f1")}, cfg.standardResultAttr())
-	assert.Equal(t, term.Attributes{Bg: term.ColorWhite,
-		Fg: term.ColorBlack}, cfg.standardBarAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorMaroon,
 		Fg: term.GetColor("#f7f7f7")}, cfg.emacsResultAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorTeal,
-		Fg: term.ColorWhite}, cfg.emacsBarAttr())
+		Fg: term.ColorWhite}, cfg.emacsMessageBarAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorNavy,
+		Fg: term.ColorSilver}, cfg.modalMessageBarAttr())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	expectedSyntaxConfig.Autoindent = false

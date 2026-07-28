@@ -61,12 +61,14 @@ log_level: info               # debug | info | warn | error
 # ---------------------------------------------------------------------------
 # Editor message bar (search prompts and echoed messages)
 #
+# `attr` sets the base attributes of the message bar and the search prompt.
 # `layout` is a Go text/template string with a single Message component and
-# the same pipe operators as the status bar.
+# the same pipe operators as the status bar; its styling wins over `attr`.
 # ---------------------------------------------------------------------------
 # editor:
 #   modal:
 #     message_bar:
+#       attr: {fg: default, bg: gray}
 #       layout: '░▒▓█ {{ .Message | fg "white" }} '
 
 # ---------------------------------------------------------------------------

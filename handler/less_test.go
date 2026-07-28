@@ -581,11 +581,27 @@ func TestLessMessageLayoutAttributes(t *testing.T) {
 			wantAttr: term.Attributes{},
 		},
 		{
-			name:     "unconfigured layout falls back to the bar attributes",
+			name:     "unconfigured layout uses the bar attributes",
 			config:   LessConfig{BarAttr: term.Attributes{Bg: term.ColorBlue, Fg: term.ColorWhite}},
 			message:  "QUERY",
 			column:   15,
 			wantAttr: term.Attributes{Bg: term.ColorBlue, Fg: term.ColorWhite},
+		},
+		{
+			name:     "bar attributes fill what the layout leaves unset",
+			layout:   `░▒▓█ {{ .Message | fg "white" }} `,
+			config:   LessConfig{SuperimposeMessage: true, BarAttr: term.Attributes{Bg: term.ColorGray}},
+			message:  "QUERY",
+			column:   15,
+			wantAttr: term.Attributes{Bg: term.ColorGray, Fg: term.ColorWhite},
+		},
+		{
+			name:    "layout styling wins over the bar attributes",
+			layout:  `░▒▓█ {{ .Message | bg "red" | fg "white" }} `,
+			config:  LessConfig{SuperimposeMessage: true, BarAttr: term.Attributes{Bg: term.ColorGray}},
+			message: "QUERY",
+			column:  15,
+			wantAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
 		},
 	}
 

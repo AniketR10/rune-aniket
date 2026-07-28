@@ -154,6 +154,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 		Wrap:               vi.config.wrap,
 		ResAttr:            vi.config.resAttr,
 		SuperimposeMessage: true,
+		BarAttr:            vi.config.barAttr,
 		MessageLayout:      vi.config.messageBarLayout,
 		Attributes:         vi.config.attr,
 	})
@@ -182,6 +183,7 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 		Wrap:               vi.config.wrap,
 		ResAttr:            vi.config.resAttr,
 		SuperimposeMessage: true,
+		BarAttr:            vi.config.barAttr,
 		MessageLayout:      vi.config.messageBarLayout,
 		Attributes:         vi.config.attr,
 	})

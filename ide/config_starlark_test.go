@@ -326,7 +326,8 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.NotContains(t, exo, "override_highlights")
 				emacs := editor["emacs"].(map[string]any)
 				assert.Equal(t, map[string]any{"fg": "default", "bg": "default"}, emacs["attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "gray"},
+					emacs["message_bar"].(map[string]any)["attr"])
 				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, emacs["search_attr"])
 				search := editor["standard"].(map[string]any)["search"].(map[string]any)
 				assertStandardSearchMap(t, search, "default")
@@ -356,7 +357,8 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.Equal(t, false, editor["auto_pair"])
 				emacs := editor["emacs"].(map[string]any)
 				assert.Equal(t, map[string]any{"fg": "default", "bg": "default"}, emacs["attr"])
-				assert.Equal(t, map[string]any{"fg": "default", "bg": "purple"}, emacs["bar_attr"])
+				assert.Equal(t, map[string]any{"fg": "default", "bg": "gray"},
+					emacs["message_bar"].(map[string]any)["attr"])
 				assert.Equal(t, map[string]any{"fg": "grey", "bg": "yellow"}, emacs["search_attr"])
 				search := editor["standard"].(map[string]any)["search"].(map[string]any)
 				assertStandardSearchMap(t, search, "#1e1e1e")
