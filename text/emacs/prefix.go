@@ -194,6 +194,9 @@ func (h *emacsHandler) dispatchCounted(
 			return h.killLines(count)
 		case ev.Ch == 'y':
 			return h.yankArg(count, raw, pasted)
+		case ev.Ch == 'q':
+			// C-u N C-q inserts the quoted character N times.
+			return h.startQuotedInsert(count)
 		case ev.Ch == 'v':
 			// GNU scroll commands take the argument in lines, not pages.
 			return h.scrollLines(count)

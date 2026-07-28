@@ -55,7 +55,7 @@ command:
     "<c-x><c-x>": exchangepointandmark
     # GNU xref, Dired, switch-buffer, symbol-jump, and completion semantics guide these keys.
     "<a-.>": "lsp definition"
-    "<a-s-/>": "lsp references"
+    "<a-s-/>": "lsp references"    # alt+shift+slash chord, i.e. M-?
     "<c-a-.>": "echo {prompt}lsp<space>definition<space>"
     "<c-s-a-/>": "echo {prompt}lsp<space>references<space>"
     # Dired and switch-buffer sit on <meta> because a focused terminal
@@ -63,11 +63,12 @@ command:
     "<s-m-d>": fexplorer
     "<s-m-t>": tabsearch
     "<c-x>j": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
-    "<a-s>o": searchtext
+    "<a-s>o": searchtext           # two-key M-s o, not the M-? chord above
     "<c-x>?": "lsp hover"
     "<c-a-\\\\>": "lsp format"
     "<c-a-i>": "lsp complete"
     # F5/F6 visits Git changes; F7/F8 steps diagnostics; F9 opens their picker.
+    # <f3>/<f4> stay unbound: the editor owns them as GNU's kmacro keys.
     "<f5>": gitprevchange
     "<f6>": gitnextchange
     "<f7>": lspprevdiagnostic
@@ -79,9 +80,11 @@ command:
     "<c-s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
-    # Bindings shared with the other presets. <alt> is left out entirely:
-    # it remains Emacs Meta for editing commands such as M-f, M-b, M-d and
-    # M-w. C-SPC sets the mark, C-o opens a line, C-i and Shift-Tab indent.
+    # Bindings shared with the other presets. <alt> is left out entirely: it
+    # remains Emacs Meta for editing commands such as M-f, M-b, M-d and M-w.
+    # <meta> is the host layer (Command on macOS, Super on Linux) for layout
+    # and the system clipboard. It is not an editing layer, so it carries no
+    # undo/redo counterpart to <m-c>/<m-v>: undo is the editor's C-/ and C-_.
     "<m-,>": "config"
     "<m-/>": "cheatsheet"
     "<m-q>": "quit"

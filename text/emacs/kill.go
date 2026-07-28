@@ -109,13 +109,18 @@ func (h *emacsHandler) killWholeLine() bool {
 
 // killRegion implements kill-region (C-w): the text between mark and point
 // is killed to the kill ring. A kill toward the beginning of the buffer
-// (point before mark) prepends to a running kill, like GNU kill-region.
+// (point before mark) prepends to a running kill, like GNU kill-region. A
+// shift-selection stands in for an explicit mark, matching GNU
+// shift-select-mode where shifted motion activates the region.
 func (h *emacsHandler) killRegion() bool {
+	point := h.cursor.CursorAtScroll()
+	if from, _, ok := h.cursor.SelectionBounds(); ok {
+		return h.killSelection(coordLess(point, from))
+	}
 	loc, ok := h.markLocation()
 	if !ok {
 		return false
 	}
-	point := h.cursor.CursorAtScroll()
 	if !h.cursor.SelectRange(point, loc.From) {
 		return false
 	}

@@ -90,6 +90,10 @@ type emacsHandler struct {
 	prefix       prefixState
 	isearch      isearchState
 	queryReplace queryReplaceState
+	// pendingQuotedInsert holds C-q open until the next key supplies the
+	// literal character to insert.
+	pendingQuotedInsert bool
+	quotedInsertCount   int
 }
 
 // NewHandler returns a emacs, simple-to-use text.Handler. indentTabspaces
@@ -250,14 +254,68 @@ func (h *emacsHandler) playMacro() bool {
 	return true
 }
 
+// asciiControlKeys maps the Control chords that ASCII defines as ordinary
+// keys. A terminal already delivers these as the key itself, so folding them
+// here keeps the GUI path identical: C-m is RET and C-i is TAB, exactly as
+// in GNU.
+var asciiControlKeys = map[rune]term.Key{
+	'm': term.KeyEnter,
+	'i': term.KeyTab,
+}
+
+// normalizeCtrlShift folds a Control chord carrying an upper-case glyph into
+// ModCtrlShift. The GUI reports C-S-<letter> as ModCtrlShift while other
+// input paths report ModCtrl with the shifted glyph, and without this the
+// two paths would need every binding duplicated.
+func normalizeCtrlShift(mod term.Modifier, ch rune) term.Modifier {
+	if mod == term.ModCtrl && ch >= 'A' && ch <= 'Z' {
+		return term.ModCtrlShift
+	}
+	return mod
+}
+
+// startMacroRecording implements <f3> (kmacro-start-macro). Recording into
+// the unnamed register mirrors GNU's single "last keyboard macro" slot.
+func (h *emacsHandler) startMacroRecording() bool {
+	if h.macroRecorder == nil || h.macroRecorder.IsRecording() {
+		return false
+	}
+	h.macroRecorder.Start(registerset.UnnamedRegisterID)
+	h.setTransientMode("MACRO")
+	return true
+}
+
+// endOrCallMacro implements <f4> (kmacro-end-or-call-macro): it closes an
+// open recording, or replays the last macro when nothing is being recorded.
+func (h *emacsHandler) endOrCallMacro() bool {
+	if h.macroRecorder != nil && h.macroRecorder.IsRecording() {
+		h.macroRecorder.Stop()
+		h.setTransientMode("")
+		return true
+	}
+	return h.playMacro()
+}
+
 // copyRegion copies the text between the mark and point to the clipboard,
-// leaving point and the buffer unchanged (M-w).
+// leaving point and the buffer unchanged (M-w). A shift-selection stands in
+// for an explicit mark, matching GNU shift-select-mode where shifted motion
+// activates the region.
 func (h *emacsHandler) copyRegion() bool {
+	point := h.cursor.CursorAtScroll()
+	if _, _, ok := h.cursor.SelectionBounds(); ok {
+		if _, err := h.cursor.CopySelection(
+			clipboard.DefaultRegisterID, h.clipboard); err != nil {
+			h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+			return false
+		}
+		h.cursor.Unselect()
+		h.cursor.MoveToScroll(point)
+		return true
+	}
 	loc, ok := h.markLocation()
 	if !ok {
 		return false
 	}
-	point := h.cursor.CursorAtScroll()
 	if !h.cursor.SelectRange(loc.From, point) {
 		return false
 	}
@@ -428,6 +486,26 @@ func (h *emacsHandler) moveUpList() bool {
 	}
 	_, ok = h.cursor.MoveToScroll(start)
 	return ok
+}
+
+// markDefun implements C-M-h: put the mark at the start of the enclosing
+// defun and point at its end, leaving the whole defun as the region. The
+// defun boundary is the same bracket-based approximation moveToDefunStart
+// uses.
+func (h *emacsHandler) markDefun() bool {
+	start, end, ok := h.enclosingBlock()
+	if !ok {
+		return false
+	}
+	if _, ok = h.cursor.MoveToScroll(start); !ok {
+		return false
+	}
+	h.setMarkLocation()
+	if !h.cursor.SelectRange(start, end) {
+		return false
+	}
+	h.cursor.MoveToScroll(end)
+	return true
 }
 
 // moveDownList moves point just inside the next opening delimiter after it
@@ -696,6 +774,12 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		return false, true
 	}
 
+	// C-q reads the next key as a literal character.
+	if h.pendingQuotedInsert {
+		h.handleQuotedInsertKey(ev)
+		return false, true
+	}
+
 	// A pending numeric argument owns digit and sign keys; any other key
 	// consumes it. Prefix keystrokes are not commands in GNU terms, so
 	// they preserve the kill-accumulation and yank-pop chains.
@@ -768,6 +852,12 @@ func (h *emacsHandler) dispatchKey(
 	ctx context.Context, ev term.Event, shift bool, pasted *bool,
 ) (handled bool) {
 	cursorAt := h.cursor.CursorAtScroll()
+	if ev.Mod == term.ModCtrl {
+		if key, ok := asciiControlKeys[ev.Ch]; ok {
+			ev = term.Event{Type: ev.Type, Key: key}
+		}
+	}
+	ev.Mod = normalizeCtrlShift(ev.Mod, ev.Ch)
 	switch ev.Mod {
 	case term.ModAltShift:
 		switch ev.Key {
@@ -890,6 +980,14 @@ func (h *emacsHandler) dispatchKey(
 	// no modifier
 	case 0:
 		switch ev.Key {
+		case term.KeyF3:
+			// <f3>: kmacro-start-macro.
+			handled = h.startMacroRecording()
+			return
+		case term.KeyF4:
+			// <f4>: kmacro-end-or-call-macro.
+			handled = h.endOrCallMacro()
+			return
 		case term.KeyEsc:
 			handled = h.cursor.Unselect()
 			h.cursor.Search("")
@@ -992,12 +1090,6 @@ func (h *emacsHandler) dispatchKey(
 			return
 		}
 		switch ev.Ch {
-		case 'c':
-			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
-			if err != nil {
-				h.log(log.ErrorLevel, "cursor copy selection: %v", err)
-			}
-			handled = true
 		case 'y':
 			// C-y: yank (paste from the clipboard).
 			if handled = h.yank(); handled {
@@ -1023,14 +1115,6 @@ func (h *emacsHandler) dispatchKey(
 			// C-j: newline-and-indent.
 			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
-		case 'm':
-			handled = h.cursor.MoveToMatchingRune()
-		case 'M':
-			// Block selection must survive the move-clears-selection tail.
-			handled = h.cursor.SelectABlockClose('(', ')') ||
-				h.cursor.SelectABlockClose('{', '}') ||
-				h.cursor.SelectABlockClose('[', ']')
-			return
 		case 'd':
 			handled = h.cursor.Delete()
 		case 'h':
@@ -1044,24 +1128,11 @@ func (h *emacsHandler) dispatchKey(
 			h.restoreDesiredColumn()
 			handled = h.cursor.MoveDown()
 		case 'q':
-			if h.macroRecorder != nil {
-				if h.macroRecorder.IsRecording() {
-					h.macroRecorder.Stop()
-				} else {
-					h.macroRecorder.Start(registerset.UnnamedRegisterID)
-				}
-				handled = true
-			}
-		case 'Q':
-			handled = h.playMacro()
+			// C-q: quoted-insert; the next key is inserted literally.
+			handled = h.startQuotedInsert(1)
+			return
 		case 'e':
 			handled = h.cursor.MoveEndLine()
-		case 'z':
-			handled = h.cursor.Undo()
-		case 'Z':
-			handled = h.cursor.ToggleFold(ctx)
-		case 'A':
-			handled = h.cursor.ToggleAllFolds(ctx)
 		case 'f':
 			handled = h.cursor.MoveRight()
 		case 'b':
@@ -1088,9 +1159,6 @@ func (h *emacsHandler) dispatchKey(
 		case 't':
 			// C-t: transpose-chars.
 			handled = h.transposeChars()
-		case 'K':
-			// C-S-k: kill the whole line, newline included.
-			handled = h.killWholeLine()
 		case 'w':
 			// C-w: kill-region (mark to point).
 			handled = h.killRegion()
@@ -1105,11 +1173,14 @@ func (h *emacsHandler) dispatchKey(
 			h.cursor.InsertLineAbove(h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 			return
+		case term.KeyBackspace:
+			// C-S-DEL: kill-whole-line.
+			handled = h.killWholeLine()
+			return
 		}
 		switch ev.Ch {
-		case 'Q':
-			handled = h.playMacro()
 		case 'M':
+			// Block selection must survive the move-clears-selection tail.
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||
 				h.cursor.SelectABlockClose('[', ']')
@@ -1117,6 +1188,16 @@ func (h *emacsHandler) dispatchKey(
 		case 'W':
 			handled = h.cursor.ShrinkSelection()
 			return
+		case 'Z':
+			handled = h.cursor.ToggleFold(ctx)
+		case 'A':
+			handled = h.cursor.ToggleAllFolds(ctx)
+		case 'H':
+			handled = h.cursor.HideSelection()
+			h.cursor.Unselect()
+		case 'V':
+			handled = h.cursor.Unhide()
+			h.cursor.Unselect()
 		}
 	case term.ModCtrlAlt:
 		switch ev.Key {
@@ -1139,11 +1220,9 @@ func (h *emacsHandler) dispatchKey(
 		case 0:
 			switch ev.Ch {
 			case 'h':
-				handled = h.cursor.HideSelection()
-				h.cursor.Unselect()
-			case 'v':
-				handled = h.cursor.Unhide()
-				h.cursor.Unselect()
+				// C-M-h: mark-defun.
+				handled = h.markDefun()
+				return
 			case 'f':
 				// C-M-f: forward-sexp (bracket-based).
 				handled = h.moveForwardSexp()
