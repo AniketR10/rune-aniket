@@ -153,7 +153,7 @@ type Tree struct {
 	closed     bool
 	lib        uintptr
 	mu         sync.Mutex
-	cells      [][]term.Cell
+	cellBytes  cell.ByteCounts
 	content    []byte
 	contentBuf bytes.Buffer
 	parser     *tree_sitter.Parser
@@ -314,6 +314,9 @@ func (t *Tree) Close() (ret error) {
 		close(ch)
 	}
 	clear(t.statesubs)
+	t.cellBytes = nil
+	t.content = nil
+	t.contentBuf = bytes.Buffer{}
 	t.currState.Closed = true
 	return
 }
@@ -676,7 +679,7 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	}
 	// use old cells to convert coordinates
 	newCells := t.buf.RawCells()
-	edit, ok := editToTreesitterEdit(t.cells, newCells, start, end, from, to, content)
+	edit, ok := editToTreesitterEdit(t.cellBytes, newCells, start, end, from, to, content)
 	if !ok {
 		t.log(log.WarnLevel, "convert edit to tree-sitter coordinates failed, "+
 			"re-parsing enabled: %t", t.config.ReparseOnErrors)
@@ -717,18 +720,18 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 }
 
 func (t *Tree) persistCells() {
-	t.cells = term.CopyCells(t.cells, t.buf.RawCells())
+	raw := t.buf.RawCells()
+	t.cellBytes = cell.NewByteCounts(t.cellBytes, raw)
 	t.contentBuf.Reset()
-	cell.CellsToBytesBuffer(&t.contentBuf, t.cells)
+	cell.CellsToBytesBuffer(&t.contentBuf, raw)
 	t.content = t.contentBuf.Bytes()
-
 }
 
 func (t *Tree) highlight() error {
 	if t.highlights == nil {
 		return nil
 	}
-	highlights := t.getHighlights(t.cells, t.content)
+	highlights := t.getHighlights(t.cellBytes, t.content)
 	ll := textapi.LocationSlice(highlights)
 	t.loc.SetLocationList(ll)
 
@@ -761,13 +764,13 @@ func (t *Tree) query(queryFile string, captureNames ...string) (iterator.Iterato
 	return iterator.FromSlice(data), nil
 }
 
-func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {
-	return getHighlights(cells, content, t.tree,
+func (t *Tree) getHighlights(counts cell.ByteCounts, content []byte) []textapi.Location {
+	return getHighlights(counts, content, t.tree,
 		t.highlights, t.config.CaptureNamesAttributes)
 }
 
 func getHighlights(
-	cells [][]term.Cell, content []byte, tree *tree_sitter.Tree, highlights *tree_sitter.Query,
+	counts cell.ByteCounts, content []byte, tree *tree_sitter.Tree, highlights *tree_sitter.Query,
 	captureNamesAttributes map[string]term.Attributes,
 ) []textapi.Location {
 	root := tree.RootNode()
@@ -785,7 +788,7 @@ func getHighlights(
 		}
 		for _, cap := range m.Captures {
 			rng := cap.Node.Range()
-			from, to, err := convertRangeToCoordinates(cells, rng)
+			from, to, err := convertRangeToCoordinates(counts, rng)
 			if err != nil {
 				continue
 			}
@@ -863,17 +866,17 @@ func (t *Tree) log(level log.Level, msg string, args ...any) {
 }
 
 // this is needed to handle multi width characters
-func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
+func convertRangeToCoordinates(counts cell.ByteCounts, n tree_sitter.Range) (
 	from, to term.Coordinates, err error,
 ) {
 	start, end := n.StartPoint, n.EndPoint
-	from, ok := cell.ConvertRunePosToCoordinates(cells, int(start.Row), int(start.Column))
+	from, ok := counts.RunePosToCoordinates(int(start.Row), int(start.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'start point "+
 			" to term 'from' coordinates: point: %v", start)
 		return
 	}
-	to, ok = cell.ConvertRunePosToCoordinates(cells, int(end.Row), int(end.Column))
+	to, ok = counts.RunePosToCoordinates(int(end.Row), int(end.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'end' point "+
 			" to term 'to' coordinates: point: %v", end)
@@ -912,14 +915,14 @@ func pointToCoordinates(content []byte, starts []int, p tree_sitter.Point) term.
 }
 
 func editToTreesitterEdit(
-	before, after [][]term.Cell, start, end, from, to term.Coordinates, content string,
+	before cell.ByteCounts, after [][]term.Cell, start, end, from, to term.Coordinates, content string,
 ) (tree_sitter.InputEdit, bool) {
-	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, start)
-	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(before, end)
+	startByte, sok := before.CoordinatesToByteOffset(start)
+	oldEndByte, eok := before.CoordinatesToByteOffset(end)
 
-	y, x, spok := cell.ConvertCoordinatesToRunePos(before, start)
+	y, x, spok := before.CoordinatesToRunePos(start)
 	startPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	y, x, epok := cell.ConvertCoordinatesToRunePos(before, end)
+	y, x, epok := before.CoordinatesToRunePos(end)
 	oldEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
 	y, x, tpok := cell.ConvertCoordinatesToRunePos(after, to)
 	newEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}

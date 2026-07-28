@@ -265,7 +265,7 @@ func (p Parser) Highlight(file workspaceapi.URI, content string) (
 	var buf cell.Buffer
 	buf.Init()
 	_, _ = buf.ReadFrom(bytes.NewReader(data))
-	cells := buf.RawCells()
+	counts := cell.NewByteCounts(nil, buf.RawCells())
 
 	go debug.CapturePanicReport(func() {
 		defer close(closeWaitCh)
@@ -290,7 +290,7 @@ func (p Parser) Highlight(file workspaceapi.URI, content string) (
 		}
 		defer tree.Close()
 
-		locations := getHighlights(cells, data, tree, parser.query, nil)
+		locations := getHighlights(counts, data, tree, parser.query, nil)
 		for _, location := range locations {
 			select {
 			case results <- location:

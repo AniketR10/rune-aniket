@@ -26,7 +26,6 @@ package syntax
 import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/cell"
 )
 
 // SelectionExpand returns the next larger syntactic selection range for rng.
@@ -43,11 +42,11 @@ func (t *Tree) SelectionExpand(rng term.Range) (term.Range, bool) {
 		return term.Range{}, false
 	}
 
-	startRow, startCol, ok := cell.ConvertCoordinatesToRunePos(t.cells, current.Start)
+	startRow, startCol, ok := t.cellBytes.CoordinatesToRunePos(current.Start)
 	if !ok {
 		return term.Range{}, false
 	}
-	endRow, endCol, ok := cell.ConvertCoordinatesToRunePos(t.cells, current.End)
+	endRow, endCol, ok := t.cellBytes.CoordinatesToRunePos(current.End)
 	if !ok {
 		return term.Range{}, false
 	}
@@ -87,7 +86,7 @@ func (t *Tree) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Ran
 		return term.Range{}, false
 	}
 
-	caretRow, caretCol, ok := cell.ConvertCoordinatesToRunePos(t.cells, caret)
+	caretRow, caretCol, ok := t.cellBytes.CoordinatesToRunePos(caret)
 	if !ok {
 		return term.Range{}, false
 	}

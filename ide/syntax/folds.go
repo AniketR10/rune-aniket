@@ -30,7 +30,6 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/cell"
 )
 
 const captureNameFoldsInitial = "initial_fold"
@@ -70,7 +69,7 @@ func (t *Tree) getFoldsFrom(from term.Coordinates) []term.Range {
 	ret := make([]term.Range, 0)
 
 	from.X = 0 // ignore x offsets to make things easier
-	byteOffset, sok := cell.ConvertCoordinatesToByteOffset(t.cells, from)
+	byteOffset, sok := t.cellBytes.CoordinatesToByteOffset(from)
 	if !sok {
 		return nil
 	}
@@ -98,9 +97,9 @@ func (t *Tree) getFoldsFrom(from term.Coordinates) []term.Range {
 }
 
 func (t *Tree) treeSitterRangeToTerm(rng tree_sitter.Range) (term.Range, bool) {
-	start, sok := cell.ConvertRunePosToCoordinates(t.cells,
+	start, sok := t.cellBytes.RunePosToCoordinates(
 		int(rng.StartPoint.Row), int(rng.StartPoint.Column))
-	end, eok := cell.ConvertRunePosToCoordinates(t.cells,
+	end, eok := t.cellBytes.RunePosToCoordinates(
 		int(rng.EndPoint.Row), int(rng.EndPoint.Column))
 	return term.Range{
 		Start: start,
