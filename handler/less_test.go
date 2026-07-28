@@ -629,6 +629,95 @@ func TestLessMessageLayoutAttributes(t *testing.T) {
 	}
 }
 
+func TestLessSearchDoesNotPaintEmptyMessage(t *testing.T) {
+	const (
+		width  = 40
+		height = 2
+	)
+	messageAttr := term.Attributes{Bg: term.ColorGray}
+	tests := []struct {
+		name      string
+		layout    string
+		moveMode  LessMoveMode
+		promptLen int
+	}{
+		{name: "plain forward", moveMode: LessMoveForward, promptLen: len("/foo")},
+		{name: "plain backward", moveMode: LessMoveBackward, promptLen: len("?foo")},
+		{
+			name:      "decorated forward",
+			layout:    `░▒▓█ {{ .Message | fg "white" }} `,
+			moveMode:  LessMoveForward,
+			promptLen: len("/foo"),
+		},
+		{
+			name:      "decorated backward",
+			layout:    `░▒▓█ {{ .Message | fg "white" }} `,
+			moveMode:  LessMoveBackward,
+			promptLen: len("?foo"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := LessConfig{
+				SuperimposeMessage: true,
+				BarAttr:            messageAttr,
+			}
+			if tt.layout != "" {
+				layout, err := ParseLessMessageLayout(tt.layout)
+				require.NoError(t, err)
+				cfg.MessageLayout = layout
+			}
+
+			b := NewLess(cfg)
+			b.Buffer().WriteString(strings.Repeat("x", width) + "\n" +
+				strings.Repeat("x", width))
+			b.Resize(width, height)
+
+			backgrounds := func() []term.Color {
+				t.Helper()
+				w := term.NewStringWriter(width, height)
+				b.Draw(w)
+				require.NoError(t, w.Flush())
+				row := w.Cells()[width:]
+				ret := make([]term.Color, len(row))
+				for i, cell := range row {
+					ret[i] = cell.Bg
+				}
+				return ret
+			}
+			assertNoMessageBackground := func() {
+				t.Helper()
+				for x, bg := range backgrounds() {
+					require.NotEqual(t, messageAttr.Bg, bg,
+						"empty message painted column %d", x)
+				}
+			}
+
+			assertNoMessageBackground()
+			b.SetSearchMode(tt.moveMode)
+			for _, ch := range "foo" {
+				_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				require.True(t, handled)
+			}
+			assertNoMessageBackground()
+
+			_, handled := b.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+			require.True(t, handled)
+			assertNoMessageBackground()
+			_, handled = b.Handle(term.Event{Type: term.EventKey, Ch: 'o'})
+			require.True(t, handled)
+			require.Equal(t, tt.promptLen, len(b.searchScrollVirt.C.Buffer().String()))
+
+			_, handled = b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			require.True(t, handled)
+			b.SetMessage("searching '%s'", "foo")
+			got := backgrounds()
+			require.Equal(t, messageAttr.Bg, got[width-1])
+		})
+	}
+}
+
 func TestParseLessMessageLayout(t *testing.T) {
 	tests := []struct {
 		name       string

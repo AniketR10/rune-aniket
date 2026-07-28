@@ -491,11 +491,11 @@ func (l *Less) resize() {
 
 func (l *Less) resizeMoveMessage(cmdBarWidth, cmdBarHeight int) {
 	width, height := cmdBarWidth, cmdBarHeight
-	// Built layouts render at their intrinsic size and centre themselves in
-	// whatever space they are given, so they must be confined to that size and
-	// placed at the top right of a command bar grown by a wrapped search query.
-	if l.msgFloating {
+	if l.config.SuperimposeMessage || l.msgFloating {
 		width = min(l.msgWidth, cmdBarWidth)
+	}
+	// Built layouts must remain on the top row when a search query wraps.
+	if l.msgFloating {
 		height = min(l.msgHeight, cmdBarHeight)
 	}
 	// don't occlude other content if bar background is empty
