@@ -781,6 +781,41 @@ config = {
 
 
 if tui:
+    tui_cmd_bindings = {
+        "<c-w>":          "tabclose",
+        "<c-l>":          "tabnext",
+        "<c-h>":          "tabprevious",
+        "<c-x><c-v>":     "clipboardpaste",
+        "<c-x><c-c>":     "clipboardcopy",
+        "<c-x><c-h>":     "windowfocus left",
+        "<c-x><c-l>":     "windowfocus right",
+        "<c-x><c-j>":     "windowfocus down",
+        "<c-x><c-k>":     "windowfocus up",
+        "<c-x><c-w>":     "windowclose",
+        "<c-x>h":         "windowdefaultsplit h",
+        "<c-x>v":         "windowdefaultsplit v",
+        "<c-j>":          "lspnextdiagnostic",
+        "<c-k>":          "lspprevdiagnostic",
+        "<c-x><c-f>":     "windowtogglemaximize",
+        "<c-x><c-t>":     "lsp hover",
+        "<c-x><c-e>":     "lsp references",
+        "<c-x><c-g>":     "lsp definition",
+        "<c-x><c-b>":     "lsp format",
+        "<c-x><c-p>":     "searchfile",
+        "<c-x><c-\\>":    "searchtext",
+        "<c-x><enter>":   "terminalneworsplit",
+        "gf":             "editfileoncursor",
+        "<c-x>1":         "workspacefocus 1",
+        "<c-x>2":         "workspacefocus 2",
+        "<c-x>3":         "workspacefocus 3",
+        "<c-x>4":         "workspacefocus 4",
+        "<c-x>5":         "workspacefocus 5",
+        "<c-x>6":         "workspacefocus 6",
+        "<c-x>7":         "workspacefocus 7",
+        "<c-x>8":         "workspacefocus 8",
+        "<c-x>9":         "workspacefocus 9",
+    }
+
     config = merge(config, {
         "default_attr": attr(fg = "default", bg = "#1e1e1e"),
             "log_path":  "~/.rune/debug.log",
