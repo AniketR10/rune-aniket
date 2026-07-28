@@ -132,6 +132,19 @@ func TestMigrateConfigKeyBindingsPicksUpMovedBindings(t *testing.T) {
 	require.Equal(t, "fexplorer", bindingsOfFile(t, path)[moved])
 }
 
+func TestStandardPresetsKeepMetaSlashForLineComments(t *testing.T) {
+	for _, path := range []string{
+		"preset_standard_darwin.yaml",
+		"preset_standard_linux.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			bindings := bindingsOfFile(t, path)
+			require.Equal(t, "cheatsheet", bindings["<a-/>"])
+			require.NotContains(t, bindings, "<m-/>")
+		})
+	}
+}
+
 func TestMigrateConfigKeyBindingsSelectsPresetByEditor(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

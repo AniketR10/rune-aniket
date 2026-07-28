@@ -110,7 +110,7 @@ command:
     # Bindings shared with the other presets.
     "<shift-tab>": "fexplorer"
     "<m-,>": "config"
-    "<m-/>": "cheatsheet"
+    "<a-/>": "cheatsheet"
     "<m-=>": "guifontsize increase"
     "<m-->": "guifontsize decrease"
     "<a-`>": "tabsearch"

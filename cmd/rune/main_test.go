@@ -39,9 +39,9 @@ func TestAppLaunchArgs(t *testing.T) {
 		wantOK   bool
 	}{
 		{
-			name:     "darwin app with zdotdir",
-			goos:     "darwin",
-			zdotDir:  filepath.Join("home", ".rune", "zdot"),
+			name:    "darwin app with zdotdir",
+			goos:    "darwin",
+			zdotDir: filepath.Join("home", ".rune", "zdot"),
 			wantArgs: []string{
 				"--rune-zdotdir=" + filepath.Join("home", ".rune", "zdot"),
 				"-G", "-w", "",
@@ -49,18 +49,18 @@ func TestAppLaunchArgs(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:     "darwin without zdotdir",
-			goos:     "darwin",
-			zdotDir:  "",
+			name:    "darwin without zdotdir",
+			goos:    "darwin",
+			zdotDir: "",
 			wantArgs: []string{
 				"-G", "-w", "",
 			},
 			wantOK: true,
 		},
 		{
-			name:     "linux app with zdotdir",
-			goos:     "linux",
-			zdotDir:  filepath.Join("home", ".rune", "zdot"),
+			name:    "linux app with zdotdir",
+			goos:    "linux",
+			zdotDir: filepath.Join("home", ".rune", "zdot"),
 			wantArgs: []string{
 				"--rune-zdotdir=" + filepath.Join("home", ".rune", "zdot"),
 				"-G", "-w", "",
@@ -68,9 +68,9 @@ func TestAppLaunchArgs(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:     "linux without zdotdir",
-			goos:     "linux",
-			zdotDir:  "",
+			name:    "linux without zdotdir",
+			goos:    "linux",
+			zdotDir: "",
 			wantArgs: []string{
 				"-G", "-w", "",
 			},
