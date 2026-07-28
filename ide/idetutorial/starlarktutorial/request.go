@@ -131,6 +131,10 @@ type request struct {
 	// wait_event: the awaited editor event-type name (e.g. "open").
 	event string
 
+	// wait_event: optional substring the observed event URI must
+	// contain. Empty matches any URI.
+	eventURI string
+
 	// wait_shell: the expected companion-shell argument tokens (e.g.
 	// ["pkg", "install", "rune-agent"]). Always non-empty — wait_shell
 	// is exclusively for commands run inside the shell.

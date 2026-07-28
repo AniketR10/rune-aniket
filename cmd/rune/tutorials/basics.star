@@ -542,15 +542,44 @@ command switches the active one.
    different theme from the completer, and press `<enter>`.
 """
 
-guitheme_persist_md = """\
+config_open_md = """\
 Nice, the whole interface just re-themed at once, terminal colors and
 all.
 
-`guitheme` changes the theme for this session only. To make a theme
-stick across restarts, set `gui.default_theme` in your config to the
-theme name. Keep `guitheme` handy for a quick switch when the lighting
-or screen brightness changes, and set `gui.default_theme` for the look
-you want by default.
+`guitheme` only changed this session. The file that decides what Rune
+looks like when it starts is one keypress away.
+
+Open it now: """ + keypress("config") + """.
+"""
+
+def config_edit_md(theme):
+    return """\
+This is your config. Three things to notice:
+
+- `config_version` marks the file as owning its full key-binding list.
+- `command.key_bindings` is **active**: every key this tutorial taught
+  you lives there, and you can rebind any of them.
+- Everything else is commented out, and the commented values are Rune's
+  own defaults. Reading the file is how you discover what is tunable.
+
+Scroll down to the **GUI theme** block and make your theme the default:
+uncomment the `gui:` line and the `default_theme:` line under it, then
+set the theme to `""" + theme + """`:
+
+```yaml
+gui:
+  default_theme: """ + theme + """
+```
+
+Then save it: """ + keypress("write") + """.
+"""
+
+config_done_md = """\
+That is the whole configuration loop: `:config` to open it, edit, save.
+
+Rune reads the config once at startup, so `gui.default_theme` takes
+effect the next time you launch. `guitheme` stays the quick way to
+change the theme for the session you are in right now.
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -864,7 +893,7 @@ def teach_cheatsheet():
 def teach_guicommands():
     floating_window(title = "Why commands look like that", text = guicommands_md,
                     dismiss_keys = [ck])
-    wait_command(
+    theme = wait_command(
         title    = "Switch the theme",
         command  = "guitheme",
         on_error = ("Run `<cmd>guitheme` and pass a theme name. Type " +
@@ -873,7 +902,31 @@ def teach_guicommands():
                     "completer."),
     )
     notify(level = success, message = "You switched the theme.")
-    floating_window(title = "Make it stick", text = guitheme_persist_md,
+    return theme.args[0] if len(theme.args) else "romero"
+
+
+def teach_config(theme):
+    floating_window(title = "Your configuration", text = config_open_md,
+                    dismiss_keys = dismiss_for("config"))
+    wait_command(
+        title    = "Your configuration",
+        command  = "config",
+        on_error = "Run `<cmd>config` to open your configuration file.",
+    )
+    notify(level = success, message = "That is your config file.")
+
+    # `config` opens whatever path the binary was launched with
+    # (config.yaml, config.star, or a `-c` override), so match the URI
+    # on a substring rather than a full path.
+    wait_event(
+        event = "flush",
+        uri   = "config",
+        title = "Make it stick",
+        text  = config_edit_md(theme),
+    )
+    notify(level = success, message = "Config saved.")
+
+    floating_window(title = "Make it stick", text = config_done_md,
                     dismiss_keys = [ck])
 
 
@@ -917,9 +970,10 @@ def run():
     teach_close_tab()
     teach_terminals()
 
-    teach_guicommands()
+    theme = teach_guicommands()
+    teach_config(theme)
 
     teach_cheatsheet()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "45", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "46", entry = run)

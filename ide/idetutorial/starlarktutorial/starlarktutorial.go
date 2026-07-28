@@ -38,6 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -763,10 +764,10 @@ func (t *Tutorial) ObserveCommand(
 
 // ObserveEvent advances the state machine when the current step is
 // wait_event and the observed editor event's type name matches the
-// armed event name. uri is accepted for parity with the event payload
-// but is not matched (no scheme/URI filtering). Returns exit=true when
-// the tutorial finishes as a result of this observation.
-func (t *Tutorial) ObserveEvent(eventType, _ string) bool {
+// armed event name. When the step declared a URI filter, uri must also
+// contain it as a substring. Returns exit=true when the tutorial
+// finishes as a result of this observation.
+func (t *Tutorial) ObserveEvent(eventType, uri string) bool {
 	t.mu.Lock()
 	active := t.active
 	finished := t.finished
@@ -775,6 +776,9 @@ func (t *Tutorial) ObserveEvent(eventType, _ string) bool {
 		return true
 	}
 	if active == nil || active.kind != reqWaitEvent || active.event != eventType {
+		return false
+	}
+	if active.eventURI != "" && !strings.Contains(uri, active.eventURI) {
 		return false
 	}
 	t.resolve(active, response{})

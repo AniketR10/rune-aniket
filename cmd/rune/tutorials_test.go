@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "45", tut.Version())
+	assert.Equal(t, "46", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "45", tut.Version())
+	assert.Equal(t, "46", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -468,9 +468,34 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	observe("tabmove", "left")
 	observe("tabmove", "right")
 
-	wait("floating_window")
+	dismissPromptStep()
+	observe("tabclose")
+	dismissPromptStep()
+	observe("!", "git", "log")
+	dismissPromptStep()
+	observe("windowclose")
+
+	dismissPromptStep()
+	observe("guitheme", "mullen")
+
+	dismissPromptStep()
+	observe("config")
+
+	wait("wait_event")
+	assert.False(t, tut.ObserveEvent("flush", "file:///README.md"),
+		"saving an unrelated buffer must not advance the config step")
+	require.True(t, tut.WaitActive("wait_event", time.Second),
+		"the config step stays armed after an unrelated flush")
+	tut.ObserveEvent("flush", "file:///home/u/.rune/config.yaml")
+
+	dismissPromptStep()
+	dismissPromptStep()
+	observe("cheatsheet")
+
 	assert.Contains(t, notis.successes(), "You resized a window.")
 	assert.Contains(t, notis.successes(), "You reordered the tabs.")
+	assert.Contains(t, notis.successes(), "Config saved.")
+	assert.Contains(t, notis.successes(), "That is your cheatsheet.")
 }
 
 func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
@@ -1157,5 +1182,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "45", tut.Version())
+	assert.Equal(t, "46", tut.Version())
 }

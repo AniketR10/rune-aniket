@@ -1054,6 +1054,54 @@ tutorial(entry=run)
 		"the matching event must resolve wait_event and resume the script")
 }
 
+// TestWaitEventURIFilter asserts that the optional uri kwarg narrows a
+// wait_event step to events whose URI contains it, so a step can await
+// a write to one specific file rather than any buffer flush.
+func TestWaitEventURIFilter(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_event(event="flush", uri="config")
+    notify(level=success, message="saved")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_event", activeKindFor(tut))
+
+	exit := tut.ObserveEvent("flush", "file:///workspace/README.md")
+	assert.False(t, exit, "a non-matching URI must not resolve wait_event")
+	assert.Equal(t, "wait_event", activeKindFor(tut),
+		"a non-matching URI must keep wait_event armed")
+	assert.Equal(t, 0, notis.len())
+
+	_ = tut.ObserveEvent("flush", "file:///home/u/.rune/config.yaml")
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("saved"),
+		"a URI containing the filter must resolve wait_event")
+}
+
+// TestWaitEventWithoutURIFilterMatchesAnyURI asserts that omitting the
+// uri kwarg keeps the historical behaviour of matching on event type
+// alone.
+func TestWaitEventWithoutURIFilterMatchesAnyURI(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_event(event="flush")
+    notify(level=success, message="saved")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_event", activeKindFor(tut))
+
+	_ = tut.ObserveEvent("flush", "file:///workspace/anything.txt")
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("saved"),
+		"an empty filter must match any URI")
+}
+
 // TestConfirmYesReturnsTrue asserts that confirm returns True when
 // the user picks Yes (the highlighted option at index 0).
 func TestConfirmYesReturnsTrue(t *testing.T) {

@@ -318,6 +318,10 @@ func builtinConfirm(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 // resolves from keystrokes, so every key reaches the IDE root while
 // the hint stays up. The event name is not validated against a fixed
 // set: an unknown name simply never matches.
+//
+// The optional uri kwarg narrows the match to events whose URI
+// contains it as a substring, so a step can await a write to one
+// specific file rather than any buffer flush.
 func builtinWaitEvent(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 	starlark.Tuple, []starlark.Tuple,
 ) (starlark.Value, error) {
@@ -326,23 +330,26 @@ func builtinWaitEvent(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 	) (starlark.Value, error) {
 		var (
 			event   starlark.String
+			uri     starlark.String
 			text    starlark.String
 			title   starlark.String
 			onError starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_event", args, kwargs,
 			"event", &event,
+			"uri?", &uri,
 			"text?", &text,
 			"title?", &title,
 			"on_error?", &onError); err != nil {
 			return nil, err
 		}
 		req := &request{
-			kind:    reqWaitEvent,
-			event:   string(event),
-			text:    string(text),
-			title:   string(title),
-			onError: string(onError),
+			kind:     reqWaitEvent,
+			event:    string(event),
+			eventURI: string(uri),
+			text:     string(text),
+			title:    string(title),
+			onError:  string(onError),
 		}
 		if _, err := t.publishRequest(req); err != nil {
 			return nil, err
