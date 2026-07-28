@@ -41,12 +41,19 @@ func TestClaudeOpus5Catalog(t *testing.T) {
 	assert.True(t, SupportsAdaptiveThinking(ClaudeOpus5))
 }
 
+func TestClaudeSonnet5Catalog(t *testing.T) {
+	assert.Equal(t, 1000000, AvailableModels()[ClaudeSonnet5])
+	assert.Equal(t, 128000, MaxOutputTokens(ClaudeSonnet5))
+	assert.True(t, SupportsAdaptiveThinking(ClaudeSonnet5))
+}
+
 func TestMaxOutputTokens(t *testing.T) {
 	tests := []struct {
 		model string
 		want  int
 	}{
 		{ClaudeOpus5, 128000},
+		{ClaudeSonnet5, 128000},
 		{ClaudeFable5, 128000},
 		{ClaudeSonnet4Dot5, 64000},
 		{ClaudeOpus4, 32000},
@@ -66,6 +73,7 @@ func TestSupportsEffort(t *testing.T) {
 		want  bool
 	}{
 		{ClaudeOpus5, true},
+		{ClaudeSonnet5, true},
 		{ClaudeOpus4Dot7, true},
 		{ClaudeOpus4Dot6, true},
 		{ClaudeSonnet4Dot6, true},
@@ -92,6 +100,7 @@ func TestSupportsAdaptiveThinking(t *testing.T) {
 		want  bool
 	}{
 		{ClaudeOpus5, true},
+		{ClaudeSonnet5, true},
 		{ClaudeOpus4Dot6, true},
 		{ClaudeSonnet4Dot6, true},
 		{ClaudeHaiku4Dot5, false},
@@ -165,6 +174,11 @@ func TestNormalizeEffort(t *testing.T) {
 		{"opus-5 high", ClaudeOpus5, "high", "high", false},
 		{"opus-5 xhigh", ClaudeOpus5, "xhigh", "xhigh", false},
 		{"opus-5 max", ClaudeOpus5, "max", "max", false},
+		{"sonnet-5 low", ClaudeSonnet5, "low", "low", false},
+		{"sonnet-5 medium", ClaudeSonnet5, "medium", "medium", false},
+		{"sonnet-5 high", ClaudeSonnet5, "high", "high", false},
+		{"sonnet-5 xhigh", ClaudeSonnet5, "xhigh", "xhigh", false},
+		{"sonnet-5 max", ClaudeSonnet5, "max", "max", false},
 
 		// Claude 4.6: unsupported levels are dropped with warning.
 		{"opus-4.6 none", ClaudeOpus4Dot6, "none", "", true},

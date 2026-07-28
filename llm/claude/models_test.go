@@ -48,14 +48,19 @@ func TestModelEntriesStampClaudeProvider(t *testing.T) {
 
 	gotSlugs := make(map[string]bool, len(entries))
 	var opus5ContextWindow int
+	var sonnet5ContextWindow int
 	for _, e := range entries {
 		assert.Equal(t, LLMProvider, e.Provider, "entry %q not stamped claude", e.Name)
 		gotSlugs[e.Name] = true
 		if e.Name == anthropic.ClaudeOpus5 {
 			opus5ContextWindow = e.ContextWindow
 		}
+		if e.Name == anthropic.ClaudeSonnet5 {
+			sonnet5ContextWindow = e.ContextWindow
+		}
 	}
 	assert.Equal(t, 1000000, opus5ContextWindow)
+	assert.Equal(t, 1000000, sonnet5ContextWindow)
 
 	wantSlugs := make(map[string]bool)
 	for _, e := range anthropic.ModelEntries() {
