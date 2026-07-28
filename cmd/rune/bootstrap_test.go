@@ -174,6 +174,32 @@ func keyEv(ch rune, mod term.Modifier) term.Event {
 	return term.Event{Type: term.EventKey, Ch: ch, Mod: mod}
 }
 
+// TestBootstrapFontSizeDelta covers the chords the welcome prompt tells
+// the user to press before any editor preset (and its <m-=> / <m-->
+// bindings) has been written to the user config.
+func TestBootstrapFontSizeDelta(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   term.Event
+		want int
+	}{
+		{"meta-equals increases", keyEv('=', term.ModMeta), 1},
+		{"meta-plus increases", keyEv('+', term.ModMeta), 1},
+		{"meta-shift-plus increases", keyEv('+', term.ModMeta|term.ModShift), 1},
+		{"meta-minus decreases", keyEv('-', term.ModMeta), -1},
+		{"meta-underscore decreases", keyEv('_', term.ModMeta), -1},
+		{"equals without meta", keyEv('=', 0), 0},
+		{"ctrl-equals", keyEv('=', term.ModCtrl), 0},
+		{"meta-a", keyEv('a', term.ModMeta), 0},
+		{"mouse", term.Event{Type: term.EventMouse}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, bootstrapFontSizeDelta(tc.ev))
+		})
+	}
+}
+
 func namedKeyEv(k term.Key) term.Event {
 	return term.Event{Type: term.EventKey, Key: k}
 }

@@ -254,12 +254,10 @@ func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 }
 
 // setupPreIDE registers the GUI command family on the pre-config IDE
-// that is active during first-run bootstrap. rune.star's GUI
-// keybindings (e.g. <m-=> -> guifontsize) are live during bootstrap, so
-// the commands they invoke must be subscribed here; otherwise they fail
-// with "unknown command". The configured IDE gets them separately via
-// setupConfiguredIDE after the swap. Must run after attachGUI so b.g is
-// set.
+// that is active during first-run bootstrap, so that commands such as
+// guifontsize resolve instead of failing with "unknown command". The
+// configured IDE gets them separately via setupConfiguredIDE after the
+// swap. Must run after attachGUI so b.g is set.
 func (b *bootstrapHandler) setupPreIDE() error {
 	return subscribeGUICommands(b.g, b.preIDE,
 		b.transparentWindow, b.launchCmd)
@@ -413,8 +411,13 @@ func (b *bootstrapHandler) Selection() (string, bool) {
 }
 
 func (b *bootstrapHandler) Handle(ev term.Event) (exit, handled bool) {
-	if b.realIDE == nil && shouldSwallowBootstrapEvent(ev) {
-		return false, true
+	if b.realIDE == nil {
+		if b.adjustBootstrapFontSize(ev) {
+			return false, true
+		}
+		if shouldSwallowBootstrapEvent(ev) {
+			return false, true
+		}
 	}
 	return b.inner.Handle(ev)
 }
@@ -635,6 +638,42 @@ func (g *guardedPromptChain) onClose(reopen func()) func() error {
 // prompt windows mid-Close forever.
 func (b *bootstrapHandler) promptGuard() *guardedPromptChain {
 	return &guardedPromptChain{closing: func() bool { return b.closingPreIDE }}
+}
+
+// bootstrapFontSizeDelta reports the font-size adjustment ev requests,
+// mirroring the editor presets' <m-=> / <m--> guifontsize bindings.
+// Those presets are only written at the end of bootstrap, so the
+// bindings the welcome prompt tells the user to press do not exist yet
+// and the chords have to be recognized here. The shifted forms count
+// too because the prompt copy says "+" and "-".
+func bootstrapFontSizeDelta(ev term.Event) int {
+	if ev.Type != term.EventKey || ev.Mod&term.ModMeta == 0 {
+		return 0
+	}
+	switch ev.Ch {
+	case '=', '+':
+		return 1
+	case '-', '_':
+		return -1
+	}
+	return 0
+}
+
+func (b *bootstrapHandler) adjustBootstrapFontSize(ev term.Event) bool {
+	delta := bootstrapFontSizeDelta(ev)
+	if delta == 0 || b.g == nil {
+		return false
+	}
+	var err error
+	if delta > 0 {
+		err = b.g.IncreaseFontSize()
+	} else {
+		err = b.g.DecreaseFontSize()
+	}
+	if err != nil {
+		b.notifyError("adjust font size", err)
+	}
+	return true
 }
 
 // shouldSwallowBootstrapEvent must NOT swallow Esc: the SDK prompt
