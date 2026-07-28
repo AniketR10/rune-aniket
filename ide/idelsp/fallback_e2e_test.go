@@ -410,6 +410,73 @@ func TestFallbackZigReferencesGolden(t *testing.T) {
 	})
 }
 
+// TestFallbackZigDocumentSymbolOutline property-checks the outline of
+// a real file: every symbol name must spell the source text under its
+// selection range, and every child must be contained in its parent.
+func TestFallbackZigDocumentSymbolOutline(t *testing.T) {
+	m, corpus, _ := fallbackE2E(t)
+	const rel = "lib/std/ascii.zig"
+	res, err := m.DocumentSymbol(
+		context.Background(), semanticapi.DocumentSymbolParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{
+				URI: corpusURI(corpus, rel),
+			},
+		})
+	require.NoError(t, err)
+	require.NotEmpty(t, res.DocumentSymbols)
+	lines := corpusLines(t, corpus, rel)
+
+	var walk func(syms []semanticapi.DocumentSymbol, parent semanticapi.Range, nested bool)
+	walk = func(syms []semanticapi.DocumentSymbol, parent semanticapi.Range, nested bool) {
+		for _, s := range syms {
+			assert.Equal(t, s.Name, textAt(t, lines, s.SelectionRange))
+			assert.True(t, rangeContains(s.Range, s.SelectionRange),
+				"%s selection %+v outside range %+v",
+				s.Name, s.SelectionRange, s.Range)
+			if nested {
+				assert.True(t, rangeContains(parent, s.Range),
+					"%s range %+v outside parent %+v",
+					s.Name, s.Range, parent)
+			}
+			walk(s.Children, s.Range, true)
+		}
+	}
+	walk(res.DocumentSymbols, semanticapi.Range{}, false)
+
+	isControl, ok := findOutlineSymbol(res.DocumentSymbols, "isControl")
+	require.True(t, ok, "isControl missing from outline")
+	assert.Equal(t, semanticapi.SymbolKindFunction, isControl.Kind)
+	assert.Equal(t, uint32(109), isControl.SelectionRange.Start.Line)
+	param, ok := findOutlineSymbol(isControl.Children, "c")
+	require.True(t, ok, "parameter c not nested under isControl")
+	assert.Equal(t, uint32(17), param.SelectionRange.Start.Character)
+}
+
+func findOutlineSymbol(
+	syms []semanticapi.DocumentSymbol, name string,
+) (semanticapi.DocumentSymbol, bool) {
+	for _, s := range syms {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return semanticapi.DocumentSymbol{}, false
+}
+
+func rangeContains(outer, inner semanticapi.Range) bool {
+	if positionBefore(inner.Start, outer.Start) {
+		return false
+	}
+	return !positionBefore(outer.End, inner.End)
+}
+
+func positionBefore(a, b semanticapi.Position) bool {
+	if a.Line != b.Line {
+		return a.Line < b.Line
+	}
+	return a.Character < b.Character
+}
+
 // TestFallbackZigCorpusSweep property-checks the fallback across a
 // deterministic slice of the corpus: every request must succeed, a
 // definition must resolve to itself, and every resolved location must

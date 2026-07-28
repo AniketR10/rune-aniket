@@ -26,17 +26,25 @@ package idelsp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/workspace"
 )
 
 const fallbackTestURI = "file:///ws/main.zig"
@@ -568,6 +576,144 @@ func TestFallbackWorkspaceSymbol(t *testing.T) {
 	})
 }
 
+// outlineCaptures models this synthetic locals.scm pass:
+//
+//	L1: def outer():          // scope L1-L6
+//	L2:     x = 1
+//	L3:     def inner():      // scope L3-L5
+//	L4:         y = 2
+//	L6: TOP = 3
+//	L7: class Widget:         // scope L7-L10
+//	L8:     def render(self): // scope L8-L10
+func outlineCaptures() []syntaxapi.Result {
+	return []syntaxapi.Result{
+		capr("local.scope", "", 0, 0, 12, 0),
+		capr("local.scope", "", 1, 0, 6, 0),
+		capr("local.definition.function", "outer", 1, 4, 1, 9),
+		capr("local.definition.var", "x", 2, 4, 2, 5),
+		capr("local.scope", "", 3, 4, 5, 0),
+		capr("local.definition.function", "inner", 3, 8, 3, 13),
+		capr("local.definition.var", "y", 4, 8, 4, 9),
+		capr("local.definition.var", "TOP", 6, 0, 6, 3),
+		capr("local.scope", "", 7, 0, 10, 0),
+		capr("local.definition.type", "Widget", 7, 6, 7, 12),
+		capr("local.scope", "", 8, 4, 10, 0),
+		capr("local.definition.method", "render", 8, 8, 8, 14),
+	}
+}
+
+func docSymParams() semanticapi.DocumentSymbolParams {
+	return semanticapi.DocumentSymbolParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{
+			URI: fallbackTestURI,
+		},
+	}
+}
+
+// flattenOutline renders the tree as "dotted.name:kind:line" entries
+// in traversal order, mirroring how outline_file presents it.
+func flattenOutline(
+	syms []semanticapi.DocumentSymbol, parent string,
+) []string {
+	var ret []string
+	for _, s := range syms {
+		name := s.Name
+		if parent != "" {
+			name = parent + "." + name
+		}
+		ret = append(ret, fmt.Sprintf(
+			"%s:%d:%d", name, s.Kind, s.Range.Start.Line,
+		))
+		ret = append(ret, flattenOutline(s.Children, s.Name)...)
+	}
+	return ret
+}
+
+func TestSyntaxFallbackDocumentSymbol(t *testing.T) {
+	t.Run("nests definitions under owning scopes", func(t *testing.T) {
+		s := newTestFallback(
+			&fallbackParser{captures: outlineCaptures()}, false, "",
+		)
+		res, err := s.documentSymbol(context.Background(), docSymParams())
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"outer:12:1",
+			"outer.x:13:2",
+			"outer.inner:12:3",
+			"inner.y:13:4",
+			"TOP:13:6",
+			"Widget:5:7",
+			"Widget.render:6:8",
+		}, flattenOutline(res.DocumentSymbols, ""))
+		outer := res.DocumentSymbols[0]
+		assert.Equal(t, wantRange(1, 0, 6, 0), outer.Range)
+		assert.Equal(t, wantRange(1, 4, 1, 9), outer.SelectionRange)
+	})
+
+	t.Run("root scope never owns a definition", func(t *testing.T) {
+		s := newTestFallback(&fallbackParser{captures: []syntaxapi.Result{
+			capr("local.scope", "", 0, 0, 4, 0),
+			capr("local.definition.function", "first", 0, 4, 0, 9),
+			capr("local.definition.function", "second", 2, 4, 2, 10),
+		}}, false, "")
+		res, err := s.documentSymbol(context.Background(), docSymParams())
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"first:12:0", "second:12:2",
+		}, flattenOutline(res.DocumentSymbols, ""))
+	})
+
+	t.Run("definitions without scopes stay flat", func(t *testing.T) {
+		s := newTestFallback(&fallbackParser{captures: []syntaxapi.Result{
+			capr("local.definition.var", "a", 0, 0, 0, 1),
+			capr("local.definition.namespace", "ns", 1, 0, 1, 2),
+		}}, false, "")
+		res, err := s.documentSymbol(context.Background(), docSymParams())
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"a:13:0", "ns:3:1",
+		}, flattenOutline(res.DocumentSymbols, ""))
+	})
+
+	t.Run("no definitions yields empty result", func(t *testing.T) {
+		s := newTestFallback(&fallbackParser{captures: []syntaxapi.Result{
+			capr("local.scope", "", 0, 0, 4, 0),
+		}}, false, "")
+		res, err := s.documentSymbol(context.Background(), docSymParams())
+		require.NoError(t, err)
+		assert.Empty(t, res.DocumentSymbols)
+	})
+
+	// Python's locals.scm captures a method as both
+	// local.definition.method and local.definition.function; the
+	// duplicate must not become a child of itself.
+	t.Run("captures sharing a range collapse to one symbol", func(t *testing.T) {
+		s := newTestFallback(&fallbackParser{captures: []syntaxapi.Result{
+			capr("local.scope", "", 0, 0, 8, 0),
+			capr("local.scope", "", 1, 0, 5, 0),
+			capr("local.definition.type", "Widget", 1, 6, 1, 12),
+			capr("local.scope", "", 2, 4, 5, 0),
+			capr("local.definition.function", "render", 2, 8, 2, 14),
+			capr("local.definition.method", "render", 2, 8, 2, 14),
+			capr("local.definition.var", "pad", 3, 8, 3, 11),
+		}}, false, "")
+		res, err := s.documentSymbol(context.Background(), docSymParams())
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"Widget:5:1", "Widget.render:6:2", "render.pad:13:3",
+		}, flattenOutline(res.DocumentSymbols, ""))
+	})
+
+	t.Run("query error propagates", func(t *testing.T) {
+		s := newTestFallback(
+			&fallbackParser{queryErr: errors.New("not installed")},
+			false, "",
+		)
+		_, err := s.documentSymbol(context.Background(), docSymParams())
+		require.Error(t, err)
+	})
+}
+
 func TestLanguageNotSupportedSentinel(t *testing.T) {
 	_, err := languageForFilename("/ws/notes.md")
 	require.Error(t, err)
@@ -638,6 +784,57 @@ func TestManagerReferencesFallback(t *testing.T) {
 	require.Len(t, locs, 2)
 }
 
+func TestManagerDocumentSymbolFallback(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("file:///ws")
+	require.NoError(t, err)
+
+	t.Run("no server falls back to syntax", func(t *testing.T) {
+		p := &fallbackParser{captures: outlineCaptures()}
+		m := New(uri, newTestScheme(), nil, nil, nil, nil, Config{
+			NoInitializeServer: true, Parser: p,
+		})
+		defer m.Close() // nolint:errcheck
+		res, derr := m.DocumentSymbol(
+			context.Background(), docSymParams(),
+		)
+		require.NoError(t, derr)
+		assert.Equal(t, []string{
+			"outer:12:1",
+			"outer.x:13:2",
+			"outer.inner:12:3",
+			"inner.y:13:4",
+			"TOP:13:6",
+			"Widget:5:7",
+			"Widget.render:6:8",
+		}, flattenOutline(res.DocumentSymbols, ""))
+	})
+
+	t.Run("no parser preserves error", func(t *testing.T) {
+		m := New(uri, newTestScheme(), nil, nil, nil, nil, Config{
+			NoInitializeServer: true,
+		})
+		defer m.Close() // nolint:errcheck
+		_, derr := m.DocumentSymbol(
+			context.Background(), docSymParams(),
+		)
+		require.Error(t, derr)
+		assert.True(t, errors.Is(derr, ErrLanguageNotSupported))
+	})
+
+	t.Run("fallback failure preserves original error", func(t *testing.T) {
+		p := &fallbackParser{queryErr: errors.New("not installed")}
+		m := New(uri, newTestScheme(), nil, nil, nil, nil, Config{
+			NoInitializeServer: true, Parser: p,
+		})
+		defer m.Close() // nolint:errcheck
+		_, derr := m.DocumentSymbol(
+			context.Background(), docSymParams(),
+		)
+		require.Error(t, derr)
+		assert.True(t, errors.Is(derr, ErrLanguageNotSupported))
+	})
+}
+
 func TestManagerWorkspaceSymbolFallback(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///ws")
 	require.NoError(t, err)
@@ -679,5 +876,568 @@ func TestManagerWorkspaceSymbolFallback(t *testing.T) {
 		)
 		require.NoError(t, serr)
 		assert.Empty(t, syms)
+	})
+}
+
+// The integration suite runs the fallback over real tree-sitter
+// grammars — the checked-in fixtures under ide/syntax/syntaxtest — so
+// capture vocabularies, scope shapes and coordinate conventions are
+// exercised as shipped rather than as hand-written captures.
+
+// fixturePkgManager serves those fixtures the way an installed
+// language package would.
+type fixturePkgManager struct{ root string }
+
+func (m fixturePkgManager) LibDir(
+	_ context.Context, langID string,
+) (iterator.Iterator[string], error) {
+	dir := filepath.Join(m.root, langID)
+	if _, err := os.Stat(dir); err != nil {
+		return nil, fmt.Errorf("package %s not installed", langID)
+	}
+	return iterator.FromSlice([]string{
+		filepath.Join(dir, "tree-sitter.so"),
+		filepath.Join(dir, "locals.scm"),
+		filepath.Join(dir, "highlights.scm"),
+		filepath.Join(dir, "indents.scm"),
+		filepath.Join(dir, "folds.scm"),
+	}), nil
+}
+
+// integrationFiles is a multi-language workspace: a two-package Go
+// module, a python package, a rust crate, plus the degenerate files
+// (empty, comment-only, unparseable, binary, no grammar) that the
+// fallback has to survive.
+var integrationFiles = map[string]string{
+	"go.mod": "module example.com/fixture\n\ngo 1.22\n",
+	"greet/greet.go": `package greet
+
+type Greeter struct {
+	Prefix string
+}
+
+func New(prefix string) *Greeter {
+	return &Greeter{Prefix: prefix}
+}
+
+func (g *Greeter) Greet(name string) string {
+	msg := g.Prefix + " " + name
+	return msg
+}
+`,
+	"main.go": `package main
+
+import "example.com/fixture/greet"
+
+const banner = "hi"
+
+func main() {
+	g := greet.New(banner)
+	shout := func(s string) string {
+		out := s + "!"
+		return out
+	}
+	println(shout(g.Greet("world")))
+}
+`,
+	"shadow.go": `package shadow
+
+func f(x int) int {
+	y := x
+	{
+		y := x * 2
+		_ = y
+	}
+	return y
+}
+`,
+	"unicode.go": `package unicode
+
+func größe(wert int) int {
+	σ := wert * 2
+	return σ
+}
+`,
+	"empty.go":    "",
+	"comments.go": "// only comments here\n// and nothing else\n",
+	"broken.go":   "package broken\n\nfunc (((\n\t??? ~~~ }}}\n",
+	"binary.go":   "package binary\n\x00\x01\x02\xff\xfe garbage \x00\n",
+	"py/mod.py": `import os
+
+
+CONST = 1
+
+
+class Widget:
+    def __init__(self, name):
+        self.name = name
+
+    def render(self, indent=0):
+        pad = " " * indent
+        return pad + self.name
+
+
+def build(count):
+    items = [Widget(str(i)) for i in range(count)]
+    return items
+`,
+	"py/empty.py": "",
+	"rs/lib.rs": `pub struct Point {
+    pub x: i32,
+}
+
+impl Point {
+    pub fn new(x: i32) -> Point {
+        let p = Point { x };
+        p
+    }
+}
+
+pub fn origin() -> Point {
+    Point::new(0)
+}
+`,
+	"conf.yaml": "root:\n  key: value\n",
+	"notes.txt": "no grammar for this one\n",
+}
+
+// integrationWorkspace materializes integrationFiles on disk and
+// returns a parser bound to it plus the workspace root.
+func integrationWorkspace(t *testing.T) (syntaxapi.Parser, string) {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		t.Skip("tree-sitter grammar fixtures are darwin-only")
+	}
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	fixtures := filepath.Join(wd, "..", "syntax", "syntaxtest")
+	require.FileExists(t, filepath.Join(fixtures, "go", "tree-sitter.so"))
+
+	root := t.TempDir()
+	for name, content := range integrationFiles {
+		p := filepath.Join(root, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	}
+
+	uri, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	return syntax.NewParser(scheme, fixturePkgManager{root: fixtures}, uri), root
+}
+
+func integrationFallback(t *testing.T) (*syntaxFallback, string) {
+	t.Helper()
+	parser, root := integrationWorkspace(t)
+	fb := newSyntaxFallback(parser, func(path string) (string, error) {
+		data, err := os.ReadFile(path) // nolint:gosec // test fixture path
+		return string(data), err
+	}, false)
+	return fb, root
+}
+
+func fileURI(root, name string) string {
+	return "file://" + filepath.Join(root, name)
+}
+
+func TestFallbackIntegrationDocumentSymbol(t *testing.T) {
+	fb, root := integrationFallback(t)
+
+	tests := []struct {
+		name string
+		file string
+		want []string
+	}{
+		{
+			name: "go package with type, function and method",
+			file: "greet/greet.go",
+			want: []string{
+				"greet:3:0",
+				"Greeter:5:2",
+				"New:12:6",
+				"New.prefix:13:6",
+				"Greet:6:10",
+				"Greet.g:13:10",
+				"Greet.name:13:10",
+				"Greet.msg:13:11",
+			},
+		},
+		{
+			name: "go closures nest under their enclosing function",
+			file: "main.go",
+			want: []string{
+				"main:3:0",
+				"banner:13:4",
+				"main:12:6",
+				"main.g:13:7",
+				"main.shout:13:8",
+				"main.s:13:8",
+				"main.out:13:9",
+			},
+		},
+		{
+			name: "shadowed declarations are listed separately",
+			file: "shadow.go",
+			want: []string{
+				"shadow:3:0", "f:12:2", "f.x:13:2", "f.y:13:3", "f.y:13:5",
+			},
+		},
+		{
+			name: "multibyte identifiers survive",
+			file: "unicode.go",
+			want: []string{
+				"unicode:3:0", "größe:12:2", "größe.wert:13:2", "größe.σ:13:3",
+			},
+		},
+		{
+			name: "python methods nest under their class exactly once",
+			file: "py/mod.py",
+			want: []string{
+				"CONST:13:3",
+				"Widget:5:6",
+				"Widget.__init__:6:7",
+				"Widget.render:6:10",
+				"render.pad:13:11",
+				"build:12:15",
+				"build.items:13:16",
+				"build.i:13:16",
+			},
+		},
+		{
+			name: "rust impl blocks nest their functions",
+			file: "rs/lib.rs",
+			want: []string{
+				"Point:5:0", "new:12:5", "new.x:13:5", "new.p:13:6",
+				"origin:12:11",
+			},
+		},
+		{
+			name: "empty file yields no symbols",
+			file: "empty.go",
+			want: nil,
+		},
+		{
+			name: "comment-only file yields no symbols",
+			file: "comments.go",
+			want: nil,
+		},
+		{
+			name: "unparseable source yields what still parses",
+			file: "broken.go",
+			want: []string{"broken:3:0"},
+		},
+		{
+			name: "binary garbage yields what still parses",
+			file: "binary.go",
+			want: []string{"binary:3:0"},
+		},
+		{
+			name: "grammar without definition captures yields no symbols",
+			file: "conf.yaml",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := fb.documentSymbol(
+				context.Background(), semanticapi.DocumentSymbolParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{
+						URI: fileURI(root, tt.file),
+					},
+				})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, flattenOutline(res.DocumentSymbols, ""))
+		})
+	}
+}
+
+func TestFallbackIntegrationDefinition(t *testing.T) {
+	fb, root := integrationFallback(t)
+
+	tests := []struct {
+		name       string
+		file       string
+		line, char int
+		wantFile   string
+		wantLine   uint32
+		wantChar   uint32
+		wantEmpty  bool
+		wantMulti  bool
+	}{
+		{
+			name: "file-level const from its use",
+			file: "main.go", line: 7, char: 16,
+			wantFile: "main.go", wantLine: 4, wantChar: 6,
+		},
+		{
+			name: "local declared earlier in the same block",
+			file: "main.go", line: 12, char: 15,
+			wantFile: "main.go", wantLine: 7, wantChar: 1,
+		},
+		{
+			name: "local inside a closure body",
+			file: "main.go", line: 10, char: 9,
+			wantFile: "main.go", wantLine: 9, wantChar: 2,
+		},
+		{
+			name: "closure variable from the call site",
+			file: "main.go", line: 12, char: 10,
+			wantFile: "main.go", wantLine: 8, wantChar: 1,
+		},
+		{
+			name: "closure parameter from the body",
+			file: "main.go", line: 9, char: 9,
+			wantFile: "main.go", wantLine: 8, wantChar: 15,
+		},
+		{
+			name: "cursor on a definition resolves to itself",
+			file: "shadow.go", line: 2, char: 5,
+			wantFile: "shadow.go", wantLine: 2, wantChar: 5,
+		},
+		{
+			name: "inner shadow wins inside its scope",
+			file: "shadow.go", line: 6, char: 7,
+			wantFile: "shadow.go", wantLine: 5, wantChar: 2,
+		},
+		{
+			name: "outer declaration wins outside the shadowing scope",
+			file: "shadow.go", line: 8, char: 8,
+			wantFile: "shadow.go", wantLine: 3, wantChar: 1,
+		},
+		{
+			name: "parameter from its use",
+			file: "shadow.go", line: 3, char: 6,
+			wantFile: "shadow.go", wantLine: 2, wantChar: 7,
+		},
+		{
+			name: "python local from a later expression",
+			file: "py/mod.py", line: 12, char: 15,
+			wantFile: "mod.py", wantLine: 11, wantChar: 8,
+		},
+		{
+			name: "rust type from an associated call",
+			file: "rs/lib.rs", line: 12, char: 4,
+			wantFile: "lib.rs", wantLine: 0, wantChar: 11,
+		},
+		{
+			name: "qualified cross-package name resolves through the index",
+			file: "main.go", line: 7, char: 12,
+			wantMulti: true,
+		},
+		{
+			name: "cursor on whitespace resolves to nothing",
+			file: "main.go", line: 5, char: 0,
+			wantEmpty: true,
+		},
+		{
+			name: "cursor past the end of the file resolves to nothing",
+			file: "main.go", line: 99, char: 0,
+			wantEmpty: true,
+		},
+		{
+			name: "empty file resolves to nothing",
+			file: "empty.go", line: 0, char: 0,
+			wantEmpty: true,
+		},
+		{
+			name: "unparseable source resolves to nothing",
+			file: "broken.go", line: 3, char: 3,
+			wantEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := fb.definition(
+				context.Background(), semanticapi.DefinitionParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{
+						URI: fileURI(root, tt.file),
+					},
+					Position: semanticapi.Position{
+						Line: uint32(tt.line), Character: uint32(tt.char),
+					},
+				})
+			require.NoError(t, err)
+			switch {
+			case tt.wantEmpty:
+				assert.Nil(t, res.Location)
+				assert.Empty(t, res.Locations)
+			case tt.wantMulti:
+				require.NotEmpty(t, res.Locations)
+			default:
+				require.NotNil(t, res.Location)
+				assert.Equal(t, tt.wantFile, filepath.Base(res.Location.URI))
+				assert.Equal(t, semanticapi.Position{
+					Line: tt.wantLine, Character: tt.wantChar,
+				}, res.Location.Range.Start)
+			}
+		})
+	}
+}
+
+func TestFallbackIntegrationReferences(t *testing.T) {
+	fb, root := integrationFallback(t)
+
+	tests := []struct {
+		name       string
+		file       string
+		line, char int
+		decl       bool
+		want       []string
+	}{
+		{
+			name: "closure local with declaration",
+			file: "main.go", line: 9, char: 2, decl: true,
+			want: []string{"main.go:9:2", "main.go:10:9"},
+		},
+		{
+			name: "file-level const with declaration",
+			file: "main.go", line: 4, char: 6, decl: true,
+			want: []string{"main.go:4:6", "main.go:7:16"},
+		},
+		{
+			name: "file-level const without declaration",
+			file: "main.go", line: 4, char: 6, decl: false,
+			want: []string{"main.go:7:16"},
+		},
+		{
+			name: "outer declaration excludes shadowed uses",
+			file: "shadow.go", line: 3, char: 1, decl: true,
+			want: []string{"shadow.go:3:1", "shadow.go:8:8"},
+		},
+		{
+			name: "inner declaration only covers its own scope",
+			file: "shadow.go", line: 5, char: 2, decl: true,
+			want: []string{"shadow.go:5:2", "shadow.go:6:6"},
+		},
+		{
+			name: "empty file has no references",
+			file: "empty.go", line: 0, char: 0, decl: true,
+			want: nil,
+		},
+		{
+			name: "unparseable source has no references",
+			file: "broken.go", line: 3, char: 3, decl: true,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			locs, err := fb.references(
+				context.Background(), semanticapi.ReferenceParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{
+						URI: fileURI(root, tt.file),
+					},
+					Position: semanticapi.Position{
+						Line: uint32(tt.line), Character: uint32(tt.char),
+					},
+					Context: semanticapi.ReferenceContext{
+						IncludeDeclaration: tt.decl,
+					},
+				})
+			require.NoError(t, err)
+			var got []string
+			for _, l := range locs {
+				got = append(got, fmt.Sprintf("%s:%d:%d",
+					filepath.Base(l.URI),
+					l.Range.Start.Line, l.Range.Start.Character))
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestFallbackIntegrationNoGrammar pins what every fallback entry
+// point does when tree-sitter cannot serve the file at all: it must
+// report an error so Manager keeps the original no-server error
+// instead of answering "no symbols".
+func TestFallbackIntegrationNoGrammar(t *testing.T) {
+	fb, root := integrationFallback(t)
+
+	tests := []struct {
+		name string
+		file string
+	}{
+		{name: "language without a grammar package", file: "notes.txt"},
+		{name: "file that does not exist", file: "missing.go"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uri := fileURI(root, tt.file)
+			_, err := fb.documentSymbol(
+				context.Background(), semanticapi.DocumentSymbolParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{URI: uri},
+				})
+			require.Error(t, err)
+
+			_, err = fb.definition(
+				context.Background(), semanticapi.DefinitionParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{URI: uri},
+				})
+			require.Error(t, err)
+
+			_, err = fb.references(
+				context.Background(), semanticapi.ReferenceParams{
+					TextDocument: semanticapi.TextDocumentIdentifier{URI: uri},
+				})
+			require.Error(t, err)
+		})
+	}
+}
+
+// TestFallbackIntegrationUnindexedWorkspaceSymbol pins that a parser
+// without a symbol index answers the zero-server contract rather than
+// scanning the workspace per request.
+func TestFallbackIntegrationUnindexedWorkspaceSymbol(t *testing.T) {
+	fb, _ := integrationFallback(t)
+	syms, err := fb.workspaceSymbol(
+		context.Background(),
+		semanticapi.WorkspaceSymbolParams{Query: "Greet"},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, syms)
+}
+
+// TestManagerIntegrationDocumentSymbol drives the production Manager
+// path with a real grammar: a language with no server configuration
+// must be answered by the fallback, while a language with neither
+// server nor grammar keeps the original error.
+func TestManagerIntegrationDocumentSymbol(t *testing.T) {
+	parser, root := integrationWorkspace(t)
+	uri, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(t, err)
+	m := New(uri, newTestScheme(), nil, nil, nil, nil, Config{
+		NoInitializeServer: true, Parser: parser,
+	})
+	defer m.Close() // nolint:errcheck
+
+	t.Run("unsupported language is served by the fallback", func(t *testing.T) {
+		res, derr := m.DocumentSymbol(
+			context.Background(), semanticapi.DocumentSymbolParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{
+					URI: fileURI(root, "conf.yaml"),
+				},
+			})
+		require.NoError(t, derr)
+		assert.Empty(t, res.DocumentSymbols)
+	})
+
+	t.Run("missing grammar preserves the original error", func(t *testing.T) {
+		_, derr := m.DocumentSymbol(
+			context.Background(), semanticapi.DocumentSymbolParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{
+					URI: fileURI(root, "notes.txt"),
+				},
+			})
+		require.Error(t, derr)
+		assert.ErrorIs(t, derr, ErrLanguageNotSupported)
 	})
 }

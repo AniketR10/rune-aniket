@@ -485,6 +485,14 @@ func (m *Manager) DocumentSymbol(
 	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
 		return srv.call(ctx, "textDocument/documentSymbol", params, &raw)
 	}); err != nil {
+		if isNoServer(err) {
+			fres, ferr := m.fallback.documentSymbol(ctx, params)
+			if ferr == nil {
+				return fres, nil
+			}
+			m.log.Debug("document symbol fallback",
+				"error", ferr, "file", params.TextDocument.URI)
+		}
 		return semanticapi.DocumentSymbolResult{}, err
 	}
 	if isNull(raw) {

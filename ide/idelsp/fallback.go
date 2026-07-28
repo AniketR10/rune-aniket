@@ -76,6 +76,8 @@ type lspFallback interface {
 	) ([]semanticapi.Location, error)
 	workspaceSymbol(ctx context.Context, params semanticapi.WorkspaceSymbolParams,
 	) ([]semanticapi.SymbolInformation, error)
+	documentSymbol(ctx context.Context, params semanticapi.DocumentSymbolParams,
+	) (semanticapi.DocumentSymbolResult, error)
 }
 
 // errNoFallbackParser makes Manager keep the original no-server
@@ -101,6 +103,12 @@ func (noFallback) workspaceSymbol(
 	context.Context, semanticapi.WorkspaceSymbolParams,
 ) ([]semanticapi.SymbolInformation, error) {
 	return nil, nil
+}
+
+func (noFallback) documentSymbol(
+	context.Context, semanticapi.DocumentSymbolParams,
+) (semanticapi.DocumentSymbolResult, error) {
+	return semanticapi.DocumentSymbolResult{}, errNoFallbackParser
 }
 
 // syntaxFallback answers a subset of LSP requests from tree-sitter
@@ -142,13 +150,17 @@ func newSyntaxFallback(
 	}
 }
 
-const fallbackNodeCaptures = syntaxapi.NodeCaptureScope |
-	syntaxapi.NodeCaptureReference |
+// outlineNodeCaptures asks only for what an outline needs; reference
+// captures would dominate the result set without contributing.
+const outlineNodeCaptures = syntaxapi.NodeCaptureScope |
 	syntaxapi.NodeCaptureDefinitionFunc |
 	syntaxapi.NodeCaptureDefinitionVar |
 	syntaxapi.NodeCaptureDefinitionMethod |
 	syntaxapi.NodeCaptureDefinitionType |
 	syntaxapi.NodeCaptureDefinitionNamespace
+
+const fallbackNodeCaptures = outlineNodeCaptures |
+	syntaxapi.NodeCaptureReference
 
 func (s *syntaxFallback) definition(
 	ctx context.Context, params semanticapi.DefinitionParams,
@@ -158,7 +170,7 @@ func (s *syntaxFallback) definition(
 		return semanticapi.LocationResult{}, err
 	}
 	pos := positionToCoord(params.Position)
-	caps, err := s.localCaptures(ctx, uri)
+	caps, err := s.localCaptures(ctx, uri, fallbackNodeCaptures)
 	if err != nil {
 		return semanticapi.LocationResult{}, err
 	}
@@ -204,7 +216,7 @@ func (s *syntaxFallback) references(
 		return nil, err
 	}
 	pos := positionToCoord(params.Position)
-	caps, err := s.localCaptures(ctx, uri)
+	caps, err := s.localCaptures(ctx, uri, fallbackNodeCaptures)
 	if err != nil {
 		return nil, err
 	}
@@ -277,12 +289,34 @@ func (s *syntaxFallback) workspaceSymbol(
 	return ret, nil
 }
 
+// documentSymbol builds a file outline from locals.scm captures.
+// Definitions that introduce a scope (functions, methods, types)
+// become containers for every definition nested inside that scope.
+func (s *syntaxFallback) documentSymbol(
+	ctx context.Context, params semanticapi.DocumentSymbolParams,
+) (semanticapi.DocumentSymbolResult, error) {
+	uri, err := workspaceapi.ParseURI(params.TextDocument.URI)
+	if err != nil {
+		return semanticapi.DocumentSymbolResult{}, err
+	}
+	caps, err := s.localCaptures(ctx, uri, outlineNodeCaptures)
+	if err != nil {
+		return semanticapi.DocumentSymbolResult{}, err
+	}
+	syms := outlineSymbols(caps)
+	if len(syms) == 0 {
+		return semanticapi.DocumentSymbolResult{}, nil
+	}
+	return semanticapi.DocumentSymbolResult{DocumentSymbols: syms}, nil
+}
+
 // localCaptures drains one locals.scm pass over uri, yielding every
-// scope, reference and definition capture in the file.
+// requested capture in the file.
 func (s *syntaxFallback) localCaptures(
 	ctx context.Context, uri workspaceapi.URI,
+	nodeTypes syntaxapi.NodeCaptureName,
 ) ([]syntaxapi.Result, error) {
-	it, err := s.parser.QueryNode(uri, fallbackNodeCaptures)
+	it, err := s.parser.QueryNode(uri, nodeTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -686,18 +720,20 @@ func positionToCoord(p semanticapi.Position) term.Coordinates {
 func resultLocation(
 	uri string, r syntaxapi.Result,
 ) semanticapi.Location {
-	return semanticapi.Location{
-		URI: uri,
-		Range: semanticapi.Range{
-			Start: semanticapi.Position{
-				Line:      uint32(r.From.Y),
-				Character: uint32(r.From.X),
-			},
-			End: semanticapi.Position{
-				Line:      uint32(r.To.Y),
-				Character: uint32(r.To.X),
-			},
-		},
+	return semanticapi.Location{URI: uri, Range: resultRange(r)}
+}
+
+func resultRange(r syntaxapi.Result) semanticapi.Range {
+	return semanticapi.Range{
+		Start: coordToPosition(r.From),
+		End:   coordToPosition(r.To),
+	}
+}
+
+func coordToPosition(c term.Coordinates) semanticapi.Position {
+	return semanticapi.Position{
+		Line:      uint32(c.Y),
+		Character: uint32(c.X),
 	}
 }
 
@@ -709,4 +745,216 @@ func kindForName(name string) semanticapi.SymbolKind {
 		return semanticapi.SymbolKindMethod
 	}
 	return semanticapi.SymbolKindFunction
+}
+
+type rangeKey struct{ from, to term.Coordinates }
+
+func rangeKeyOf(r syntaxapi.Result) rangeKey {
+	return rangeKey{from: r.From, to: r.To}
+}
+
+// outlineSymbols nests each definition capture under the definition
+// owning its enclosing scope, producing a document symbol tree.
+func outlineSymbols(caps []syntaxapi.Result) []semanticapi.DocumentSymbol {
+	var scopes, defs []syntaxapi.Result
+	for _, c := range caps {
+		switch {
+		case isScopeCapture(c):
+			scopes = append(scopes, c)
+		case isDefinitionCapture(c) && c.Text != "":
+			defs = append(defs, c)
+		}
+	}
+	sort.SliceStable(defs, func(i, j int) bool {
+		if defs[i].From != defs[j].From {
+			return coordBefore(defs[i].From, defs[j].From)
+		}
+		return capturePriority(defs[i].CaptureName) <
+			capturePriority(defs[j].CaptureName)
+	})
+	defs = dedupeDefs(defs)
+	root := widestScope(scopes)
+	own := make([]syntaxapi.Result, len(defs))
+	owns := make([]bool, len(defs))
+	ownerOf := make(map[rangeKey]int, len(defs))
+	parent := make([]syntaxapi.Result, len(defs))
+	parented := make([]bool, len(defs))
+	for i, d := range defs {
+		sc, ok := innermostScope(scopes, d.From)
+		if _, taken := ownerOf[rangeKeyOf(sc)]; ok && !taken && ownsScope(d, sc, root) {
+			own[i], owns[i] = sc, true
+			ownerOf[rangeKeyOf(sc)] = i
+			parent[i], parented[i] = innermostScopeExcluding(scopes, d.From, sc)
+			continue
+		}
+		parent[i], parented[i] = sc, ok
+	}
+	children := make([][]int, len(defs))
+	var roots []int
+	for i := range defs {
+		p, ok := nearestOwner(scopes, ownerOf, parent[i], parented[i])
+		if !ok || p == i {
+			roots = append(roots, i)
+			continue
+		}
+		children[p] = append(children[p], i)
+	}
+	return outlineTree(defs, own, owns, children, roots)
+}
+
+func outlineTree(
+	defs, own []syntaxapi.Result, owns []bool,
+	children [][]int, idxs []int,
+) []semanticapi.DocumentSymbol {
+	if len(idxs) == 0 {
+		return nil
+	}
+	ret := make([]semanticapi.DocumentSymbol, 0, len(idxs))
+	for _, i := range idxs {
+		d := defs[i]
+		full := resultRange(d)
+		if owns[i] {
+			full = spanRange(d, own[i])
+		}
+		ret = append(ret, semanticapi.DocumentSymbol{
+			Name:           d.Text,
+			Kind:           kindForCapture(d.CaptureName),
+			Range:          full,
+			SelectionRange: resultRange(d),
+			Children: outlineTree(
+				defs, own, owns, children, children[i],
+			),
+		})
+	}
+	return ret
+}
+
+// ownsScope reports whether d introduces sc. locals.scm hoists a
+// function or type name out of the very node forming its scope, so
+// that scope node starts on the definition's own line. The file-root
+// scope is never owned: a definition on the first line would
+// otherwise swallow the whole outline.
+func ownsScope(d, sc, root syntaxapi.Result) bool {
+	if !liftsScope(d) || rangeKeyOf(sc) == rangeKeyOf(root) {
+		return false
+	}
+	return sc.From.Y == d.From.Y
+}
+
+// nearestOwner walks outwards from sc to the closest enclosing scope
+// that some definition owns.
+func nearestOwner(
+	scopes []syntaxapi.Result, ownerOf map[rangeKey]int,
+	sc syntaxapi.Result, ok bool,
+) (int, bool) {
+	for range scopes {
+		if !ok {
+			break
+		}
+		if idx, found := ownerOf[rangeKeyOf(sc)]; found {
+			return idx, true
+		}
+		sc, ok = enclosingScope(scopes, sc)
+	}
+	return 0, false
+}
+
+// enclosingScope returns the narrowest scope strictly containing sc.
+func enclosingScope(
+	scopes []syntaxapi.Result, sc syntaxapi.Result,
+) (syntaxapi.Result, bool) {
+	var best syntaxapi.Result
+	found := false
+	for _, c := range scopes {
+		if rangeKeyOf(c) == rangeKeyOf(sc) ||
+			!rangeWithin(sc.From, sc.To, c.From, c.To) {
+			continue
+		}
+		if !found || rangeWithin(c.From, c.To, best.From, best.To) {
+			best, found = c, true
+		}
+	}
+	return best, found
+}
+
+func widestScope(scopes []syntaxapi.Result) syntaxapi.Result {
+	var best syntaxapi.Result
+	found := false
+	for _, sc := range scopes {
+		if !found || rangeWithin(best.From, best.To, sc.From, sc.To) {
+			best, found = sc, true
+		}
+	}
+	return best
+}
+
+// dedupeDefs drops definition captures that repeat a range already
+// taken: a single declaration can match several locals.scm patterns
+// (python captures a method as both method and function) and the
+// duplicate would otherwise nest under itself.
+func dedupeDefs(defs []syntaxapi.Result) []syntaxapi.Result {
+	seen := make(map[rangeKey]bool, len(defs))
+	ret := defs[:0]
+	for _, d := range defs {
+		key := rangeKeyOf(d)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		ret = append(ret, d)
+	}
+	return ret
+}
+
+// capturePriority orders the capture kinds competing for one range,
+// most specific first, so dedupeDefs keeps the best description.
+func capturePriority(capture string) int {
+	switch capture {
+	case "local.definition.method":
+		return 0
+	case "local.definition.type":
+		return 1
+	case "local.definition.function":
+		return 2
+	case "local.definition.namespace":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func spanRange(a, b syntaxapi.Result) semanticapi.Range {
+	from, to := a.From, a.To
+	if coordBefore(b.From, from) {
+		from = b.From
+	}
+	if coordBefore(to, b.To) {
+		to = b.To
+	}
+	return semanticapi.Range{
+		Start: coordToPosition(from),
+		End:   coordToPosition(to),
+	}
+}
+
+func coordBefore(a, b term.Coordinates) bool {
+	if a.Y != b.Y {
+		return a.Y < b.Y
+	}
+	return a.X < b.X
+}
+
+func kindForCapture(capture string) semanticapi.SymbolKind {
+	switch capture {
+	case "local.definition.function":
+		return semanticapi.SymbolKindFunction
+	case "local.definition.method":
+		return semanticapi.SymbolKindMethod
+	case "local.definition.type":
+		return semanticapi.SymbolKindClass
+	case "local.definition.namespace":
+		return semanticapi.SymbolKindNamespace
+	default:
+		return semanticapi.SymbolKindVariable
+	}
 }
