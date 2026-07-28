@@ -116,6 +116,7 @@ func newBootstrapHandler(
 	}
 
 	if isBootstrapped(dataDir) {
+		migrateBootstrappedConfig(configPath)
 		client, releaseManager := newAPIClient(bh.storage, installBackupDir, rootCfg)
 		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {

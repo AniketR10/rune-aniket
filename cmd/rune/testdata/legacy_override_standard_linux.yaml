@@ -22,10 +22,6 @@
 # ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 # Rune user configuration (standard editor preset).
-
-# Marks this config as owning its full command.key_bindings list.
-config_version: 2
-
 editor:
   mode: standard
   auto_pair: true
@@ -58,6 +54,15 @@ command:
     "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
     "<a-s-c>": "echo {prompt}lsp<space>declaration<space>"
     "<a-g>": "lsp signature-help"
+    "<m-r>": ""
+    "<m-q>": ""
+    "<m-t>": ""
+    "<m-n>": ""
+    "<m-c>": ""
+    "<m-v>": ""
+    "<m-w>": ""
+    "<m-f>": ""
+    "<s-m-f>": ""
     "<ctrl-shift-->": "cursorhistory next"
     "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
@@ -94,77 +99,56 @@ command:
     "<a-]>": tabnext
     "<a-s-[>": "tabmove left"
     "<a-s-]>": "tabmove right"
+    "<a-s-h>": ""
     "<a-h>": "windowdefaultsplit h"
     "<a-v>": "windowdefaultsplit v"
+    "<c-m-h>": ""
+    "<c-m-v>": ""
     # Ctrl-Meta I/K visits Git changes; J/L visits diagnostics.
     "<c-m-i>": gitprevchange
     "<c-m-k>": gitnextchange
     "<c-m-j>": lspprevdiagnostic
     "<c-m-l>": lspnextdiagnostic
+    "<a-s-t>": ""
     "<c-a-h>": "lsp hover"
     "<c-s-a-h>": "echo {prompt}lsp<space>hover<space>"
     "<c-a-i>": "lsp implementation"
     "<c-s-a-i>": "echo {prompt}lsp<space>implementation<space>"
     "<c-a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
+    "<c-i>": ""
+    "<c-k>": ""
     "<s-m-r>": history
-    # Bindings shared with the other presets.
-    "<shift-tab>": "fexplorer"
-    "<m-,>": "config"
-    "<m-/>": "cheatsheet"
-    "<m-=>": "guifontsize increase"
-    "<m-->": "guifontsize decrease"
-    "<a-`>": "tabsearch"
-    "<s-m-backspace>": "windowresize reset"
-    "<s-m-+>": ["windowresize max width", "windowresize max height"]
-    "<s-m-->": ["windowresize min width", "windowresize min height"]
-    "<a-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
-    "<a-s>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"
-    "<a-s-e>": "lsp diagnostics"
-    "<a-r>": "lsp references"
-    "<a-s-r>": "echo {prompt}lsp<space>references<space>"
-    "<a-d>": "lsp definition"
-    "<a-s-d>": "echo {prompt}lsp<space>definition<space>"
-    "<a-b>": "lsp format"
-    "<c-space>": "lsp complete"
-    "<m-enter>": "terminalneworsplit"
-    "<s-m-enter>": "!"
-    "<m-`>": "workspacesearch"
-    "<a-1>": "tabfocus 1"
-    "<a-2>": "tabfocus 2"
-    "<a-3>": "tabfocus 3"
-    "<a-4>": "tabfocus 4"
-    "<a-5>": "tabfocus 5"
-    "<a-6>": "tabfocus 6"
-    "<a-7>": "tabfocus 7"
-    "<a-8>": "tabfocus 8"
-    "<a-9>": "tabfocus 9"
-    "<a-s-1>": "tabmove 1"
-    "<a-s-2>": "tabmove 2"
-    "<a-s-3>": "tabmove 3"
-    "<a-s-4>": "tabmove 4"
-    "<a-s-5>": "tabmove 5"
-    "<a-s-6>": "tabmove 6"
-    "<a-s-7>": "tabmove 7"
-    "<a-s-8>": "tabmove 8"
-    "<a-s-9>": "tabmove 9"
-    "<m-1>": "workspacefocus 1"
-    "<m-2>": "workspacefocus 2"
-    "<m-3>": "workspacefocus 3"
-    "<m-4>": "workspacefocus 4"
-    "<m-5>": "workspacefocus 5"
-    "<m-6>": "workspacefocus 6"
-    "<m-7>": "workspacefocus 7"
-    "<m-8>": "workspacefocus 8"
-    "<m-9>": "workspacefocus 9"
-    "<s-m-1>": "workspacemove 1"
-    "<s-m-2>": "workspacemove 2"
-    "<s-m-3>": "workspacemove 3"
-    "<s-m-4>": "workspacemove 4"
-    "<s-m-5>": "workspacemove 5"
-    "<s-m-6>": "workspacemove 6"
-    "<s-m-7>": "workspacemove 7"
-    "<s-m-8>": "workspacemove 8"
-    "<s-m-9>": "workspacemove 9"
+    "<c-a-m-i>": ""
+    "<c-a-m-j>": ""
+    "<c-a-m-k>": ""
+    "<c-a-m-l>": ""
+    "<c-a-j>": ""
+    "<c-a-l>": ""
+    "<c-s-a-j>": ""
+    "<c-s-a-l>": ""
+    "<c-s-m-i>": ""
+    "<c-s-m-j>": ""
+    "<c-s-m-k>": ""
+    "<c-s-m-l>": ""
+    "<m-left>": ""
+    "<m-right>": ""
+    "<m-down>": ""
+    "<m-up>": ""
+    "<s-m-left>": ""
+    "<s-m-right>": ""
+    "<s-m-down>": ""
+    "<s-m-up>": ""
+    "<alt-meta-h>": ""
+    "<a-s-left>": ""
+    "<a-s-right>": ""
+    "<m-h>": ""
+    "<m-j>": ""
+    "<m-k>": ""
+    "<m-l>": ""
+    "<s-m-h>": ""
+    "<s-m-j>": ""
+    "<s-m-k>": ""
+    "<s-m-l>": ""
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log
@@ -263,7 +247,7 @@ command:
 #   progress_bar: true
 
 # ---------------------------------------------------------------------------
-# Command prompt — additions to the active standard preset above
+# Command prompt — additions to the active standard overrides above
 #
 # The active block has already remapped `command.key` to <c-s-p>; you
 # can replace that here. Aliases layer on top of built-ins: a string

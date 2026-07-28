@@ -22,6 +22,10 @@
 # ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 # Rune user configuration (standard editor preset).
+
+# Marks this config as owning its full command.key_bindings list.
+config_version: 2
+
 editor:
   mode: standard
   auto_pair: true
