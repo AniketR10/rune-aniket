@@ -420,18 +420,19 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.Equal(t, 2000, cfg.consoleMaxHistory())
 }
 
-func TestRuneStarModalUsesHomeRowResizeBindings(t *testing.T) {
-	data := readRuneStar(t)
+func TestModalPresetUsesHomeRowResizeBindings(t *testing.T) {
+	base, err := decodeDefaultConfig(DefaultConfig{
+		src: string(readRuneStar(t)), modal: true, tui: false,
+	})
+	require.NoError(t, err)
 
-	var cfg ideConfig
-	require.NoError(t, loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
-		DefaultConfig{
-			src:   string(data),
-			modal: true,
-			tui:   false,
-		},
-		term.RingBell, term.ScheduleNextTick, ""))
+	overlay, err := os.ReadFile("../cmd/rune/preset_modal.yaml")
+	require.NoError(t, err)
+	raw, err := decodeOverlayConfigFile(
+		bytes.NewReader(overlay), "preset_modal.yaml", base)
+	require.NoError(t, err)
 
+	cfg := ideConfig{cfg: raw, errors: map[string]error{}}
 	mappings := cfg.commandKeyMappings()
 	for key, wantCmd := range map[string]string{
 		"<alt-meta-h>": "windowresize decrease width",
@@ -804,11 +805,11 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 	}{
 		{
 			name: "darwin",
-			file: "override_standard_darwin.yaml",
+			file: "preset_standard_darwin.yaml",
 		},
 		{
 			name: "linux",
-			file: "override_standard_linux.yaml",
+			file: "preset_standard_linux.yaml",
 			unbound: []string{
 				"<c-a-j>", "<c-a-l>",
 				"<c-s-a-j>", "<c-s-a-l>",
@@ -923,7 +924,7 @@ func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
 	}{
 		{
 			name:       "darwin",
-			file:       "override_standard_darwin.yaml",
+			file:       "preset_standard_darwin.yaml",
 			commandKey: "<s-m-p>",
 			bound: map[string]string{
 				"<m-s>":   "write",
@@ -935,7 +936,7 @@ func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
 		},
 		{
 			name:       "linux",
-			file:       "override_standard_linux.yaml",
+			file:       "preset_standard_linux.yaml",
 			commandKey: "<c-s-p>",
 			bound: map[string]string{
 				"<c-s>":   "write",
@@ -985,10 +986,10 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	overlay, err := os.ReadFile("../cmd/rune/override_standard_darwin.yaml")
+	overlay, err := os.ReadFile("../cmd/rune/preset_standard_darwin.yaml")
 	require.NoError(t, err)
 	cfg, err := decodeOverlayConfigFile(
-		bytes.NewReader(overlay), "override_standard_darwin.yaml", base)
+		bytes.NewReader(overlay), "preset_standard_darwin.yaml", base)
 	require.NoError(t, err)
 
 	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
@@ -1055,10 +1056,10 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	overlay, err := os.ReadFile("../cmd/rune/override_emacs.yaml")
+	overlay, err := os.ReadFile("../cmd/rune/preset_emacs.yaml")
 	require.NoError(t, err)
 	cfg, err := decodeOverlayConfigFile(
-		bytes.NewReader(overlay), "override_emacs.yaml", base)
+		bytes.NewReader(overlay), "preset_emacs.yaml", base)
 	require.NoError(t, err)
 
 	require.NoError(t, validateConfig(cfg),

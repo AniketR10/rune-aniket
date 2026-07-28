@@ -21,32 +21,11 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+//go:build linux
+
 package main
 
-import (
-	_ "embed"
-	"fmt"
-)
+import _ "embed"
 
-//go:embed override_modal.yaml
-var overrideModalYAML string
-
-//go:embed override_emacs.yaml
-var overrideEmacsYAML string
-
-// renderOverride returns the override-config file body for the given
-// editor choice. The modal choice enables vim mode everywhere; the
-// standard choice uses platform-native standard editor bindings;
-// the emacs choice uses an Emacs keymap. The deprecated "modeless" alias
-// resolves to the standard preset.
-func renderOverride(editor string) (string, error) {
-	switch editor {
-	case editorModal:
-		return overrideModalYAML, nil
-	case editorStandard, editorModeless:
-		return overrideStandardYAML, nil
-	case editorEmacs:
-		return overrideEmacsYAML, nil
-	}
-	return "", fmt.Errorf("unknown editor choice: %q", editor)
-}
+//go:embed preset_standard_linux.yaml
+var presetStandardYAML string

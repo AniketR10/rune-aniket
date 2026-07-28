@@ -21,11 +21,11 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//go:build linux
+//go:build darwin
 
 package main
 
 import _ "embed"
 
-//go:embed override_standard_linux.yaml
-var overrideStandardYAML string
+//go:embed preset_standard_darwin.yaml
+var presetStandardYAML string

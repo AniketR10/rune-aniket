@@ -2596,10 +2596,10 @@ func TestExEmacsLifecycleBindingsReachCommandLayerFromTerminal(t *testing.T) {
 		src: string(runeStar), modal: true, tui: false,
 	})
 	require.NoError(t, err)
-	overlay, err := os.ReadFile("../cmd/rune/override_emacs.yaml")
+	overlay, err := os.ReadFile("../cmd/rune/preset_emacs.yaml")
 	require.NoError(t, err)
 	cfg, err := decodeOverlayConfigFile(
-		bytes.NewReader(overlay), "override_emacs.yaml", base)
+		bytes.NewReader(overlay), "preset_emacs.yaml", base)
 	require.NoError(t, err)
 	mappings := (&ideConfig{cfg: cfg, errors: map[string]error{}}).commandKeyMappings()
 

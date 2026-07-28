@@ -1,13 +1,116 @@
-# Rune user configuration.
+# Rune user configuration (modal editor preset).
 #
-# Every property below is commented out except `log_level`, which keeps
-# this file syntactically non-empty. Uncomment what you want to change.
-# The shown values are Rune's built-in defaults; see the embedded
-# rune.star (bundled with the binary) for the full schema and run
-# `:config` from inside Rune to open this file again.
+# The active blocks below are the modal preset; everything else is
+# commented out. Uncomment what you want to change. The shown values
+# are Rune's built-in defaults; see the embedded rune.star (bundled
+# with the binary) for the full schema and run `:config` from inside
+# Rune to open this file again.
 
 log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log
+
+command:
+  key_bindings:
+    "<shift-tab>": "fexplorer"
+    "<m-r>": "history"
+    "<m-,>": "config"
+    "<m-/>": "cheatsheet"
+    "<m-q>": "quit"
+    "<m-=>": "guifontsize increase"
+    "<m-->": "guifontsize decrease"
+    "<m-t>": "tabnew"
+    "<alt-enter>": "echo {prompt}windowconverttab<space>"
+    "<a-w>": "tabclose"
+    "<a-l>": "tabnext"
+    "<a-h>": "tabprevious"
+    "<m-n>": "windownew"
+    "<m-c>": "clipboardcopy"
+    "<m-v>": "clipboardpaste"
+    "<a-`>": "tabsearch"
+    "<a-s-l>": "tabmove right"
+    "<a-s-h>": "tabmove left"
+    "<m-h>": "windowfocus left"
+    "<m-l>": "windowfocus right"
+    "<m-j>": "windowfocus down"
+    "<m-k>": "windowfocus up"
+    "<s-m-h>": "windowmove left"
+    "<s-m-l>": "windowmove right"
+    "<s-m-j>": "windowmove down"
+    "<s-m-k>": "windowmove up"
+    "<s-m-backspace>": "windowresize reset"
+    "<s-m-+>": ["windowresize max width", "windowresize max height"]
+    "<s-m-->": ["windowresize min width", "windowresize min height"]
+    "<alt-meta-h>": "windowresize decrease width"
+    "<alt-meta-j>": "windowresize decrease height"
+    "<alt-meta-k>": "windowresize increase height"
+    "<alt-meta-l>": "windowresize increase width"
+    "<m-w>": "windowclose"
+    "<c-m-h>": "windowdefaultsplit h"
+    "<c-m-v>": "windowdefaultsplit v"
+    "<s-m-f>": "windowtogglemaximize"
+    "<a-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
+    "<a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
+    "<a-s>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"
+    "<a-j>": "lspnextdiagnostic"
+    "<a-k>": "lspprevdiagnostic"
+    "<a-t>": "lsp hover"
+    "<a-s-t>": "echo {prompt}lsp<space>hover<space>"
+    "<a-s-e>": "lsp diagnostics"
+    "<m-f>": "lsp rename"
+    "<a-r>": "lsp references"
+    "<a-s-r>": "echo {prompt}lsp<space>references<space>"
+    "<a-d>": "lsp definition"
+    "<a-s-d>": "echo {prompt}lsp<space>definition<space>"
+    "<a-i>": "lsp implementation"
+    "<a-s-i>": "echo {prompt}lsp<space>implementation<space>"
+    "<c-o>": "cursorhistory prev"
+    "<c-i>": "cursorhistory next"
+    "<a-b>": "lsp format"
+    # on MacOS <c-space> is a shortcut. To disable it and enable this
+    # key binding, go to System Settings → Keyboard → Keyboard Shortcuts
+    # → Input Sources → uncheck both entries.
+    "<c-space>": "lsp complete"
+    "<a-s-j>": "gitnextchange"
+    "<a-s-k>": "gitprevchange"
+    "<m-enter>": "terminalneworsplit"
+    "<s-m-enter>": "!"
+    "<m-`>": "workspacesearch"
+    "<a-1>": "tabfocus 1"
+    "<a-2>": "tabfocus 2"
+    "<a-3>": "tabfocus 3"
+    "<a-4>": "tabfocus 4"
+    "<a-5>": "tabfocus 5"
+    "<a-6>": "tabfocus 6"
+    "<a-7>": "tabfocus 7"
+    "<a-8>": "tabfocus 8"
+    "<a-9>": "tabfocus 9"
+    "<a-s-1>": "tabmove 1"
+    "<a-s-2>": "tabmove 2"
+    "<a-s-3>": "tabmove 3"
+    "<a-s-4>": "tabmove 4"
+    "<a-s-5>": "tabmove 5"
+    "<a-s-6>": "tabmove 6"
+    "<a-s-7>": "tabmove 7"
+    "<a-s-8>": "tabmove 8"
+    "<a-s-9>": "tabmove 9"
+    "<m-1>": "workspacefocus 1"
+    "<m-2>": "workspacefocus 2"
+    "<m-3>": "workspacefocus 3"
+    "<m-4>": "workspacefocus 4"
+    "<m-5>": "workspacefocus 5"
+    "<m-6>": "workspacefocus 6"
+    "<m-7>": "workspacefocus 7"
+    "<m-8>": "workspacefocus 8"
+    "<m-9>": "workspacefocus 9"
+    "<s-m-1>": "workspacemove 1"
+    "<s-m-2>": "workspacemove 2"
+    "<s-m-3>": "workspacemove 3"
+    "<s-m-4>": "workspacemove 4"
+    "<s-m-5>": "workspacemove 5"
+    "<s-m-6>": "workspacemove 6"
+    "<s-m-7>": "workspacemove 7"
+    "<s-m-8>": "workspacemove 8"
+    "<s-m-9>": "workspacemove 9"
 
 # ---------------------------------------------------------------------------
 # GUI theme
@@ -124,12 +227,12 @@ log_level: info               # debug | info | warn | error
 #   progress_bar: true
 
 # ---------------------------------------------------------------------------
-# Command prompt
+# Command prompt — additions to the active modal bindings above
 #
 # `key` opens the command prompt; `history_key` toggles between command
 # list and history. Aliases layer on top of built-ins: a string value is
 # the substitution, a dict with `command` + `completer` adds completion.
-# Set a key_binding value to "" to unbind a built-in.
+# Set a key_binding value to "" to unbind one added by an extension.
 # ---------------------------------------------------------------------------
 # command:
 #   key:         ":"
@@ -148,11 +251,3 @@ log_level: info               # debug | info | warn | error
 #       completer: '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"'
 #     # Open this configuration file (already bound to <m-,>).
 #     conf: config
-#   key_bindings:
-#     "<m-,>":     config
-#     "<m-q>":     quit
-#     "<m-p>":     searchfile
-#     "<m-\\\\>":  searchtext
-#     "<m-enter>": terminalneworsplit
-#     "<a-j>":     lspnextdiagnostic
-#     "<a-k>":     lspprevdiagnostic

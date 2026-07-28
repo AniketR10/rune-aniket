@@ -47,28 +47,28 @@ func TestOptionToChoiceMapping(t *testing.T) {
 	}
 }
 
-// TestRenderOverride pins that the vim-mode choice maps to the modal
-// override, the standard-editor choice maps to the standard override
+// TestRenderPreset pins that the vim-mode choice maps to the modal
+// preset, the standard-editor choice maps to the standard preset
 // (which switches editor.mode to standard), the emacs choice maps to
-// the emacs override, the deprecated modeless alias resolves to the
-// standard override, and that an unknown choice is an error.
-func TestRenderOverride(t *testing.T) {
-	modal, err := renderOverride(editorModal)
+// the emacs preset, the deprecated modeless alias resolves to the
+// standard preset, and that an unknown choice is an error.
+func TestRenderPreset(t *testing.T) {
+	modal, err := renderPreset(editorModal)
 	require.NoError(t, err)
 	require.NotContains(t, modal, "mode: standard",
 		"vim mode must not switch the editor into standard")
 
-	std, err := renderOverride(editorStandard)
+	std, err := renderPreset(editorStandard)
 	require.NoError(t, err)
 	require.Contains(t, std, "mode: standard",
 		"the standard choice must switch the editor into standard")
 
-	deprecated, err := renderOverride(editorModeless)
+	deprecated, err := renderPreset(editorModeless)
 	require.NoError(t, err)
 	require.Equal(t, std, deprecated,
-		"the deprecated modeless alias must resolve to the standard override")
+		"the deprecated modeless alias must resolve to the standard preset")
 
-	ema, err := renderOverride(editorEmacs)
+	ema, err := renderPreset(editorEmacs)
 	require.NoError(t, err)
 	require.Contains(t, ema, "mode: emacs",
 		"the emacs choice must switch the editor into emacs")
@@ -93,7 +93,7 @@ func TestRenderOverride(t *testing.T) {
 		`"<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>`,
 		"the displaced function search binding must remain prompt-only")
 
-	_, err = renderOverride("bogus")
+	_, err = renderPreset("bogus")
 	require.Error(t, err)
 }
 
@@ -145,7 +145,7 @@ func TestShouldSwallowBootstrapEvent(t *testing.T) {
 		{"colon opens command prompt", keyEv(':', 0), true},
 
 		// Dangerous: default quit / close-window / close-tab
-		// bindings from rune.star and override_standard.yaml.
+		// bindings from the editor presets.
 		{"meta-q quit", keyEv('q', term.ModMeta), true},
 		{"meta-w windowclose", keyEv('w', term.ModMeta), true},
 		{"alt-w tabclose", keyEv('w', term.ModAlt), true},

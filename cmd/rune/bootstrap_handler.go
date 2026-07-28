@@ -419,8 +419,8 @@ func (b *bootstrapHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (b *bootstrapHandler) performSwap() error {
-	if err := b.writeOverrideConfig(); err != nil {
-		return fmt.Errorf("write bootstrap override: %w", err)
+	if err := b.writePresetConfig(); err != nil {
+		return fmt.Errorf("write bootstrap preset: %w", err)
 	}
 
 	b.configPath = filepath.Join(b.dataDir, configFilename)
@@ -455,14 +455,14 @@ func (b *bootstrapHandler) performSwap() error {
 	return errors.Join(setupErr, closeErr)
 }
 
-func (b *bootstrapHandler) writeOverrideConfig() error {
-	body, err := renderOverride(b.chosenEditor)
+func (b *bootstrapHandler) writePresetConfig() error {
+	body, err := renderPreset(b.chosenEditor)
 	if err != nil {
-		return fmt.Errorf("render override: %w", err)
+		return fmt.Errorf("render preset: %w", err)
 	}
 	path := filepath.Join(b.dataDir, configFilename)
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		return fmt.Errorf("write override config %q: %w", path, err)
+		return fmt.Errorf("write preset config %q: %w", path, err)
 	}
 	return nil
 }
@@ -648,8 +648,7 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 	if ev.Mod == 0 && ev.Ch == ':' {
 		return true
 	}
-	// Quit / close keybindings from rune.star and
-	// override_standard.yaml:
+	// Quit / close keybindings from the editor presets:
 	//   <m-q> quit
 	//   <m-w> windowclose, <a-w> tabclose, <c-w> tabclose
 	//   <m-s-w> / <s-m-w> windowclose (standard overrides)

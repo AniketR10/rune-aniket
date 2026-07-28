@@ -8,7 +8,7 @@
 # The Rune loader passes `tui` (bool) as a predeclared global; the script
 # branches on it below. The `mode` global is also exposed for backwards
 # compatibility but is no longer consulted here; editor mode is selected by
-# an override file written by the bootstrap flow.
+# the editor preset written to the user config by the bootstrap flow.
 
 # Box-drawing frame characters used by the terminal-specific overrides below.
 TUI_FRAME_CHARSET = {
@@ -299,9 +299,9 @@ config = {
     },
     "editor": {
         # Editor mode and exo settings are not configured here. The
-        # bootstrap flow writes an override file with the user's choice
+        # bootstrap flow writes an editor preset with the user's choice
         # ("modal", "standard", "emacs", or "exo" with a preset). Without an
-        # override, Rune defaults to modal as configured below.
+        # editor preset, Rune defaults to modal as configured below.
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
         # Auto-pair quotes, brackets, and braces while editing. Explicitly off
@@ -614,109 +614,10 @@ config = {
                 "extensionready rune-agent ? I need help",
             ],
         },
-        # Key bindings merge with the built-ins; set a value to "" to unbind.
-        "key_bindings": {
-            "<shift-tab>":    "fexplorer",
-            "<m-r>":          "history",
-            "<m-,>":          "config",
-            "<m-/>":          "cheatsheet",
-            "<m-q>":          "quit",
-            "<m-=>":          "guifontsize increase",
-            "<m-->":          "guifontsize decrease",
-            "<m-t>":          "tabnew",
-            "<alt-enter>":    "echo {prompt}windowconverttab<space>",
-            "<a-w>":          "tabclose",
-            "<a-l>":          "tabnext",
-            "<a-h>":          "tabprevious",
-            "<m-n>":          "windownew",
-            "<m-c>":          "clipboardcopy",
-            "<m-v>":          "clipboardpaste",
-            "<a-`>":          "tabsearch",
-            "<a-s-l>":        "tabmove right",
-            "<a-s-h>":        "tabmove left",
-            "<m-h>":          "windowfocus left",
-            "<m-l>":          "windowfocus right",
-            "<m-j>":          "windowfocus down",
-            "<m-k>":          "windowfocus up",
-            "<s-m-h>":        "windowmove left",
-            "<s-m-l>":        "windowmove right",
-            "<s-m-j>":        "windowmove down",
-            "<s-m-k>":        "windowmove up",
-            "<s-m-backspace>":"windowresize reset",
-            "<s-m-+>":        ["windowresize max width", "windowresize max height"],
-            "<s-m-->":        ["windowresize min width", "windowresize min height"],
-            "<alt-meta-h>":   "windowresize decrease width",
-            "<alt-meta-j>":   "windowresize decrease height",
-            "<alt-meta-k>":   "windowresize increase height",
-            "<alt-meta-l>":   "windowresize increase width",
-            "<m-w>":          "windowclose",
-            "<c-m-h>":        "windowdefaultsplit h",
-            "<c-m-v>":        "windowdefaultsplit v",
-            "<s-m-f>":        "windowtogglemaximize",
-            "<a-f>":          "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>",
-            "<a-v>":          "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
-            "<a-s>":          "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>",
-            "<a-j>":          "lspnextdiagnostic",
-            "<a-k>":          "lspprevdiagnostic",
-            "<a-t>":          "lsp hover",
-            "<a-s-t>":        "echo {prompt}lsp<space>hover<space>",
-            "<a-s-e>":        "lsp diagnostics",
-            "<m-f>":          "lsp rename",
-            "<a-r>":          "lsp references",
-            "<a-s-r>":        "echo {prompt}lsp<space>references<space>",
-            "<a-d>":          "lsp definition",
-            "<a-s-d>":        "echo {prompt}lsp<space>definition<space>",
-            "<a-i>":          "lsp implementation",
-            "<a-s-i>":        "echo {prompt}lsp<space>implementation<space>",
-            "<c-o>":          "cursorhistory prev",
-            "<c-i>":          "cursorhistory next",
-            "<a-b>":          "lsp format",
-            # on MacOS <c-space> is a shortcut. To disable it and enable this
-            # key binding, go to System Settings → Keyboard → Keyboard Shortcuts
-            # → Input Sources → uncheck both entries.
-            "<c-space>":      "lsp complete",
-            "<a-s-j>":        "gitnextchange",
-            "<a-s-k>":        "gitprevchange",
-            "<m-enter>":      "terminalneworsplit",
-            "<s-m-enter>":    "!",
-            "<m-`>":          "workspacesearch",
-            "<a-1>":          "tabfocus 1",
-            "<a-2>":          "tabfocus 2",
-            "<a-3>":          "tabfocus 3",
-            "<a-4>":          "tabfocus 4",
-            "<a-5>":          "tabfocus 5",
-            "<a-6>":          "tabfocus 6",
-            "<a-7>":          "tabfocus 7",
-            "<a-8>":          "tabfocus 8",
-            "<a-9>":          "tabfocus 9",
-            "<a-s-1>":        "tabmove 1",
-            "<a-s-2>":        "tabmove 2",
-            "<a-s-3>":        "tabmove 3",
-            "<a-s-4>":        "tabmove 4",
-            "<a-s-5>":        "tabmove 5",
-            "<a-s-6>":        "tabmove 6",
-            "<a-s-7>":        "tabmove 7",
-            "<a-s-8>":        "tabmove 8",
-            "<a-s-9>":        "tabmove 9",
-            "<m-1>":          "workspacefocus 1",
-            "<m-2>":          "workspacefocus 2",
-            "<m-3>":          "workspacefocus 3",
-            "<m-4>":          "workspacefocus 4",
-            "<m-5>":          "workspacefocus 5",
-            "<m-6>":          "workspacefocus 6",
-            "<m-7>":          "workspacefocus 7",
-            "<m-8>":          "workspacefocus 8",
-            "<m-9>":          "workspacefocus 9",
-            "<s-m-1>":        "workspacemove 1",
-            "<s-m-2>":        "workspacemove 2",
-            "<s-m-3>":        "workspacemove 3",
-            "<s-m-4>":        "workspacemove 4",
-            "<s-m-5>":        "workspacemove 5",
-            "<s-m-6>":        "workspacemove 6",
-            "<s-m-7>":        "workspacemove 7",
-            "<s-m-8>":        "workspacemove 8",
-            "<s-m-9>":        "workspacemove 9",
-        },
+        # Key bindings are owned entirely by the editor preset written to
+        # the user config (preset_modal.yaml, preset_standard_*.yaml,
+        # preset_emacs.yaml). Set a value to "" there to unbind.
+        "key_bindings": {},
         # Prompt colors.
         "element_attr":       attr(fg = "default", bg = "default", flags = ["dim"]),
         "manual_attr":        attr(fg = "default", bg = "default"),
@@ -880,41 +781,6 @@ config = {
 
 
 if tui:
-    tui_cmd_bindings = {
-        "<c-w>":          "tabclose",
-        "<c-l>":          "tabnext",
-        "<c-h>":          "tabprevious",
-        "<c-x><c-v>":     "clipboardpaste",
-        "<c-x><c-c>":     "clipboardcopy",
-        "<c-x><c-h>":     "windowfocus left",
-        "<c-x><c-l>":     "windowfocus right",
-        "<c-x><c-j>":     "windowfocus down",
-        "<c-x><c-k>":     "windowfocus up",
-        "<c-x><c-w>":     "windowclose",
-        "<c-x>h":         "windowdefaultsplit h",
-        "<c-x>v":         "windowdefaultsplit v",
-        "<c-j>":          "lspnextdiagnostic",
-        "<c-k>":          "lspprevdiagnostic",
-        "<c-x><c-f>":     "windowtogglemaximize",
-        "<c-x><c-t>":     "lsp hover",
-        "<c-x><c-e>":     "lsp references",
-        "<c-x><c-g>":     "lsp definition",
-        "<c-x><c-b>":     "lsp format",
-        "<c-x><c-p>":     "searchfile",
-        "<c-x><c-\\>":    "searchtext",
-        "<c-x><enter>":   "terminalneworsplit",
-        "gf":             "editfileoncursor",
-        "<c-x>1":         "workspacefocus 1",
-        "<c-x>2":         "workspacefocus 2",
-        "<c-x>3":         "workspacefocus 3",
-        "<c-x>4":         "workspacefocus 4",
-        "<c-x>5":         "workspacefocus 5",
-        "<c-x>6":         "workspacefocus 6",
-        "<c-x>7":         "workspacefocus 7",
-        "<c-x>8":         "workspacefocus 8",
-        "<c-x>9":         "workspacefocus 9",
-    }
-
     config = merge(config, {
         "default_attr": attr(fg = "default", bg = "#1e1e1e"),
             "log_path":  "~/.rune/debug.log",

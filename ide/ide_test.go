@@ -3563,26 +3563,25 @@ func (i protectedDirInfo) IsDir() bool        { return true }
 func (i protectedDirInfo) Sys() any           { return nil }
 
 // TestCommandPromptKeyBindingHintsIntegration renders the command
-// prompt with key hints resolved from a shipped rune.star default
+// prompt with key hints resolved from the shipped modal preset
 // binding. The <alt-enter> echo prefill must surface as a right-aligned
 // hint on the windowconverttab row.
 func TestCommandPromptKeyBindingHintsIntegration(t *testing.T) {
 	const echoKey = "<alt-enter>"
 
-	// pin the test to the shipped default: rune.star must keep binding
-	// <alt-enter> to the windowconverttab prompt prefill.
-	starCfg, err := decodeStarlarkConfig(starlarkConfigSource{
-		src:      readRuneStar(t),
-		filename: "rune.star",
-		params:   map[string]any{"mode": "modal", "tui": false},
-	})
+	// pin the test to the shipped default: the modal preset must keep
+	// binding <alt-enter> to the windowconverttab prompt prefill.
+	preset, err := os.ReadFile("../cmd/rune/preset_modal.yaml")
 	require.NoError(t, err)
-	starCmd, ok := starCfg["command"].(map[string]any)
-	require.True(t, ok, "rune.star: missing `command` section")
-	starBindings, ok := starCmd["key_bindings"].(map[string]any)
-	require.True(t, ok, "rune.star: missing `command.key_bindings`")
-	echoBody, ok := starBindings[echoKey].(string)
-	require.Truef(t, ok, "rune.star: missing %q key binding", echoKey)
+	presetCfg, err := decodeOverlayConfigFile(
+		bytes.NewReader(preset), "preset_modal.yaml", map[string]any{})
+	require.NoError(t, err)
+	presetCmd, ok := presetCfg["command"].(map[string]any)
+	require.True(t, ok, "preset_modal.yaml: missing `command` section")
+	presetBindings, ok := presetCmd["key_bindings"].(map[string]any)
+	require.True(t, ok, "preset_modal.yaml: missing `command.key_bindings`")
+	echoBody, ok := presetBindings[echoKey].(string)
+	require.Truef(t, ok, "preset_modal.yaml: missing %q key binding", echoKey)
 	require.Equal(t, "echo {prompt}windowconverttab<space>", echoBody)
 
 	cfg := defaultConfigWithWrap(false)

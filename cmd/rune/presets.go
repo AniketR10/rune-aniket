@@ -21,11 +21,32 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//go:build darwin
-
 package main
 
-import _ "embed"
+import (
+	_ "embed"
+	"fmt"
+)
 
-//go:embed override_standard_darwin.yaml
-var overrideStandardYAML string
+//go:embed preset_modal.yaml
+var presetModalYAML string
+
+//go:embed preset_emacs.yaml
+var presetEmacsYAML string
+
+// renderPreset returns the preset-config file body for the given
+// editor choice. The modal choice enables vim mode everywhere; the
+// standard choice uses platform-native standard editor bindings;
+// the emacs choice uses an Emacs keymap. The deprecated "modeless" alias
+// resolves to the standard preset.
+func renderPreset(editor string) (string, error) {
+	switch editor {
+	case editorModal:
+		return presetModalYAML, nil
+	case editorStandard, editorModeless:
+		return presetStandardYAML, nil
+	case editorEmacs:
+		return presetEmacsYAML, nil
+	}
+	return "", fmt.Errorf("unknown editor choice: %q", editor)
+}
