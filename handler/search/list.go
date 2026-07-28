@@ -173,13 +173,16 @@ func (l *List) Push(ctx context.Context) chan<- []byte {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// we want the cancel from outside to not cancel waitPushCtx
-	// because we use that for ensuring that no more data will be pushed
+	// waitPushCtx is a pure completion signal: it must complete only via
+	// cancelWait, which the consumer calls after flushing its buffered
+	// elements. Deriving it from the caller's ctx would let an outside
+	// cancel complete it transitively, unblocking a subsequent Push (the
+	// DrainList barrier) before the flush has landed.
 	var cancelWait func()
-	l.waitPushCtx, cancelWait = context.WithCancel(ctx)
+	l.waitPushCtx, cancelWait = context.WithCancel(context.Background())
 
-	// cancel from outside though should cancel the internal one
-	ctx, l.cancelPush = context.WithCancel(l.waitPushCtx)
+	// cancel from outside should cancel the consumer's ctx
+	ctx, l.cancelPush = context.WithCancel(ctx)
 
 	datachan := make(chan []byte)
 	quitChan := l.quitChan
@@ -702,13 +705,13 @@ func (l *List) drawMatchCounts(w term.Writer) {
 }
 
 func (l *List) asyncSearchLocked(ctx context.Context) {
-	// we want the cancel from outside to not cancel waitSearchCtx
-	// because we use that for ensuring that no more data will be pushed
+	// waitSearchCtx completes only via cancelWait once handleSearch has
+	// finished pushing matches; see the equivalent note in Push.
 	var cancelWait func()
-	l.waitSearchCtx, cancelWait = context.WithCancel(ctx)
+	l.waitSearchCtx, cancelWait = context.WithCancel(context.Background())
 
-	// cancel from outside though should cancel the internal one
-	ctx, l.cancelSearch = context.WithCancel(l.waitSearchCtx)
+	// cancel from outside should cancel the search's ctx
+	ctx, l.cancelSearch = context.WithCancel(ctx)
 
 	input := make([][]byte, len(l.input))
 	copy(input, l.input)
@@ -725,9 +728,9 @@ func (l *List) asyncSearchLocked(ctx context.Context) {
 
 func (l *List) syncSearchLocked(ctx context.Context) {
 	var cancelWait func()
-	l.waitSearchCtx, cancelWait = context.WithCancel(ctx)
+	l.waitSearchCtx, cancelWait = context.WithCancel(context.Background())
 
-	ctx, l.cancelSearch = context.WithCancel(l.waitSearchCtx)
+	ctx, l.cancelSearch = context.WithCancel(ctx)
 
 	input := make([][]byte, len(l.input))
 	copy(input, l.input)

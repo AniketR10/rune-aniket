@@ -356,6 +356,36 @@ func streamBatch(t *testing.T, l *List, items ...string) {
 	l.Wait()
 }
 
+// TestPushOuterCancelDoesNotUnblockDrainEarly guards the Push/DrainList
+// barrier: waitPushCtx must complete only after the consumer goroutine
+// has flushed its buffered elements, even when the ctx passed to Push is
+// canceled right after the last send (as the finder's readCommand does
+// via its deferred cancelScan). If waitPushCtx were derived from the
+// caller's ctx, the outer cancel would unblock a subsequent Push before
+// the flush, and buffered elements would be observed late.
+func TestPushOuterCancelDoesNotUnblockDrainEarly(t *testing.T) {
+	const total = 50
+	for iter := 0; iter < 100; iter++ {
+		l := NewList(ListConfig{Interrupter: term.NopInterrupter()})
+		ctx, cancel := context.WithCancel(context.Background())
+		ch := l.Push(ctx)
+		for i := 0; i < total; i++ {
+			ch <- []byte(strconv.Itoa(i))
+		}
+		close(ch)
+		cancel()
+
+		// Drain exactly like finder.DrainList: a fresh Push must wait for
+		// the prior consumer to exit (and flush) before returning.
+		drain := l.Push(context.Background())
+		close(drain)
+
+		count := l.TotalCount()
+		require.NoError(t, l.Close())
+		require.Equal(t, total, count, "iteration %d", iter)
+	}
+}
+
 func focusIdx(t *testing.T, l *List) int {
 	t.Helper()
 	m, ok := l.Focus()
