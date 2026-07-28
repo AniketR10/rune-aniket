@@ -112,6 +112,8 @@ editor:
         search_attr:
             bg: red
             fg: "#f0f0f0"
+        message_bar:
+            layout: '▓▒░ {{ .Message | bg "navy" | fg "silver" | italic }} '
         debug: true
         wrap: true
     standard:
@@ -132,6 +134,8 @@ editor:
         bar_attr:
             bg: teal
             fg: white
+        message_bar:
+            layout: ' {{ .Message | bg "red" | fg "white" | bold }} █▓▒░'
         search_attr:
             bg: maroon
             fg: "#f7f7f7"
@@ -1033,6 +1037,22 @@ func TestConfigSetting(t *testing.T) {
 			Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
 		},
 	}, cfg.editorComments())
+	assert.Equal(t, handler.LessMessageLayout{
+		Template: " %s █▓▒░",
+		Attributes: term.Attributes{
+			Bg:    term.ColorRed,
+			Fg:    term.ColorWhite,
+			Attrs: term.AttrBold,
+		},
+	}, cfg.emacsMessageBarLayout())
+	assert.Equal(t, handler.LessMessageLayout{
+		Template: "▓▒░ %s ",
+		Attributes: term.Attributes{
+			Bg:    term.ColorNavy,
+			Fg:    term.ColorSilver,
+			Attrs: term.AttrItalic,
+		},
+	}, cfg.modalMessageBarLayout())
 	expectedLSPIcons := idelsp.IconSet{
 		idelsp.IconDiagnosticError:       "E",
 		idelsp.IconDiagnosticWarning:     "W",

@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/text"
 )
 
@@ -37,6 +38,7 @@ import (
 type viConfig struct {
 	attr               term.Attributes
 	resAttr            term.Attributes
+	messageBarLayout   handler.LessMessageLayout
 	comments           text.CommentConfig
 	clipboard          clipboard.Register
 	tabspaces          int
@@ -138,6 +140,13 @@ func WithRuler(ruler int) Option {
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithMessageBarLayout configures the layout of the superimposed message bar.
+func WithMessageBarLayout(layout handler.LessMessageLayout) Option {
+	return func(cfg *viConfig) {
+		cfg.messageBarLayout = layout
 	}
 }
 

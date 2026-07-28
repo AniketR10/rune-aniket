@@ -121,6 +121,7 @@ func (h *emacsHandler) Init(
 		NoBar:              !h.cfg.commandBar,
 		SuperimposeMessage: true,
 		ResAttr:            h.cfg.resAttr,
+		MessageLayout:      h.cfg.messageBarLayout,
 		Attributes:         h.cfg.attr,
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
@@ -542,12 +543,23 @@ func (h *emacsHandler) renderPrompt() {
 	h.less.SetMessage("%s", h.minibuffer.prompt())
 }
 
+func (h *emacsHandler) setTransientMode(mode string) {
+	attr := h.cfg.barAttr
+	if !h.cfg.barAttrSet {
+		attr = h.cfg.attr
+	}
+	h.statusBar.SetStatus(mode, attr)
+}
+
 // startGotoLine opens the go-to-line prompt (M-g g). On submit it moves point
 // to the given one-based line, clamped to the buffer; a blank or malformed
 // entry is ignored. The echo area is cleared when the prompt closes.
 func (h *emacsHandler) startGotoLine() {
 	h.minibuffer.start("Goto line: ", func(text string) {
-		defer h.less.SetMessage("")
+		defer func() {
+			h.less.SetMessage("")
+			h.setTransientMode("")
+		}()
 		text = strings.TrimSpace(text)
 		if text == "" {
 			return
@@ -561,7 +573,9 @@ func (h *emacsHandler) startGotoLine() {
 		h.SetCursorAtScroll(term.Coordinates{Y: line - 1, X: 0})
 	}, func() {
 		h.less.SetMessage("")
+		h.setTransientMode("")
 	})
+	h.setTransientMode("GOTO")
 	h.renderPrompt()
 }
 
@@ -671,6 +685,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			return false, true
 		}
 		// Any other key aborts the prefix; C-g is the explicit abort.
+		h.setTransientMode("")
 		return false, true
 	}
 
@@ -694,6 +709,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		count, raw := h.prefix.value(), h.prefix.rawOnly()
 		h.prefix = prefixState{}
 		h.less.SetMessage("")
+		h.setTransientMode("")
 		// The whole counted command is one undo group.
 		h.closeUndoRun()
 		h.buf.MarkStartUndo()
@@ -854,6 +870,7 @@ func (h *emacsHandler) dispatchKey(
 				// M-g: prefix for the goto-map. Await the next key
 				// (currently only M-g g / go-to-line).
 				h.pendingGoto = true
+				h.setTransientMode("GOTO")
 				handled = true
 			case '%':
 				// M-%: query-replace.

@@ -59,6 +59,17 @@ log_level: info               # debug | info | warn | error
 #     foreground_error_attr:  {fg: yellow}
 
 # ---------------------------------------------------------------------------
+# Editor message bar (search prompts and echoed messages)
+#
+# `layout` is a Go text/template string with a single Message component and
+# the same pipe operators as the status bar.
+# ---------------------------------------------------------------------------
+# editor:
+#   modal:
+#     message_bar:
+#       layout: '░▒▓█ {{ .Message | fg "white" }} '
+
+# ---------------------------------------------------------------------------
 # Auxiliary bar (left of each editor pane: line numbers, git, folds, icons)
 # ---------------------------------------------------------------------------
 # editor:

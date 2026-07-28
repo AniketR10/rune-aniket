@@ -33,6 +33,7 @@ import (
 func (h *emacsHandler) startZap(count int) bool {
 	h.pendingZap = true
 	h.zapCount = count
+	h.setTransientMode("ZAP")
 	// The whole zap is one command: reading the target character must not
 	// break a kill-accumulation chain ending at the M-z keystroke.
 	h.killedNow = h.lastKill
@@ -45,6 +46,7 @@ func (h *emacsHandler) startZap(count int) bool {
 // occurrence of the character.
 func (h *emacsHandler) handleZapKey(ev term.Event) {
 	h.pendingZap = false
+	h.setTransientMode("")
 	if ev.Type != term.EventKey || (ev.Mod == term.ModCtrl && ev.Ch == 'g') {
 		h.less.SetMessage("")
 		return

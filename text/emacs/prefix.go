@@ -116,6 +116,7 @@ func (h *emacsHandler) startPrefixArg(ev term.Event) bool {
 		return false
 	}
 	h.renderPrefixArg()
+	h.setTransientMode("ARG")
 	return true
 }
 
@@ -130,6 +131,7 @@ func (h *emacsHandler) collectPrefixKey(ev term.Event) bool {
 	case ev.Mod == term.ModCtrl && ev.Ch == 'g':
 		h.prefix = prefixState{}
 		h.less.SetMessage("Quit")
+		h.setTransientMode("")
 		return true
 	case ev.Mod == term.ModCtrl && ev.Ch == 'u':
 		if h.prefix.hasDigits || h.prefix.neg {

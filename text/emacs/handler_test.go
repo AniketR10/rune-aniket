@@ -81,6 +81,16 @@ type testMacroPlayer struct {
 	playing bool
 }
 
+type testStatusBar struct {
+	status string
+	attrs  term.Attributes
+}
+
+func (b *testStatusBar) SetStatus(status string, attrs term.Attributes) {
+	b.status = status
+	b.attrs = attrs
+}
+
 type testMacroPlay struct {
 	registerID string
 	count      int
@@ -1522,6 +1532,78 @@ func TestEmacsKeyboardQuit(t *testing.T) {
 	_, ok = h.Selection()
 	assert.False(t, ok)
 	assert.Empty(t, markLocations())
+}
+
+func TestEmacsTransientModesUpdateStatusBar(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		start    []term.Event
+		wantMode string
+		finish   []term.Event
+	}{
+		{
+			name:     "incremental search",
+			content:  "alpha beta",
+			start:    []term.Event{ctrl('s')},
+			wantMode: "ISEARCH",
+			finish:   []term.Event{key(term.KeyEnter)},
+		},
+		{
+			name:     "query replace",
+			content:  "alpha alpha",
+			start:    []term.Event{alt('%')},
+			wantMode: "QUERY",
+			finish:   []term.Event{ctrl('g')},
+		},
+		{
+			name:     "goto prefix",
+			content:  "one\ntwo",
+			start:    []term.Event{alt('g')},
+			wantMode: "GOTO",
+			finish:   []term.Event{char('x')},
+		},
+		{
+			name:     "goto prompt",
+			content:  "one\ntwo",
+			start:    []term.Event{alt('g'), char('g')},
+			wantMode: "GOTO",
+			finish:   []term.Event{ctrl('g')},
+		},
+		{
+			name:     "zap",
+			content:  "alpha beta",
+			start:    []term.Event{alt('z')},
+			wantMode: "ZAP",
+			finish:   []term.Event{ctrl('g')},
+		},
+		{
+			name:     "prefix argument",
+			content:  "alpha beta",
+			start:    []term.Event{ctrl('u')},
+			wantMode: "ARG",
+			finish:   []term.Event{ctrl('g')},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newEmacsHandler(t, tt.content)
+			root := h.(*emacsHandler)
+			bar := new(testStatusBar)
+			root.setStatusBar(bar)
+
+			for _, ev := range tt.start {
+				require.True(t, runEvent(h, ev))
+			}
+			require.Equal(t, tt.wantMode, bar.status)
+
+			for _, ev := range tt.finish {
+				require.True(t, runEvent(h, ev))
+			}
+			require.Empty(t, bar.status)
+		})
+	}
 }
 
 func TestPasteFromClipboardHistory(t *testing.T) {

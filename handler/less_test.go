@@ -170,6 +170,493 @@ hello world. Leremei
 	comptest.TestComponent(t, b, w, tests)
 }
 
+// TestLessDrawConfiguredMessageLayout exercises the message bar across the
+// layout configuration space and the message/search input surface. Each step
+// applies a message before feeding its input sequence, so the table also
+// covers clearing and re-setting the message mid-sequence.
+func TestLessDrawConfiguredMessageLayout(t *testing.T) {
+	type step struct {
+		message  string
+		input    string
+		expected string
+	}
+	tests := []struct {
+		name    string
+		layout  string
+		config  LessConfig
+		content string
+		width   int
+		height  int
+		steps   []step
+	}{
+		{
+			name:    "unconfigured layout superimposed",
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐             QUERY"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "styled layout superimposed",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "I-search: fo", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐ I-search: fo █▓▒░"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "styled layout permanent bar",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "no bar suppresses the message",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{NoBar: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "message wider than the viewport",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "supercalifragilistic", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐upercalifragilisti"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "wide runes in the message",
+			layout:  `░▒▓█ {{ .Message | bg "gray" | fg "white" | bold }} `,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "界界界", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐      ░▒▓█ 界 界 界  "},
+				{message: "a界b", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        ░▒▓█ a界 b "},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "tabs and nulls in the message",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "a\tb", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐           a b█▓▒░"},
+				{message: "a\x00b", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐           a b█▓▒░"},
+				{message: "\t", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐              █▓▒░"},
+			},
+		},
+		{
+			name:    "message shares the command bar with the search prompt",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "QUERY", input: "/", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"/▐        QUERY █▓▒░"},
+				{message: "QUERY", input: "XX", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"/XX▐      QUERY █▓▒░"},
+				{message: "QUERY", input: "<enter>", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "QUERY", input: "n", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "QUERY", input: "/", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"/▐        QUERY █▓▒░"},
+				{message: "QUERY", input: "<esc>", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐        QUERY █▓▒░"},
+			},
+		},
+		{
+			name:    "search prompt without a message",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "", input: "?", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"?▐                  "},
+				{message: "", input: "XX", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"?XX▐                "},
+				{message: "", input: "<backspace>", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"?X▐                 "},
+				{message: "", input: "<enter>", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "layout without decoration",
+			layout:  `{{ .Message }}`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐             QUERY"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "layout with plain decoration",
+			layout:  `[{{ .Message }}]`,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAXXBBBBB\nCCCCCDDDDD\nEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "QUERY", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐           [QUERY]"},
+				{message: "", input: "", expected: "AAAXXBBBBB          \n" +
+					"CCCCCDDDDD          \n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "wrapped content under a styled message",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{Wrap: true, SuperimposeMessage: true},
+			content: "AAAXXBBBBBCCCCCDDDDDEEEEEFFFFF\nGGGGGHHHHH",
+			width:   20,
+			height:  5,
+			steps: []step{
+				{message: "QUERY", input: "", expected: "AAAXXBBBBBCCCCCDDDDD\n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"                    \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "QUERY", input: "j", expected: "AAAXXBBBBBCCCCCDDDDD\n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"                    \n" +
+					" ▐        QUERY █▓▒░"},
+				{message: "", input: "", expected: "AAAXXBBBBBCCCCCDDDDD\n" +
+					"EEEEEFFFFF          \n" +
+					"GGGGGHHHHH          \n" +
+					"                    \n" +
+					" ▐                  "},
+			},
+		},
+		{
+			name:    "styled message pinned to the top row of a wrapped command bar",
+			layout:  `░▒▓█ {{ .Message | bg "gray" | fg "white" }} `,
+			config:  LessConfig{Wrap: true, SuperimposeMessage: true},
+			content: "AAAA\nBBBB\nCCCC\nDDDD\nEEEE\nFFFF",
+			width:   24,
+			height:  8,
+			steps: []step{
+				{message: "QUERY", input: "/", expected: "AAAA                    \n" +
+					"BBBB                    \n" +
+					"CCCC                    \n" +
+					"DDDD                    \n" +
+					"EEEE                    \n" +
+					"FFFF                    \n" +
+					"                        \n" +
+					"/▐           ░▒▓█ QUERY "},
+				{message: "QUERY", input: "supercalifragilisticexpia", expected: "AAAA                    \n" +
+					"BBBB                    \n" +
+					"CCCC                    \n" +
+					"DDDD                    \n" +
+					"EEEE                    \n" +
+					"FFFF                    \n" +
+					"/supercalifra░▒▓█ QUERY \n" +
+					"gilisticexpia           "},
+				{message: "QUERY", input: "lidociousandthensomemore", expected: "AAAA                    \n" +
+					"BBBB                    \n" +
+					"CCCC                    \n" +
+					"DDDD                    \n" +
+					"EEEE                    \n" +
+					"/supercalifra░▒▓█ QUERY \n" +
+					"gilisticexpia           \n" +
+					"lidociousandt           "},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := tt.config
+			if tt.layout != "" {
+				layout, err := ParseLessMessageLayout(tt.layout)
+				require.NoError(t, err)
+				cfg.MessageLayout = layout
+			}
+			b := NewLess(cfg)
+			b.Buffer().WriteString(tt.content)
+			b.Resize(tt.width, tt.height)
+
+			writer := term.NewStringWriter(tt.width, tt.height)
+			for _, s := range tt.steps {
+				b.SetMessage("%s", s.message)
+				handlertest.RunHandlerSequenceWriter(t, writer, b, tt.width, tt.height,
+					[]handlertest.SequenceTestCase{{InputSequence: s.input, Expected: s.expected}})
+			}
+		})
+	}
+}
+
+// TestLessMessageLayoutAttributes covers the styling half of the layout, which
+// the rendered strings cannot express.
+func TestLessMessageLayoutAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		layout   string
+		config   LessConfig
+		message  string
+		column   int
+		wantAttr term.Attributes
+	}{
+		{
+			name:    "styled message cell",
+			layout:  ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:  LessConfig{SuperimposeMessage: true},
+			message: "QUERY",
+			column:  10,
+			wantAttr: term.Attributes{
+				Bg: term.ColorRed, Fg: term.ColorWhite, Attrs: term.AttrBold,
+			},
+		},
+		{
+			name:     "cell left of the message keeps the scroll attributes",
+			layout:   ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			config:   LessConfig{SuperimposeMessage: true},
+			message:  "QUERY",
+			column:   0,
+			wantAttr: term.Attributes{},
+		},
+		{
+			name:     "unconfigured layout falls back to the bar attributes",
+			config:   LessConfig{BarAttr: term.Attributes{Bg: term.ColorBlue, Fg: term.ColorWhite}},
+			message:  "QUERY",
+			column:   15,
+			wantAttr: term.Attributes{Bg: term.ColorBlue, Fg: term.ColorWhite},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := tt.config
+			if tt.layout != "" {
+				layout, err := ParseLessMessageLayout(tt.layout)
+				require.NoError(t, err)
+				cfg.MessageLayout = layout
+			}
+			b := NewLess(cfg)
+			b.Resize(20, 2)
+			b.SetMessage("%s", tt.message)
+
+			w := term.NewStringWriter(20, 2)
+			b.Draw(w)
+			require.NoError(t, w.Flush())
+
+			got := w.Cells()[20+tt.column]
+			require.Equal(t, tt.wantAttr.Bg, got.Bg)
+			require.Equal(t, tt.wantAttr.Fg, got.Fg)
+			require.Equal(t, tt.wantAttr.Attrs, got.Attrs)
+		})
+	}
+}
+
+func TestParseLessMessageLayout(t *testing.T) {
+	tests := []struct {
+		name       string
+		layout     string
+		want       LessMessageLayout
+		wantErrSub string
+	}{
+		{
+			name:   "message with styling",
+			layout: ` {{ .Message | bg "red" | fg "white" | bold }} █▓▒░`,
+			want: LessMessageLayout{
+				Template: " %s █▓▒░",
+				Attributes: term.Attributes{
+					Bg:    term.ColorRed,
+					Fg:    term.ColorWhite,
+					Attrs: term.AttrBold,
+				},
+			},
+		},
+		{
+			name:       "unknown component",
+			layout:     `{{ .Status }}`,
+			wantErrSub: `unknown less message bar component: "Status"`,
+		},
+		{
+			name:       "missing message",
+			layout:     `literal only`,
+			wantErrSub: "less message bar layout must contain .Message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseLessMessageLayout(tt.layout)
+			if tt.wantErrSub != "" {
+				require.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestLessDrawNoBarWrap(t *testing.T) {
 	b := NewLess(LessConfig{Wrap: true, NoBar: true})
 	b.Resize(20, 4)

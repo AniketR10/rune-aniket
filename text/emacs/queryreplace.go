@@ -45,19 +45,23 @@ type queryReplaceState struct {
 // startQueryReplace begins M-%: it reads the search string, then the
 // replacement string, then enters the decision loop.
 func (h *emacsHandler) startQueryReplace() bool {
+	h.setTransientMode("QUERY")
 	h.minibuffer.start("Query replace: ", func(search string) {
 		if search == "" {
 			h.less.SetMessage("")
+			h.setTransientMode("")
 			return
 		}
 		h.minibuffer.start("Query replace "+search+" with: ", func(replacement string) {
 			h.beginQueryReplaceLoop(search, replacement)
 		}, func() {
 			h.less.SetMessage("")
+			h.setTransientMode("")
 		})
 		h.renderPrompt()
 	}, func() {
 		h.less.SetMessage("")
+		h.setTransientMode("")
 	})
 	h.renderPrompt()
 	return true
@@ -152,6 +156,7 @@ func (h *emacsHandler) finishQueryReplace(msg string) {
 	h.cursor.Unselect()
 	h.cursor.Search("")
 	h.less.SetMessage("%s", msg)
+	h.setTransientMode("")
 }
 
 // renderQueryReplace shows the y/n/!/q prompt for the pending match.

@@ -281,7 +281,7 @@ diff_buf_adjust(win_
 	})
 }
 
-func TestIncrementalSearchUsesStatusBarAcrossEditorChrome(t *testing.T) {
+func TestIncrementalSearchSplitsMessageAndModeAcrossEditorChrome(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
@@ -294,28 +294,28 @@ func TestIncrementalSearchUsesStatusBarAcrossEditorChrome(t *testing.T) {
 				{InputSequence: "<ctrl-s>", Expected: "  1 ▐oo x foo             \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
-					"  3                       \n" +
-					"I-search:                 "},
+					"  3             I-search: \n" +
+					"ISEARCH                   "},
 				{InputSequence: "foo", Expected: "  1 foo▐x foo             \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
-					"  3                       \n" +
-					"I-search: foo             "},
+					"  3          I-search: foo\n" +
+					"ISEARCH                   "},
 				{InputSequence: "<ctrl-s>", Expected: "  1 foo x foo▐            \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
-					"  3                       \n" +
-					"I-search: foo             "},
+					"  3          I-search: foo\n" +
+					"ISEARCH                   "},
 				{InputSequence: "z", Expected: "  1 ▐oo x foo             \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
-					"  3                       \n" +
-					"Failing I-search: fooz    "},
+					"  3 Failing I-search: fooz\n" +
+					"ISEARCH                   "},
 				{InputSequence: "<backspace>", Expected: "  1 foo▐x foo             \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
-					"  3                       \n" +
-					"I-search: foo             "},
+					"  3          I-search: foo\n" +
+					"ISEARCH                   "},
 				{InputSequence: "<enter>", Expected: "  1 foo▐x foo             \n" +
 					"  1 界  foo                \n" +
 					"  2 last                  \n" +
@@ -330,38 +330,38 @@ func TestIncrementalSearchUsesStatusBarAcrossEditorChrome(t *testing.T) {
 				{InputSequence: "<ctrl-s>界", Expected: "  1 界 ▐foo bar            \n" +
 					"  1 foo bar 界             \n" +
 					"  2 end                   \n" +
-					"  3                       \n" +
-					"I-search: 界               "},
+					"  3           I-search: 界 \n" +
+					"ISEARCH                   "},
 				{InputSequence: "<ctrl-s>", Expected: "  1 界  foo bar            \n" +
 					"  2 foo bar 界 ▐           \n" +
 					"  1 end                   \n" +
-					"  2                       \n" +
-					"I-search: 界               "},
+					"  2           I-search: 界 \n" +
+					"ISEARCH                   "},
 				{InputSequence: "<ctrl-r>", Expected: "  1 ▐  foo bar            \n" +
 					"  1 foo bar 界             \n" +
 					"  2 end                   \n" +
-					"  3                       \n" +
-					"I-search backward: 界      "},
+					"  3  I-search backward: 界 \n" +
+					"ISEARCH                   "},
 				{InputSequence: "<backspace>", Expected: "  1 ▐  foo bar            \n" +
 					"  1 foo bar 界             \n" +
 					"  2 end                   \n" +
-					"  3                       \n" +
-					"I-search backward:        "},
+					"  3    I-search backward: \n" +
+					"ISEARCH                   "},
 				{InputSequence: "foo<space>bar", Expected: "  1 界  foo bar            \n" +
 					"  2 ▐oo bar 界             \n" +
-					"  1 end                   \n" +
-					"  2                       \n" +
-					"I-search backward: foo bar"},
+					"  1 I-search backward: foo\n" +
+					"  2  bar                  \n" +
+					"ISEARCH                   "},
 				{InputSequence: "<ctrl-s>", Expected: "  1 界  foo bar▐           \n" +
 					"  1 foo bar 界             \n" +
 					"  2 end                   \n" +
-					"  3                       \n" +
-					"I-search: foo bar         "},
+					"  3      I-search: foo bar\n" +
+					"ISEARCH                   "},
 				{InputSequence: "q", Expected: "  1 ▐  foo bar            \n" +
 					"  1 foo bar 界             \n" +
-					"  2 end                   \n" +
-					"  3                       \n" +
-					"Failing I-search: foo barq"},
+					"  2 Failing I-search: foo \n" +
+					"  3 barq                  \n" +
+					"ISEARCH                   "},
 				{InputSequence: "<ctrl-g>", Expected: "  1 ▐  foo bar            \n" +
 					"  1 foo bar 界             \n" +
 					"  2 end                   \n" +
@@ -369,11 +369,316 @@ func TestIncrementalSearchUsesStatusBarAcrossEditorChrome(t *testing.T) {
 					"                          "},
 			},
 		},
-	}
+		{
+			name:    "tabs and nulls in the buffer",
+			content: "a\tb foo\n\x00foo\x00\nfoo\tbar",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>foo", Expected: "  1 a    b foo▐           \n" +
+					"  1  foo                  \n" +
+					"  2 foo    bar            \n" +
+					"  3          I-search: foo\n" +
+					"ISEARCH                   "},
+				{InputSequence: "<ctrl-s>", Expected: "  1 a    b foo            \n" +
+					"  2  foo▐                 \n" +
+					"  1 foo    bar            \n" +
+					"  2          I-search: foo\n" +
+					"ISEARCH                   "},
+				{InputSequence: "<ctrl-s>", Expected: "  2 a    b foo            \n" +
+					"  1  foo                  \n" +
+					"  3 foo   ▐bar            \n" +
+					"  1          I-search: foo\n" +
+					"ISEARCH                   "},
+				{InputSequence: "<enter>", Expected: "  2 a    b foo            \n" +
+					"  1  foo                  \n" +
+					"  3 foo   ▐bar            \n" +
+					"  1                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "wide runes and tabs interleaved",
+			content: "界\t界 foo\n\t界界\nfoo",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>界界", Expected: "  1 界     界  foo          \n" +
+					"  2     界 界 ▐             \n" +
+					"  1 foo                   \n" +
+					"  2         I-search: 界 界 \n" +
+					"ISEARCH                   "},
+				{InputSequence: "<backspace>", Expected: "  1 界    ▐界  foo          \n" +
+					"  1     界 界               \n" +
+					"  2 foo                   \n" +
+					"  3           I-search: 界 \n" +
+					"ISEARCH                   "},
+				{InputSequence: "<ctrl-g>", Expected: "  1 ▐     界  foo          \n" +
+					"  1     界 界               \n" +
+					"  2 foo                   \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "empty buffer",
+			content: "",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>", Expected: "  1 ▐                     \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3             I-search: \n" +
+					"ISEARCH                   "},
+				{InputSequence: "foo", Expected: "  1 ▐                     \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3  Failing I-search: foo\n" +
+					"ISEARCH                   "},
+				{InputSequence: "<ctrl-g>", Expected: "  1 ▐                     \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "control keys inside the query",
+			content: "a\tb\nab\nend",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>", Expected: "  1 ▐    b                \n" +
+					"  1 ab                    \n" +
+					"  2 end                   \n" +
+					"  3             I-search: \n" +
+					"ISEARCH                   "},
+				{InputSequence: "a", Expected: "  1 a   ▐b                \n" +
+					"  1 ab                    \n" +
+					"  2 end                   \n" +
+					"  3            I-search: a\n" +
+					"ISEARCH                   "},
+				{InputSequence: "<tab>", Expected: "  1 a       ▐b            \n" +
+					"  1 ab                    \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"                          "},
+				{InputSequence: "b", Expected: "  1 a    b   ▐b           \n" +
+					"  1 ab                    \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"                          "},
+				{InputSequence: "<ctrl-g>", Expected: "  1 a    b   ▐b           \n" +
+					"  1 ab                    \n" +
+					"  2 end                   \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "query longer than the editor width",
+			content: "supercalifragilistic\nother",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-s>supercalifragilistic", Expected: "  1 supercalifragilistic▐ \n" +
+					"  1 other                 \n" +
+					"  2 I-search: supercalifra\n" +
+					"  3 gilistic              \n" +
+					"ISEARCH                   "},
+				{InputSequence: "<backspace>", Expected: "  1 supercalifragilisti▐  \n" +
+					"  1 other                 \n" +
+					"  2 I-search: supercalifra\n" +
+					"  3 gilisti               \n" +
+					"ISEARCH                   "},
+				{InputSequence: "<enter>", Expected: "  1 supercalifragilisti▐  \n" +
+					"  1 other                 \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newStatusIsearchIntegrationHandler(t, tt.content)
+			handlertest.RunHandlerSequence(t, h, 26, 5, tt.cases)
+		})
+	}
+}
+
+// TestTransientModesSplitMessageAndModeAcrossEditorChrome covers the remaining
+// transient states. M-% is not expressible as a handlertest input sequence, so
+// scenarios that need it seed the state through prelude events.
+func TestTransientModesSplitMessageAndModeAcrossEditorChrome(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		prelude []term.Event
+		cases   []handlertest.SequenceTestCase
+	}{
+		{
+			name:    "query replace decision loop",
+			content: "foo bar\n界 foo\nfoo qux",
+			prelude: []term.Event{alt('%')},
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "", Expected: "  1 ▐oo bar               \n" +
+					"  1 界  foo                \n" +
+					"  2 foo qux               \n" +
+					"  3        Query replace: \n" +
+					"QUERY                     "},
+				{InputSequence: "foo", Expected: "  1 ▐oo bar               \n" +
+					"  1 界  foo                \n" +
+					"  2 foo qux               \n" +
+					"  3     Query replace: foo\n" +
+					"QUERY                     "},
+				{InputSequence: "<enter>", Expected: "  1 ▐oo bar               \n" +
+					"  1 界  foo                \n" +
+					"  2 Query replace foo with\n" +
+					"  3 :                     \n" +
+					"QUERY                     "},
+				{InputSequence: "界", Expected: "  1 ▐oo bar               \n" +
+					"  1 界  foo                \n" +
+					"  2 Query replace foo with\n" +
+					"  3 : 界                   \n" +
+					"QUERY                     "},
+				{InputSequence: "<enter>", Expected: "  1 ▐oo bar               \n" +
+					"  1 界  foo                \n" +
+					"  2 Query replacing foo wi\n" +
+					"  3 th 界  (y/n/!/./q)     \n" +
+					"QUERY                     "},
+				{InputSequence: "y", Expected: "  1 界  bar                \n" +
+					"  2 界  ▐oo                \n" +
+					"  1 Query replacing foo wi\n" +
+					"  2 th 界  (y/n/!/./q)     \n" +
+					"QUERY                     "},
+				{InputSequence: "n", Expected: "  1 界  foo                \n" +
+					"  3 ▐oo qux               \n" +
+					"  1 Query replacing foo wi\n" +
+					"  2 th 界  (y/n/!/./q)     \n" +
+					"QUERY                     "},
+				{InputSequence: "q", Expected: "  1 界  foo                \n" +
+					"  3 ▐oo qux               \n" +
+					"  1                       \n" +
+					"  2                   Done\n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "zap to char",
+			content: "alpha beta gamma",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<alt-z>", Expected: "  1 ▐lpha beta gamma      \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3          Zap to char: \n" +
+					"ZAP                       "},
+				{InputSequence: "a", Expected: "  1 ▐pha beta gamma       \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "zap aborted",
+			content: "alpha beta",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<alt-z>", Expected: "  1 ▐lpha beta            \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3          Zap to char: \n" +
+					"ZAP                       "},
+				{InputSequence: "<ctrl-g>", Expected: "  1 ▐lpha beta            \n" +
+					"  1                       \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "goto line",
+			content: "one\ntwo\nthree\nfour",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<alt-g>", Expected: "  1 ▐ne                   \n" +
+					"  1 two                   \n" +
+					"  2 three                 \n" +
+					"  3 four                  \n" +
+					"GOTO                      "},
+				{InputSequence: "g", Expected: "  1 ▐ne                   \n" +
+					"  1 two                   \n" +
+					"  2 three                 \n" +
+					"  3            Goto line: \n" +
+					"GOTO                      "},
+				{InputSequence: "3", Expected: "  1 ▐ne                   \n" +
+					"  1 two                   \n" +
+					"  2 three                 \n" +
+					"  3           Goto line: 3\n" +
+					"GOTO                      "},
+				{InputSequence: "<enter>", Expected: "  2 one                   \n" +
+					"  1 two                   \n" +
+					"  3 ▐hree                 \n" +
+					"  1 four                  \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "goto prefix aborted",
+			content: "one\ntwo",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<alt-g>", Expected: "  1 ▐ne                   \n" +
+					"  1 two                   \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"GOTO                      "},
+				{InputSequence: "x", Expected: "  1 ▐ne                   \n" +
+					"  1 two                   \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "prefix argument aborted",
+			content: "abc\ndef",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-u>", Expected: "  1 ▐bc                   \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                    C-u\n" +
+					"ARG                       "},
+				{InputSequence: "4", Expected: "  1 ▐bc                   \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                  C-u 4\n" +
+					"ARG                       "},
+				{InputSequence: "<ctrl-g>", Expected: "  1 ▐bc                   \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                   Quit\n" +
+					"                          "},
+			},
+		},
+		{
+			name:    "prefix argument consumed",
+			content: "abc\ndef",
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "<ctrl-u>", Expected: "  1 ▐bc                   \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                    C-u\n" +
+					"ARG                       "},
+				{InputSequence: "3", Expected: "  1 ▐bc                   \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                  C-u 3\n" +
+					"ARG                       "},
+				{InputSequence: "z", Expected: "  1 zzz▐bc                \n" +
+					"  1 def                   \n" +
+					"  2                       \n" +
+					"  3                       \n" +
+					"                          "},
+			},
+		}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newStatusIsearchIntegrationHandler(t, tt.content)
+			h.Resize(26, 5)
+			for _, ev := range tt.prelude {
+				h.Handle(ev)
+			}
 			handlertest.RunHandlerSequence(t, h, 26, 5, tt.cases)
 		})
 	}

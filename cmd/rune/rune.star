@@ -322,6 +322,12 @@ config = {
             "attr":        attr(fg = "default", bg = "default"),
             # Search and message bar attributes.
             "bar_attr":    attr(fg = "default", bg = "default"),
+            # Layout of the superimposed message bar shown while searching.
+            # The Message component supports the same styling operators as
+            # status-bar components.
+            "message_bar": {
+                "layout": '░▒▓█ {{ .Message | fg "white" }} ',
+            },
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
         },
@@ -352,6 +358,11 @@ config = {
             "attr":        attr(fg = "default", bg = "default"),
             # Incremental-search status attributes.
             "bar_attr":    attr(fg = "default", bg = "purple"),
+            # Layout of the overlaid Emacs echo area. The Message component
+            # supports the same styling operators as status-bar components.
+            "message_bar": {
+                "layout": '░▒▓█ {{ .Message | fg "white" }} ',
+            },
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
         },

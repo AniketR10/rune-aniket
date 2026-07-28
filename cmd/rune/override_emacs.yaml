@@ -226,6 +226,17 @@ command:
 #     foreground_error_attr: {fg: yellow}
 
 # ---------------------------------------------------------------------------
+# Editor message bar (echo area: search prompts and echoed messages)
+#
+# `layout` is a Go text/template string with a single Message component and
+# the same pipe operators as the status bar.
+# ---------------------------------------------------------------------------
+# editor:
+#   emacs:
+#     message_bar:
+#       layout: '░▒▓█ {{ .Message | fg "white" }} '
+
+# ---------------------------------------------------------------------------
 # Terminal
 # ---------------------------------------------------------------------------
 # terminal:

@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	componenttemplate "unstable.build/go-tui/component/template"
 )
 
 // LessConfig holds configuration values for a Less instance.
@@ -41,6 +42,7 @@ type LessConfig struct {
 	SuperimposeMessage bool
 	ResAttr            term.Attributes
 	BarAttr            term.Attributes
+	MessageLayout      LessMessageLayout
 	Attributes         term.Attributes
 	Handler            func(LessEvent)
 	// NoBar disables SetMessage and search functionality.
@@ -65,7 +67,10 @@ type Less struct {
 	scroll            *component.Scroll
 	searchScrollVirt  compapi.Virtual[*component.Scroll]
 	msgStr            string
-	msgVirt           compapi.Virtual[*compapi.ResponsiveString]
+	msgWidth          int
+	msgHeight         int
+	msgFloating       bool
+	msgVirt           compapi.Virtual[compapi.Responsive]
 	mode              LessMode
 	moveMode          LessMoveMode
 	usedMsgBarAttr    term.Attributes
@@ -76,6 +81,15 @@ type Less struct {
 	width             int
 	search            string
 	config            LessConfig
+}
+
+type lessMessage struct {
+	compapi.Floating
+}
+
+func (m lessMessage) Height(int) int {
+	_, height := m.Dimensions()
+	return height
 }
 
 // LessEventType represents a less event
@@ -209,7 +223,9 @@ func (l *Less) Draw(w term.Writer) {
 
 	// if attrs were changed dynamically, ensure attributes of superimposed message
 	// match those of the Scroll.
-	if l.config.SuperimposeMessage && l.usedMsgBarAttr != l.scroll.Attributes {
+	if l.config.SuperimposeMessage &&
+		(l.config.MessageLayout.Template == "" || l.config.MessageLayout.Attributes.Bg == 0) &&
+		l.usedMsgBarAttr.Bg != l.scroll.Attributes.Bg {
 		l.setMessage(l.msgStr)
 		cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
 		l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
@@ -395,20 +411,38 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 }
 
 func (l *Less) setMessage(msg string) {
-	// if bar is going to be limited to its strict width
-	// ensure the backgrounds blend. Use scroll Attributes
-	// so dynamically changed background attributes are captured.
-	attr := l.config.BarAttr
-	if l.config.SuperimposeMessage {
+	layout := l.config.MessageLayout
+	configuredLayout := layout.Template != ""
+	if layout.Template == "" {
+		layout.Template = "%s"
+		layout.Attributes = l.config.BarAttr
+	}
+	attr := layout.Attributes
+	if l.config.SuperimposeMessage && (!configuredLayout || attr.Bg == 0) {
 		attr.Bg = l.scroll.Attributes.Bg
 	}
-	newMsg := compapi.NewResponsiveString(msg, compapi.StringResponsiveConfig{
-		StringConfig: compapi.StringConfig{
-			Alignment:            compapi.AlignmentRight,
-			Attributes:           attr,
-			BackgroundAttributes: attr,
-		},
-	})
+	formatted := ""
+	if msg != "" {
+		formatted = fmt.Sprintf(layout.Template, msg)
+	}
+	var newMsg compapi.Responsive = compapi.NewResponsiveString(formatted,
+		compapi.StringResponsiveConfig{
+			StringConfig: compapi.StringConfig{
+				Alignment:            compapi.AlignmentRight,
+				Attributes:           attr,
+				BackgroundAttributes: attr,
+			},
+		})
+	l.msgWidth = term.CalculateOptimalWidth(term.StringToCells(formatted))
+	l.msgFloating = false
+	if msg != "" && layout.Template != "%s" {
+		built := componenttemplate.Build(layout.Template, msg, term.Attributes{},
+			attr, l.scroll.Attributes.Bg)
+		inline := compapi.Inline(built, compapi.AlignmentRight)
+		l.msgWidth, l.msgHeight = inline.Dimensions()
+		l.msgFloating = true
+		newMsg = lessMessage{Floating: inline}
+	}
 	l.usedMsgBarAttr = attr
 	l.msgVirt.C = newMsg
 	l.msgStr = msg
@@ -420,7 +454,7 @@ func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
 	}
 	cmdBarWidth = l.width
 	if l.config.SuperimposeMessage {
-		msgslen := len(l.msgStr) + len(l.searchScrollVirt.C.Buffer().String())
+		msgslen := l.msgWidth + len(l.searchScrollVirt.C.Buffer().String())
 		cmdBarWidth = min(l.width, msgslen)
 	}
 	cmdBarHeight = max(l.msgVirt.C.Height(cmdBarWidth),
@@ -451,15 +485,23 @@ func (l *Less) resize() {
 	}
 
 	l.searchScrollVirt.Move(term.Coordinates{X: 0, Y: l.height - cmdBarHeight})
-	l.searchScrollVirt.Resize(l.width-len(l.msgStr), cmdBarHeight)
+	l.searchScrollVirt.Resize(l.width-l.msgWidth, cmdBarHeight)
 
 	l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
 }
 
 func (l *Less) resizeMoveMessage(cmdBarWidth, cmdBarHeight int) {
+	width, height := cmdBarWidth, cmdBarHeight
+	// Built layouts render at their intrinsic size and centre themselves in
+	// whatever space they are given, so they must be confined to that size and
+	// placed at the top right of a command bar grown by a wrapped search query.
+	if l.msgFloating {
+		width = min(l.msgWidth, cmdBarWidth)
+		height = min(l.msgHeight, cmdBarHeight)
+	}
 	// don't occlude other content if bar background is empty
-	l.msgVirt.Move(term.Coordinates{X: l.width - cmdBarWidth, Y: l.height - cmdBarHeight})
-	l.msgVirt.Resize(cmdBarWidth, cmdBarHeight)
+	l.msgVirt.Move(term.Coordinates{X: l.width - width, Y: l.height - cmdBarHeight})
+	l.msgVirt.Resize(width, height)
 }
 
 func (l *Less) setupScroll(w *component.Scroll, attr term.Attributes) {

@@ -24,12 +24,12 @@
 package emacs
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/text"
 )
 
@@ -43,6 +43,7 @@ type emacsConfig struct {
 	attr               term.Attributes
 	barAttr            term.Attributes
 	barAttrSet         bool
+	messageBarLayout   handler.LessMessageLayout
 	resAttr            term.Attributes
 	comments           text.CommentConfig
 	registry           text.WorkspaceCommandRegistry
@@ -121,6 +122,13 @@ func WithBarAttr(attr term.Attributes) Option {
 	return func(cfg *emacsConfig) {
 		cfg.barAttr = attr
 		cfg.barAttrSet = true
+	}
+}
+
+// WithMessageBarLayout configures the Emacs echo-area message layout.
+func WithMessageBarLayout(layout handler.LessMessageLayout) Option {
+	return func(cfg *emacsConfig) {
+		cfg.messageBarLayout = layout
 	}
 }
 
@@ -296,7 +304,6 @@ type nopBar struct {
 }
 
 func (n nopBar) SetStatus(status string, _ term.Attributes) {
-	logrus.Infof("emacs handler status: %s", status)
 }
 
 func (n nopBar) ShowBar(bool) {

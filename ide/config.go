@@ -2490,6 +2490,14 @@ func (c ideConfig) modalAttr() (attr term.Attributes) {
 	return attr
 }
 
+func (c ideConfig) modalMessageBarLayout() handler.LessMessageLayout {
+	cfg, ok := c.modal()
+	if !ok {
+		return handler.DefaultLessMessageLayout()
+	}
+	return c.messageBarLayout(cfg, "editor.modal")
+}
+
 func (c ideConfig) initialFolds() bool {
 	cfg, ok := c.editor()
 	if !ok {
@@ -2985,6 +2993,41 @@ func (c ideConfig) emacsBarAttr() term.Attributes {
 		return attr
 	}
 	return configured
+}
+
+func (c ideConfig) emacsMessageBarLayout() (ret handler.LessMessageLayout) {
+	cfg, ok := c.emacs()
+	if !ok {
+		return handler.DefaultLessMessageLayout()
+	}
+	return c.messageBarLayout(cfg, "editor.emacs")
+}
+
+// messageBarLayout reads the `message_bar.layout` template of an editor
+// section, falling back to the plain layout when unset or invalid.
+func (c ideConfig) messageBarLayout(
+	editor config.Config, path string,
+) handler.LessMessageLayout {
+	cfg, err := editor.GetConfig("message_bar")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[path+".message_bar"] = err
+		}
+		return handler.DefaultLessMessageLayout()
+	}
+	layout, err := cfg.GetString("layout")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[path+".message_bar.layout"] = err
+		}
+		return handler.DefaultLessMessageLayout()
+	}
+	parsed, err := handler.ParseLessMessageLayout(layout)
+	if err != nil {
+		c.errors[path+".message_bar.layout"] = err
+		return handler.DefaultLessMessageLayout()
+	}
+	return parsed
 }
 
 func (c ideConfig) emacsAttr() term.Attributes {
