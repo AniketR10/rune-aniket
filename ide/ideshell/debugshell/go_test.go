@@ -1294,6 +1294,74 @@ func TestE2E_OutputAppearsInIDEEditorBuffer(t *testing.T) {
 	_, _ = h.run(ctx, subTerminate)
 }
 
+// TestE2E_StoppedLocationWithCursorAlreadyOnLine reproduces the
+// bug where the yellow "paused" marker (and the variables
+// overlay) never appeared when the user left the cursor on the
+// breakpoint line before starting the session.
+//
+// text.Handler.SetCursorAtScroll reports false when the cursor
+// did not move, which is exactly the "cursor already there"
+// case. openFrame treated that as a fatal error and returned
+// before installing the stopped location list.
+func TestE2E_StoppedLocationWithCursorAlreadyOnLine(t *testing.T) {
+	t.Parallel()
+	dlvBin := findDlv(t)
+	tmpDir := setupBuggy(t)
+	mainPath := filepath.Join(tmpDir, "main.go")
+
+	h := newIDEHarness(t, dlvBin, tmpDir)
+	defer h.close()
+
+	ctx := h.ctx
+
+	mainURI, err := workspaceapi.ParseURI("file://" + mainPath)
+	require.NoError(t, err)
+
+	// Park the cursor exactly where the debuggee will stop.
+	stopPos := term.Coordinates{X: 0, Y: sumFirstStmtLine - 1}
+	h.uiMu.Lock()
+	_, err = h.comp.Open(mainURI)
+	require.NoError(t, err)
+	ed, err := h.comp.Editor(mainURI)
+	require.NoError(t, err)
+	ed.Resize(120, 40)
+	ed.SetCursorAtScroll(stopPos)
+	cur := ed.CursorAtScroll()
+	h.uiMu.Unlock()
+	require.Equal(t, stopPos, cur, "precondition: cursor parked on breakpoint line")
+
+	it, err := h.run(ctx, subInitialize, "go")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	_, err = h.run(ctx, subLaunch, tmpDir)
+	require.NoError(t, err)
+	h.waitMilestone(t, "initialized", 10*time.Second)
+
+	h.setBreakpoint(t, mainPath, sumFirstStmtLine)
+
+	_, err = h.run(ctx, subConfigured)
+	require.NoError(t, err)
+	h.waitMilestone(t, "stopped", 15*time.Second)
+
+	var stopLoc textapi.Location
+	require.Eventually(t, func() bool {
+		set, ok := h.locationSet(mainURI, stoppedLocationID)
+		if !ok || len(set.Locations) == 0 {
+			return false
+		}
+		stopLoc = set.Locations[0]
+		return true
+	}, 10*time.Second, 50*time.Millisecond,
+		"stopped location list never installed with cursor already on the line")
+
+	assert.Equal(t, sumFirstStmtLine-1, stopLoc.From.Y)
+	assert.Equal(t, term.ColorYellow, stopLoc.Attr.Bg)
+	assert.Equal(t, term.ColorBlack, stopLoc.Attr.Fg)
+
+	_, _ = h.run(ctx, subTerminate)
+}
+
 // ideHarness is an e2e harness that uses a real text.Component
 // as both browser.Browser and textapi.Editor — the production
 // wiring — plus a file-scheme watcher that reloads open tabs on
@@ -1539,6 +1607,32 @@ func (h *ideHarness) outputPath(t *testing.T) string {
 		return ""
 	}
 	return h.h.output.Path()
+}
+
+func (h *ideHarness) setBreakpoint(t *testing.T, path string, line int) {
+	t.Helper()
+	h.h.mu.Lock()
+	h.h.breakpoints[path] = []int{line}
+	h.h.mu.Unlock()
+}
+
+// locationSet reads the location list installed under id
+// directly from the real editor handler for uri.
+func (h *ideHarness) locationSet(
+	uri workspaceapi.URI, id string,
+) (text.LocationSet, bool) {
+	h.uiMu.Lock()
+	defer h.uiMu.Unlock()
+	hd, err := h.comp.Editor(uri)
+	if err != nil {
+		return text.LocationSet{}, false
+	}
+	for _, ls := range hd.LocationLists() {
+		if ls.ID == id {
+			return ls, true
+		}
+	}
+	return text.LocationSet{}, false
 }
 
 // bufferContent returns the IDE editor buffer's current

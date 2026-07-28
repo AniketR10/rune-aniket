@@ -603,7 +603,7 @@ func (h *Handler) openFrame(
 	if y < 0 {
 		y = 0
 	}
-	if err := h.editor.SetCursor(ed, term.Coordinates{X: 0, Y: y}); err != nil {
+	if err := h.setCursor(ed, term.Coordinates{X: 0, Y: y}); err != nil {
 		return err
 	}
 	if frames == nil {
@@ -632,6 +632,25 @@ func (h *Handler) openFrame(
 	h.recordInstalledLocation(uri, stoppedLocationID)
 	h.installVariablesLocations(ctx, sid, ed, uri, frame)
 	return nil
+}
+
+// setCursor moves ed's cursor to pos, tolerating the editor
+// reporting failure because the cursor already sits there.
+// text.Handler.SetCursorAtScroll returns false when the cursor
+// does not move, which is the common case when the user leaves
+// the cursor on the breakpoint line: treating it as fatal would
+// skip the stopped marker and the variables overlay.
+func (h *Handler) setCursor(
+	ed textapi.Handler, pos term.Coordinates,
+) error {
+	err := h.editor.SetCursor(ed, pos)
+	if err == nil {
+		return nil
+	}
+	if cur, cerr := h.editor.Cursor(ed); cerr == nil && cur == pos {
+		return nil
+	}
+	return err
 }
 
 // placeFrameWindow installs hd in the first non-floating,
