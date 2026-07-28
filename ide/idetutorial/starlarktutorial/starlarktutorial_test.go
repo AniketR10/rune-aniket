@@ -783,7 +783,9 @@ tutorial(entry=run)
 		wantX     int
 		wantY     int
 	}{
-		{"center default", "", "", (screenW - innerW) / 2,
+		{"bottom default", "", "", (screenW - innerW) / 2,
+			screenH - innerH},
+		{"center explicit", "center", "", (screenW - innerW) / 2,
 			wmY + (screenH-wmY-innerH)/2},
 		{"top-left flush", "top-left", "", 0, wmY},
 		{"top-right flush", "top-right", "", screenW - innerW, wmY},

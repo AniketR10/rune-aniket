@@ -46,6 +46,10 @@ def dismiss_for(cmd, *args):
     k = key_for(cmd, *args)
     return [ck, k] if k else [ck]
 
+cleanup_md = """\
+Let's start fresh. Clear the layout: """ + keypress("windowcloseall") + """.
+"""
+
 agent_install_md = """\
 The **Rune Agent** is Rune's builtin AI coding assistant. It ships as a
 package you install on demand, so the first step is to install it.
@@ -101,7 +105,7 @@ Try it now: """ + keypress("help") + """. Happy hacking!
 
 def teach_provider(provider, label, action_tokens, run_md, success_msg):
     title = "Connect " + label
-    floating_window(title = title, text = run_md)
+    floating_window(title = title, text = run_md, alignment = "top")
     wait_shell(
         title    = title,
         args     = ["models", "providers", provider] + action_tokens,
@@ -109,6 +113,16 @@ def teach_provider(provider, label, action_tokens, run_md, success_msg):
                     provider + " " + " ".join(action_tokens) + "`."),
     )
     notify(level = success, message = success_msg)
+
+def teach_cleanup():
+    floating_window(title = "Clear the layout", text = cleanup_md,
+                    dismiss_keys = dismiss_for("windowcloseall"))
+    wait_command(
+        title    = "Clear the layout",
+        command  = "windowcloseall",
+        on_error = "Close every window except the focused one with `<cmd>windowcloseall`.",
+    )
+    notify(level = success, message = "Layout cleared.")
 
 def teach_agent():
     floating_window(title = "Set up the Rune Agent", text = agent_install_md,
@@ -119,7 +133,8 @@ def teach_agent():
         on_error = "Open Rune's console: run the `<cmd>console` command.",
     )
 
-    floating_window(title = "Install the agent package", text = agent_pkg_install_md)
+    floating_window(title = "Install the agent package", text = agent_pkg_install_md,
+                    alignment = "top")
     wait_shell(
         title    = "Install the agent package",
         args     = ["pkg", "install", "rune-agent"],
@@ -225,7 +240,6 @@ Press `<enter>` or `<space>` to continue.
 
 def teach_help():
     floating_window(title = "One last thing", text = help_md,
-                    alignment = "top",
                     dismiss_keys = dismiss_for("help"))
     wait_command(
         title    = "One last thing",
@@ -235,7 +249,8 @@ def teach_help():
     notify(level = success, message = "That is the help command.")
 
 def run():
+    teach_cleanup()
     teach_agent()
     teach_help()
 
-tutorial(id = "agent", title = "Rune Agent", version = "2", entry = run)
+tutorial(id = "agent", title = "Rune Agent", version = "4", entry = run)

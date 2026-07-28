@@ -71,7 +71,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "44", tut.Version())
+	assert.Equal(t, "45", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +98,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "44", tut.Version())
+	assert.Equal(t, "45", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -579,6 +579,13 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 			"expected a %s step", kind)
 	}
 
+	// Layout cleanup comes first so the console does not open inside a
+	// leftover floating window.
+	wait("floating_window")
+	dismiss(term.Event{Type: term.EventKey, Ch: ':'})
+	wait("wait_command")
+	tut.ObserveCommand("windowcloseall", "windowcloseall", nil, nil)
+
 	// Command prompt instructions for opening the console.
 	wait("floating_window")
 	dismiss(term.Event{Type: term.EventKey, Ch: ':'})
@@ -599,8 +606,11 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 	wait("wait_command")
 	tut.ObserveCommand("help", "help", nil, nil)
 	require.True(t, tut.WaitFinished(time.Second))
-	assert.Equal(t, []string{"Rune Agent installed.", "That is the help command."},
-		notis.successes())
+	assert.Equal(t, []string{
+		"Layout cleared.",
+		"Rune Agent installed.",
+		"That is the help command.",
+	}, notis.successes())
 }
 
 func TestTutorialPackageInstallOwnership(t *testing.T) {
@@ -1016,7 +1026,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "10", tut.Version())
+	assert.Equal(t, "11", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1037,7 +1047,7 @@ func TestAgentTutorialParses(t *testing.T) {
 	require.NotNil(t, tut)
 	assert.Equal(t, "agent", tut.ID())
 	assert.Equal(t, "Rune Agent", tut.Title())
-	assert.Equal(t, "2", tut.Version())
+	assert.Equal(t, "4", tut.Version())
 }
 
 func TestEmbeddedTutorialPlaylist(t *testing.T) {
@@ -1082,7 +1092,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "10", tut.Version())
+	assert.Equal(t, "11", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1108,7 +1118,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "10", tut.Version())
+	assert.Equal(t, "11", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
@@ -1147,5 +1157,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "44", tut.Version())
+	assert.Equal(t, "45", tut.Version())
 }

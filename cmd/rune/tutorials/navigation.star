@@ -74,11 +74,7 @@ def dismiss_for(cmd, *args):
     return [ck, k] if k else [ck]
 
 cleanup_md = """\
-The last tutorial left splits and floating windows behind. `windowcloseall`
-keeps the focused window and closes every other one, so you start this
-one with a clean screen.""" + keyhint("windowcloseall") + """
-
-Clear the layout: """ + keypress("windowcloseall") + """.
+Let's start fresh. Clear the layout: """ + keypress("windowcloseall") + """.
 """
 
 intro_md = """\
@@ -395,7 +391,7 @@ def run():
     teach_lsp_more()
 
     floating_window(title = "You can navigate code", text = wrapup_md,
-                    alignment = "top", dismiss_keys = [ck])
+                    dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "10", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "11", entry = run)

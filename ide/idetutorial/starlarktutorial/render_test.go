@@ -642,6 +642,58 @@ tutorial(entry=run)
 	}
 }
 
+// TestStepWindowsShareBottomAnchor asserts that a teaching window and
+// the hint window of the step that follows it both anchor at the
+// bottom, so the tutorial does not jump between the top and bottom of
+// the screen between steps.
+func TestStepWindowsShareBottomAnchor(t *testing.T) {
+	t.Parallel()
+	src := "def run():\n" +
+		"    floating_window(text=\"intro\", title=\"Manage windows\")\n" +
+		"    wait_command(command=\"windownew\", title=\"Manage windows\")\n" +
+		"tutorial(entry=run)\n"
+	tut, _ := newTutorial(t, src)
+	const screenW, screenH = 80, 24
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	pos, _, h := activeWindowRect(t, tut)
+	assert.Equal(t, screenH, pos.Y+h,
+		"teaching window must sit flush against the bottom of the screen")
+
+	tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitNextActive(t, tut, "wait_command", time.Second)
+
+	pos, _, h = activeWindowRect(t, tut)
+	assert.Equal(t, screenH, pos.Y+h,
+		"hint window must keep the teaching window's bottom anchor")
+}
+
+// TestWaitShellHintAnchorsAtTop asserts that steps waiting on a
+// console command anchor their hint at the top: Rune's console draws
+// its prompt at the bottom of the screen, which a bottom-anchored
+// hint would cover.
+func TestWaitShellHintAnchorsAtTop(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_shell(args=["pkg", "install", "rune-agent"])
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	const screenW, screenH = 80, 24
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	pos, _, h := activeWindowRect(t, tut)
+	assert.Equal(t, 1, pos.Y,
+		"console hint must sit just below the top of the screen")
+	assert.Less(t, pos.Y+h, screenH,
+		"console hint must leave the console prompt at the bottom visible")
+}
+
 // TestConfirmOverlayMeetsMinimumSize asserts that even with a very
 // short confirm message the prompt window honours the overlay
 // browser's configured minimum prompt width and is tall enough for
@@ -717,7 +769,9 @@ func TestFloatingWindowDragMovesShaderGeometry(t *testing.T) {
 
 	pos, w, _ := activeWindowRect(t, tut)
 	require.Greater(t, w, 8, "window too narrow to grab the bar")
-	const dx, dy = 3, 2
+	// Step windows anchor flush to the bottom, so drag upwards: a
+	// downward drag would be clamped by the screen edge.
+	const dx, dy = 3, -2
 	grabX, grabY := pos.X+5, pos.Y
 	_, routed := tut.winOverlay.HandleMouse(mouseEvent(term.MouseLeft, grabX, grabY))
 	require.True(t, routed, "the bar press must route to the browser")

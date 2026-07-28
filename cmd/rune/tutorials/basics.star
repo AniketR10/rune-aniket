@@ -685,7 +685,6 @@ def teach_focus_window():
 
 def teach_move_window():
     floating_window(title = "Move a window", text = move_window_md,
-                    alignment = "top",
                     dismiss_keys = dismiss_for("windowmove", "left"))
     wait_expected_command(
         title    = "Move a window",
@@ -704,7 +703,6 @@ def teach_move_window():
 
 def teach_resize_window():
     floating_window(title = "Resize a window", text = resize_window_md,
-                    alignment = "top",
                     dismiss_keys = dismiss_for("windowresize", "increase", "width"))
     wait_expected_command(
         title         = "Resize a window",
@@ -854,7 +852,6 @@ def teach_terminals():
 
 def teach_cheatsheet():
     floating_window(title = "Your cheatsheet", text = cheatsheet_md,
-                    alignment = "top",
                     dismiss_keys = dismiss_for("cheatsheet"))
     wait_command(
         title    = "Your cheatsheet",
@@ -925,4 +922,4 @@ def run():
     teach_cheatsheet()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "44", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "45", entry = run)

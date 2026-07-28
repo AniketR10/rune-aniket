@@ -149,7 +149,7 @@ func (t *Tutorial) openFloatingWindow(r *request, width, height int) {
 	})
 	align := r.align
 	if align == 0 {
-		align = component.AlignmentCentered
+		align = defaultStepAlignment
 	}
 	offset := r.offset
 	offset.X = max(offset.X, 0)
@@ -207,12 +207,24 @@ func (t *Tutorial) openPromptWindow(r *request) {
 		r.message, padPromptOptions(r.options), nil, ph)
 }
 
-// openHintWindow opens the non-modal hint window for a wait_* request
-// at the bottom of the screen, clear of the command prompt the step
-// usually asks the user to open. Keys are never routed to it — they
-// fall through to the IDE root while the request is armed — but the
-// user can drag it aside, scroll it, or close it via the window bar
-// without resolving the step.
+// defaultStepAlignment anchors step windows at the bottom of the
+// screen: the command prompt opens near the top, and keeping every
+// step in the same place stops the tutorial from jumping between the
+// top and bottom of the screen from one step to the next.
+const defaultStepAlignment = component.AlignmentBottom |
+	component.AlignmentHorizontallyCentered
+
+// consoleStepAlignment anchors the hint of a console step at the top:
+// Rune's console draws its own prompt at the bottom of the screen,
+// which the default bottom anchor would cover.
+const consoleStepAlignment = component.AlignmentTop |
+	component.AlignmentHorizontallyCentered
+
+// openHintWindow opens the non-modal hint window for a wait_* request,
+// clear of the prompt the step asks the user to type into. Keys are
+// never routed to it — they fall through to the IDE root while the
+// request is armed — but the user can drag it aside, scroll it, or
+// close it via the window bar without resolving the step.
 func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	if t.winOverlay == nil {
 		return
@@ -226,10 +238,13 @@ func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	})
 	content.hint = true
 	r.winContent = content
+	align := defaultStepAlignment
+	if r.kind == reqWaitShell {
+		align = consoleStepAlignment
+	}
 	r.win = t.winOverlay.Floating(content, browserapi.FloatingConfig{
-		Alignment: component.AlignmentBottom |
-			component.AlignmentHorizontallyCentered,
-		Title: floatingWindowTitle(r),
+		Alignment: align,
+		Title:     floatingWindowTitle(r),
 	})
 }
 
