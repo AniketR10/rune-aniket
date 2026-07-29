@@ -119,7 +119,7 @@ func TestMigrateConfigKeyBindingsPicksUpMovedBindings(t *testing.T) {
 	require.NoError(t, err)
 	want := bindingsOf(t, []byte(preset))
 
-	moved := "<s-m-d>"
+	moved := "<meta-o>"
 	require.Equal(t, "fexplorer", want[moved],
 		"fixture assumes the emacs preset homes fexplorer on %s", moved)
 
@@ -139,8 +139,8 @@ func TestStandardPresetsKeepMetaSlashForLineComments(t *testing.T) {
 	} {
 		t.Run(path, func(t *testing.T) {
 			bindings := bindingsOfFile(t, path)
-			require.Equal(t, "cheatsheet", bindings["<a-/>"])
-			require.NotContains(t, bindings, "<m-/>")
+			require.Equal(t, "cheatsheet", bindings["<alt-/>"])
+			require.NotContains(t, bindings, "<meta-/>")
 		})
 	}
 }
@@ -150,23 +150,25 @@ func TestStandardPresetsAvoidEditorKeyConflicts(t *testing.T) {
 		path        string
 		explorerKey string
 	}{
-		{"preset_standard_darwin.yaml", "<s-m-e>"},
-		{"preset_standard_linux.yaml", "<c-s-e>"},
+		{"preset_standard_darwin.yaml", "<shift-meta-e>"},
+		{"preset_standard_linux.yaml", "<ctrl-shift-e>"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
 			bindings := bindingsOfFile(t, tc.path)
 			require.Equal(t, "fexplorer", bindings[tc.explorerKey])
-			require.Equal(t, "cursorhistory prev", bindings["<c-a-j>"])
-			require.Equal(t, "cursorhistory next", bindings["<c-a-l>"])
-			require.Equal(t, "lsp hover", bindings["<c-m-q>"])
+			require.Equal(t, "cursorhistory prev", bindings["<alt-,>"])
+			require.Equal(t, "cursorhistory next", bindings["<alt-.>"])
+			require.Equal(t, "lsp hover", bindings["<alt-t>"])
 			require.Equal(t,
 				"echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
-				bindings["<c-s-a-v>"])
+				bindings["<alt-x>"])
 
 			for _, stale := range []string{
-				"<shift-tab>", "<ctrl-->", "<ctrl-shift-->", "<c-a-h>", "<c-a-v>",
+				"<shift-tab>", "<ctrl-->", "<ctrl-shift-->",
+				"<ctrl-alt-h>", "<ctrl-alt-v>",
+				"<ctrl-meta-q>", "<ctrl-alt-i>", "<ctrl-shift-alt-h>",
 			} {
 				require.NotContains(t, bindings, stale)
 			}
@@ -233,11 +235,11 @@ func TestMigrateConfigKeyBindingsPresetWinsOverStaleValue(t *testing.T) {
 	preset, err := renderPreset(editorModal)
 	require.NoError(t, err)
 	want := bindingsOf(t, []byte(preset))
-	require.Equal(t, "quit", want["<m-q>"])
+	require.Equal(t, "quit", want["<meta-q>"])
 
-	path := writeConfig(t, "command:\n  key_bindings:\n    \"<m-q>\": staleaction\n")
+	path := writeConfig(t, "command:\n  key_bindings:\n    \"<meta-q>\": staleaction\n")
 	require.NoError(t, migrateConfigKeyBindings(path))
-	require.Equal(t, "quit", bindingsOfFile(t, path)["<m-q>"])
+	require.Equal(t, "quit", bindingsOfFile(t, path)["<meta-q>"])
 }
 
 func TestMigrateConfigKeyBindingsStampsVersionAndIsIdempotent(t *testing.T) {

@@ -222,7 +222,6 @@ func applyPresetKeyBindings(
 	}
 
 	stamp := []string{
-		"# Marks this config as owning its full command.key_bindings list.",
 		fmt.Sprintf("%s: %d", configVersionKey, currentConfigVersion),
 		"",
 	}

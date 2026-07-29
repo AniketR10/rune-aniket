@@ -1,175 +1,5 @@
-# Unstable Build LLC ("COMPANY") CONFIDENTIAL
-#
-# Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
-#
-# NOTICE: All information contained herein is, and remains the property of COMPANY.
-# The intellectual and technical concepts contained herein are proprietary to
-# COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-# and are protected by trade secret or copyright law. Dissemination of this information
-# or reproduction of this material is strictly forbidden unless prior written permission
-# is obtained from COMPANY. Access to the source code contained herein is hereby
-# forbidden to anyone except current COMPANY employees, managers or contractors who
-# have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
-#
-# The copyright notice above does not evidence any actual or intended publication or
-# disclosure of this source code, which includes information that is confidential and/or
-# proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-# DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-# WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-# VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-# THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-# REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-# ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-
 # Rune user configuration (standard editor preset).
-
-# Marks this config as owning its full command.key_bindings list.
 config_version: 2
-
-editor:
-  mode: standard
-  auto_pair: true
-  standard:
-    attr: {fg: default, bg: default}
-    search_attr: {fg: grey, bg: yellow}
-terminal:
-  modal: false
-command:
-  key: <s-m-p>
-  key_bindings:
-    "<m-s>": write
-    "<m-o>": searchfile
-    "<a-m-s>": writeall
-    "<m-q>": quit
-    "<m-n>": tabnew
-    "<m-w>": tabclose
-    "<c-m-p>": "echo <s-m-p>workspacefocus{wait}<space>"
-    "<m-f2>": "locationtoggle bookmark"
-    "<f2>": "jumptolocation next bookmark"
-    "<s-f2>": "jumptolocation previous bookmark"
-    "<a-f2>": "locationhighlight bookmark"
-    "<s-m-f2>": "locationdeleteall bookmark"
-    "<s-m-f>": searchtext
-    "<m-g>": "jumptolocation next search"
-    "<s-m-g>": "jumptolocation prev search"
-    "<a-c>": "lsp declaration"
-    "<a-y>": "lsp type-definition"
-    "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
-    "<a-s-c>": "echo {prompt}lsp<space>declaration<space>"
-    "<a-g>": "lsp signature-help"
-    "<c-a-l>": "cursorhistory next"
-    "<c-a-j>": "cursorhistory prev"
-    "<c-g>": "echo <esc>:"
-    "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    # IJKL points up, left, down, right. <alt> focuses a window;
-    # add <shift> to move it and <meta> to resize it.
-    "<a-i>": "windowfocus up"
-    "<a-j>": "windowfocus left"
-    "<a-k>": "windowfocus down"
-    "<a-l>": "windowfocus right"
-    "<a-s-i>": "windowmove up"
-    "<a-s-j>": "windowmove left"
-    "<a-s-k>": "windowmove down"
-    "<a-s-l>": "windowmove right"
-    "<alt-meta-i>": "windowresize increase height"
-    "<alt-meta-j>": "windowresize decrease width"
-    "<alt-meta-k>": "windowresize decrease height"
-    "<alt-meta-l>": "windowresize increase width"
-    # The modified arrows remain available as resize aliases.
-    "<c-a-m-left>": "windowresize decrease width"
-    "<c-a-m-right>": "windowresize increase width"
-    "<c-a-m-down>": "windowresize decrease height"
-    "<c-a-m-up>": "windowresize increase height"
-    # Create and close windows and tabs on the same <alt> layer.
-    "<a-n>": windownew
-    "<alt-enter>": terminalneworsplit
-    "<a-q>": windowclose
-    "<a-m>": windowtogglemaximize
-    "<a-s-enter>": "echo {prompt}windowconverttab<space>"
-    "<a-t>": tabnew
-    "<a-w>": tabclose
-    # Brackets switch tabs; add <shift> to reorder them.
-    "<a-[>": tabprevious
-    "<a-]>": tabnext
-    "<a-s-[>": "tabmove left"
-    "<a-s-]>": "tabmove right"
-    "<a-h>": "windowdefaultsplit h"
-    "<a-v>": "windowdefaultsplit v"
-    # Ctrl-Meta I/K visits Git changes; J/L visits diagnostics.
-    "<c-m-i>": gitprevchange
-    "<c-m-k>": gitnextchange
-    "<c-m-j>": lspprevdiagnostic
-    "<c-m-l>": lspnextdiagnostic
-    "<c-m-q>": "lsp hover"
-    "<c-s-a-h>": "echo {prompt}lsp<space>hover<space>"
-    "<c-a-i>": "lsp implementation"
-    "<c-s-a-i>": "echo {prompt}lsp<space>implementation<space>"
-    "<c-s-a-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
-    "<s-m-r>": history
-    # Bindings shared with the other presets.
-    "<s-m-e>": "fexplorer"
-    "<m-,>": "config"
-    "<a-/>": "cheatsheet"
-    "<m-=>": "guifontsize increase"
-    "<m-->": "guifontsize decrease"
-    "<m-t>": "tabnew"
-    "<m-c>": "clipboardcopy"
-    "<m-v>": "clipboardpaste"
-    "<a-`>": "tabsearch"
-    "<s-m-backspace>": "windowresize reset"
-    "<s-m-+>": ["windowresize max width", "windowresize max height"]
-    "<s-m-->": ["windowresize min width", "windowresize min height"]
-    "<a-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
-    "<a-s>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"
-    "<a-s-e>": "lsp diagnostics"
-    "<a-r>": "lsp references"
-    "<a-s-r>": "echo {prompt}lsp<space>references<space>"
-    "<a-d>": "lsp definition"
-    "<a-s-d>": "echo {prompt}lsp<space>definition<space>"
-    "<a-b>": "lsp format"
-    "<c-space>": "lsp complete"
-    "<m-enter>": "terminalneworsplit"
-    "<s-m-enter>": "!"
-    "<m-`>": "workspacesearch"
-    "<a-1>": "tabfocus 1"
-    "<a-2>": "tabfocus 2"
-    "<a-3>": "tabfocus 3"
-    "<a-4>": "tabfocus 4"
-    "<a-5>": "tabfocus 5"
-    "<a-6>": "tabfocus 6"
-    "<a-7>": "tabfocus 7"
-    "<a-8>": "tabfocus 8"
-    "<a-9>": "tabfocus 9"
-    "<a-s-1>": "tabmove 1"
-    "<a-s-2>": "tabmove 2"
-    "<a-s-3>": "tabmove 3"
-    "<a-s-4>": "tabmove 4"
-    "<a-s-5>": "tabmove 5"
-    "<a-s-6>": "tabmove 6"
-    "<a-s-7>": "tabmove 7"
-    "<a-s-8>": "tabmove 8"
-    "<a-s-9>": "tabmove 9"
-    "<m-1>": "workspacefocus 1"
-    "<m-2>": "workspacefocus 2"
-    "<m-3>": "workspacefocus 3"
-    "<m-4>": "workspacefocus 4"
-    "<m-5>": "workspacefocus 5"
-    "<m-6>": "workspacefocus 6"
-    "<m-7>": "workspacefocus 7"
-    "<m-8>": "workspacefocus 8"
-    "<m-9>": "workspacefocus 9"
-    "<s-m-1>": "workspacemove 1"
-    "<s-m-2>": "workspacemove 2"
-    "<s-m-3>": "workspacemove 3"
-    "<s-m-4>": "workspacemove 4"
-    "<s-m-5>": "workspacemove 5"
-    "<s-m-6>": "workspacemove 6"
-    "<s-m-7>": "workspacemove 7"
-    "<s-m-8>": "workspacemove 8"
-    "<s-m-9>": "workspacemove 9"
-
-# log_level: info               # debug | info | warn | error
-# log_path: ~/.rune/debug.log
 
 # ---------------------------------------------------------------------------
 # GUI theme
@@ -177,15 +7,11 @@ command:
 # Rune ships a catalog of themes:
 #   furman, romero, carmack, reynolds, brevik, thompson, pike, hopper,
 #   kernighan, wozniak, auge, ritchie, kelleher, sanfilippo, greig, mullen
-# Run `:guitheme` to preview live and `:colorPalette` to see named colors.
-# Try `mullen` for a deep-purple / hot-pink feel, or `kernighan` for the
-# classic Windows-Terminal palette.
+# Run `:guitheme` to preview live.
 # ---------------------------------------------------------------------------
 gui:
   default_theme: romero
 #   font_size: 13
-#   line_height_offset: 0
-#   column_width_offset: -1
 #   window_opacity: {fg: 1, bg: 1}
 #   window_blur_radius: 100
 #   # Remap physical keys before they reach the editor (see the key-mapping
@@ -195,19 +21,22 @@ gui:
 #     "<capslock>": "<esc>"
 
 # ---------------------------------------------------------------------------
-# Editor behavior
+# Editor
+#
+# `aux_bar` is the strip left of each editor pane and `status_bar` the bar at
+# the bottom of each pane.
 # ---------------------------------------------------------------------------
-# editor:
+editor:
+  mode: standard
+  auto_pair: true
+  standard:
+    attr: {fg: default, bg: default}
+    search_attr: {fg: grey, bg: yellow}
 #   tabspaces: 4
 #   ruler: 90
 #   autoindent: true            # syntax-driven indentation
 #   auto_save: false            # flush dirty buffers ~2s after last edit
 #   initial_folds: true         # collapse language-defined folds on open
-
-# ---------------------------------------------------------------------------
-# Auxiliary bar (left of each editor pane)
-# ---------------------------------------------------------------------------
-# editor:
 #   aux_bar:
 #     enabled:          true
 #     lines:            absolute   # disabled | absolute | relative
@@ -215,29 +44,180 @@ gui:
 #     folds:            true
 #     icons:            true
 #     highlight_cursor: true
-
-# ---------------------------------------------------------------------------
-# Editor status bar (bottom)
-# ---------------------------------------------------------------------------
-# editor:
 #   status_bar:
 #     enabled: true
+#     # Components: Status, Filepath, GitShortRef, GitDiffAdd, GitDiffDel,
+#     # ShiftRight, CursorColumn, CursorLine, TotalLines, Language.
+#     # Pipe operators: bg, fg, bold, italic, underline, reverse, dim.
+#     layout: ' {{ .Status | bg "red" | fg "white" | bold }} █▓▒░  {{ .Filepath | fg "white" }}  {{ .GitShortRef | fg "white" }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn | fg "white" }}:{{ .CursorLine | fg "white" }}  {{ .TotalLines | fg "white" }} lines  ░▒▓█ {{ .Language | bold | fg "white" | bg "red" }} '
 #     background_attr:       {bg: gray}
 #     foreground_error_attr: {fg: yellow}
 
 # ---------------------------------------------------------------------------
 # Terminal
 # ---------------------------------------------------------------------------
-# terminal:
+terminal:
+  modal: false
 #   max_lines:         1000
-#   initial_reservoir: 0           # pre-spawned emulator instances
+#   initial_reservoir: 0           # set to non-zero to speed up terminal initialization
 #   plugin:
 #     # Layout of the bar shown above a `!` command. Components:
 #     # Command, StatusIcon, ExitStatus, Elapsed, AlignRight, AlignCenter.
+#     # Pipe operators: bg, fg, bold, italic, underline, reverse, dim.
 #     bar_layout: ' {{ .StatusIcon | bg "gray" | fg "white" }} █▓▒░{{ .AlignCenter }}{{ .Command | fg "white" | bold }}{{ .AlignRight }}  ░▒▓█ {{ .Elapsed | fg "white" | bg "gray" }} '
-#     bar_align_bottom:    false
-#     status_error_icon:   ""
-#     status_success_icon: ""
+#     bar_background_attr: {bg: default}
+#     bar_align_bottom:    true
+#     status_success_icon: ""
+#     status_success_attr: {fg: green}
+#     status_error_icon:   ""
+#     status_error_attr:   {fg: red}
+#     animation: "⠃⠅⠆⠘⠨⠰⠉⠒⠤⠑⠡⠢⠊⠌⠔⠇⠸⠎⠱⠣⠜⠪⠕⠋⠙⠓⠚⠍⠩⠥⠬⠖⠲⠦⠴⠏⠹⠧⠼⠫⠝⠮⠵⠺⠗⠞⠳⠛⠭⠶⠟⠻⠷⠾⠯⠽⠿"
+
+# ---------------------------------------------------------------------------
+# Command prompt
+#
+# `key` opens the command prompt; `history_key` toggles between the command
+# list and history. Aliases layer on top of built-ins: a string value is the
+# substitution, a dict with `command` + `completer` adds completion. Set a
+# key_binding value to "" to unbind a built-in.
+# ---------------------------------------------------------------------------
+command:
+  key: <shift-meta-p>
+#   history_key: <meta-r>
+#   max_history: 20000
+#   aliases:
+#     # Simple alias: `:w` runs `:write`.
+#     w: write
+#     # Alias with a completer: typing `:e <tab>` suggests files.
+#     e:    {command: edit, completer: files}
+#     # Alias with a shell completer (here: git branch names).
+#     gitcheckout:
+#       command:   "!! git -C $WORKSPACE_PATH checkout $1"
+#       completer: '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"'
+#     conf: config
+  key_bindings:
+    "<meta-s>": write
+    "<meta-o>": searchfile
+    "<shift-meta-s>": writeall
+    "<meta-q>": quit
+    "<meta-w>": tabclose
+    "<meta-f2>": "locationtoggle bookmark"
+    "<f2>": "jumptolocation next bookmark"
+    "<shift-f2>": "jumptolocation previous bookmark"
+    "<alt-f2>": "locationhighlight bookmark"
+    "<shift-meta-f2>": "locationdeleteall bookmark"
+    "<shift-meta-f>": searchtext
+    "<meta-g>": "jumptolocation next search"
+    "<shift-meta-g>": "jumptolocation prev search"
+    "<alt-c>": "lsp declaration"
+    "<alt-y>": "lsp type-definition"
+    "<alt-shift-y>": "echo {prompt}lsp<space>type-definition<space>"
+    "<alt-shift-c>": "echo {prompt}lsp<space>declaration<space>"
+    "<alt-g>": "lsp signature-help"
+    "<alt-.>": "cursorhistory next"
+    "<alt-,>": "cursorhistory prev"
+    # IJKL points up, left, down, right. <alt> focuses a window;
+    # add <shift> to move it and <meta> to resize it.
+    "<alt-i>": "windowfocus up"
+    "<alt-j>": "windowfocus left"
+    "<alt-k>": "windowfocus down"
+    "<alt-l>": "windowfocus right"
+    "<alt-shift-i>": "windowmove up"
+    "<alt-shift-j>": "windowmove left"
+    "<alt-shift-k>": "windowmove down"
+    "<alt-shift-l>": "windowmove right"
+    "<alt-meta-i>": "windowresize increase height"
+    "<alt-meta-j>": "windowresize decrease width"
+    "<alt-meta-k>": "windowresize decrease height"
+    "<alt-meta-l>": "windowresize increase width"
+    # Create and close windows on the same <alt> layer.
+    "<alt-n>": windownew
+    "<alt-enter>": terminalneworsplit
+    "<alt-q>": windowclose
+    "<alt-shift-q>": windowcloseall
+    "<alt-m>": windowtogglemaximize
+    "<alt-shift-enter>": "echo {prompt}windowconverttab<space>"
+    "<alt-w>": tabclose
+    # Brackets switch tabs; add <shift> to reorder them.
+    "<alt-[>": tabprevious
+    "<alt-]>": tabnext
+    "<alt-shift-[>": "tabmove left"
+    "<alt-shift-]>": "tabmove right"
+    "<alt-h>": "windowdefaultsplit h"
+    "<alt-v>": "windowdefaultsplit v"
+    # Ctrl-Meta reuses the IJKL cluster to step through occurrences:
+    # I/K visits Git changes, J/L visits diagnostics.
+    "<ctrl-meta-i>": gitprevchange
+    "<ctrl-meta-k>": gitnextchange
+    "<ctrl-meta-j>": lspprevdiagnostic
+    "<ctrl-meta-l>": lspnextdiagnostic
+    "<alt-t>": "lsp hover"
+    "<alt-shift-t>": "echo {prompt}lsp<space>hover<space>"
+    "<alt-p>": "lsp implementation"
+    "<alt-shift-p>": "echo {prompt}lsp<space>implementation<space>"
+    "<alt-e>": "lsp diagnostics"
+    "<alt-r>": "lsp references"
+    "<alt-shift-r>": "echo {prompt}lsp<space>references<space>"
+    "<alt-d>": "lsp definition"
+    "<alt-shift-d>": "echo {prompt}lsp<space>definition<space>"
+    "<alt-b>": "lsp format"
+    "<ctrl-space>": "lsp complete"
+    "<alt-x>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"
+    "<alt-f>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"
+    "<alt-s>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"
+    "<shift-meta-r>": history
+    # Bindings shared with the other presets.
+    "<shift-meta-e>": "fexplorer"
+    "<meta-,>": "config"
+    "<alt-/>": "cheatsheet"
+    "<meta-=>": "guifontsize increase"
+    "<meta-->": "guifontsize decrease"
+    "<meta-t>": "tabnew"
+    "<meta-c>": "clipboardcopy"
+    "<meta-v>": "clipboardpaste"
+    "<alt-`>": "tabsearch"
+    "<shift-meta-backspace>": "windowresize reset"
+    "<shift-meta-+>": ["windowresize max width", "windowresize max height"]
+    "<shift-meta-->": ["windowresize min width", "windowresize min height"]
+    "<meta-enter>": "terminalneworsplit"
+    "<shift-meta-enter>": "!"
+    "<meta-`>": "workspacesearch"
+    "<alt-1>": "tabfocus 1"
+    "<alt-2>": "tabfocus 2"
+    "<alt-3>": "tabfocus 3"
+    "<alt-4>": "tabfocus 4"
+    "<alt-5>": "tabfocus 5"
+    "<alt-6>": "tabfocus 6"
+    "<alt-7>": "tabfocus 7"
+    "<alt-8>": "tabfocus 8"
+    "<alt-9>": "tabfocus 9"
+    "<alt-shift-1>": "tabmove 1"
+    "<alt-shift-2>": "tabmove 2"
+    "<alt-shift-3>": "tabmove 3"
+    "<alt-shift-4>": "tabmove 4"
+    "<alt-shift-5>": "tabmove 5"
+    "<alt-shift-6>": "tabmove 6"
+    "<alt-shift-7>": "tabmove 7"
+    "<alt-shift-8>": "tabmove 8"
+    "<alt-shift-9>": "tabmove 9"
+    "<meta-1>": "workspacefocus 1"
+    "<meta-2>": "workspacefocus 2"
+    "<meta-3>": "workspacefocus 3"
+    "<meta-4>": "workspacefocus 4"
+    "<meta-5>": "workspacefocus 5"
+    "<meta-6>": "workspacefocus 6"
+    "<meta-7>": "workspacefocus 7"
+    "<meta-8>": "workspacefocus 8"
+    "<meta-9>": "workspacefocus 9"
+    "<shift-meta-1>": "workspacemove 1"
+    "<shift-meta-2>": "workspacemove 2"
+    "<shift-meta-3>": "workspacemove 3"
+    "<shift-meta-4>": "workspacemove 4"
+    "<shift-meta-5>": "workspacemove 5"
+    "<shift-meta-6>": "workspacemove 6"
+    "<shift-meta-7>": "workspacemove 7"
+    "<shift-meta-8>": "workspacemove 8"
+    "<shift-meta-9>": "workspacemove 9"
 
 # ---------------------------------------------------------------------------
 # Animations between workspaces
@@ -261,27 +241,3 @@ gui:
 # ---------------------------------------------------------------------------
 # notifications:
 #   auto_close:   5s
-#   padding:      1
-#   progress_bar: true
-
-# ---------------------------------------------------------------------------
-# Command prompt — additions to the active standard preset above
-#
-# The active block has already remapped `command.key` to <s-m-p>; you
-# can replace that here. Aliases layer on top of built-ins: a string
-# value is the substitution, a dict with `command` + `completer` adds
-# completion. Set a key_binding value to "" to unbind a built-in.
-# ---------------------------------------------------------------------------
-# command:
-#   history_key: <m-r>
-#   max_history: 20000
-#   aliases:
-#     # Simple alias: `:w` runs `:write`.
-#     w: write
-#     # Alias with a completer: typing `:e <tab>` suggests files.
-#     e:    {command: edit, completer: files}
-#     # Alias with a shell completer (here: git branch names).
-#     gitcheckout:
-#       command:   "!! git -C $WORKSPACE_PATH checkout $1"
-#       completer: '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"'
-#     conf: config

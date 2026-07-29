@@ -24,6 +24,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,25 +75,37 @@ func TestRenderPreset(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, ema, "mode: emacs",
 		"the emacs choice must switch the editor into emacs")
-	require.Contains(t, ema, `"<m-f>": "windowfocus right"`,
+	require.Contains(t, ema, `"<meta-f>": "windowfocus right"`,
 		"emacs must use the PNBF direction layer for window focus")
+	require.Contains(t, ema, `"<ctrl-x>u": "undo prefix"`,
+		"emacs must expose GNU's C-x u undo alias")
 	for _, binding := range []string{
-		`"<m-d>": "windownew down"`,
-		`"<m-r>": "windownew right"`,
-		`"<s-m-w>": windowclose`,
-		`"<m-k>": windowcloseall`,
-		`"<m-e>": windowtogglemaximize`,
-		`"<m-left>": "windowresize decrease width"`,
+		`"<meta-d>": "windownew down"`,
+		`"<meta-r>": "windownew right"`,
+		`"<meta-k>": windowclose`,
+		`"<shift-meta-k>": windowcloseall`,
+		`"<meta-m>": windowtogglemaximize`,
+		`"<meta-o>": fexplorer`,
+		`"<meta-left>": "windowresize decrease width"`,
 	} {
 		require.Contains(t, ema, binding,
 			"emacs layout bindings must remain reachable from terminals")
 	}
-	for _, key := range []string{`"<c-x>0"`, `"<c-x>1"`, `"<c-x>2"`, `"<c-x>3"`, `"<c-x>9"`} {
-		require.NotContains(t, ema, key,
-			"terminal-inaccessible C-x lifecycle bindings must not return")
+	// A focused terminal eats C-x, so the GNU lifecycle chords may only ever
+	// duplicate a <meta> binding, never be the sole way to reach a command.
+	for cx, meta := range map[string]string{
+		`"<ctrl-x>0": windowclose`:       `"<meta-k>": windowclose`,
+		`"<ctrl-x>1": windowcloseall`:    `"<shift-meta-k>": windowcloseall`,
+		`"<ctrl-x>2": "windownew down"`:  `"<meta-d>": "windownew down"`,
+		`"<ctrl-x>3": "windownew right"`: `"<meta-r>": "windownew right"`,
+	} {
+		if strings.Contains(ema, cx) {
+			require.Contains(t, ema, meta,
+				"%s must duplicate a <meta> binding, not replace it", cx)
+		}
 	}
 	require.NotContains(t, ema,
-		`"<m-f>": "echo {prompt}jumptoast<space>locals.scm<space>`,
+		`"<meta-f>": "echo {prompt}jumptoast<space>locals.scm<space>`,
 		"the displaced function search binding must remain prompt-only")
 
 	_, err = renderPreset("bogus")

@@ -769,34 +769,30 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 		"<alt-meta-k>": "windowresize decrease height",
 		"<alt-meta-l>": "windowresize increase width",
 
-		"<ctrl-alt-meta-up>":    "windowresize increase height",
-		"<ctrl-alt-meta-left>":  "windowresize decrease width",
-		"<ctrl-alt-meta-down>":  "windowresize decrease height",
-		"<ctrl-alt-meta-right>": "windowresize increase width",
-
 		"<alt-h>": "windowdefaultsplit h",
 		"<alt-v>": "windowdefaultsplit v",
 
 		"<alt-n>":           "windownew",
 		"<alt-enter>":       "terminalneworsplit",
 		"<alt-q>":           "windowclose",
+		"<alt-shift-q>":     "windowcloseall",
 		"<alt-m>":           "windowtogglemaximize",
 		"<alt-shift-enter>": "echo {prompt}windowconverttab<space>",
-		"<alt-t>":           "tabnew",
 		"<alt-w>":           "tabclose",
 		"<alt-[>":           "tabprevious",
 		"<alt-]>":           "tabnext",
 		"<alt-shift-[>":     "tabmove left",
 		"<alt-shift-]>":     "tabmove right",
 
-		"<ctrl-meta-q>":      "lsp hover",
-		"<ctrl-shift-alt-h>": "echo {prompt}lsp<space>hover<space>",
-		"<ctrl-alt-i>":       "lsp implementation",
-		"<ctrl-shift-alt-i>": "echo {prompt}lsp<space>implementation<space>",
-		"<ctrl-shift-alt-v>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
+		"<alt-t>":       "lsp hover",
+		"<alt-shift-t>": "echo {prompt}lsp<space>hover<space>",
+		"<alt-p>":       "lsp implementation",
+		"<alt-shift-p>": "echo {prompt}lsp<space>implementation<space>",
+		"<alt-e>":       "lsp diagnostics",
+		"<alt-x>":       "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
 
-		"<ctrl-alt-j>": "cursorhistory prev",
-		"<ctrl-alt-l>": "cursorhistory next",
+		"<alt-,>": "cursorhistory prev",
+		"<alt-.>": "cursorhistory next",
 
 		"<ctrl-meta-i>": "gitprevchange",
 		"<ctrl-meta-k>": "gitnextchange",
@@ -874,8 +870,11 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 				"gitnextchange":                "<ctrl-meta-k>",
 				"windowdefaultsplit h":         "<alt-h>",
 				"windowdefaultsplit v":         "<alt-v>",
-				"lsp hover":                    "<ctrl-meta-q>",
-				"lsp implementation":           "<ctrl-alt-i>",
+				"lsp hover":                    "<alt-t>",
+				"lsp implementation":           "<alt-p>",
+				"lsp diagnostics":              "<alt-e>",
+				"cursorhistory prev":           "<alt-,>",
+				"cursorhistory next":           "<alt-.>",
 				"windowtogglemaximize":         "<alt-m>",
 			} {
 				cmd := strings.Split(wantCmd, " ")
@@ -906,7 +905,7 @@ func TestStandardPresetUsesModifierLayoutBindings(t *testing.T) {
 						"%s must not carry a stale Standard layout command", key)
 				}
 			}
-			for _, key := range []string{"<ctrl-meta-h>", "<ctrl-meta-v>", "<alt-shift-t>"} {
+			for _, key := range []string{"<ctrl-meta-h>", "<ctrl-meta-v>"} {
 				seq := mustParseBindingKey(t, key)
 				if got, ok := mappings[seq]; ok {
 					require.Equalf(t, [][]string{{""}}, got,
@@ -933,7 +932,7 @@ func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
 			bound: map[string]string{
 				"<m-s>":   "write",
 				"<m-o>":   "searchfile",
-				"<m-n>":   "tabnew",
+				"<m-t>":   "tabnew",
 				"<m-w>":   "tabclose",
 				"<s-m-f>": "searchtext",
 			},
@@ -947,8 +946,7 @@ func TestStandardPresetUsesPlatformApplicationBindings(t *testing.T) {
 				"<c-s-s>": "writeall",
 				"<c-o>":   "searchfile",
 				"<c-n>":   "tabnew",
-				"<c-f4>":  "tabclose",
-				"<c-f>":   "echo <m-f>",
+				"<a-w>":   "tabclose",
 				"<c-s-f>": "searchtext",
 			},
 		},
@@ -1017,6 +1015,10 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		"<ctrl-shift-->": "cursorhistory next",
 		"<ctrl-alt-h>":   "lsp hover",
 		"<ctrl-alt-v>":   "echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>",
+		"<ctrl-meta-q>":  "lsp hover",
+		"<ctrl-alt-i>":   "lsp implementation",
+		"<ctrl-alt-j>":   "cursorhistory prev",
+		"<ctrl-alt-l>":   "cursorhistory next",
 	}
 	for key, oldCmd := range staleUnbound {
 		seq := mustParseBindingKey(t, key)
@@ -1037,8 +1039,11 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 		"<alt-shift-[>": {"tabmove", "left"},
 		"<alt-]>":       {"tabnext"},
 		"<alt-[>":       {"tabprevious"},
-		"<ctrl-alt-l>":  {"cursorhistory", "next"},
-		"<ctrl-alt-j>":  {"cursorhistory", "prev"},
+		"<alt-.>":       {"cursorhistory", "next"},
+		"<alt-,>":       {"cursorhistory", "prev"},
+		"<alt-t>":       {"lsp", "hover"},
+		"<alt-p>":       {"lsp", "implementation"},
+		"<alt-e>":       {"lsp", "diagnostics"},
 	}
 	for wantKey, cmd := range wantResolved {
 		got := lookup(cmd[0], cmd[1:])
@@ -1095,10 +1100,10 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<a-s-/>":    "lsp references",
 		"<c-a-.>":    "echo {prompt}lsp<space>definition<space>",
 		"<c-s-a-/>":  "echo {prompt}lsp<space>references<space>",
-		"<c-x>j": "echo {prompt}jumptoast<space>locals.scm<space>" +
+		"<m-j>": "echo {prompt}jumptoast<space>locals.scm<space>" +
 			"local.definition.method|local.definition.function<space>",
 		"<a-s>o":     "searchtext",
-		"<c-x>?":     "lsp hover",
+		"<m-h>":      "lsp hover",
 		"<c-a-\\\\>": "lsp format",
 		"<c-a-i>":    "lsp complete",
 		"<f5>":       "gitprevchange",
@@ -1106,8 +1111,9 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<f7>":       "lspprevdiagnostic",
 		"<f8>":       "lspnextdiagnostic",
 		"<f9>":       "lsp diagnostics",
-		"<c-f2>":     "jumptolocation next bookmark",
-		"<c-s-f2>":   "jumptolocation previous bookmark",
+		"<m-f3>":     "jumptolocation next bookmark",
+		"<s-m-f3>":   "jumptolocation previous bookmark",
+		"<m-f4>":     "locationhighlight bookmark",
 	}
 	for key, wantCmd := range wantBound {
 		seq := mustParseBindingKey(t, key)
@@ -1124,7 +1130,6 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<m-b>":   "windowfocus left",
 		"<m-n>":   "windowfocus down",
 		"<m-f>":   "windowfocus right",
-		"<m-j>":   "cursorhistory jump",
 		"<m-g>":   "jumptolocation next search",
 		"<s-m-g>": "jumptolocation prev search",
 		"<m-i>":   "lsp implementation",
@@ -1143,10 +1148,10 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 
 		"<m-d>":   "windownew down",
 		"<m-r>":   "windownew right",
-		"<s-m-w>": "windowclose",
-		"<m-k>":   "windowcloseall",
-		"<m-e>":   "windowtogglemaximize",
-		"<s-m-r>": "history",
+		"<m-k>":   "windowclose",
+		"<s-m-k>": "windowcloseall",
+		"<m-m>":   "windowtogglemaximize",
+		"<a-s-x>": "history",
 
 		"<c-m-h>":   "windowdefaultsplit h",
 		"<c-m-v>":   "windowdefaultsplit v",
@@ -1161,8 +1166,14 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<s-m-]>":   "tabmove right",
 		"<s-m-[>":   "tabmove left",
 
-		"<s-m-d>": "fexplorer",
-		"<s-m-t>": "tabsearch",
+		"<m-o>":   "fexplorer",
+		"<m-l>":   "lspnextdiagnostic",
+		"<s-m-l>": "lspprevdiagnostic",
+		"<m-e>":   "lsp diagnostics",
+		"<m-s>": "echo {prompt}jumptoast<space>locals.scm<space>" +
+			"local.definition.type<space>",
+		"<m-x>": "echo {prompt}jumptoast<space>locals.scm<space>" +
+			"local.definition.var<space>",
 	}
 	for key, wantCmd := range wantLive {
 		seq := mustParseBindingKey(t, key)
@@ -1186,26 +1197,24 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"windowresize decrease width":  "<meta-left>",
 		"windowresize decrease height": "<meta-down>",
 		"windowresize increase width":  "<meta-right>",
-		"windowclose":                  "<shift-meta-w>",
-		"windowcloseall":               "<meta-k>",
+		"windowclose":                  "<meta-k>",
+		"windowcloseall":               "<shift-meta-k>",
 		"windownew down":               "<meta-d>",
 		"windownew right":              "<meta-r>",
-		"windowtogglemaximize":         "<meta-e>",
-		"history":                      "<shift-meta-r>",
+		"windowtogglemaximize":         "<meta-m>",
+		"history":                      "<alt-shift-x>",
 		"cursorhistory prev":           "<alt-,>",
 		"cursorhistory next":           "<ctrl-alt-,>",
-		"cursorhistory jump":           "<meta-j>",
 		"lsp definition":               "<alt-.>",
 		"lsp references":               "<alt-shift-/>",
 		"lsp implementation":           "<meta-i>",
-		"lsp hover":                    "<ctrl-x><shift-/>",
+		"lsp hover":                    "<meta-h>",
 		"lsp format":                   "<ctrl-alt-\\\\>",
-		"lsp diagnostics":              "<f9>",
+		"lsp diagnostics":              "<meta-e>",
 		"searchtext":                   "<alt-s>o",
 		"jumptolocation next search":   "<meta-g>",
 		"jumptolocation prev search":   "<shift-meta-g>",
-		"fexplorer":                    "<shift-meta-d>",
-		"tabsearch":                    "<shift-meta-t>",
+		"fexplorer":                    "<meta-o>",
 		"lsp complete":                 "<ctrl-alt-i>",
 		"tabclose":                     "<meta-w>",
 		"tabprevious":                  "<meta-[>",
@@ -1214,8 +1223,8 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"tabmove right":                "<shift-meta-]>",
 		"gitprevchange":                "<f5>",
 		"gitnextchange":                "<f6>",
-		"lspprevdiagnostic":            "<f7>",
-		"lspnextdiagnostic":            "<f8>",
+		"lspprevdiagnostic":            "<shift-meta-l>",
+		"lspnextdiagnostic":            "<meta-l>",
 	} {
 		cmd := strings.Split(wantCmd, " ")
 		require.Equalf(t, wantKey, lookup(cmd[0], cmd[1:]),
@@ -1223,8 +1232,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		"<m-h>", "<m-l>",
-		"<s-m-j>", "<s-m-k>", "<s-m-l>",
+		"<s-m-j>",
 		"<alt-meta-h>", "<alt-meta-j>", "<alt-meta-k>", "<alt-meta-l>",
 		"<c-m-i>", "<c-m-j>", "<c-m-k>", "<c-m-l>",
 		"<c-s-m-i>", "<c-s-m-j>", "<c-s-m-k>", "<c-s-m-l>",
@@ -1240,8 +1248,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		"<c-x>0", "<c-x>1", "<c-x>2", "<c-x>3", "<c-x>9",
-		"<c-x>d", "<c-x>b",
+		"<c-x>9", "<c-x>d", "<c-x>b", "<c-x>j", "<c-x>?",
 	} {
 		_, ok := mappings[mustParseBindingKey(t, key)]
 		require.Falsef(t, ok,
