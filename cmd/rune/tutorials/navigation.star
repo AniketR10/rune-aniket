@@ -46,9 +46,11 @@ def_by_name_dismiss = [ck, def_by_name_key]
 
 # The `jumptoast` prefill fuzzy-jumps to a function or method defined in
 # the current file. It is bound as a prompt-prefill macro whose chord
-# differs by mode. `key_for` cannot resolve prefill macros, so hardcode it.
+# differs by mode. `key_for` cannot resolve prefill macros, so hardcode
+# it; TestNavigationTutorialJumpToSymbolKeyMatchesPreset pins each chord
+# against the preset that binds it.
 if editor_mode() == "emacs":
-    jump_symbol_key = "<ctrl-x>j"
+    jump_symbol_key = "<meta-j>"
 else:
     jump_symbol_key = "<alt-f>"
 jump_symbol_dismiss = [ck, jump_symbol_key]
@@ -451,4 +453,4 @@ def run():
                     dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "16", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "17", entry = run)

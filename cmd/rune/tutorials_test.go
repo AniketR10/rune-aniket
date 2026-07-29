@@ -1074,6 +1074,77 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	}, notis.successes())
 }
 
+// TestNavigationTutorialPrefillKeysMatchPresets pins the chords the
+// tutorial hardcodes against the presets that bind them. They cannot
+// come from key_for because they are prompt-prefill macros, and the
+// jumptoast copy went stale once already when the emacs preset moved
+// that binding off <ctrl-x>j.
+func TestNavigationTutorialPrefillKeysMatchPresets(t *testing.T) {
+	t.Parallel()
+
+	const (
+		jumpPrefill = `": "echo {prompt}jumptoast<space>locals.scm<space>` +
+			`local.definition.method|local.definition.function<space>"`
+		defPrefill = `": "echo {prompt}lsp<space>definition<space>"`
+	)
+	tests := []struct {
+		mode    string
+		jumpKey string
+		defKey  string
+		preset  string
+	}{
+		{
+			mode:    "emacs",
+			jumpKey: "<meta-j>",
+			defKey:  "<ctrl-alt-.>",
+			preset:  presetEmacsYAML,
+		},
+		{
+			mode:    "modal",
+			jumpKey: "<alt-f>",
+			defKey:  "<alt-shift-d>",
+			preset:  presetModalYAML,
+		},
+		{
+			mode:    "standard",
+			jumpKey: "<alt-f>",
+			defKey:  "<alt-shift-d>",
+			preset:  presetStandardYAML,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			t.Parallel()
+			assert.Contains(t, tt.preset, `"`+tt.jumpKey+jumpPrefill,
+				"the preset must bind the chord the tutorial teaches")
+			assert.Contains(t, tt.preset, `"`+tt.defKey+defPrefill,
+				"the preset must bind the chord the tutorial teaches")
+
+			src := `
+def run():
+    floating_window(text = jump_symbol_md + lsp_definition_name_md)
+tutorial(entry=run)
+`
+			modeSrc := strings.Replace(navigationTutorial,
+				`tutorial(id = "navigation", title = "Navigate code", version = "17", entry = run)`,
+				"", 1) + src
+			tut, err := starlarktutorial.New(
+				"navigation-prefill-keys", modeSrc,
+				nil, nil, nil, nil,
+				term.Attributes{}, nil, nil,
+				term.KeyComb{Ch: ':'}, tt.mode,
+				nil, nil, nil, nil,
+			)
+			require.NoError(t, err)
+			tut.Resize(80, 24)
+			tut.Reset()
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+			assert.Contains(t, tut.ActiveText(), tt.jumpKey)
+			assert.Contains(t, tut.ActiveText(), tt.defKey)
+		})
+	}
+}
+
 func TestNavigationTutorialSearchTextPickerKeysByMode(t *testing.T) {
 	t.Parallel()
 
@@ -1101,7 +1172,7 @@ def run():
 tutorial(entry=run)
 `
 			modeSrc := strings.Replace(navigationTutorial,
-				`tutorial(id = "navigation", title = "Navigate code", version = "16", entry = run)`,
+				`tutorial(id = "navigation", title = "Navigate code", version = "17", entry = run)`,
 				"", 1) + src
 			tut, err := starlarktutorial.New(
 				"navigation-picker-keys", modeSrc,
@@ -1452,7 +1523,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "16", tut.Version())
+	assert.Equal(t, "17", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1518,7 +1589,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "16", tut.Version())
+	assert.Equal(t, "17", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1544,18 +1615,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "16", tut.Version())
-}
-
-func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
-	t.Parallel()
-	require.Contains(t, navigationTutorial, `jump_symbol_key = "<ctrl-x>j"`)
-	require.Contains(t, navigationTutorial, `def_by_name_key = "<ctrl-alt-.>"`)
-	require.Contains(t, navigationTutorial,
-		`"press `+"`"+`" + def_by_name_key + "`+"`"+` to prefill`)
-	require.NotContains(t, navigationTutorial,
-		`press `+"`"+`<alt-shift-d>`+"`"+` to prefill`)
-	require.NotContains(t, navigationTutorial, `jump_symbol_key = "<meta-f>"`)
+	assert.Equal(t, "17", tut.Version())
 }
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
