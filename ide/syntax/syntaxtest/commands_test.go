@@ -119,7 +119,7 @@ func TestCommandsIntegration(t *testing.T) {
 	items, err = iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{
-		"package main",
+		"'package main'",
 	}, items)
 
 	_, err = c.DispatchCommand(ctx, textapi.Command{
@@ -201,7 +201,7 @@ func TestCommandsIntegration(t *testing.T) {
 	items, err = iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{
-		"package main",
+		"'package main'",
 	}, items)
 
 	tests = []comptest.TestCase{

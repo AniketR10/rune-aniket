@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/command"
 )
 
 // Handler is a subset of text.Handler.
@@ -133,7 +134,10 @@ func (c CommandHandler) completeJumpToSyntax(ctx context.Context, cmd textapi.Co
 		}
 		seen := make(map[string]struct{})
 		lines := iterator.Map(matches, func(s Match) string {
-			return jumpToSyntaxLineString(s.LineString)
+			// quote so that the prompt's tokenizer hands the line back
+			// verbatim as a single argument: source lines routinely
+			// contain quotes, backslashes and runs of whitespace.
+			return command.ShellQuote(jumpToSyntaxLineString(s.LineString))
 		})
 		return iterator.Filter(lines, func(line string) bool {
 			if _, ok := seen[line]; ok {

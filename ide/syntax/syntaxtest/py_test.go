@@ -201,9 +201,9 @@ func TestPythonJumpToSyntaxMethodIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	const method = "def __init__(self, prefix):"
-	require.Equal(t, []string{"def greet(name):", method}, items)
+	require.Equal(t, []string{"'def greet(name):'", "'" + method + "'"}, items)
 
-	cmd.Args = append(cmd.Args[:2], command.SplitCommandLine(method)...)
+	cmd.Args = append(cmd.Args[:2], command.UnquoteToken("'"+method+"'"))
 	require.NoError(t, handler.HandleCommand(context.Background(), cmd))
 	assert.Equal(t, term.Coordinates{Y: 13}, cursor.at)
 }
@@ -215,6 +215,45 @@ type syntaxCommandCursor struct {
 func (c *syntaxCommandCursor) SetCursorAtScroll(at term.Coordinates) bool {
 	c.at = at
 	return true
+}
+
+func TestPythonJumpToSyntaxQuotedLineIntegration(t *testing.T) {
+	_, tree, cleanup := newPythonTreeWithContent(t,
+		newInstalledPythonPkgManager(t), pyQuotedFileContent)
+	defer cleanup()
+
+	cursor := new(syntaxCommandCursor)
+	_, handler := syntax.Commands(cursor, tree)
+	cmd := textapi.Command{
+		Name: "jumptoast",
+		Args: []string{
+			"locals.scm",
+			"local.definition.method|local.definition.function",
+			"",
+		},
+	}
+	it, _, err := handler.Complete(context.Background(), cmd)
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	require.Len(t, items, 3)
+
+	for i, expected := range []int{2, 4, 7} {
+		item := items[i]
+		t.Run(item, func(t *testing.T) {
+			// simulate command.Prompt: completion entries are tokenized
+			// and unquoted before reaching the command handler.
+			var args []string
+			args = append(args, cmd.Args[:2]...)
+			for _, tok := range command.SplitCommandLine(item) {
+				args = append(args, command.UnquoteToken(tok))
+			}
+			cursor.at = term.Coordinates{}
+			require.NoError(t, handler.HandleCommand(
+				context.Background(), textapi.Command{Name: cmd.Name, Args: args}))
+			assert.Equal(t, term.Coordinates{Y: expected}, cursor.at)
+		})
+	}
 }
 
 func TestPythonTreeCommentCoverageIntegration(t *testing.T) {
@@ -384,4 +423,14 @@ def greet(name):
 class Greeter:
     def __init__(self, prefix):
         self.prefix = prefix
+`
+
+const pyQuotedFileContent = `import os
+
+def is_js_token(s): return len(s) and not s.startswith('//')
+
+def gen_stats(base_path="."):
+  return []
+
+def display_diff(diff): return "+"+str(diff) if diff > 0 else str(diff)
 `
