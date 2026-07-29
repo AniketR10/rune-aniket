@@ -86,6 +86,10 @@ func (e *editor) Edit(
 	cursor := &handler.(*emacsHandler).cursor
 	if e.fileRegistry != nil {
 		var err error
+		ret, err = subscribeUndoCommand(file, e.fileRegistry, handler.(*emacsHandler), ret)
+		if err != nil {
+			return nil, err
+		}
 		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
 		if err != nil {
 			return nil, err

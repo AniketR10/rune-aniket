@@ -1802,3 +1802,35 @@ func TestCommandKeyBindingLookupPrefersPrintableAlias(t *testing.T) {
 	}
 	assert.Empty(t, c.errors)
 }
+
+// TestCommandKeyBindingLookupPrefersSingleChord pins that a command bound
+// to both a single chord and a two-key sequence advertises the chord. A
+// focused terminal consumes prefix chords such as C-x as PTY input, so
+// surfacing the sequence would advertise a key the user cannot press.
+func TestCommandKeyBindingLookupPrefersSingleChord(t *testing.T) {
+	t.Parallel()
+	c := ideConfig{
+		cfg: map[string]any{
+			"command": map[string]any{
+				"key_bindings": map[string]any{
+					"<c-x>2": "windownew down",
+					"<m-d>":  "windownew down",
+					"<c-x>0": "windowclose",
+					"<f9>":   "lsp diagnostics",
+					"<c-x>9": "lsp diagnostics",
+				},
+			},
+		},
+		errors: map[string]error{},
+	}
+
+	for range 20 {
+		lookup := c.commandKeyBindingLookup()
+		assert.Equal(t, "<meta-d>", lookup("windownew", []string{"down"}))
+		// A named key still beats a two-key sequence.
+		assert.Equal(t, "<f9>", lookup("lsp", []string{"diagnostics"}))
+		// A sequence is still returned when it is the only binding.
+		assert.Equal(t, "<ctrl-x>0", lookup("windowclose", nil))
+	}
+	assert.Empty(t, c.errors)
+}

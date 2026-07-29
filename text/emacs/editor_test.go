@@ -283,6 +283,106 @@ func TestEditorRegistersIndentCommand(t *testing.T) {
 	assert.NotContains(t, wr.sub[cwd.String()], text.CommandReindent)
 }
 
+func TestEditorRegistersUndoCommand(t *testing.T) {
+	type action struct {
+		event   term.Event
+		command []string
+		want    string
+	}
+	tests := []struct {
+		name    string
+		content string
+		at      term.Coordinates
+		actions []action
+	}{
+		{
+			name: "prefix undo", content: "ab", at: term.Coordinates{X: 2},
+			actions: []action{
+				{event: char('X'), want: "abX"},
+				{event: ctrl('x'), want: "abX"},
+				{command: []string{undoPrefixArg}, want: "ab"},
+			},
+		},
+		{
+			name: "repeated prefix undo",
+			actions: []action{
+				{event: char('a'), want: "a"},
+				{event: ctrl('b'), want: "a"},
+				{event: char('b'), want: "ba"},
+				{event: ctrl('x'), want: "ba"},
+				{command: []string{undoPrefixArg}, want: "a"},
+				{event: ctrl('x'), want: "a"},
+				{command: []string{undoPrefixArg}, want: ""},
+			},
+		},
+		{
+			name: "prefix redo after breakers", content: "ab", at: term.Coordinates{X: 2},
+			actions: []action{
+				{event: char('界'), want: "ab界"},
+				{event: ctrl('x'), want: "ab界"},
+				{command: []string{undoPrefixArg}, want: "ab"},
+				{event: key(term.KeyF5), want: "ab"},
+				{event: ctrl('l'), want: "ab"},
+				{event: ctrl('x'), want: "ab"},
+				{command: []string{undoPrefixArg}, want: "ab界"},
+			},
+		},
+		{
+			name: "direct command ignores stale prefix", content: "ab", at: term.Coordinates{X: 2},
+			actions: []action{
+				{event: char('X'), want: "abX"},
+				{event: ctrl('x'), want: "abX"},
+				{command: []string{undoPrefixArg}, want: "ab"},
+				{event: ctrl('x'), want: "ab"},
+				{command: []string{}, want: "abX"},
+			},
+		},
+		{
+			name: "no history",
+			actions: []action{
+				{event: ctrl('x'), want: ""},
+				{command: []string{undoPrefixArg}, want: ""},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cwd, err := workspaceapi.ParseURI("memory:///")
+			require.NoError(t, err)
+			uri, err := workspaceapi.ParseURI("memory:///undo.txt")
+			require.NoError(t, err)
+			wr := newWorkspaceRegistry()
+			ed := Editor(WithWorkspaceCommandRegistry(cwd, wr))
+			buf := cell.NewBuffer()
+			buf.WriteString(tc.content)
+			h, err := ed.Edit(context.Background(), uri, buf, false, false)
+			require.NoError(t, err)
+			h.Resize(80, 10)
+			if tc.at != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.at))
+			}
+			cmds := wr.sub[cwd.String()]
+			require.Contains(t, cmds, CommandUndo)
+
+			for i, action := range tc.actions {
+				if action.command == nil {
+					h.Handle(action.event)
+				} else {
+					require.NoError(t, cmds[CommandUndo].HandleCommand(
+						context.Background(), textapi.Command{
+							URI: uri, Name: CommandUndo, Args: action.command,
+						}))
+				}
+				assert.Equal(t, action.want, buf.String(), "action %d", i)
+			}
+
+			require.NoError(t, h.Close())
+			assert.NotContains(t, wr.sub[cwd.String()], CommandUndo)
+		})
+	}
+}
+
 type workspaceRegistry struct {
 	sub map[string]map[string]text.CommandHandler
 }

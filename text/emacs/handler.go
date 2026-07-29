@@ -83,6 +83,8 @@ type emacsHandler struct {
 	// most undoRunMax characters.
 	undoRun      undoRunKind
 	undoRunLen   int
+	undoSequence undoSequenceState
+	undoPrefix   *undoSequenceState
 	minibuffer   minibuffer
 	pendingGoto  bool
 	pendingZap   bool
@@ -681,17 +683,31 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		// Any mouse action breaks an amalgamation run, like any other
 		// intervening command in GNU Emacs.
 		h.closeUndoRun()
+		h.breakUndoSequence()
 		return h.mouse.Handle(ev)
 	case term.EventPasteStart:
+		h.closeUndoRun()
+		h.breakUndoSequence()
 		h.pasteBuf.Reset()
 		h.pasteStarted = true
 		handled = true
 		return
 	case term.EventPasteEnd:
+		if !h.pasteStarted {
+			return
+		}
 		str := h.pasteBuf.String()
-		h.closeUndoRun()
+		h.pasteStarted = false
+		from, to, selected := h.cursor.SelectionBounds()
+		if str == "" && (!selected || from == to) {
+			if selected {
+				h.cursor.Unselect()
+			}
+			handled = true
+			return
+		}
 		h.buf.MarkStartUndo()
-		if _, ok := h.cursor.SelectionMode(); ok {
+		if selected {
 			// Pasting over a selection replaces it with the pasted text.
 			h.cursor.DeleteSelection()
 			h.cursor.Unselect()
@@ -699,7 +715,6 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		h.cursor.InsertString(str)
 		h.buf.GroupUndo()
 		handled = true
-		h.pasteStarted = false
 		return
 	case term.EventKey:
 	default:
@@ -726,6 +741,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 	// An active echo-area prompt (go-to-line, query-replace) owns every
 	// keystroke until it is submitted or cancelled.
 	if h.minibuffer.active {
+		h.breakUndoSequence()
 		h.minibuffer.handle(ev)
 		// A submit callback may chain another prompt or start the
 		// query-replace loop, each of which sets its own message; only
@@ -740,6 +756,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 	// both ends the search and carries its own meaning is reprocessed by the
 	// normal keymap below.
 	if h.isearch.active {
+		h.breakUndoSequence()
 		if !h.handleIsearchKey(ev) {
 			return false, true
 		}
@@ -747,6 +764,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	// The query-replace decision loop owns every keystroke until it ends.
 	if h.queryReplace.active {
+		h.breakUndoSequence()
 		h.handleQueryReplaceKey(ev)
 		return false, true
 	}
@@ -755,6 +773,7 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 	// command; today only go-to-line is bound, reachable as both M-g g
 	// and M-g M-g like in GNU Emacs.
 	if h.pendingGoto {
+		h.breakUndoSequence()
 		h.pendingGoto = false
 		if ev.Type == term.EventKey && ev.Ch == 'g' &&
 			(ev.Mod == 0 || ev.Mod == term.ModAlt) {
@@ -768,12 +787,14 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	// M-z reads the next character as the zap target.
 	if h.pendingZap {
+		h.breakUndoSequence()
 		h.handleZapKey(ev)
 		return false, true
 	}
 
 	// C-q reads the next key as a literal character.
 	if h.pendingQuotedInsert {
+		h.breakUndoSequence()
 		h.handleQuotedInsertKey(ev)
 		return false, true
 	}
@@ -793,11 +814,19 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		h.prefix = prefixState{}
 		h.less.SetMessage("")
 		h.setTransientMode("")
-		// The whole counted command is one undo group.
 		h.closeUndoRun()
-		h.buf.MarkStartUndo()
-		handled = h.dispatchCounted(ctx, ev, count, raw, &pastedThisTurn)
-		h.buf.GroupUndo()
+		if dispatchesUndo(ev) {
+			handled = h.dispatchCounted(ctx, ev, count, raw, &pastedThisTurn)
+			if !isUndoEvent(ev) {
+				h.breakUndoSequence()
+			}
+		} else {
+			// The whole counted command is one undo group.
+			h.buf.MarkStartUndo()
+			handled = h.dispatchCounted(ctx, ev, count, raw, &pastedThisTurn)
+			h.buf.GroupUndo()
+			h.breakUndoSequence()
+		}
 		return false, handled
 	}
 	if h.startPrefixArg(ev) {
@@ -805,6 +834,19 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		pastedThisTurn = h.lastPaste
 		return false, true
 	}
+	if ev.Mod == term.ModCtrl && ev.Ch == 'x' {
+		state := h.undoSequence
+		h.undoPrefix = &state
+		h.breakUndoSequence()
+	} else {
+		h.undoPrefix = nil
+	}
+	undoEvent := isUndoEvent(ev)
+	defer func() {
+		if !undoEvent {
+			h.breakUndoSequence()
+		}
+	}()
 
 	// One command, one undo: everything a dispatched key edits merges into
 	// a single undo group, except amalgamating runs which keep their group
@@ -1142,10 +1184,10 @@ func (h *emacsHandler) dispatchKey(
 			// C-/ and C-_: undo. A terminal folds C-/, C-_ and C-7 into
 			// one control code that arrives as C-/; the GUI path delivers
 			// the distinct glyphs.
-			handled = h.cursor.Undo()
+			handled = h.undo()
 		case '?':
 			// C-?: undo-redo (GUI path only; a terminal C-? is DEL).
-			handled = h.cursor.Redo()
+			handled = h.undoRedo()
 		case 's':
 			// C-s: isearch-forward.
 			handled = h.startIsearch(true)
@@ -1248,7 +1290,7 @@ func (h *emacsHandler) dispatchKey(
 			case '/', '_':
 				// C-M-/ and C-M-_: undo-redo (Emacs 28). The terminal
 				// folds both onto the same control code, like C-/.
-				handled = h.cursor.Redo()
+				handled = h.undoRedo()
 			}
 		}
 	}
@@ -1518,6 +1560,10 @@ func (h *emacsHandler) pasteFromHistory() (handled bool) {
 	}
 	// Undo the previous paste before replacing it with an older entry.
 	h.cursor.Undo()
+	// That undo shrank the timeline below the merge mark beginEventUndo
+	// opened for this event; re-anchor it so every edit of the replacement
+	// paste (a block paste makes several) still merges into one group.
+	h.buf.MarkStartUndo()
 	mode, _ := data.Metadata.(text.SelectMode)
 	h.cursor.Paste(data.Text, mode, false)
 	h.historyIdx = next

@@ -2727,6 +2727,20 @@ func TestEmacsKillRingEdgeCases(t *testing.T) {
 		require.True(t, runEvent(h, alt('y')))
 		assert.Equal(t, "za", buf.String())
 	})
+
+	t.Run("yank-pop of a block entry undoes in one step", func(t *testing.T) {
+		h, buf, reg := newEmacsHandlerWithHistory(t, "z\nz")
+		require.NoError(t, reg.Copy(clipboard.DefaultRegisterID,
+			clipboard.Data{Text: "1\n2", Metadata: text.BlockSelection}))
+		require.NoError(t, reg.Copy(clipboard.DefaultRegisterID,
+			clipboard.Data{Text: "c", Metadata: text.StandardSelection}))
+		require.True(t, runEvent(h, ctrl('y')))
+		require.Equal(t, "cz\nz", buf.String())
+		require.True(t, runEvent(h, alt('y')))
+		require.Equal(t, "1z\n2z", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "z\nz", buf.String(), "the block yank-pop reverts as one group")
+	})
 }
 
 // TestEmacsSexpMotionEdgeCases exercises the bracket-based forward and
@@ -4427,197 +4441,537 @@ func TestEmacsFillParagraph(t *testing.T) {
 	})
 }
 
-// TestEmacsUndoKeys pins C-/ (undo) restoring the buffer after each
-// single-edit command.
-func TestEmacsUndoKeys(t *testing.T) {
-	cases := []struct {
+// TestEmacsUndoInputSurface verifies that edits across the character and key
+// input surface can be undone with either GNU binding and redone after several
+// intervening non-undo commands.
+func TestEmacsUndoInputSurface(t *testing.T) {
+	tests := []struct {
 		name    string
 		content string
-		start   term.Coordinates
-		event   term.Event
+		at      term.Coordinates
+		arrange []term.Event
+		edit    []term.Event
 		after   string
 	}{
-		{"undo insertion", "ab", term.Coordinates{X: 2}, term.Event{Type: term.EventKey, Ch: 'X'}, "abX"},
-		{"undo forward delete", "abc", term.Coordinates{X: 1}, key(term.KeyDelete), "ac"},
-		{"undo backspace", "abc", term.Coordinates{X: 2}, key(term.KeyBackspace), "ac"},
-		{"undo kill-line", "abc\nd", term.Coordinates{}, ctrl('k'), "\nd"},
-		{"undo transpose-chars", "abc", term.Coordinates{X: 1}, ctrl('t'), "bac"},
-		{"undo kill-word", "alpha beta", term.Coordinates{}, alt('d'), " beta"},
+		{name: "ASCII insertion", content: "ab", at: term.Coordinates{X: 1}, edit: []term.Event{char('X')}, after: "aXb"},
+		{name: "wide-rune insertion", content: "界界", at: term.Coordinates{X: 1}, edit: []term.Event{char('世')}, after: "界世界"},
+		{name: "emoji insertion", content: "ab", at: term.Coordinates{X: 1}, edit: []term.Event{char('🚀')}, after: "a🚀b"},
+		{name: "combining-mark insertion", content: "ab", at: term.Coordinates{X: 1}, edit: []term.Event{char('\u0301')}, after: "a\u0301b"},
+		{name: "normal TAB", content: "ab", at: term.Coordinates{X: 2}, edit: []term.Event{key(term.KeyTab)}, after: "ab\t"},
+		{name: "quoted TAB", content: "ab", at: term.Coordinates{X: 1}, edit: []term.Event{ctrl('q'), key(term.KeyTab)}, after: "a\tb"},
+		{name: "quoted NUL", content: "a\x00b", at: term.Coordinates{X: 1}, edit: []term.Event{ctrl('q'), ctrl('@')}, after: "a\x00\x00b"},
+		{name: "newline", content: "ab", at: term.Coordinates{X: 1}, edit: []term.Event{key(term.KeyEnter)}, after: "a\nb"},
+		{name: "backspace over TAB", content: "a\tb", at: term.Coordinates{X: 2}, edit: []term.Event{key(term.KeyBackspace)}, after: "ab"},
+		{name: "backspace over wide rune", content: "a界b", at: term.Coordinates{X: 2}, edit: []term.Event{ctrl('h')}, after: "ab"},
+		{name: "delete NUL", content: "a\x00b", at: term.Coordinates{X: 1}, edit: []term.Event{key(term.KeyDelete)}, after: "ab"},
+		{name: "delete emoji", content: "a🚀b", at: term.Coordinates{X: 1}, edit: []term.Event{ctrl('d')}, after: "ab"},
+		{name: "kill mixed-width line", content: "a\t\x00界\nd", at: term.Coordinates{X: 1}, edit: []term.Event{ctrl('k')}, after: "a\nd"},
+		{name: "transpose wide runes", content: "世界", at: term.Coordinates{X: 1}, edit: []term.Event{ctrl('t')}, after: "界世"},
+		{
+			name: "replace mixed selection", content: "a\t\x00界z",
+			arrange: []term.Event{
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+			},
+			edit: []term.Event{char('世')}, after: "世z",
+		},
+		{
+			name: "paste TAB and wide rune", content: "ab", at: term.Coordinates{X: 1},
+			edit: []term.Event{
+				{Type: term.EventPasteStart},
+				char('\t'),
+				char('界'),
+				{Type: term.EventPasteEnd},
+			},
+			after: "a\t界b",
+		},
 	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			h, buf, _ := newEmacsHandlerWithClipboard(t, tc.content)
-			if tc.start != (term.Coordinates{}) {
-				require.True(t, h.SetCursorAtScroll(tc.start))
-			}
-			require.True(t, runEvent(h, tc.event))
-			require.Equal(t, tc.after, buf.String())
-			require.True(t, runEvent(h, ctrl('/')))
-			assert.Equal(t, tc.content, buf.String())
-		})
+	undoBindings := []struct {
+		name string
+		ev   term.Event
+	}{
+		{name: "C-slash", ev: ctrl('/')},
+		{name: "C-underscore", ev: ctrl('_')},
 	}
+	breakers := []term.Event{key(term.KeyF5), ctrl('z'), ctrl('l')}
 
-	t.Run("undo with no history is a no-op", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abc")
-		assert.False(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abc", buf.String())
-	})
+	for _, tc := range tests {
+		for i, undo := range undoBindings {
+			t.Run(tc.name+"/"+undo.name, func(t *testing.T) {
+				h, buf, _ := newEmacsHandlerWithClipboard(t, tc.content)
+				if tc.at != (term.Coordinates{}) {
+					require.True(t, h.SetCursorAtScroll(tc.at))
+				}
+				for _, ev := range tc.arrange {
+					require.True(t, runEvent(h, ev), "arrange event %#v", ev)
+				}
+				for _, ev := range tc.edit {
+					require.True(t, runEvent(h, ev), "edit event %#v", ev)
+				}
+				require.Equal(t, tc.after, buf.String(), "after edit")
 
-	t.Run("C-slash and C-underscore both undo", func(t *testing.T) {
-		for _, undo := range []term.Event{ctrl('/'), ctrl('_')} {
-			h, buf := newEmacsHandler(t, "ab")
-			require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
-			require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'X'}))
-			require.Equal(t, "abX", buf.String())
-			require.True(t, runEvent(h, undo))
-			assert.Equal(t, "ab", buf.String())
+				require.True(t, runEvent(h, undo.ev), "undo")
+				require.Equal(t, tc.content, buf.String(), "after undo")
+				for _, ev := range breakers {
+					h.Handle(ev)
+				}
+				redo := undoBindings[(i+1)%len(undoBindings)].ev
+				require.True(t, runEvent(h, redo), "ordinary undo after breakers")
+				assert.Equal(t, tc.after, buf.String(), "after GNU-style redo")
+			})
+		}
+	}
+}
+
+// TestEmacsUndoTimelines covers transitions among ordinary undo, GNU-style
+// redo, explicit undo-redo, fresh edits, and non-command runtime events.
+func TestEmacsUndoTimelines(t *testing.T) {
+	t.Run("ordinary undo and redo timelines", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			undoBefore  int
+			beforeBreak string
+			breakers    []term.Event
+			want        []string
+		}{
+			{
+				name:        "repeated undo stays backward",
+				undoBefore:  1,
+				beforeBreak: "a",
+				want:        []string{""},
+			},
+			{
+				name:        "motions switch repeated undo to redo",
+				undoBefore:  2,
+				beforeBreak: "",
+				breakers: []term.Event{
+					ctrl('f'), ctrl('b'), key(term.KeyHome), key(term.KeyEnd),
+				},
+				want: []string{"a", "ba"},
+			},
+			{
+				name:        "boundary no-ops still switch to redo",
+				undoBefore:  2,
+				beforeBreak: "",
+				breakers: []term.Event{
+					ctrl('b'), key(term.KeyArrowLeft), ctrl('p'), key(term.KeyF5), ctrl('z'),
+				},
+				want: []string{"a", "ba"},
+			},
+			{
+				name:        "mouse input switches to redo",
+				undoBefore:  2,
+				beforeBreak: "",
+				breakers: []term.Event{
+					{Type: term.EventMouse, Key: term.MouseWheelDown, MouseX: 0, MouseY: 0},
+				},
+				want: []string{"a", "ba"},
+			},
+			{
+				name:        "empty paste switches to redo",
+				undoBefore:  2,
+				beforeBreak: "",
+				breakers: []term.Event{
+					{Type: term.EventPasteStart},
+					{Type: term.EventPasteEnd},
+				},
+				want: []string{"a", "ba"},
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				h, buf := newEmacsHandler(t, "")
+				require.True(t, runEvent(h, char('a')))
+				require.True(t, runEvent(h, ctrl('b')))
+				require.True(t, runEvent(h, char('b')))
+				require.Equal(t, "ba", buf.String())
+				for range tc.undoBefore {
+					require.True(t, runEvent(h, ctrl('/')))
+				}
+				require.Equal(t, tc.beforeBreak, buf.String())
+				for _, ev := range tc.breakers {
+					h.Handle(ev)
+				}
+				for i, want := range tc.want {
+					require.True(t, runEvent(h, []term.Event{ctrl('_'), ctrl('/')}[i]))
+					assert.Equal(t, want, buf.String(), "step %d", i)
+				}
+			})
 		}
 	})
 
-	t.Run("C-z is unbound: GNU reserves it for suspend-frame", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "ab")
-		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
-		require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'X'}))
-		assert.False(t, runEvent(h, ctrl('z')))
-		assert.Equal(t, "abX", buf.String())
-	})
-
-	t.Run("C-question, C-M-slash and C-M-underscore redo", func(t *testing.T) {
-		for _, redo := range []term.Event{ctrl('?'), ctrlAlt('/'), ctrlAlt('_')} {
-			h, buf := newEmacsHandler(t, "ab")
-			require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
-			require.True(t, runEvent(h, term.Event{Type: term.EventKey, Ch: 'X'}))
-			require.True(t, runEvent(h, ctrl('/')))
-			require.Equal(t, "ab", buf.String())
-			require.True(t, runEvent(h, redo))
-			assert.Equal(t, "abX", buf.String())
-		}
-	})
-
-	t.Run("redo with nothing to redo is a no-op", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "ab")
-		assert.False(t, runEvent(h, ctrl('?')))
-		assert.Equal(t, "ab", buf.String())
-	})
-
-	t.Run("a new edit clears the redo timeline", func(t *testing.T) {
+	t.Run("an unbroken sequence rolls past the redos into undoing again", func(t *testing.T) {
 		h, buf := newEmacsHandler(t, "")
 		require.True(t, runEvent(h, char('a')))
-		require.True(t, runEvent(h, ctrl('/')))
+		require.True(t, runEvent(h, ctrl('b')))
 		require.True(t, runEvent(h, char('b')))
-		assert.False(t, runEvent(h, ctrl('?')))
-		assert.Equal(t, "b", buf.String())
+		require.True(t, runEvent(h, ctrl('/')))
+		require.True(t, runEvent(h, ctrl('_')))
+		require.Equal(t, "", buf.String())
+		h.Handle(ctrl('f'))
+		for i, want := range []string{"a", "ba", "a", ""} {
+			require.True(t, runEvent(h, []term.Event{ctrl('/'), ctrl('_')}[i%2]), "step %d", i)
+			assert.Equal(t, want, buf.String(), "step %d", i)
+		}
+	})
+
+	t.Run("runtime events are not editing commands", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			ev   term.Event
+		}{
+			{name: "resize", ev: term.Event{Type: term.EventResize, Width: 80, Height: 20}},
+			{name: "focus", ev: term.Event{Type: term.EventFocus}},
+			{name: "unfocus", ev: term.Event{Type: term.EventUnfocus}},
+			{name: "interrupt", ev: term.Event{Type: term.EventInterrupt}},
+			{name: "stray paste end", ev: term.Event{Type: term.EventPasteEnd}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				h, buf := newEmacsHandler(t, "")
+				require.True(t, runEvent(h, char('a')))
+				require.True(t, runEvent(h, ctrl('b')))
+				require.True(t, runEvent(h, char('b')))
+				require.True(t, runEvent(h, ctrl('/')))
+				require.Equal(t, "a", buf.String())
+				_, handled := h.Handle(tc.ev)
+				assert.False(t, handled)
+				require.True(t, runEvent(h, ctrl('_')))
+				assert.Equal(t, "", buf.String())
+			})
+		}
+	})
+
+	t.Run("empty paste over an empty selection creates no undo entry", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		require.True(t, runEvent(h, char('a')))
+		require.True(t, runEvent(h, ctrl('b')))
+		require.True(t, runEvent(h, char('b')))
+		require.True(t, runEvent(h, ctrl('/')))
+		require.True(t, runEvent(h, ctrl('_')))
+		require.Equal(t, "", buf.String())
+		assert.False(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+		require.True(t, runEvent(h, term.Event{Type: term.EventPasteStart}))
+		require.True(t, runEvent(h, term.Event{Type: term.EventPasteEnd}))
+		require.True(t, runEvent(h, ctrl('/')))
+		assert.Equal(t, "a", buf.String())
+	})
+
+	t.Run("explicit redo bindings start a fresh undo sequence", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			ev   term.Event
+		}{
+			{name: "C-question", ev: ctrl('?')},
+			{name: "C-M-slash", ev: ctrlAlt('/')},
+			{name: "C-M-underscore", ev: ctrlAlt('_')},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				h, buf := newEmacsHandler(t, "ab")
+				require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+				require.True(t, runEvent(h, char('X')))
+				require.True(t, runEvent(h, ctrl('/')))
+				require.True(t, runEvent(h, tc.ev))
+				require.Equal(t, "abX", buf.String())
+				require.True(t, runEvent(h, ctrl('_')))
+				assert.Equal(t, "ab", buf.String())
+			})
+		}
+	})
+
+	t.Run("empty timelines are no-ops", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			ev   term.Event
+		}{
+			{name: "ordinary undo", ev: ctrl('/')},
+			{name: "alternate undo", ev: ctrl('_')},
+			{name: "explicit redo", ev: ctrl('?')},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				h, buf := newEmacsHandler(t, "abc")
+				assert.False(t, runEvent(h, tc.ev))
+				assert.Equal(t, "abc", buf.String())
+			})
+		}
 	})
 }
 
-// TestEmacsUndoGrouping pins GNU one-undo-per-command semantics: a command
-// that performs several internal edits (M-^, M-t, cross-line C-t, M-SPC,
-// paste over a selection, a whole query-replace session) reverts with a
-// single undo.
-func TestEmacsUndoGrouping(t *testing.T) {
-	cases := []struct {
-		name    string
-		content string
-		start   term.Coordinates
-		event   term.Event
-		after   string
+// TestEmacsUndoStateMachineBreakers drives commands that are consumed by
+// transient states instead of the normal keymap. Each completed command must
+// still end an undo sequence so the next ordinary undo redoes the prior edit.
+func TestEmacsUndoStateMachineBreakers(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		at       term.Coordinates
+		breakers []term.Event
 	}{
-		{"M-^ delete-indentation", "a\n    b", term.Coordinates{Y: 1, X: 4}, alt('^'), "a b"},
-		{"M-t transpose-words", "alpha beta", term.Coordinates{X: 5}, alt('t'), "beta alpha"},
-		{"C-t across lines", "ab\n\ncd", term.Coordinates{Y: 1}, ctrl('t'), "a\nb\ncd"},
-		{"M-SPC just-one-space", "a   b", term.Coordinates{X: 2}, key2(term.KeySpace, term.ModAlt), "a b"},
+		{name: "incremental search accepted", content: "foo", at: term.Coordinates{X: 3}, breakers: []term.Event{ctrl('s'), char('f'), char('o'), char('o'), key(term.KeyEnter)}},
+		{name: "incremental search aborted", content: "foo", at: term.Coordinates{X: 3}, breakers: []term.Event{ctrl('s'), char('f'), ctrl('g')}},
+		{name: "goto minibuffer submitted", content: "a\nb", at: term.Coordinates{Y: 1, X: 1}, breakers: []term.Event{alt('g'), char('g'), char('1'), key(term.KeyEnter)}},
+		{name: "goto minibuffer cancelled", content: "ab", at: term.Coordinates{X: 2}, breakers: []term.Event{alt('g'), char('g'), ctrl('g')}},
+		{name: "query prompt cancelled", content: "foo", at: term.Coordinates{X: 3}, breakers: []term.Event{alt('%'), char('f'), char('o'), ctrl('g')}},
+		{name: "query decision quit", content: "foo", breakers: []term.Event{alt('%'), char('f'), char('o'), char('o'), key(term.KeyEnter), char('x'), key(term.KeyEnter), char('q')}},
+		{name: "goto prefix invalid key", content: "ab", at: term.Coordinates{X: 2}, breakers: []term.Event{alt('g'), char('x')}},
+		{name: "zap target not found", content: "ab", at: term.Coordinates{X: 2}, breakers: []term.Event{alt('z'), char('x')}},
+		{name: "quoted key without literal form", content: "ab", at: term.Coordinates{X: 2}, breakers: []term.Event{ctrl('q'), key(term.KeyArrowRight)}},
+		{name: "counted motion", content: "abcd", at: term.Coordinates{X: 4}, breakers: []term.Event{ctrl('u'), char('2'), ctrl('b')}},
 	}
-	for _, tc := range cases {
+
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h, buf := newEmacsHandler(t, tc.content)
-			if tc.start != (term.Coordinates{}) {
-				require.True(t, h.SetCursorAtScroll(tc.start))
+			if tc.at != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.at))
 			}
-			require.True(t, runEvent(h, tc.event))
-			require.Equal(t, tc.after, buf.String())
-			require.True(t, runEvent(h, ctrl('/')), "undo")
-			assert.Equal(t, tc.content, buf.String(), "one undo must restore the original")
+			require.True(t, runEvent(h, char('X')))
+			edited := buf.String()
+			require.True(t, runEvent(h, ctrl('/')))
+			require.Equal(t, tc.content, buf.String())
+			for _, ev := range tc.breakers {
+				require.True(t, runEvent(h, ev), "breaker %#v", ev)
+			}
+			require.True(t, runEvent(h, ctrl('_')))
+			assert.Equal(t, edited, buf.String())
+		})
+	}
+}
+
+func TestEmacsUndoKeysInTransientStates(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		at         term.Coordinates
+		enter      []term.Event
+		undoInMode term.Event
+		exit       []term.Event
+		executes   bool
+	}{
+		{name: "isearch rehandles undo", content: "foo", at: term.Coordinates{X: 3}, enter: []term.Event{ctrl('s'), char('f')}, undoInMode: ctrl('/'), executes: true},
+		{name: "goto minibuffer consumes undo", content: "a\nb", at: term.Coordinates{Y: 1, X: 1}, enter: []term.Event{alt('g'), char('g'), char('1')}, undoInMode: ctrl('_'), exit: []term.Event{ctrl('g')}},
+		{name: "query search minibuffer consumes undo", content: "foo", at: term.Coordinates{X: 3}, enter: []term.Event{alt('%'), char('f')}, undoInMode: ctrl('/'), exit: []term.Event{ctrl('g')}},
+		{name: "query decision consumes undo", content: "foo", enter: []term.Event{alt('%'), char('f'), char('o'), char('o'), key(term.KeyEnter), char('x'), key(term.KeyEnter)}, undoInMode: ctrl('_'), exit: []term.Event{char('q')}},
+		{name: "goto prefix consumes undo", content: "ab", at: term.Coordinates{X: 2}, enter: []term.Event{alt('g')}, undoInMode: ctrl('/')},
+		{name: "zap prefix consumes undo", content: "ab", at: term.Coordinates{X: 2}, enter: []term.Event{alt('z')}, undoInMode: ctrl('_')},
+		{name: "quoted insert consumes nonliteral undo chord", content: "ab", at: term.Coordinates{X: 2}, enter: []term.Event{ctrl('q')}, undoInMode: ctrl('/')},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.at != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.at))
+			}
+			require.True(t, runEvent(h, char('X')))
+			edited := buf.String()
+			require.True(t, runEvent(h, ctrl('/')))
+			require.Equal(t, tc.content, buf.String())
+			for _, ev := range tc.enter {
+				require.True(t, runEvent(h, ev), "enter event %#v", ev)
+			}
+			require.True(t, runEvent(h, tc.undoInMode), "undo key must be consumed")
+			if tc.executes {
+				require.Equal(t, edited, buf.String(), "active state must re-dispatch undo")
+			} else {
+				require.Equal(t, tc.content, buf.String(), "active state must own undo")
+			}
+			for _, ev := range tc.exit {
+				require.True(t, runEvent(h, ev), "exit event %#v", ev)
+			}
+			if !tc.executes {
+				require.True(t, runEvent(h, ctrl('/')), "next ordinary undo must redo")
+			}
+			assert.Equal(t, edited, buf.String())
+		})
+	}
+}
+
+func TestEmacsCountedUndo(t *testing.T) {
+	tests := []struct {
+		name          string
+		before        []term.Event
+		count         []term.Event
+		afterEachUndo []string
+	}{
+		{
+			name:          "counted undo walks backward",
+			count:         []term.Event{ctrl('u'), char('2'), ctrl('/')},
+			afterEachUndo: []string{""},
+		},
+		{
+			name:          "prefix collection does not break an undo run",
+			before:        []term.Event{ctrl('/')},
+			count:         []term.Event{ctrl('u'), char('1'), ctrl('_')},
+			afterEachUndo: []string{""},
+		},
+		{
+			name:          "counted undo becomes counted redo after a breaker",
+			before:        []term.Event{ctrl('/'), ctrl('_'), key(term.KeyF5)},
+			count:         []term.Event{ctrl('u'), char('2'), ctrl('/')},
+			afterEachUndo: []string{"ba"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, "")
+			require.True(t, runEvent(h, char('a')))
+			require.True(t, runEvent(h, ctrl('b')))
+			require.True(t, runEvent(h, char('b')))
+			require.Equal(t, "ba", buf.String())
+			for _, ev := range tc.before {
+				h.Handle(ev)
+			}
+			for _, ev := range tc.count {
+				require.True(t, runEvent(h, ev), "counted event %#v", ev)
+			}
+			assert.Equal(t, tc.afterEachUndo[0], buf.String())
 		})
 	}
 
-	t.Run("paste over a selection is one undo", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "hello world")
-		for range 5 {
-			require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
+	t.Run("counted redo keeps the redone changes separate", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "")
+		require.True(t, runEvent(h, char('a')))
+		require.True(t, runEvent(h, ctrl('b')))
+		require.True(t, runEvent(h, char('b')))
+		require.True(t, runEvent(h, ctrl('/')))
+		require.True(t, runEvent(h, ctrl('_')))
+		require.Equal(t, "", buf.String())
+		h.Handle(key(term.KeyF5))
+		for _, ev := range []term.Event{ctrl('u'), char('2'), ctrl('/')} {
+			require.True(t, runEvent(h, ev), "counted event %#v", ev)
 		}
-		runEvent(h, term.Event{Type: term.EventPasteStart})
-		for _, ch := range "XY" {
-			runEvent(h, term.Event{Type: term.EventKey, Ch: ch})
-		}
-		runEvent(h, term.Event{Type: term.EventPasteEnd})
-		require.Equal(t, "XY world", buf.String())
+		require.Equal(t, "ba", buf.String(), "counted redo replays both edits")
+		h.Handle(key(term.KeyF5))
 		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "hello world", buf.String())
+		assert.Equal(t, "a", buf.String(), "undo after a counted redo reverses one change")
 	})
+}
 
-	t.Run("interactive query-replace session is one undo", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "foo a foo b foo")
-		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>yyy")
-		require.Equal(t, "zap a zap b zap", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "foo a foo b foo", buf.String())
-	})
+func TestEmacsUndoAfterNewEdit(t *testing.T) {
+	tests := []struct {
+		name  string
+		edit  []term.Event
+		after string
+	}{
+		{name: "ASCII insertion", edit: []term.Event{char('b')}, after: "b"},
+		{name: "normal TAB", edit: []term.Event{key(term.KeyTab)}, after: "\t"},
+		{name: "quoted NUL", edit: []term.Event{ctrl('q'), ctrl('@')}, after: "\x00"},
+		{name: "wide paste", edit: []term.Event{{Type: term.EventPasteStart}, char('界'), {Type: term.EventPasteEnd}}, after: "界"},
+	}
 
-	t.Run("replace-all is one undo", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "foo a foo b foo")
-		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>!")
-		require.Equal(t, "zap a zap b zap", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "foo a foo b foo", buf.String())
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, "")
+			require.True(t, runEvent(h, char('a')))
+			require.True(t, runEvent(h, ctrl('/')))
+			for _, ev := range tc.edit {
+				require.True(t, runEvent(h, ev), "edit event %#v", ev)
+			}
+			require.Equal(t, tc.after, buf.String())
+			require.True(t, runEvent(h, ctrl('_')))
+			assert.Equal(t, "", buf.String(), "undo must target the new edit")
+			require.True(t, runEvent(h, ctrl('?')), "the fresh edit can be redone")
+			assert.Equal(t, tc.after, buf.String())
+			assert.False(t, runEvent(h, ctrl('?')), "the abandoned edit must not remain on the redo timeline")
+		})
+	}
+}
 
-	t.Run("quitting query-replace still groups the done replacements", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "foo a foo b foo")
-		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>yq")
-		require.Equal(t, "zap a foo b foo", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "foo a foo b foo", buf.String())
-	})
+// TestEmacsUndoGrouping verifies that each user command creates the expected
+// undo checkpoints even when it performs multiple buffer edits internally.
+func TestEmacsUndoGrouping(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		at            term.Coordinates
+		arrange       []term.Event
+		events        []term.Event
+		keys          string
+		after         string
+		afterEachUndo []string
+		finalNoOp     bool
+	}{
+		{name: "delete-indentation", content: "a\n\t\x00界", at: term.Coordinates{Y: 1, X: 2}, events: []term.Event{alt('^')}, after: "a 界", afterEachUndo: []string{"a\n\t\x00界"}},
+		{name: "transpose words", content: "alpha 世界", at: term.Coordinates{X: 5}, events: []term.Event{alt('t')}, after: "世界 alpha", afterEachUndo: []string{"alpha 世界"}},
+		{name: "transpose across lines", content: "ab\n\n界d", at: term.Coordinates{Y: 1}, events: []term.Event{ctrl('t')}, after: "a\nb\n界d", afterEachUndo: []string{"ab\n\n界d"}},
+		{name: "collapse mixed whitespace", content: "a \t\x00 b", at: term.Coordinates{X: 3}, events: []term.Event{key2(term.KeySpace, term.ModAlt)}, after: "a b", afterEachUndo: []string{"a \t\x00 b"}},
+		{
+			name: "paste over mixed selection", content: "a\t\x00界z",
+			arrange: []term.Event{
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+			},
+			events: []term.Event{
+				{Type: term.EventPasteStart}, char('\t'), char('🚀'), {Type: term.EventPasteEnd},
+			},
+			after: "\t🚀z", afterEachUndo: []string{"a\t\x00界z"},
+		},
+		{
+			name: "empty paste deletes mixed selection", content: "a\t\x00界z",
+			arrange: []term.Event{
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+			},
+			events: []term.Event{
+				{Type: term.EventPasteStart}, {Type: term.EventPasteEnd},
+			},
+			after: "z", afterEachUndo: []string{"a\t\x00界z"},
+		},
+		{name: "interactive query replace", content: "界 a 界 b 界", keys: "<alt-shift-5>界<enter>世<enter>yyy", after: "世 a 世 b 世", afterEachUndo: []string{"界 a 界 b 界"}},
+		{name: "replace all", content: "foo a foo b foo", keys: "<alt-shift-5>foo<enter>zap<enter>!", after: "zap a zap b zap", afterEachUndo: []string{"foo a foo b foo"}},
+		{name: "quit query replace", content: "foo a foo b foo", keys: "<alt-shift-5>foo<enter>zap<enter>yq", after: "zap a foo b foo", afterEachUndo: []string{"foo a foo b foo"}},
+		{name: "abort query replace", content: "foo a foo", keys: "<alt-shift-5>foo<enter>zap<enter>y<ctrl-g>", after: "zap a foo", afterEachUndo: []string{"foo a foo"}},
+		{name: "counted quoted TAB", content: "ab", at: term.Coordinates{X: 1}, keys: "<ctrl-u>3<ctrl-q><tab>", after: "a\t\t\tb", afterEachUndo: []string{"ab"}},
+		{name: "counted wide insertion", content: "ab", at: term.Coordinates{X: 1}, keys: "<ctrl-u>3界", after: "a界界界b", afterEachUndo: []string{"ab"}},
+		{
+			name: "typing over selection", content: "a\t\x00界z",
+			arrange: []term.Event{
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+				key2(term.KeyArrowRight, term.ModShift),
+			},
+			events: []term.Event{char('X'), char('世')}, after: "X世z",
+			afterEachUndo: []string{"a\t\x00界z"},
+		},
+		{name: "consecutive kills stay separate", content: "ab\ncd", events: []term.Event{ctrl('k'), ctrl('k')}, after: "cd", afterEachUndo: []string{"\ncd", "ab\ncd"}},
+		{name: "query replace without matches", content: "abc", keys: "<alt-shift-5>zz<enter>y<enter>", after: "abc", finalNoOp: true},
+	}
 
-	t.Run("consecutive kill commands stay separate undo groups", func(t *testing.T) {
-		h, buf, _ := newEmacsHandlerWithClipboard(t, "ab\ncd")
-		require.True(t, runEvent(h, ctrl('k')))
-		require.True(t, runEvent(h, ctrl('k')))
-		require.Equal(t, "cd", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "\ncd", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "ab\ncd", buf.String())
-	})
-
-	t.Run("typing over a selection undoes as one group", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "hello world")
-		for range 5 {
-			require.True(t, runEvent(h, key2(term.KeyArrowRight, term.ModShift)))
-		}
-		require.True(t, runEvent(h, char('X')))
-		require.True(t, runEvent(h, char('Y')))
-		require.Equal(t, "XY world", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "hello world", buf.String())
-	})
-
-	t.Run("quitting query-replace with C-g still groups", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "foo a foo")
-		feedKeys(t, h, "<alt-shift-5>foo<enter>zap<enter>y<ctrl-g>")
-		require.Equal(t, "zap a foo", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "foo a foo", buf.String())
-	})
-
-	t.Run("query-replace without matches leaves nothing to undo", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abc")
-		feedKeys(t, h, "<alt-shift-5>zz<enter>y<enter>")
-		require.Equal(t, "abc", buf.String())
-		assert.False(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abc", buf.String())
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, _ := newEmacsHandlerWithClipboard(t, tc.content)
+			if tc.at != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.at))
+			}
+			for _, ev := range tc.arrange {
+				require.True(t, runEvent(h, ev), "arrange event %#v", ev)
+			}
+			for _, ev := range tc.events {
+				require.True(t, runEvent(h, ev), "command event %#v", ev)
+			}
+			if tc.keys != "" {
+				feedKeys(t, h, tc.keys)
+			}
+			require.Equal(t, tc.after, buf.String())
+			for i, want := range tc.afterEachUndo {
+				require.True(t, runEvent(h, []term.Event{ctrl('/'), ctrl('_')}[i%2]), "undo %d", i)
+				assert.Equal(t, want, buf.String(), "after undo %d", i)
+			}
+			if tc.finalNoOp {
+				assert.False(t, runEvent(h, ctrl('/')))
+				assert.Equal(t, tc.after, buf.String())
+			}
+		})
+	}
 }
 
 // TestEmacsSentenceMotion pins M-a (backward-sentence) and M-e
@@ -5295,113 +5649,58 @@ func TestEmacsUniversalArgumentSpecials(t *testing.T) {
 	})
 }
 
-// TestEmacsUndoAmalgamation pins GNU amalgamating undo: consecutive
-// self-inserted characters (and consecutive same-direction deletes) merge
-// into one undo group of at most 20, and any other command closes the run.
+// TestEmacsUndoAmalgamation verifies the checkpoints formed by self-insert and
+// same-direction delete runs across aliases and character widths.
 func TestEmacsUndoAmalgamation(t *testing.T) {
-	t.Run("typed characters undo as one group", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "hello")
-		require.Equal(t, "hello", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "", buf.String())
-	})
+	wideRun := make([]term.Event, 25)
+	wideDeletes := make([]term.Event, 25)
+	for i := range wideRun {
+		wideRun[i] = char('界')
+		wideDeletes[i] = key(term.KeyBackspace)
+	}
+	tests := []struct {
+		name          string
+		content       string
+		at            term.Coordinates
+		events        []term.Event
+		after         string
+		afterEachUndo []string
+	}{
+		{name: "ASCII and space form one insert run", events: []term.Event{char('a'), char('b'), key(term.KeySpace), char('c'), char('d')}, after: "ab cd", afterEachUndo: []string{""}},
+		{name: "wide emoji and combining marks form one insert run", events: []term.Event{char('界'), char('🚀'), char('\u0301'), char('世')}, after: "界🚀\u0301世", afterEachUndo: []string{""}},
+		{name: "wide run caps at twenty logical characters", events: wideRun, after: strings.Repeat("界", 25), afterEachUndo: []string{strings.Repeat("界", 20), ""}},
+		{name: "motion splits insert runs", events: []term.Event{char('a'), char('b'), ctrl('b'), char('c'), char('d')}, after: "acdb", afterEachUndo: []string{"ab", ""}},
+		{name: "unbound key splits insert runs", events: []term.Event{char('a'), char('b'), key(term.KeyF5), char('c'), char('d')}, after: "abcd", afterEachUndo: []string{"ab", ""}},
+		{name: "normal TAB has its own group", events: []term.Event{char('a'), char('b'), key(term.KeyTab), char('c'), char('d')}, after: "ab\tcd", afterEachUndo: []string{"ab\t", "ab", ""}},
+		{name: "quoted TAB has its own group", events: []term.Event{char('a'), char('b'), ctrl('q'), key(term.KeyTab), char('c'), char('d')}, after: "ab\tcd", afterEachUndo: []string{"ab\t", "ab", ""}},
+		{name: "quoted NUL has its own group", events: []term.Event{char('a'), char('b'), ctrl('q'), ctrl('@'), char('c'), char('d')}, after: "ab\x00cd", afterEachUndo: []string{"ab\x00", "ab", ""}},
+		{name: "newline has its own group", events: []term.Event{char('a'), char('b'), key(term.KeyEnter), char('c'), char('d')}, after: "ab\ncd", afterEachUndo: []string{"ab\n", "ab", ""}},
+		{name: "empty paste splits insert runs", events: []term.Event{char('a'), char('b'), {Type: term.EventPasteStart}, {Type: term.EventPasteEnd}, char('c'), char('d')}, after: "abcd", afterEachUndo: []string{"ab", ""}},
+		{name: "nonempty paste has its own group", events: []term.Event{char('a'), char('b'), {Type: term.EventPasteStart}, char('\t'), char('界'), {Type: term.EventPasteEnd}, char('c'), char('d')}, after: "ab\t界cd", afterEachUndo: []string{"ab\t界", "ab", ""}},
+		{name: "backspace aliases share a mixed-width run", content: "a\t\x00界🚀", at: term.Coordinates{X: 5}, events: []term.Event{key(term.KeyBackspace), ctrl('h'), key(term.KeyBackspace)}, after: "a\t", afterEachUndo: []string{"a\t\x00界🚀"}},
+		{name: "forward-delete aliases share a mixed-width run", content: "\t\x00界🚀z", events: []term.Event{key(term.KeyDelete), ctrl('d'), key(term.KeyDelete), ctrl('d')}, after: "z", afterEachUndo: []string{"\t\x00界🚀z"}},
+		{name: "wide delete run caps at twenty logical characters", content: strings.Repeat("界", 25), at: term.Coordinates{X: 25}, events: wideDeletes, after: "", afterEachUndo: []string{strings.Repeat("界", 5), strings.Repeat("界", 25)}},
+		{name: "switching delete direction splits runs", content: "abcdef", at: term.Coordinates{X: 3}, events: []term.Event{key(term.KeyBackspace), ctrl('d')}, after: "abef", afterEachUndo: []string{"abdef", "abcdef"}},
+		{name: "typing then deleting splits runs", events: []term.Event{char('a'), char('b'), key(term.KeyBackspace)}, after: "a", afterEachUndo: []string{"ab", ""}},
+		{name: "boundary no-op splits delete runs", content: "abc", at: term.Coordinates{X: 3}, events: []term.Event{key(term.KeyBackspace), ctrl('f'), ctrl('h')}, after: "a", afterEachUndo: []string{"ab", "abc"}},
+	}
 
-	t.Run("space joins the typing run", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "ab<space>cd")
-		require.Equal(t, "ab cd", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "", buf.String())
-	})
-
-	t.Run("the run caps at 20 characters", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "abcdefghijklmnopqrstuvwxy") // 25 chars
-		require.Equal(t, "abcdefghijklmnopqrstuvwxy", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abcdefghijklmnopqrst", buf.String(),
-			"first undo drops the 5-char tail run")
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "", buf.String(), "second undo drops the 20-char run")
-	})
-
-	t.Run("a motion breaks the typing run", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "ab")
-		require.True(t, runEvent(h, ctrl('b')))
-		feedKeys(t, h, "cd")
-		require.Equal(t, "acdb", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "ab", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "", buf.String())
-	})
-
-	t.Run("RET breaks the typing run", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "ab<enter>cd")
-		require.Equal(t, "ab\ncd", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "ab\n", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "ab", buf.String())
-	})
-
-	t.Run("backspaces undo as one group", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abcdef")
-		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
-		for range 3 {
-			require.True(t, runEvent(h, key(term.KeyBackspace)))
-		}
-		require.Equal(t, "abc", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abcdef", buf.String())
-	})
-
-	t.Run("forward deletes undo as one group", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abcdef")
-		for range 3 {
-			require.True(t, runEvent(h, ctrl('d')))
-		}
-		require.Equal(t, "def", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abcdef", buf.String())
-	})
-
-	t.Run("switching delete direction breaks the run", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abcdef")
-		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 3}))
-		require.True(t, runEvent(h, key(term.KeyBackspace)))
-		require.True(t, runEvent(h, ctrl('d')))
-		require.Equal(t, "abef", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abdef", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abcdef", buf.String())
-	})
-
-	t.Run("typing then deleting are separate undo groups", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "")
-		feedKeys(t, h, "ab")
-		require.True(t, runEvent(h, key(term.KeyBackspace)))
-		require.Equal(t, "a", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "ab", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "", buf.String())
-	})
-
-	t.Run("C-h joins the backward-delete run", func(t *testing.T) {
-		h, buf := newEmacsHandler(t, "abcdef")
-		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
-		require.True(t, runEvent(h, ctrl('h')))
-		require.True(t, runEvent(h, key(term.KeyBackspace)))
-		require.True(t, runEvent(h, ctrl('h')))
-		require.Equal(t, "abc", buf.String())
-		require.True(t, runEvent(h, ctrl('/')))
-		assert.Equal(t, "abcdef", buf.String())
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf := newEmacsHandler(t, tc.content)
+			if tc.at != (term.Coordinates{}) {
+				require.True(t, h.SetCursorAtScroll(tc.at))
+			}
+			for _, ev := range tc.events {
+				h.Handle(ev)
+			}
+			require.Equal(t, tc.after, buf.String())
+			for i, want := range tc.afterEachUndo {
+				require.True(t, runEvent(h, []term.Event{ctrl('/'), ctrl('_')}[i%2]), "undo %d", i)
+				assert.Equal(t, want, buf.String(), "after undo %d", i)
+			}
+		})
+	}
 }
 
 // TestEmacsMacroKeys pins GNU's kmacro keys: <f3> starts recording through

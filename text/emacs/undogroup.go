@@ -43,6 +43,80 @@ const (
 // characters merge into one undo group before a new one starts.
 const undoRunMax = 20
 
+type undoSequenceState int
+
+const (
+	undoSequenceNone undoSequenceState = iota
+	undoSequenceUndo
+	undoSequenceRedoNext
+	undoSequenceRedo
+)
+
+func isUndoEvent(ev term.Event) bool {
+	return ev.Type == term.EventKey && ev.Mod == term.ModCtrl &&
+		(ev.Ch == '/' || ev.Ch == '_')
+}
+
+// dispatchesUndo reports whether ev dispatches an undo or undo-redo
+// command. Undo and redo rewrite the undo timeline themselves, so their
+// dispatch must never run inside a MarkStartUndo/GroupUndo pair: grouping
+// the entries a redo pushes back would fold distinct changes into one.
+func dispatchesUndo(ev term.Event) bool {
+	if ev.Type != term.EventKey {
+		return false
+	}
+	switch ev.Mod {
+	case term.ModCtrl:
+		return ev.Ch == '/' || ev.Ch == '_' || ev.Ch == '?'
+	case term.ModCtrlAlt:
+		return ev.Ch == '/' || ev.Ch == '_'
+	}
+	return false
+}
+
+func (h *emacsHandler) breakUndoSequence() {
+	switch h.undoSequence {
+	case undoSequenceUndo:
+		h.undoSequence = undoSequenceRedoNext
+	case undoSequenceRedo:
+		h.undoSequence = undoSequenceNone
+	}
+}
+
+func (h *emacsHandler) undo() bool {
+	switch h.undoSequence {
+	case undoSequenceRedoNext:
+		if h.cursor.Redo() {
+			h.undoSequence = undoSequenceRedo
+			return true
+		}
+	case undoSequenceRedo:
+		if h.cursor.Redo() {
+			return true
+		}
+		// GNU rolls an unbroken sequence past the redos into undoing
+		// earlier changes again instead of going inert.
+	}
+	if !h.cursor.Undo() {
+		return false
+	}
+	h.undoSequence = undoSequenceUndo
+	return true
+}
+
+func (h *emacsHandler) undoFromPrefix() bool {
+	if h.undoPrefix != nil {
+		h.undoSequence = *h.undoPrefix
+		h.undoPrefix = nil
+	}
+	return h.undo()
+}
+
+func (h *emacsHandler) undoRedo() bool {
+	h.undoSequence = undoSequenceNone
+	return h.cursor.Redo()
+}
+
 // amalgamationKind classifies ev before dispatch. Only plain character
 // insertion (self-insert) and single-character deletes amalgamate; every
 // other key is its own undo group.
@@ -88,6 +162,10 @@ func (h *emacsHandler) closeUndoRun() {
 // events; any other key closes the run and gets a group of its own. It
 // returns true when the caller must close that group after dispatch.
 func (h *emacsHandler) beginEventUndo(ev term.Event) bool {
+	if dispatchesUndo(ev) {
+		h.closeUndoRun()
+		return false
+	}
 	kind := amalgamationKind(ev)
 	if kind == undoRunNone {
 		h.closeUndoRun()

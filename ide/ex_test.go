@@ -720,6 +720,22 @@ type trackingWorkspaceRegistry struct {
 	errs []string
 }
 
+type editorWorkspaceRegistry struct {
+	editor text.Editor
+}
+
+func (r *editorWorkspaceRegistry) SubscribeCommandForWorkspace(
+	_ workspaceapi.URI, cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	return r.editor.SubscribeCommand(cmd, handler)
+}
+
+func (r *editorWorkspaceRegistry) UnsubscribeCommandForWorkspace(
+	_ workspaceapi.URI, name string,
+) error {
+	return r.editor.UnsubscribeCommand(name)
+}
+
 func newTrackingWorkspaceRegistry() *trackingWorkspaceRegistry {
 	return &trackingWorkspaceRegistry{cmds: make(map[string]struct{})}
 }
@@ -2610,20 +2626,33 @@ func TestExEmacsLifecycleBindingsReachCommandLayerFromTerminal(t *testing.T) {
 		"<meta-right>":   "windowresize increase width",
 		"<meta-d>":       "windownew down",
 		"<meta-r>":       "windownew right",
-		"<shift-meta-w>": "windowclose",
-		"<meta-k>":       "windowcloseall",
-		"<meta-e>":       "windowtogglemaximize",
-		"<shift-meta-d>": "fexplorer",
-		"<shift-meta-t>": "tabsearch",
+		"<meta-k>":       "windowclose",
+		"<shift-meta-k>": "windowcloseall",
+		"<meta-m>":       "windowtogglemaximize",
+		"<meta-o>":       "fexplorer",
 	}
 	for key, command := range wantBindings {
 		seq := mustParseBindingKey(t, key)
 		require.Equalf(t, [][]string{strings.Split(command, " ")}, mappings[seq],
 			"%s must run %q", key, command)
 	}
+	// The GNU C-x lifecycle chords are optional duplicates: a focused terminal
+	// eats them, so each one must mirror a <meta> binding above.
+	for cx, meta := range map[string]string{
+		"<ctrl-x>0": "<meta-k>",
+		"<ctrl-x>1": "<shift-meta-k>",
+		"<ctrl-x>2": "<meta-d>",
+		"<ctrl-x>3": "<meta-r>",
+	} {
+		got, ok := mappings[mustParseBindingKey(t, cx)]
+		if !ok {
+			continue
+		}
+		require.Equalf(t, mappings[mustParseBindingKey(t, meta)], got,
+			"%s must duplicate %s, not diverge from it", cx, meta)
+	}
 	for _, key := range []string{
-		"<ctrl-x>0", "<ctrl-x>1", "<ctrl-x>2", "<ctrl-x>3", "<ctrl-x>9",
-		"<ctrl-x>d", "<ctrl-x>b",
+		"<ctrl-x>9", "<ctrl-x>d", "<ctrl-x>b", "<ctrl-x>j", "<ctrl-x>?",
 	} {
 		_, ok := mappings[mustParseBindingKey(t, key)]
 		require.Falsef(t, ok, "%s must not remain as a terminal-inaccessible alias", key)
@@ -2688,6 +2717,41 @@ func nonEmpty(s []string) []string {
 		return nil
 	}
 	return s
+}
+
+func TestExEmacsCtrlXUUndoIntegration(t *testing.T) {
+	ctrlX := term.KeyComb{Mod: term.ModCtrl, Ch: 'x'}
+	sequence := thandler.Sequence{First: ctrlX, Last: term.KeyComb{Ch: 'u'}}
+	opts := []text.Option{text.WithCommandSequenceBinding(
+		sequence, [][]string{{emacs.CommandUndo, "prefix"}})}
+	cwd, err := workspaceapi.ParseURI("file:///")
+	require.NoError(t, err)
+	registry := new(editorWorkspaceRegistry)
+	e := newExForTesting(t, emacs.Editor(
+		emacs.WithWorkspaceCommandRegistry(cwd, registry)), opts...)
+	registry.editor = e.Editor()
+	t.Cleanup(func() { require.NoError(t, e.Close()) })
+
+	uri, err := workspaceapi.ParseURI("file:///ctrl-x-u.txt")
+	require.NoError(t, err)
+	_, err = e.editFileURI(uri, e.invokeWindow(), false)
+	require.NoError(t, err)
+	require.Contains(t, e.config.CommandSequenceBindings, sequence)
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), time.Second)
+	defer cancelWait()
+	require.NoError(t, e.editorObserver.Wait(waitCtx, emacs.CommandUndo))
+	h, err := e.Editor().Editor(uri)
+	require.NoError(t, err)
+
+	_, handled := e.Handle(term.Event{Type: term.EventKey, Ch: 'X'})
+	require.True(t, handled)
+	require.Equal(t, "X", h.CellView().String())
+
+	_, handled = e.Handle(term.Event{Type: term.EventKey, Mod: ctrlX.Mod, Ch: ctrlX.Ch})
+	assert.False(t, handled)
+	require.NotNil(t, e.cancelPartialReissue)
+	_, _ = e.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+	assert.Equal(t, "", h.CellView().String())
 }
 
 func TestExTabIntegration(t *testing.T) {

@@ -534,6 +534,16 @@ func sortedCommandKeySequences(mappings map[handler.Sequence][][]string) []handl
 		seqs = append(seqs, seq)
 	}
 	slices.SortFunc(seqs, func(a, b handler.Sequence) int {
+		// A focused terminal consumes prefix chords such as C-x as PTY
+		// input, so a single chord is always the more useful thing to
+		// advertise when a command carries both spellings.
+		aSeq, bSeq := a.Last != (term.KeyComb{}), b.Last != (term.KeyComb{})
+		if aSeq != bSeq {
+			if bSeq {
+				return -1
+			}
+			return 1
+		}
 		if a.First.Ch != 0 && b.First.Ch == 0 {
 			return -1
 		}
