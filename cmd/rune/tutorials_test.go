@@ -1101,7 +1101,7 @@ def run():
 tutorial(entry=run)
 `
 			modeSrc := strings.Replace(navigationTutorial,
-				`tutorial(id = "navigation", title = "Navigate code", version = "15", entry = run)`,
+				`tutorial(id = "navigation", title = "Navigate code", version = "16", entry = run)`,
 				"", 1) + src
 			tut, err := starlarktutorial.New(
 				"navigation-picker-keys", modeSrc,
@@ -1179,10 +1179,12 @@ func TestNavigationTutorialInstallsFuzzySearchFirst(t *testing.T) {
 	wait("wait_command")
 	tut.ObserveCommand("console", "console", nil, nil)
 
-	wait("floating_window") // pkg install fuzzy-search
-	// The install page has no dismiss_keys; <enter> advances it.
-	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
-	wait("wait_shell")
+	wait("wait_shell") // pkg install fuzzy-search
+	// The console is focused here, so the step must let the user type
+	// the install command instead of swallowing its keys.
+	handled, _ := tut.Handle(term.Event{Type: term.EventKey, Ch: 'p'})
+	assert.False(t, handled, "wait_shell must not swallow console input")
+	assert.Contains(t, tut.ActiveText(), "Rune's console")
 	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "fuzzy-search"}, nil)
 
@@ -1450,7 +1452,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "15", tut.Version())
+	assert.Equal(t, "16", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1516,7 +1518,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "15", tut.Version())
+	assert.Equal(t, "16", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1542,7 +1544,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "15", tut.Version())
+	assert.Equal(t, "16", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {

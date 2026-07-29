@@ -167,8 +167,9 @@ func commandName(cmd string) string {
 
 // buildWaitShellHint composes the markdown body for a wait_shell hint
 // window: it asks the user to run the expected command inside Rune's
-// console. A swapped-in on_error message (request.text
-// non-empty) wins and is rendered verbatim after the prompt opener.
+// console. A non-empty request.text is rendered verbatim after the
+// prompt opener: it is either the step's own instruction or the
+// on_error message the runtime swapped in after a wrong command.
 func buildWaitShellHint(r *request, cmdKey string) string {
 	if r == nil {
 		return ""

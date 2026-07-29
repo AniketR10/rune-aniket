@@ -121,10 +121,9 @@ Open the console: """ + keypress("console") + """.
 """
 
 pkg_install_md = """\
-You're in Rune's console now. Install the fuzzy-search extension:
-
-1. Type `pkg install fuzzy-search`.
-2. Press Enter and wait for the install to finish.
+You're in Rune's console now: type `pkg install fuzzy-search` and press
+Enter. The install takes a few seconds; this hint clears once it
+finishes.
 """
 
 searchfile_missing_md = """\
@@ -286,11 +285,10 @@ def teach_fuzzy_search_install():
         command  = "console",
         on_error = "Open Rune's console: run the `<cmd>console` command.",
     )
-    floating_window(title = "Install the finder", text = pkg_install_md,
-                    alignment = "top")
     wait_shell(
         title    = "Install the finder",
         args     = ["pkg", "install", "fuzzy-search"],
+        text     = pkg_install_md,
         on_error = "In Rune's console, run `pkg install fuzzy-search`.",
     )
     notify(level = success, message = "Fuzzy search installed.")
@@ -453,4 +451,4 @@ def run():
                     dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "15", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "16", entry = run)

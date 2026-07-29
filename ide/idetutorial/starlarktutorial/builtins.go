@@ -272,11 +272,13 @@ func builtinWaitShell(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			argList *starlark.List
 			onError starlark.String
 			title   starlark.String
+			text    starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_shell", args, kwargs,
 			"args", &argList,
 			"on_error?", &onError,
-			"title?", &title); err != nil {
+			"title?", &title,
+			"text?", &text); err != nil {
 			return nil, err
 		}
 		want, err := starlarkStringList(argList, "args")
@@ -291,6 +293,7 @@ func builtinWaitShell(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			shellArgs: want,
 			onError:   string(onError),
 			title:     string(title),
+			text:      string(text),
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {

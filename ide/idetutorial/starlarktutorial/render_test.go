@@ -863,6 +863,36 @@ tutorial(entry=run)
 		"console hint must leave the console prompt at the bottom visible")
 }
 
+// TestWaitShellHintShowsStepText asserts a console step can carry its
+// own instruction, so a lesson does not need a key-swallowing page to
+// explain what to type while the console is focused.
+func TestWaitShellHintShowsStepText(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_shell(args=["pkg", "install", "rune-agent"],
+               text="Type it and press Enter.")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	const screenW, screenH = 80, 24
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	g := newAttrGridWriter(screenW, screenH)
+	tut.Draw(g)
+	tut.winOverlay.Draw(g)
+	body := gridText(g)
+
+	assert.Contains(t, body, "pkg install")
+	assert.Contains(t, body, "Type it and press Enter.")
+
+	handled, _ := tut.Handle(term.Event{Type: term.EventKey, Ch: 'p'})
+	assert.False(t, handled,
+		"a console step must let the user type the command")
+}
+
 // TestConfirmOverlayMeetsMinimumSize asserts that even with a very
 // short confirm message the prompt window honours the overlay
 // browser's configured minimum prompt width and is tall enough for
