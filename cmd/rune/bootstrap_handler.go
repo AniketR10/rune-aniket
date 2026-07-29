@@ -523,14 +523,14 @@ const (
 // Editor option labels double as map keys in optionToChoice; they must
 // stay byte-identical between the prompt and the callback.
 const (
-	optVimYes = "    vim    "
-	optVimNo  = "  default  "
-	optEmacs  = "   emacs   "
+	optVimYes   = "    vim    "
+	optStandard = " standard "
+	optEmacs    = "   emacs   "
 )
 
 var (
 	bootstrapVimKeys = []term.KeyComb{
-		{Ch: 'd'}, {Ch: 'e'}, {Ch: 'v'},
+		{Ch: 's'}, {Ch: 'e'}, {Ch: 'v'},
 	}
 
 	bootstrapWelcomeKeys = []term.KeyComb{
@@ -583,14 +583,14 @@ func (b *bootstrapHandler) openVimPrompt() {
 		"Rune ships with three built-in editors, so pick the one that feels like home.\n\n" +
 		"Know vim? Pick **vim** and you get it **everywhere**, not just in editor " +
 		"buffers: the terminal, input boxes, and the file explorer.\n\n" +
-		"Used to VS Code, Cursor, Sublime or a plain text editor? Pick **default** and Rune uses " +
+		"Used to VS Code, Cursor, Sublime or a plain text editor? Pick **standard** and Rune uses " +
 		"those familiar, standard key bindings everywhere instead.\n\n" +
 		"Prefer Emacs? Pick **emacs** for an Emacs-style keymap everywhere.\n\n" +
 		"**Which key bindings do you want?**"
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
-		[]string{optVimNo, optEmacs, optVimYes},
+		[]string{optStandard, optEmacs, optVimYes},
 		bootstrapVimKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
@@ -708,7 +708,7 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 
 func optionToChoice(option string) string {
 	switch option {
-	case optVimNo:
+	case optStandard:
 		return editorStandard
 	case optEmacs:
 		return editorEmacs

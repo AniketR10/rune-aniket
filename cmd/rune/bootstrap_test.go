@@ -31,12 +31,14 @@ import (
 )
 
 func TestOptionToChoiceMapping(t *testing.T) {
+	require.Equal(t, " standard ", optStandard)
+
 	cases := []struct {
 		option string
 		want   string
 	}{
 		{optVimYes, editorModal},
-		{optVimNo, editorStandard},
+		{optStandard, editorStandard},
 		{optEmacs, editorEmacs},
 		{"unknown", editorModal}, // default fallback
 	}
