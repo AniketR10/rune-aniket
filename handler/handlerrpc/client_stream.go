@@ -406,7 +406,7 @@ func (s *ClientStream[T]) scheduleDrawRequest(ctx context.Context, reqIsTick boo
 
 	// finally send a draw request, which will trigger the final interrupt
 	{
-		var req handlerrpc.DrawStreamRequest
+		req := handlerrpc.DrawStreamRequest{PackedOk: true}
 		sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Draw, Draw: &req}
 		err := s.stream.SendMsg(&sendMsg)
 		if err != nil {
@@ -594,7 +594,7 @@ func (s *ClientStream[T]) drawPending(w term.Writer) {
 }
 
 func (s *ClientStream[T]) drawReady(w term.Writer) {
-	doDraw(w, s.resp.DrawStreamResponse.GetRows())
+	doDraw(w, s.resp.DrawStreamResponse)
 }
 
 func (s *ClientStream[T]) log(level log.Level, msg string, args ...any) {
@@ -627,8 +627,15 @@ func makeContextPayload[T handlerrpc.StreamMessage](s *ClientStream[T]) string {
 	return fmt.Sprintf("%s:%p", ctxPayloadPrefix, s)
 }
 
-func doDraw(w term.Writer, rows []*termrpc.CellRow) {
-	for y, row := range rows {
+// doDraw blits a draw frame into w. Extensions that negotiated the packed
+// wire format send columnar planes, which blit without allocating a message
+// per cell; older extensions still send per-cell rows.
+func doDraw(w term.Writer, resp *handlerrpc.DrawStreamResponse) {
+	if packed := resp.GetPacked(); packed != nil {
+		packed.WriteTo(w)
+		return
+	}
+	for y, row := range resp.GetRows() {
 		for x, c := range row.Cells {
 			cell := c.ToModel()
 			w.SetCell(term.Coordinates{X: x, Y: y}, cell)

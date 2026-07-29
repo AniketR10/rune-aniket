@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	sync "sync"
 	"sync/atomic"
@@ -40,6 +41,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"unstable.build/go-tui/browser/browsertest"
 	thandlerrpc "unstable.build/go-tui/handler/handlerrpc"
 )
@@ -172,6 +175,40 @@ AAAAAAAAAAAAAAAAAAAA
 		wg.Add(1)
 		comptest.TestComponent(t, client, w, tests)
 		wg.Wait()
+	})
+
+	// The wire format is negotiated per draw request: a host that
+	// advertises packed_ok gets columnar planes, an older host that
+	// cannot set the field keeps getting per-cell rows. Both must render
+	// the same screen.
+	t.Run("draw frame format is negotiated per request", func(t *testing.T) {
+		const width, height = 20, 10
+
+		rows := drawFrame(t, width, height, false)
+		assert.Nil(t, rows.GetPacked())
+		require.Len(t, rows.GetRows(), height)
+
+		packed := drawFrame(t, width, height, true)
+		require.NotNil(t, packed.GetPacked())
+		assert.Empty(t, packed.GetRows())
+		assert.Equal(t, uint32(width), packed.GetPacked().GetWidth())
+		assert.Equal(t, uint32(height), packed.GetPacked().GetHeight())
+
+		rowsScreen := term.NewStringWriter(width, height)
+		for y, row := range rows.GetRows() {
+			for x, cell := range row.GetCells() {
+				rowsScreen.SetCell(term.Coordinates{X: x, Y: y}, cell.ToModel())
+			}
+		}
+		require.NoError(t, rowsScreen.Flush())
+
+		packedScreen := term.NewStringWriter(width, height)
+		packed.GetPacked().WriteTo(packedScreen)
+		require.NoError(t, packedScreen.Flush())
+
+		assert.Contains(t, packedScreen.String(), "AAAA")
+		assert.Equal(t, rowsScreen.String(), packedScreen.String())
+		assert.Equal(t, rowsScreen.Cells(), packedScreen.Cells())
 	})
 
 	t.Run("handle short circuits exit by sending close request", func(t *testing.T) {
@@ -439,3 +476,62 @@ func doSetupIntTest(t *testing.T, register func(*grpc.Server)) (
 }
 
 func nopPublisher(term.Event) error { return nil }
+
+// scriptedStream is a grpc.ClientStream that replays a fixed script of
+// server messages and records what the ServerStream sends back, so a draw
+// request can be issued with an arbitrary packed_ok.
+type scriptedStream struct {
+	script []*handlerrpc.ServerMessage
+	sent   []*TestMessage
+}
+
+func (s *scriptedStream) Header() (metadata.MD, error) { return nil, nil }
+func (s *scriptedStream) Trailer() metadata.MD         { return nil }
+func (s *scriptedStream) CloseSend() error             { return nil }
+func (s *scriptedStream) Context() context.Context     { return context.Background() }
+
+func (s *scriptedStream) SendMsg(m any) error {
+	s.sent = append(s.sent, m.(*TestMessage))
+	return nil
+}
+
+func (s *scriptedStream) RecvMsg(m any) error {
+	if len(s.script) == 0 {
+		return io.EOF
+	}
+	next := s.script[0]
+	s.script = s.script[1:]
+	msg := m.(*handlerrpc.ServerMessage)
+	proto.Reset(msg)
+	proto.Merge(msg, next)
+	return nil
+}
+
+// drawFrame runs a ServerStream against a handler that fills the screen and
+// returns the frame it answers a draw request with the given packed_ok with.
+func drawFrame(
+	t *testing.T, width, height int, packedOK bool,
+) *handlerrpc.DrawStreamResponse {
+	t.Helper()
+
+	stream := &scriptedStream{script: []*handlerrpc.ServerMessage{{
+		Type: handlerrpc.MessageType_Resize,
+		Resize: &handlerrpc.ResizeStreamRequest{
+			Width:  int32(width),
+			Height: int32(height),
+		},
+	}, {
+		Type: handlerrpc.MessageType_Draw,
+		Draw: &handlerrpc.DrawStreamRequest{PackedOk: packedOK},
+	}}}
+
+	server := handlerrpc.NewServerStream(stream,
+		browsertest.NewTestFloating(width, height),
+		func() *TestMessage { return new(TestMessage) })
+	server.ReceiveMessages()
+
+	require.Len(t, stream.sent, 1)
+	draw := stream.sent[0].GetDraw()
+	require.NotNil(t, draw)
+	return draw
+}

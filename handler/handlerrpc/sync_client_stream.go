@@ -244,8 +244,8 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 		comp := component.NewStringWithConfig(smtgWrongCopy,
 			component.StringConfig{Alignment: component.AlignmentCentered})
 		comp.Resize(width, height)
-		draw := handlerrpc.NewDrawResponse(w.Context(), comp, width, height)
-		doDraw(w, draw.GetRows())
+		draw := handlerrpc.NewDrawResponse(w.Context(), comp, width, height, true)
+		doDraw(w, draw)
 		return
 	}
 	pending := s.respPending.CompareAndSwap(true, false)
@@ -255,7 +255,7 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 			return
 		}
 	}
-	var req handlerrpc.DrawStreamRequest
+	req := handlerrpc.DrawStreamRequest{PackedOk: true}
 	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Draw, Draw: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
@@ -276,7 +276,7 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 		return
 	}
 
-	doDraw(w, recvMsg.GetDraw().GetRows())
+	doDraw(w, recvMsg.GetDraw())
 }
 
 // Dimensions satisfies Handler.
