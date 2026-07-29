@@ -560,14 +560,14 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	case term.ModCtrl:
 		handled = true
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			if h.userScrolling {
 				handled = h.list.FocusDown()
 			} else {
 				handled = h.setUserScrolling(true)
 			}
 			h.dispatchPreviewArgument()
-		case 'k':
+		case 'k', 'p':
 			ok := h.list.FocusUp()
 			if !ok {
 				handled = h.setUserScrolling(false)

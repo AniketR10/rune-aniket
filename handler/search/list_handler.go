@@ -76,9 +76,9 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 		case 'c':
 			s.Cancel()
 			handled = true
-		case 'j':
+		case 'j', 'n':
 			handled = s.FocusDown()
-		case 'k':
+		case 'k', 'p':
 			handled = s.FocusUp()
 		}
 	}

@@ -296,15 +296,24 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 			s.mu.Lock()
 		default:
-			if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
-				// Ctrl-C dismisses the active selection prompt.
-				ch := s.comp.PreparePromptDismiss()
-				s.mu.Unlock()
-				if ch != nil {
-					ch <- nil
+			if ev.Mod == term.ModCtrl {
+				switch ev.Ch {
+				case 'k', 'p':
+					s.comp.PromptMoveUp()
+					return
+				case 'j', 'n':
+					s.comp.PromptMoveDown()
+					return
+				case 'c':
+					// Ctrl-C dismisses the active selection prompt.
+					ch := s.comp.PreparePromptDismiss()
+					s.mu.Unlock()
+					if ch != nil {
+						ch <- nil
+					}
+					s.mu.Lock()
+					return
 				}
-				s.mu.Lock()
-				return
 			}
 			if ev.Ch == ' ' {
 				s.comp.PromptToggle()
@@ -420,13 +429,13 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 	case term.ModCtrl:
 		switch ev.Ch {
-		case 'k':
+		case 'k', 'p':
 			if s.recallUp() {
 				handled = true
 				return
 			}
 			handled = s.comp.SeekUp()
-		case 'j':
+		case 'j', 'n':
 			if s.recallDown() {
 				handled = true
 				return

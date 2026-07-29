@@ -242,10 +242,10 @@ func (p *codeActionPicker) Handle(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			p.list.FocusDown()
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			p.list.FocusUp()
 			return false, true
 		case 'c':

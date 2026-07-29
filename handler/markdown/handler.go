@@ -199,12 +199,14 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return false, true
 	}
 
-	// The less-style character shortcuts below are bare keypresses.
-	// Vim-style Ctrl paging shortcuts. These are handled before the
-	// modifier fall-through below so they scroll rather than being
-	// dispatched by the host.
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
+		case 'p':
+			h.comp.SeekUp()
+			return false, true
+		case 'n':
+			h.comp.SeekDown()
+			return false, true
 		case 'f': // page down
 			h.scrollPage(1)
 			return false, true

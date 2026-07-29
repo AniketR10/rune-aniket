@@ -1151,8 +1151,8 @@ func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWrit
 	return less, term.NewStringWriter(width, height)
 }
 
-// TestLessNavigationKeys exercises the arrow and ctrl-b/ctrl-f and
-// pgup/pgdn navigation bindings end-to-end against the rendered
+// TestLessNavigationKeys exercises the arrow, ctrl-p/ctrl-n,
+// ctrl-b/ctrl-f, and pgup/pgdn bindings against the rendered
 // framebuffer. The fixture is a 12-line file of 2-character line
 // labels (00..11) so each rendered row is unambiguous and the
 // viewport (4x4 with the command bar disabled) shows exactly four
@@ -1189,6 +1189,22 @@ func TestLessNavigationKeys(t *testing.T) {
 		},
 		{
 			InputSequence: "<up>",
+			Expected: "" +
+				"00  \n" +
+				"01  \n" +
+				"02  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<c-n>",
+			Expected: "" +
+				"01  \n" +
+				"02  \n" +
+				"03  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<c-p>",
 			Expected: "" +
 				"00  \n" +
 				"01  \n" +

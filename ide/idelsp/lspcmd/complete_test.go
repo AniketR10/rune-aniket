@@ -215,12 +215,32 @@ func TestCompletionHandlerHandle(t *testing.T) {
 			wantFocusOffset: 1,
 		},
 		{
+			name:      "ctrl-n moves focus down",
+			giveItems: 3,
+			giveEvent: term.Event{
+				Type: term.EventKey,
+				Mod:  term.ModCtrl, Ch: 'n',
+			},
+			wantHandled:     true,
+			wantFocusOffset: 1,
+		},
+		{
 			name:       "ctrl-k moves focus up",
 			giveItems:  3,
 			giveOffset: 1,
 			giveEvent: term.Event{
 				Type: term.EventKey,
 				Mod:  term.ModCtrl, Ch: 'k',
+			},
+			wantHandled: true,
+		},
+		{
+			name:       "ctrl-p moves focus up",
+			giveItems:  3,
+			giveOffset: 1,
+			giveEvent: term.Event{
+				Type: term.EventKey,
+				Mod:  term.ModCtrl, Ch: 'p',
 			},
 			wantHandled: true,
 		},

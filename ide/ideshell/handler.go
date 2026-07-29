@@ -526,7 +526,7 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return false, true
 	}
 
-	// up/down (and the vi-style <c-k>/<c-j> aliases) cycle through
+	// up/down and the control-key aliases cycle through
 	// command history, but only at the vertical edges of the input. A
 	// recalled multi-line command must let the editor move the cursor
 	// between its rows first; history is reached only when the cursor
@@ -558,17 +558,16 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 // historyDir maps a key event to a history-navigation direction. The
 // second result is false for events that are not history-cycle keys.
-// Up moves toward older entries (<up>, <c-k>); down moves toward newer
-// ones (<down>, <c-j>).
+// Up moves toward older entries; down moves toward newer ones.
 func historyDir(ev term.Event) (up, ok bool) {
 	switch {
 	case ev.Mod == 0 && ev.Key == term.KeyArrowUp:
 		return true, true
 	case ev.Mod == 0 && ev.Key == term.KeyArrowDown:
 		return false, true
-	case ev.Mod == term.ModCtrl && ev.Ch == 'k':
+	case ev.Mod == term.ModCtrl && (ev.Ch == 'k' || ev.Ch == 'p'):
 		return true, true
-	case ev.Mod == term.ModCtrl && ev.Ch == 'j':
+	case ev.Mod == term.ModCtrl && (ev.Ch == 'j' || ev.Ch == 'n'):
 		return false, true
 	}
 	return false, false
@@ -911,10 +910,10 @@ func (h *Handler) handleHistory(ev term.Event) (exit, handled bool) {
 		case 'r':
 			h.list.FocusDown()
 			return false, true
-		case 'j':
+		case 'j', 'n':
 			h.list.FocusDown()
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			h.list.FocusUp()
 			return false, true
 		case 'c', 'g':
@@ -964,11 +963,11 @@ func (h *Handler) handleCompletion(ev term.Event) (exit, handled bool) {
 		}
 	case term.ModCtrl:
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			h.list.FocusDown()
 			h.compMoved = true
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			h.list.FocusUp()
 			h.compMoved = true
 			return false, true

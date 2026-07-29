@@ -520,6 +520,16 @@ func (a *commandAdapter) openCommandFloating(items []component.Responsive) {
 			list.SeekDown()
 			return false, true
 		}
+		if ev.Mod == term.ModCtrl {
+			switch ev.Ch {
+			case 'k', 'p':
+				list.SeekUp()
+				return false, true
+			case 'j', 'n':
+				list.SeekDown()
+				return false, true
+			}
+		}
 		return
 	})
 

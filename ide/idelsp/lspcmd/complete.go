@@ -335,10 +335,10 @@ func (c *completionHandler) handleKey(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			c.list.FocusDown()
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			c.list.FocusUp()
 			return false, true
 		}

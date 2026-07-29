@@ -90,10 +90,10 @@ func (v *textView) Handle(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			v.list.FocusDown()
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			v.list.FocusUp()
 			return false, true
 		case 'c':

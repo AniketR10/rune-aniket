@@ -327,10 +327,6 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	// Named-key navigation: arrow and page keys work regardless of
-	// the Ch field, plus Ctrl-f / Ctrl-b emacs/less-style page
-	// scrolling. We special-case these before the rune switch so
-	// they remain available even when the user holds Ctrl.
 	if ev.Mod == 0 {
 		switch ev.Key {
 		case term.KeyArrowUp:
@@ -345,6 +341,10 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
+		case 'p':
+			return false, l.scroll.SeekUp()
+		case 'n':
+			return false, l.scroll.SeekDown()
 		case 'b':
 			return false, l.scroll.SeekUpPage()
 		case 'f':

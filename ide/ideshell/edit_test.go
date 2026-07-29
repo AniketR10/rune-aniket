@@ -68,6 +68,28 @@ type stubEditHandler struct {
 	width         int
 }
 
+func TestHistoryDirSupportsArrowAndControlAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		ev   term.Event
+		up   bool
+	}{
+		{"arrow up", term.Event{Type: term.EventKey, Key: term.KeyArrowUp}, true},
+		{"ctrl-k", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'k'}, true},
+		{"ctrl-p", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'p'}, true},
+		{"arrow down", term.Event{Type: term.EventKey, Key: term.KeyArrowDown}, false},
+		{"ctrl-j", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'j'}, false},
+		{"ctrl-n", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'n'}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			up, ok := historyDir(tt.ev)
+			require.True(t, ok)
+			require.Equal(t, tt.up, up)
+		})
+	}
+}
+
 func (s *stubEditHandler) Resize(width, _ int) { s.width = width }
 func (s *stubEditHandler) Draw(w term.Writer) {
 	x, y := 0, 0
@@ -115,14 +137,15 @@ func (s *stubEditHandler) Handle(ev term.Event) (bool, bool) {
 	if ev.Mod == term.ModCtrl && ev.Ch == 'r' {
 		return false, true
 	}
-	// A real editor consumes arrow keys (and vi-style <c-j>/<c-k>) as
+	// A real editor consumes arrow keys and control-key aliases as
 	// cursor motion. The shell wrapper must intercept these for
 	// history cycling before the editor sees them.
 	if ev.Mod == 0 &&
 		(ev.Key == term.KeyArrowUp || ev.Key == term.KeyArrowDown) {
 		return false, true
 	}
-	if ev.Mod == term.ModCtrl && (ev.Ch == 'j' || ev.Ch == 'k') {
+	if ev.Mod == term.ModCtrl &&
+		(ev.Ch == 'j' || ev.Ch == 'k' || ev.Ch == 'n' || ev.Ch == 'p') {
 		return false, true
 	}
 	switch ev.Key {

@@ -256,26 +256,35 @@ func TestHandlerPromptRendersSelection(t *testing.T) {
 	assert.Contains(t, w.String(), "SQLite")
 }
 
-func TestHandlerPromptArrowKeysMoveCursor(t *testing.T) {
-	h, tx, interrupt := newPromptHandler(t)
-	resultCh := make(chan []string, 1)
-
-	tx <- MessageEvent{
-		Type:          MessageEventPrompt,
-		PromptTitle:   "Choose",
-		PromptOptions: []PromptEventOption{{Label: "A"}, {Label: "B"}, {Label: "C"}},
-		PromptResult:  resultCh,
+func TestHandlerPromptDownKeysMoveCursor(t *testing.T) {
+	tests := []struct {
+		name string
+		ev   term.Event
+	}{
+		{"arrow", term.Event{Type: term.EventKey, Key: term.KeyArrowDown}},
+		{"ctrl-j", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'j'}},
+		{"ctrl-n", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'n'}},
 	}
-	<-interrupt
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, tx, interrupt := newPromptHandler(t)
+			resultCh := make(chan []string, 1)
 
-	// Move down and select
-	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
-	assert.True(t, handled)
-	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
-	assert.True(t, handled)
+			tx <- MessageEvent{
+				Type:          MessageEventPrompt,
+				PromptTitle:   "Choose",
+				PromptOptions: []PromptEventOption{{Label: "A"}, {Label: "B"}, {Label: "C"}},
+				PromptResult:  resultCh,
+			}
+			<-interrupt
 
-	vals := <-resultCh
-	assert.Equal(t, []string{"B"}, vals)
+			_, handled := h.Handle(tt.ev)
+			assert.True(t, handled)
+			_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			assert.True(t, handled)
+			assert.Equal(t, []string{"B"}, <-resultCh)
+		})
+	}
 }
 
 func TestHandlerPromptEnterSelectsAndSendsResult(t *testing.T) {

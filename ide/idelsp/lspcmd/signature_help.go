@@ -375,6 +375,20 @@ func (f *signatureHelpFloating) Handle(ev term.Event) (bool, bool) {
 	if ev.Type != term.EventKey {
 		return false, false
 	}
+	if ev.Mod == term.ModCtrl {
+		switch ev.Ch {
+		case 'k', 'p':
+			if f.activeIdx > 0 {
+				f.activeIdx--
+			}
+			return false, true
+		case 'j', 'n':
+			if f.activeIdx < len(f.result.Signatures)-1 {
+				f.activeIdx++
+			}
+			return false, true
+		}
+	}
 	switch ev.Key {
 	case term.KeyArrowUp:
 		if f.activeIdx > 0 {

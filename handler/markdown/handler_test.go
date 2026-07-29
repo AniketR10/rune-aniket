@@ -332,13 +332,16 @@ func TestHandleNonMouseEvent(t *testing.T) {
 // unhandled so the host can dispatch its bound command (e.g. <meta-n>
 // opening a new window) instead of being swallowed as a scroll.
 func TestHandleModifiedCharKeysFallThrough(t *testing.T) {
-	// Ctrl paging shortcuts (Ctrl-F/B/D/U/E/Y) are handled by the
+	// Ctrl scrolling shortcuts (Ctrl-F/B/D/U/E/Y/N/P) are handled by the
 	// viewer itself, so they are excluded from the Ctrl fall-through
-	// set below and covered by TestCtrlPageScrolling instead.
-	ctrlPaging := map[rune]bool{'f': true, 'b': true, 'd': true, 'u': true, 'e': true, 'y': true}
+	// set below and covered by the scrolling tests.
+	ctrlScrolling := map[rune]bool{
+		'f': true, 'b': true, 'd': true, 'u': true,
+		'e': true, 'y': true, 'n': true, 'p': true,
+	}
 	for _, mod := range []term.Modifier{term.ModCtrl, term.ModAlt, term.ModMeta} {
-		for _, ch := range []rune{'q', 'n', 'N', 'j', 'k', 'g', 'G', 'b', 'f', 'd', 'u', 'e', 'y', '/'} {
-			if mod == term.ModCtrl && ctrlPaging[ch] {
+		for _, ch := range []rune{'q', 'n', 'p', 'N', 'j', 'k', 'g', 'G', 'b', 'f', 'd', 'u', 'e', 'y', '/'} {
+			if mod == term.ModCtrl && ctrlScrolling[ch] {
 				continue
 			}
 			comp, err := markdown.New("Hello World")
@@ -457,6 +460,17 @@ func TestKeyboardScrolling(t *testing.T) {
 
 		cases = []handlertest.SequenceTestCase{
 			{InputSequence: "<up>", Expected: "Line1     \n          \nLine2     "},
+		}
+		handlertest.RunHandlerSequence(t, h, width, height, cases)
+	})
+
+	t.Run("ctrl-n and ctrl-p scroll", func(t *testing.T) {
+		comp, _ := markdown.New(content)
+		h := New(comp)
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "", Expected: "Line1     \n          \nLine2     "},
+			{InputSequence: "<c-n>", Expected: "          \nLine2     \n          "},
+			{InputSequence: "<c-p>", Expected: "Line1     \n          \nLine2     "},
 		}
 		handlertest.RunHandlerSequence(t, h, width, height, cases)
 	})

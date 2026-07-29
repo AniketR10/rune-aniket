@@ -1592,11 +1592,11 @@ func (h *forkPickerHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
-		case 'k':
+		case 'k', 'p':
 			h.list.FocusUp()
 			h.updatePreview()
 			return false, true
-		case 'j':
+		case 'j', 'n':
 			h.list.FocusDown()
 			h.updatePreview()
 			return false, true

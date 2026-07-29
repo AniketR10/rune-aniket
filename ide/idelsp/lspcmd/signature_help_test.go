@@ -194,15 +194,25 @@ func TestSignatureHelpFloatingOverloadCycling(t *testing.T) {
 	f := newSignatureHelpFloating(result, DefaultSignatureHelpConfig(), &mockWindowManager{})
 	assert.Equal(t, 0, f.activeIdx)
 
-	// Down twice.
-	f.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
-	assert.Equal(t, 1, f.activeIdx)
-	f.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
-	assert.Equal(t, 2, f.activeIdx)
+	moves := []struct {
+		ev   term.Event
+		want int
+	}{
+		{term.Event{Type: term.EventKey, Key: term.KeyArrowDown}, 1},
+		{term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'n'}, 2},
+		{term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'p'}, 1},
+		{term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'j'}, 2},
+		{term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'k'}, 1},
+		{term.Event{Type: term.EventKey, Key: term.KeyArrowUp}, 0},
+	}
+	for _, move := range moves {
+		_, handled := f.Handle(move.ev)
+		assert.True(t, handled)
+		assert.Equal(t, move.want, f.activeIdx)
+	}
 
-	// Up once.
-	f.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
-	assert.Equal(t, 1, f.activeIdx)
+	// Leave the second signature active for the dimensions assertion.
+	f.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'n'})
 
 	// Dimensions reflect the currently active signature.
 	w, _ := f.Dimensions()
