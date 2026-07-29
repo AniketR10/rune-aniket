@@ -21,11 +21,11 @@ mode = editor_mode()
 # mode, IJKL in standard mode, and PNBF in Emacs mode.
 if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
-    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
+    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>` (or `<up>` / `<down>`)"
     modal_surface_allow_keys = ["<esc>"]
 elif mode == "emacs":
     dir_phrase = "the motion keys `<ctrl-p>` / `<ctrl-n>` or the arrow keys"
-    completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
+    completer_pick_phrase = "`<ctrl-p>` / `<ctrl-n>` (or `<up>` / `<down>`)"
     modal_surface_allow_keys = []
 else:
     dir_phrase = "the arrow keys"
@@ -967,4 +967,4 @@ def run():
     teach_cheatsheet()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "56", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "57", entry = run)

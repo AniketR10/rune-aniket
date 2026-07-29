@@ -73,7 +73,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "56", tut.Version())
+	assert.Equal(t, "57", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -100,7 +100,60 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "56", tut.Version())
+	assert.Equal(t, "57", tut.Version())
+}
+
+// TestBasicsTutorialCompleterKeysByMode asserts the completion-list
+// phrasing names each preset's own list bindings rather than a single
+// hardcoded arrow-key spelling.
+func TestBasicsTutorialCompleterKeysByMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		mode      string
+		expected  []string
+		forbidden []string
+	}{
+		{mode: "modal", expected: []string{"<ctrl-j>", "<ctrl-k>", "<up>", "<down>"}},
+		{
+			mode:      "standard",
+			expected:  []string{"<up>", "<down>"},
+			forbidden: []string{"<ctrl-i>", "<ctrl-k>"},
+		},
+		{mode: "emacs", expected: []string{"<ctrl-p>", "<ctrl-n>", "<up>", "<down>"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			t.Parallel()
+			src := `
+def run():
+    floating_window(text = completer_pick_phrase)
+tutorial(entry=run)
+`
+			modeSrc := strings.Replace(basicsTutorial,
+				`tutorial(id = "basics", title = "Rune basics", version = "57", entry = run)`,
+				"", 1) + src
+			tut, err := starlarktutorial.New(
+				"basics-completer-keys", modeSrc,
+				nil, nil, nil, nil,
+				term.Attributes{}, nil, nil,
+				term.KeyComb{Ch: ':'}, tt.mode,
+				nil, nil, nil, nil,
+			)
+			require.NoError(t, err)
+			tut.Resize(80, 24)
+			tut.Reset()
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+
+			text := tut.ActiveText()
+			for _, key := range tt.expected {
+				assert.Contains(t, text, key)
+			}
+			for _, key := range tt.forbidden {
+				assert.NotContains(t, text, key)
+			}
+		})
+	}
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -952,10 +1005,10 @@ func TestNavigationTutorialFlow(t *testing.T) {
 		"Type a word you want to search for, or just a few characters from that")
 	assert.Contains(t, tut.ActiveText(),
 		"word. Scroll through the completion list")
-	assert.Contains(t, tut.ActiveText(), "<ctrl-i>")
-	assert.Contains(t, tut.ActiveText(), "<ctrl-k>")
 	assert.Contains(t, tut.ActiveText(), "<up>")
 	assert.Contains(t, tut.ActiveText(), "<down>")
+	assert.NotContains(t, tut.ActiveText(), "<ctrl-i>")
+	assert.NotContains(t, tut.ActiveText(), "<ctrl-k>")
 	tut.ObserveEvent("open", "file:///workspace/b.go")
 
 	// jumptoast: window -> command (fuzzy-jump to a function in the file).
@@ -1025,12 +1078,18 @@ func TestNavigationTutorialSearchTextPickerKeysByMode(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		mode string
-		up   string
-		down string
+		mode      string
+		up        string
+		down      string
+		forbidden []string
 	}{
 		{mode: "modal", up: "<ctrl-k>", down: "<ctrl-j>"},
-		{mode: "standard", up: "<ctrl-i>", down: "<ctrl-k>"},
+		{
+			mode:      "standard",
+			up:        "<up>",
+			down:      "<down>",
+			forbidden: []string{"<ctrl-i>", "<ctrl-k>"},
+		},
 		{mode: "emacs", up: "<ctrl-p>", down: "<ctrl-n>"},
 	}
 	for _, tt := range tests {
@@ -1042,7 +1101,7 @@ def run():
 tutorial(entry=run)
 `
 			modeSrc := strings.Replace(navigationTutorial,
-				`tutorial(id = "navigation", title = "Navigate code", version = "14", entry = run)`,
+				`tutorial(id = "navigation", title = "Navigate code", version = "15", entry = run)`,
 				"", 1) + src
 			tut, err := starlarktutorial.New(
 				"navigation-picker-keys", modeSrc,
@@ -1061,6 +1120,9 @@ tutorial(entry=run)
 			assert.Contains(t, text, tt.down)
 			assert.Contains(t, text, "<up>")
 			assert.Contains(t, text, "<down>")
+			for _, key := range tt.forbidden {
+				assert.NotContains(t, text, key)
+			}
 		})
 	}
 }
@@ -1388,7 +1450,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "14", tut.Version())
+	assert.Equal(t, "15", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1454,7 +1516,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "14", tut.Version())
+	assert.Equal(t, "15", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1480,7 +1542,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "14", tut.Version())
+	assert.Equal(t, "15", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
@@ -1519,5 +1581,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "56", tut.Version())
+	assert.Equal(t, "57", tut.Version())
 }

@@ -35,7 +35,7 @@ if editor_mode() == "modal":
 elif editor_mode() == "emacs":
     move_phrase = "`<ctrl-p>` / `<ctrl-n>` (or `<up>` / `<down>`)"
 else:
-    move_phrase = "`<ctrl-i>` / `<ctrl-k>` (or `<up>` / `<down>`)"
+    move_phrase = "the arrow keys `<up>` / `<down>`"
 
 if editor_mode() == "emacs":
     def_by_name_key = "<ctrl-alt-.>"
@@ -453,4 +453,4 @@ def run():
                     dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "14", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "15", entry = run)
