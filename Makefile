@@ -3,8 +3,8 @@ CI ?= false
 # The 600s budget accommodates the docker-driven SSH integration
 # suite (workspace/workspacessh/test), which exceeds 4 minutes when
 # the rest of the repository's tests run in parallel with it.
-GOTESTFLAGS ?= -race -timeout 600s
-GOTESTFLAGSNORACE = -timeout 600s
+GOTESTFLAGS ?= -race -timeout 180s
+GOTESTFLAGSNORACE = -timeout 180s
 # RUNE_DEBUG_BUILD, when set to "true", flips an in-binary feature
 # flag that exposes debug-only ex commands such as :panic and :crash.
 # Defaults to off; the `debug` target sets it via a target-specific
