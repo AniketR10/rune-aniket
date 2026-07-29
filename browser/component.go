@@ -1046,7 +1046,15 @@ func (c *Component) FloatingWindows() int {
 // CloseOtherWindows closes all the windows except the given window.
 func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 	if win.IsFloating() {
-		return errors.New("cannot close all tiled windows")
+		// Program output and prompts are floating windows that take
+		// focus, and a workspace cannot be left holding only floating
+		// windows. Keep a tile instead so the focused float is closed
+		// along with everything else and the layout really is cleared.
+		tile, ok := c.firstTile()
+		if !ok {
+			return errors.New("cannot close all tiled windows")
+		}
+		win = tile
 	}
 	var ok bool
 	c.wm.Iterate(func(w thandler.Window) {
@@ -1079,6 +1087,24 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 		retErr = errors.New("no windows to close")
 	}
 	return
+}
+
+// firstTile returns the first tiled window in tree order, reusing the
+// tracked browserWindow so the double-close guard in
+// browserWindow.Close stays effective.
+func (c *Component) firstTile() (*browserWindow, bool) {
+	var found *browserWindow
+	c.wm.Iterate(func(w thandler.Window) {
+		if found != nil || w.IsFloating() {
+			return
+		}
+		bw, ok := c.findWindow(w.ID())
+		if !ok {
+			bw = c.newWindow(w)
+		}
+		found = bw
+	})
+	return found, found != nil
 }
 
 // Close closes the resources associated with this browser.

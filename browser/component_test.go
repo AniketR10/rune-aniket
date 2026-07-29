@@ -1025,23 +1025,18 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 		assert.Equal(t, 1, b.Tiles())
 		assert.Equal(t, 0, b.FloatingWindows())
 	})
-	t.Run("fails if there's one tiled window and one floating window", func(t *testing.T) {
-		b := NewComponent(DefaultConfig())
-		_ = b.Floating(newTestHandler(), browserapi.FloatingConfig{
-			Alignment: component.AlignmentHorizontallyCentered,
-		})
-		require.Error(t, b.CloseOtherWindows(b.Focus()))
-		assert.Equal(t, 1, b.Tiles())
-		assert.Equal(t, 1, b.FloatingWindows())
-	})
-	t.Run("fails if called on floating window", func(t *testing.T) {
+	// A floating window takes focus when it opens, so "close every
+	// other window" has to keep a tile rather than refuse: the
+	// alternative leaves the float that prompted the call on screen.
+	t.Run("closes the focused floating window and keeps a tile", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
 		win := b.Floating(newTestHandler(), browserapi.FloatingConfig{
 			Alignment: component.AlignmentHorizontallyCentered,
 		})
-		require.Error(t, b.CloseOtherWindows(win))
+		require.True(t, b.Focus().IsFloating())
+		require.NoError(t, b.CloseOtherWindows(win))
 		assert.Equal(t, 1, b.Tiles())
-		assert.Equal(t, 1, b.FloatingWindows())
+		assert.Equal(t, 0, b.FloatingWindows())
 	})
 	t.Run("closes all floating and non-floating windows except focus", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
