@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -61,11 +60,20 @@ type Component struct {
 	spanMessages component.Span
 	box          *handler.Frame
 	input        Input
-	container    component.Container
-	inputRow     *component.Row
-	inputCol     *component.Virtual[component.Responsive]
 	height       int
 	width        int
+
+	// layout: the viewport is split vertically between the messages region
+	// (top, full width) and the compose box (bottom, horizontally centered
+	// according to cfg.InputRowColumns). See relayout.
+	msgArea component.Virtual[tui.Component]
+	boxArea component.Virtual[tui.Component]
+	// layoutBoxH and layoutMsgH are the compose box height and the total
+	// messages content height observed at the last relayout. A change in
+	// either means the regions must be resized again; this makes the layout
+	// self-correcting without every content mutator having to opt in.
+	layoutBoxH int
+	layoutMsgH int
 
 	// streamed reasoning
 	reasoningMsg  strings.Builder
@@ -154,17 +162,10 @@ func (c *Component) Init(cfg ComponentConfig) {
 	c.messages.Init()
 	c.messages.Alignment = component.AlignmentBottom
 	c.spanMessages.Init(&c.messages, c.cfg.MessagesRowConfig)
-	messagesResponsive := component.FuncResponsive(&c.spanMessages, func(width int) int {
-		// do not use ResponsiveList.Height, otherwise it might not leave space for prompt
-		// assumes c.height has been set prior to call to Container.Resize
-		return int(math.Max(float64(c.height-c.boxHeight(c.boxWidth(width))), 0))
-	})
-	c.container.AddRow().AddComponent(messagesResponsive, component.MaxCols)
+	c.msgArea.C = &c.spanMessages
 
 	c.input = c.newInputBackend(cfg)
 	c.box = handler.NewFrame(c.input)
-	c.inputRow = c.container.AddRow()
-	c.inputRow.AddComponent(component.NopResponsive(), (component.MaxCols-c.cfg.InputRowColumns)/2)
 	c.box.SetAttr(cfg.InputBox.FrameAttr)
 	if cfg.InputBackgroundColor != term.ColorDefault {
 		c.box.Bg = cfg.InputBackgroundColor
@@ -172,10 +173,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 	if cfg.InputBox.FrameCharSet != (component.FrameCharSet{}) {
 		c.box.FrameCharSet = cfg.InputBox.FrameCharSet
 	}
-	cappedBox := component.FuncResponsive(c.box, func(width int) int {
-		return c.boxHeight(width)
-	})
-	c.inputCol = c.inputRow.AddComponent(cappedBox, c.boxWidth(component.MaxCols))
+	c.boxArea.C = c.box
 }
 
 func (c *Component) newInputBackend(cfg ComponentConfig) Input {
@@ -209,6 +207,12 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 
 // Draw satisfies tui.Component.
 func (c *Component) Draw(w term.Writer) {
+	if c.messagesContentHeight() != c.layoutMsgH {
+		c.relayout()
+	} else {
+		c.layoutIfDirty()
+	}
+
 	if c.cfg.BackgroundColor != 0 {
 		bg := term.NewCell(0, 0, term.Attributes{Bg: c.cfg.BackgroundColor})
 		for y := range c.height {
@@ -217,16 +221,64 @@ func (c *Component) Draw(w term.Writer) {
 			}
 		}
 	}
-	c.container.Draw(w)
+	vw := component.VirtualWriter{Writer: w, Height: c.height, Width: c.width}
+	c.msgArea.Draw(&vw)
+	c.boxArea.Draw(&vw)
 }
 
 // Resize satisfies tui.Component.
 func (c *Component) Resize(width, height int) {
-	// store height for Container's call to responsive list's Height
+	// store height for the messages/compose split computed by relayout
 	c.height = height
 	// store for calculating hint size upon AddReceiveMessageHint
 	c.width = width
-	c.container.Resize(width, height)
+	c.relayout()
+}
+
+// relayout recomputes the messages/compose split and resizes both regions.
+// The compose box is bottom-anchored and takes cfg.InputRowColumns of the
+// available MaxCols; the messages region takes the remaining rows.
+func (c *Component) relayout() {
+	width, height := c.width, c.height
+	boxW := c.boxWidth(width)
+	boxH := c.boxHeight(boxW)
+	c.layoutBoxH = boxH
+
+	if boxH > height {
+		boxH = height
+	}
+	if boxH < 0 {
+		boxH = 0
+	}
+	boxX := int(float64((component.MaxCols-c.cfg.InputRowColumns)/2) *
+		float64(width) / float64(component.MaxCols))
+	if boxX+boxW > width {
+		boxW = width - boxX
+	}
+	msgH := height - boxH
+
+	c.msgArea.Move(term.Coordinates{})
+	c.msgArea.Resize(width, msgH)
+	c.boxArea.Move(term.Coordinates{X: boxX, Y: msgH})
+	c.boxArea.Resize(boxW, boxH)
+	c.layoutMsgH = c.messagesContentHeight()
+}
+
+// layoutIfDirty recomputes the layout when the compose box grew or shrank
+// since the last relayout. Positions are therefore fresh at query time,
+// regardless of whether the host asks for the cursor before or after the draw.
+func (c *Component) layoutIfDirty() {
+	if c.boxHeight(c.boxWidth(c.width)) != c.layoutBoxH {
+		c.relayout()
+	}
+}
+
+// messagesContentHeight returns the total height the messages currently want
+// at the width they were last laid out with. Message components mutate in
+// place while content streams in, so this is what tells the layout that the
+// rows need to be resized again.
+func (c *Component) messagesContentHeight() int {
+	return c.messages.Height(c.messages.SizeWidth())
 }
 
 // Input returns the compose input employed by this Component.
@@ -236,19 +288,19 @@ func (c *Component) Input() Input {
 
 // Cursor returns the input.Box cursor.
 func (c *Component) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	c.layoutIfDirty()
 	return c.box.Cursor()
 }
 
 // InputPosition returns the offset of the input component.
 func (c *Component) InputPosition() term.Coordinates {
-	return term.Coordinates{
-		Y: c.inputRow.Position().Y,
-		X: c.inputCol.Position().X,
-	}
+	c.layoutIfDirty()
+	return c.boxArea.Position()
 }
 
 // MessagesPosition returns the offset of the messages component.
 func (c *Component) MessagesPosition() term.Coordinates {
+	c.layoutIfDirty()
 	return c.spanMessages.ContentOffset()
 }
 
