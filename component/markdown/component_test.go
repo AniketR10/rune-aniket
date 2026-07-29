@@ -835,6 +835,19 @@ func TestComponentHeight(t *testing.T) {
 	assert.Equal(t, h, md.Height(40))
 }
 
+func TestComponentHeightCacheInvalidation(t *testing.T) {
+	md, err := New("# Hello\n\nWorld")
+	require.NoError(t, err)
+
+	short := md.Height(40)
+	require.NoError(t, md.Init("# Hello\n\nWorld\n\nAnd some more paragraphs\n\nAgain"))
+	assert.Greater(t, md.Height(40), short, "new content must not reuse the cached height")
+
+	tall := md.Height(40)
+	assert.NotEqual(t, tall, md.Height(8), "a different width must not reuse the cache")
+	assert.Equal(t, tall, md.Height(40))
+}
+
 func TestComponentResponsiveInterface(t *testing.T) {
 	md, err := New("# Hello\n\nWorld")
 	require.NoError(t, err)

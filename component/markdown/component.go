@@ -44,6 +44,12 @@ type Component struct {
 	offset        int
 	totalHeight   int
 
+	// heightCache memoizes Height for heightCacheWidth. Blocks are
+	// immutable once parsed, so the cache only has to be dropped when
+	// Init replaces them.
+	heightCache      int
+	heightCacheWidth int
+
 	searchQuery   string
 	searchResults []textapi.Location
 	searchList    textapi.LocationList
@@ -84,6 +90,7 @@ func (c *Component) Init(content string) error {
 	}
 	c.closeBlocks()
 	c.blocks = blocks
+	c.heightCacheWidth = 0
 	c.offset = 0
 	if c.anchors == nil {
 		c.anchors = make(map[string]int)
@@ -624,10 +631,14 @@ func (c *Component) buildAnchors() {
 // Height returns the total height needed to render all blocks at the
 // given width. This is a pure calculation with no side effects.
 func (c *Component) Height(width int) int {
+	if width > 0 && c.heightCacheWidth == width {
+		return c.heightCache
+	}
 	total := 0
 	for _, blk := range c.blocks {
 		total += blk.Height(width)
 	}
+	c.heightCache, c.heightCacheWidth = total, width
 	return total
 }
 
