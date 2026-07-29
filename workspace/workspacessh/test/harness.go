@@ -10,6 +10,7 @@ package workspacetest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -48,19 +49,19 @@ type SSHDScenario struct {
 
 	// InstallRuneBinary, when true, cross-compiles the runesvc helper
 	// (workspace/workspacessh/test/cmd/runesvc) and bind-mounts it into
-	// the container as /usr/local/bin/rune. This lets a test exercise
-	// the full connectScheme path (whichCommand + StartSchemeServer)
-	// against a real Linux binary without building the full `rune`
-	// package, which depends on CGO/GUI libraries.
+	// the container, then installs it at the ssh user's
+	// ~/.local/bin/rune — the only supported remote location, and the
+	// one Rune's install.sh uses. That directory is deliberately NOT on
+	// the sshd session PATH (sshd runs a non-login shell, skipping the
+	// profile files where distributions add ~/.local/bin), so every
+	// scenario exercises connectScheme's PATH injection the same way a
+	// production install does.
+	//
+	// This lets a test exercise the full connectScheme path
+	// (whichCommand + StartSchemeServer) against a real Linux binary
+	// without building the full `rune` package, which depends on
+	// CGO/GUI libraries.
 	InstallRuneBinary bool
-
-	// InstallRuneBinaryUserLocal, when true, installs the runesvc
-	// helper at the ssh user's ~/.local/bin/rune — the location Rune's
-	// install.sh uses — WITHOUT putting it on the sshd session PATH.
-	// This exercises connectScheme's PATH injection, which is what
-	// makes the supported install location work for non-interactive
-	// SSH sessions.
-	InstallRuneBinaryUserLocal bool
 
 	// RemoteHomeConfig, when non-empty, is written to the ssh user's
 	// ~/.rune/config.yaml after the container is up. It stands in for the
@@ -137,12 +138,6 @@ func StartContainer(t *testing.T, scenario SSHDScenario) *Container {
 	if scenario.InstallRuneBinary {
 		bin := buildRuneTestBinary(t)
 		args = append(args,
-			"-v", bin+":/usr/local/bin/rune:ro",
-		)
-	}
-	if scenario.InstallRuneBinaryUserLocal {
-		bin := buildRuneTestBinary(t)
-		args = append(args,
 			"-v", bin+":/runesvc:ro",
 		)
 	}
@@ -192,7 +187,7 @@ func StartContainer(t *testing.T, scenario SSHDScenario) *Container {
 			t.Fatalf("sshd did not come back up after applying ExtraSSHDConfig: %v", err)
 		}
 	}
-	if scenario.InstallRuneBinaryUserLocal {
+	if scenario.InstallRuneBinary {
 		installUserLocalRune(t, id)
 	}
 	if scenario.RemoteHomeConfig != "" {
@@ -309,6 +304,10 @@ func buildRuneTestBinary(t *testing.T) string {
 		runeBinaryError = err
 		t.Fatalf("mkdir cache: %v", err)
 	}
+	if err := prepareRuneBinaryOutput(out); err != nil {
+		runeBinaryError = err
+		t.Fatalf("prepare runesvc output: %v", err)
+	}
 
 	cmd := exec.Command("go", "build",
 		"-o", out,
@@ -326,6 +325,27 @@ func buildRuneTestBinary(t *testing.T) string {
 	}
 	runeBinaryPath = out
 	return runeBinaryPath
+}
+
+// prepareRuneBinaryOutput clears a cached output path that is not a
+// regular file. Docker creates a missing bind-mount source as a
+// directory on the host, and `go build -o <dir>` then writes the binary
+// inside it rather than replacing it, so a single such mishap poisons
+// the cache for every later run: the container gets a directory where
+// the `rune` executable should be and the bootstrap's `which rune`
+// fails.
+func prepareRuneBinaryOutput(out string) error {
+	info, err := os.Lstat(out)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode().IsRegular() {
+		return nil
+	}
+	return os.RemoveAll(out)
 }
 
 // containerGOARCH returns the GOARCH value to cross-compile runesvc

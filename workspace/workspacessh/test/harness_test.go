@@ -5,11 +5,24 @@
 package workspacetest
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestPrepareRuneBinaryOutputRemovesStaleDirectory(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "runesvc-linux-arm64")
+	require.NoError(t, os.MkdirAll(out, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "runesvc"), []byte("stale"), 0o755))
+
+	require.NoError(t, prepareRuneBinaryOutput(out))
+	_, err := os.Lstat(out)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
 
 // TestContainerHelper boots two scenarios in parallel and confirms each
 // reports a distinct host port.

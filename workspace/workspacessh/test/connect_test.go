@@ -150,8 +150,8 @@ func TestConnectSchemeUserLocalBin(t *testing.T) {
 	EnsureImage(t)
 
 	c := StartContainer(t, SSHDScenario{
-		PublicKeyFile:              "/id_ed25519.pub",
-		InstallRuneBinaryUserLocal: true,
+		PublicKeyFile:     "/id_ed25519.pub",
+		InstallRuneBinary: true,
 	})
 
 	keyPath := PrivateKeyPath(t, "id_ed25519")
