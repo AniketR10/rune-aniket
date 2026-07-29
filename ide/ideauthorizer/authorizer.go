@@ -114,6 +114,7 @@ type Config struct {
 	AutoAuthorizeExtensions        bool
 	AutoAuthorizeCommands          bool
 	AutoAuthorizeVerifiedPublisher bool
+	OnboardingActive               func() bool
 }
 
 // NewAuthorizer returns an Authorizer that satisfies both the workspace
@@ -268,8 +269,9 @@ func (a *Authorizer) AuthorizeCommand(
 	}
 	// Commands run silently only when the operator opted into
 	// auto-authorizing commands AND the extension is from a verified
-	// publisher; either alone still prompts.
-	autoAuthorize := a.config.AutoAuthorizeCommands &&
+	// publisher; either alone still prompts. First-run onboarding stands
+	// in for the operator opt-in while it lasts (see Config.OnboardingActive).
+	autoAuthorize := (a.config.AutoAuthorizeCommands || a.onboardingActive()) &&
 		!claims.Extra.Plugin && a.verified(claims.Extra)
 	return a.authorizePermission(ctx, claims.Extra, identity, keys, onceKey, perm, resource,
 		&command, autoAuthorize)
@@ -288,6 +290,10 @@ func (a *Authorizer) authorizeExtension(
 func (a *Authorizer) verified(ext Extension) bool {
 	return a.config.AutoAuthorizeVerifiedPublisher && ext.VerifiedPublisher != "" &&
 		a.trust.IsTrustedFingerprint(ext.VerifiedPublisher)
+}
+
+func (a *Authorizer) onboardingActive() bool {
+	return a.config.OnboardingActive != nil && a.config.OnboardingActive()
 }
 
 func (a *Authorizer) authorizePermission(

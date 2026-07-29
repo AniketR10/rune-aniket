@@ -2878,6 +2878,65 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 	}
 }
 
+// TestIDEOnboardingActiveGate verifies the authorizer onboarding gate
+// wired into the workspace handler: a session started with a starting
+// tutorial is onboarding for its whole lifetime — including before the
+// deferred tutorial dispatch, when extensions boot and ask to run
+// commands — and no other session ever is.
+func TestIDEOnboardingActiveGate(t *testing.T) {
+	cases := []struct {
+		name         string
+		withStarting bool
+	}{
+		{name: "starting tutorial session", withStarting: true},
+		{name: "session without starting tutorial", withStarting: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, _ := makeTestFiles(t)
+			dataDir := t.TempDir()
+			mu := new(sync.Mutex)
+			opts := []Option{
+				WithPublishEvent(nopPublishEvent),
+				WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+				WithLocker(mu),
+				WithScheduleNextTick(func(fn func()) bool {
+					fn()
+					return true
+				}),
+				WithoutHomePrompt(),
+				WithStarlarkTutorial("basics", minimalStarTutorial),
+			}
+			if tc.withStarting {
+				opts = append(opts, WithStartingTutorial("basics"))
+			}
+			i, err := New("", configFile.Name(), dataDir,
+				pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir), opts...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = i.Close() })
+
+			gate := i.workspaceHandler.onboardingActive
+			require.NotNil(t, gate)
+			assert.Equal(t, tc.withStarting, gate(),
+				"gate must be active before the tutorial is dispatched")
+
+			mu.Lock()
+			require.NoError(t, i.tutorial.HandleCommand(context.Background(),
+				textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+			mu.Unlock()
+			assert.Equal(t, tc.withStarting, gate(),
+				"gate must stay active while the tutorial runs")
+
+			mu.Lock()
+			require.NoError(t, i.tutorial.HandleCommand(context.Background(),
+				textapi.Command{Name: "tutorial", Args: []string{"stop"}}))
+			mu.Unlock()
+			assert.Equal(t, tc.withStarting, gate(),
+				"gate must survive the gap between playlist tutorials")
+		})
+	}
+}
+
 func TestIDEPlaylistPromptsForNextTutorial(t *testing.T) {
 	newIDE := func(t *testing.T, registerNavigation bool) (*IDE, *sync.Mutex) {
 		t.Helper()

@@ -182,6 +182,13 @@ type workspaceManagerHandler struct {
 	// value is a construction bug that must panic, not be guarded.
 	tutorialsInstalled func(names []string) (bool, error)
 
+	// onboardingActive is wired by the IDE at construction and reports
+	// whether the bootstrap-started first-run tutorial flow is currently
+	// active; extension authorizers use it to grant verified-publisher
+	// commands without prompting while the tutorial overlay would bury
+	// the prompt. Nil (in tests) means never active.
+	onboardingActive func() bool
+
 	commandObserver *commandObserverRegistry
 
 	// commandHistory exposes the command prompt's persisted history so
@@ -2042,6 +2049,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 			AutoAuthorizeExtensions:        cfg.authorizerAutoAuthorizeExtensions(),
 			AutoAuthorizeCommands:          cfg.authorizerAutoAuthorizeCommands(),
 			AutoAuthorizeVerifiedPublisher: cfg.authorizerAutoAuthorizeVerified(),
+			OnboardingActive:               h.onboardingActive,
 		})
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)

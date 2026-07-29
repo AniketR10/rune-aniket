@@ -1925,6 +1925,13 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 		m.log(log.WarnLevel, "resolve extension entrypoint %s: %v", path, err)
 		return "", false
 	}
+	// Package configs point at the shared bin copy
+	// ($RUNE_DATADIR/bin/<name>), which lives outside the package
+	// version dir, so entrypoints are matched by manifest path there too.
+	sharedBin, err := filepath.EvalSymlinks(makeBinDirname(m.dataDir))
+	if err != nil {
+		sharedBin = ""
+	}
 	dit, err := m.storage.List(context.Background(), nil)
 	if err != nil {
 		m.log(log.WarnLevel, "list package provenance: %v", err)
@@ -1944,8 +1951,17 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 		if err != nil {
 			continue
 		}
+		var entryPath string
+		var sharedCopy bool
 		rel, err := filepath.Rel(resolvedDir, resolved)
-		if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		switch {
+		case err == nil && rel != "." && rel != ".." &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator)):
+			entryPath = filepath.ToSlash(rel)
+		case sharedBin != "" && filepath.Dir(resolved) == sharedBin:
+			entryPath = "bin/" + filepath.Base(resolved)
+			sharedCopy = true
+		default:
 			continue
 		}
 		manifest, err := readManifest(makeManifestFilename(m.dataDir, installed.Package, installed.Version))
@@ -1958,7 +1974,6 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 			m.log(log.WarnLevel, "package manifest provenance mismatch for %s", installed.Package)
 			return "", false
 		}
-		entryPath := filepath.ToSlash(rel)
 		configPath, err := filepath.Rel(dir, pkgConfigFile(dir))
 		if err != nil {
 			return "", false
@@ -1966,11 +1981,17 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 		configPath = filepath.ToSlash(configPath)
 		wanted := make(map[string]pkgtrust.Entry)
 		for _, entry := range manifest {
-			if entry.Path == entryPath || entry.Path == configPath || isLibraryEntry(entry.Path) {
-				wanted[entry.Path] = entry
+			normalized := manifestEntryPath(entry.Path)
+			if normalized == entryPath || normalized == configPath ||
+				isLibraryEntry(normalized) {
+				wanted[normalized] = entry
 			}
 		}
 		if _, ok := wanted[entryPath]; !ok {
+			if sharedCopy {
+				// The copy may belong to any other installed package.
+				continue
+			}
 			m.log(log.WarnLevel, "extension entrypoint %s is absent from package manifest", resolved)
 			return "", false
 		}
@@ -1986,9 +2007,27 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 			m.log(log.WarnLevel, "package integrity check failed for %s: %v", installed.Package, err)
 			return "", false
 		}
+		// Trusting the copy requires it to still match the signed
+		// original it was made from; its manifest path is relative to
+		// the datadir, where the copy lives.
+		if sharedCopy {
+			if err := pkgtrust.VerifyEntries(m.dataDir,
+				[]pkgtrust.Entry{wanted[entryPath]}); err != nil {
+				m.log(log.WarnLevel, "bin copy integrity check failed for %s: %v",
+					installed.Package, err)
+				return "", false
+			}
+		}
 		return installed.Provenance.Fingerprint, true
 	}
 	return "", false
+}
+
+// manifestEntryPath normalizes a manifest path for comparison with paths
+// built from the filesystem: published tarballs are packed with
+// `tar -c .`, so their entries carry a "./" prefix.
+func manifestEntryPath(path string) string {
+	return strings.TrimPrefix(filepath.ToSlash(path), "./")
 }
 
 func readManifest(path string) (pkgtrust.Manifest, error) {

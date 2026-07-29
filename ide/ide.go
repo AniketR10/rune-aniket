@@ -602,15 +602,12 @@ func (i *IDE) init(
 	}
 
 	i.workspaceHandler = new(workspaceManagerHandler)
-	// The observer registry breaks the construction cycle between
-	// the workspace handler (whose ex instances dispatch commands)
-	// and the tutorial runner (which observes those dispatches).
-	// The registry is created first and threaded into newEx
-	// through workspaceManagerHandler.init; the tutorial runner
-	// subscribes after it has been built below.
 	commandObserver := newCommandObserverRegistry()
 	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
 	i.workspaceHandler.tutorialsInstalled = i.onTutorialsInstalled
+	i.workspaceHandler.onboardingActive = func() bool {
+		return op.startingTutorial != ""
+	}
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,

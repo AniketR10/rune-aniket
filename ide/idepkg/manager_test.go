@@ -24,6 +24,9 @@
 package idepkg
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -38,9 +41,6 @@ import (
 	"testing"
 	"time"
 
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
@@ -63,6 +63,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace/walkdir"
@@ -1100,6 +1101,135 @@ func listFiles(t *testing.T, bindir string) []string {
 }
 
 var syncTick = func(fn func()) bool { fn(); return true }
+
+// TestVerifyExtensionEntrypoint pins verified-publisher resolution against the
+// shapes packages actually have on disk. Extensions are launched through the
+// path their package config declares — in practice the datadir bin copy — so
+// every install path that legitimately reaches a signed executable must return
+// the signing fingerprint, and every path whose bytes no longer match the
+// signed manifest must not.
+func TestVerifyExtensionEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		// path selects the entrypoint handed to the manager, mirroring
+		// what a package config would expand to.
+		path func(t *testing.T, dataDir string) string
+		// corrupt mutates the install after it succeeded.
+		corrupt func(t *testing.T, dataDir string)
+		wantOK  bool
+	}{
+		{
+			name: "published layout package dir",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(
+					makePackageVersionDirname(dataDir, dotPkgID, verifyPkgVersion),
+					"bin", dotEntrypoint)
+			},
+			wantOK: true,
+		},
+		{
+			name: "published layout bin copy",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), dotEntrypoint)
+			},
+			wantOK: true,
+		},
+		{
+			name: "published layout lib symlink",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeLibDirname(dataDir), dotPkgID, "bin", dotEntrypoint)
+			},
+			wantOK: true,
+		},
+		{
+			name: "unprefixed manifest bin copy",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), flatEntrypoint)
+			},
+			wantOK: true,
+		},
+		{
+			name: "executable absent from every manifest",
+			path: func(t *testing.T, dataDir string) string {
+				path := filepath.Join(makeBinDirname(dataDir), "extension_stranger")
+				require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+				return path
+			},
+		},
+		{
+			name: "executable outside the datadir",
+			path: func(t *testing.T, _ string) string {
+				path := filepath.Join(t.TempDir(), dotEntrypoint)
+				require.NoError(t, os.WriteFile(path, []byte(entrypointScript), 0o755))
+				return path
+			},
+		},
+		{
+			name: "tampered bin copy",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), dotEntrypoint)
+			},
+			corrupt: func(t *testing.T, dataDir string) {
+				require.NoError(t, os.WriteFile(
+					filepath.Join(makeBinDirname(dataDir), dotEntrypoint),
+					[]byte("#!/bin/sh\nexit 1\n"), 0o755))
+			},
+		},
+		{
+			name: "tampered packaged original",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), dotEntrypoint)
+			},
+			corrupt: func(t *testing.T, dataDir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(
+					makePackageVersionDirname(dataDir, dotPkgID, verifyPkgVersion),
+					"bin", dotEntrypoint), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+			},
+		},
+		{
+			name: "tampered package config",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), dotEntrypoint)
+			},
+			corrupt: func(t *testing.T, dataDir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(
+					makePackageVersionDirname(dataDir, dotPkgID, verifyPkgVersion),
+					"config.yaml"), []byte("extensions: {}\n"), 0o644))
+			},
+		},
+		{
+			name: "manifest no longer matches provenance",
+			path: func(_ *testing.T, dataDir string) string {
+				return filepath.Join(makeBinDirname(dataDir), dotEntrypoint)
+			},
+			corrupt: func(t *testing.T, dataDir string) {
+				path := makeManifestFilename(dataDir, dotPkgID, verifyPkgVersion)
+				manifest, err := readManifest(path)
+				require.NoError(t, err)
+				manifest = append(manifest, pkgtrust.Entry{Path: "./bin/extra"})
+				require.NoError(t, writeManifest(path, manifest))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			manager, dataDir := installVerifyPackages(t)
+			path := tc.path(t, dataDir)
+			if tc.corrupt != nil {
+				tc.corrupt(t, dataDir)
+			}
+			fingerprint, ok := manager.VerifyExtensionEntrypoint(path)
+			assert.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				assert.NotEmpty(t, fingerprint)
+				return
+			}
+			assert.Empty(t, fingerprint)
+		})
+	}
+}
 
 type recordingProgressWriter struct {
 	mu       sync.Mutex
@@ -4095,4 +4225,73 @@ func hasNotificationContaining(n *idepkgtest.Notifications, substr string) bool 
 		}
 	}
 	return false
+}
+
+const (
+	verifyPkgVersion = release.Version("1")
+	dotPkgID         = "dotpkg"
+	dotEntrypoint    = "extension_dot"
+	flatPkgID        = "flatpkg"
+	flatEntrypoint   = "extension_flat"
+	entrypointScript = "#!/bin/sh\nexit 0\n"
+)
+
+// installVerifyPackages installs two signed packages that differ only in the
+// tar shape publishers produce: dotpkg carries the "./" prefixes `tar -c .`
+// emits, flatpkg does not. Installing both keeps every lookup scanning past a
+// package that does not own the executable being verified.
+func installVerifyPackages(t *testing.T) (*Manager, string) {
+	t.Helper()
+	manager, _, rm, dataDir := newTestManager(t,
+		idepkgtest.MakePackages(
+			release.Package{Name: dotPkgID, Latest: verifyPkgVersion},
+			release.Package{Name: flatPkgID, Latest: verifyPkgVersion},
+		),
+		idepkgtest.MakeBundles(
+			[]release.Bundle{{Package: dotPkgID, Version: verifyPkgVersion}},
+			[]release.Bundle{{Package: flatPkgID, Version: verifyPkgVersion}},
+		))
+	rm.SetTarball(dotPkgID, pkgTarball(t, dotEntrypoint, "./"))
+	rm.SetTarball(flatPkgID, pkgTarball(t, flatEntrypoint, ""))
+	for _, pkgID := range []string{dotPkgID, flatPkgID} {
+		require.NoError(t, manager.InstallPackageVersion(
+			context.Background(), pkgID, verifyPkgVersion, repl.NopProgressWriter()))
+	}
+	return manager, dataDir
+}
+
+// pkgTarball builds a gzipped tar holding an extension entrypoint under bin/,
+// which is where package configs point through $RUNE_DATADIR/bin/<name>.
+func pkgTarball(t *testing.T, entrypoint, prefix string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+	if prefix != "" {
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name: prefix, Mode: 0o755, Typeflag: tar.TypeDir,
+		}))
+	}
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Name: prefix + "bin/", Mode: 0o755, Typeflag: tar.TypeDir,
+	}))
+	config := "extensions:\n  " + entrypoint +
+		":\n    path: '$RUNE_DATADIR/bin/" + entrypoint + "'\n"
+	for _, file := range []struct {
+		name    string
+		content string
+		mode    int64
+	}{
+		{name: prefix + "config.yaml", content: config, mode: 0o644},
+		{name: prefix + "bin/" + entrypoint, content: entrypointScript, mode: 0o755},
+	} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name: file.name, Mode: file.mode, Size: int64(len(file.content)),
+		}))
+		_, err := tw.Write([]byte(file.content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gzw.Close())
+	return buf.Bytes()
 }
