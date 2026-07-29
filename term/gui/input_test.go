@@ -668,6 +668,18 @@ func TestInputMultiFrame(t *testing.T) {
 				},
 			},
 		},
+		{
+			description: "Ctrl+Alt chord drops the matching char on the same frame",
+			frames: []frame{
+				{
+					keyEvents: []ebiten.KeyEvent{
+						press(ebiten.KeyPeriod, ebiten.KeyModControl, ebiten.KeyModAlt),
+					},
+					chars:          []rune{'.'},
+					expectedEvents: []term.Event{{Mod: term.ModCtrlAlt, Ch: '.'}},
+				},
+			},
+		},
 	}
 
 	for _, test := range suite {

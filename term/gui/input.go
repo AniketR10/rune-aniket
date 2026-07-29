@@ -144,10 +144,10 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 	i.keyEvents = i.input.AppendKeyEvents(i.keyEvents[:0])
 	i.chars = i.input.AppendInputChars(i.chars[:0])
 
-	// Alt+printable is a modifier chord handled on the key path. On macOS the
-	// char stream also delivers the Option-composed rune (e.g. 'å' for Alt+a);
-	// drop those so the same physical key is not emitted twice.
-	altChord := false
+	// Alt-bearing printable chords are handled on the key path, but the char
+	// stream may still echo the same physical key as a plain or Option-composed
+	// rune. Drop that echo so it cannot be delivered to a new input target.
+	altPrintableChord := false
 
 	for _, ke := range i.keyEvents {
 		if ke.Action == ebiten.KeyActionRelease {
@@ -185,8 +185,8 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 			if mod&(term.ModCtrl|term.ModAlt|term.ModMeta) == 0 && !remapped {
 				continue
 			}
-			if mod&(term.ModCtrl|term.ModMeta) == 0 && mod&term.ModAlt != 0 {
-				altChord = true
+			if mod&term.ModAlt != 0 {
+				altPrintableChord = true
 			}
 			ch, mod := resolveCharKey(base, shift, mod)
 			dst = append(dst, term.Event{
@@ -205,9 +205,9 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 
 	for _, ch := range i.chars {
 		// Space reaches the key path as term.KeySpace; the char-stream copy
-		// would double it. Alt-composed runes belong to a chord already
-		// emitted above.
-		if ch == ' ' || altChord {
+		// would double it. Alt-bearing printable chords were already emitted
+		// above, so their char-stream echoes must also be dropped.
+		if ch == ' ' || altPrintableChord {
 			continue
 		}
 		dst = append(dst, term.Event{
