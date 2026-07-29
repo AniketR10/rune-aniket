@@ -85,9 +85,14 @@ type request struct {
 
 	// floating_window / markdown.
 	text, title string
-	align       component.Alignment
 	offset      term.Coordinates
 	md          *markdown.Component
+
+	// align overrides where the step's window is anchored. Zero means
+	// the per-kind default. wait_* steps accept it too so a lesson can
+	// keep its page and its hint on the same side of the screen,
+	// clear of the layout the step asks the user to work with.
+	align component.Alignment
 
 	// win is the overlay-browser window backing this request, opened
 	// at publish time on the run goroutine and closed on resolve,

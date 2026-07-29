@@ -3611,6 +3611,40 @@ func TestFloatingPromptClosePrefersFloatingFocus(t *testing.T) {
 	assert.False(t, focus.IsFloating())
 }
 
+// TestWindowCloseAllClosesFloatingWindows asserts that `windowcloseall`
+// clears floating windows too, including when one of them holds focus:
+// `!` program output opens as a focused floating window, so a
+// "clear the layout" step that left it on screen would be useless.
+func TestWindowCloseAllClosesFloatingWindows(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+
+	b.Resize(40, 12)
+	browserComp := b.ex.comp.Browser()
+	require.NoError(t, b.ex.windownew(t.Context()))
+	require.Equal(t, 2, browserComp.Tiles())
+
+	prompt := browserComp.Prompt("keep me?", []string{yesOpt, noOpt},
+		yesNoKeyCombs, handler.NopPromptHandler())
+	require.Equal(t, 1, browserComp.FloatingWindows())
+
+	focus, err := b.ex.Browser().Focus()
+	require.NoError(t, err)
+	require.True(t, focus.IsFloating(),
+		"the prompt must hold focus for this to exercise the bug")
+
+	require.NoError(t, b.ex.windowcloseall(t.Context()))
+	assert.Equal(t, 0, browserComp.FloatingWindows(),
+		"windowcloseall must close floating windows")
+	assert.Equal(t, 1, browserComp.Tiles())
+	assert.True(t, prompt.Closed())
+
+	focus, err = b.ex.Browser().Focus()
+	require.NoError(t, err)
+	assert.False(t, focus.IsFloating(),
+		"focus must land back on the surviving tile")
+}
+
 type testShellREPLHandler struct{}
 
 func (*testShellREPLHandler) HandleCommand(
@@ -4296,16 +4330,18 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 └──└────────────────────────────────┘──┘`,
 		},
 		{":windowcloseall>",
-			`┌────────────────────────┌─────────────┐
-│                        │ cannot      │
-├──█●███████████ sleep 20│ close all   │
-│  │ ▐                   │ tiled       │
-│  │▐                    │ windows     │
-│  │                     └─────────────┘
-│  │                                │  │
-│  │                                │  │
-│  │                                │  │
-└──└────────────────────────────────┘──┘`,
+			// windowcloseall clears floating windows too, so the
+			// ephemeral terminal goes away with everything else.
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+└──────────────────────────────────────┘`,
 		},
 		{":noticloseall>:! sh -c 'sleep 20 && echo $FILE'>",
 			`┌──────────────────────────────────────┐

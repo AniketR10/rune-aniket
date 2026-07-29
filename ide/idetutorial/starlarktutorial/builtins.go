@@ -48,6 +48,7 @@ func builtins(t *Tutorial) starlark.StringDict {
 		"command_key":    starlark.NewBuiltin("command_key", builtinCommandKey(t)),
 		"editor_mode":    starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
 		"key_for":        starlark.NewBuiltin("key_for", builtinKeyFor(t)),
+		"command_exists": starlark.NewBuiltin("command_exists", builtinCommandExists(t)),
 		"workspace_open": starlark.NewBuiltin("workspace_open", builtinWorkspaceOpen(t)),
 		"is_lsp_server_running": starlark.NewBuiltin(
 			"is_lsp_server_running", builtinLSPServerRunning(t)),
@@ -230,18 +231,25 @@ func builtinWaitCommand(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			command starlark.String
 			onError starlark.String
 			title   starlark.String
+			align   starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_command", args, kwargs,
 			"command", &command,
 			"on_error?", &onError,
-			"title?", &title); err != nil {
+			"title?", &title,
+			"alignment?", &align); err != nil {
 			return nil, err
+		}
+		alignment, err := parseFloatingAlignment(string(align))
+		if err != nil {
+			return nil, fmt.Errorf("wait_command: %w", err)
 		}
 		req := &request{
 			kind:    reqWaitCommand,
 			command: string(command),
 			onError: string(onError),
 			title:   string(title),
+			align:   alignment,
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {
@@ -334,14 +342,20 @@ func builtinWaitEvent(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			text    starlark.String
 			title   starlark.String
 			onError starlark.String
+			align   starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_event", args, kwargs,
 			"event", &event,
 			"uri?", &uri,
 			"text?", &text,
 			"title?", &title,
-			"on_error?", &onError); err != nil {
+			"on_error?", &onError,
+			"alignment?", &align); err != nil {
 			return nil, err
+		}
+		alignment, err := parseFloatingAlignment(string(align))
+		if err != nil {
+			return nil, fmt.Errorf("wait_event: %w", err)
 		}
 		req := &request{
 			kind:     reqWaitEvent,
@@ -350,6 +364,7 @@ func builtinWaitEvent(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			text:     string(text),
 			title:    string(title),
 			onError:  string(onError),
+			align:    alignment,
 		}
 		if _, err := t.publishRequest(req); err != nil {
 			return nil, err
@@ -742,6 +757,31 @@ func builtinKeyFor(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			return starlark.String(""), nil
 		}
 		return starlark.String(t.keyForCommand(cmd, cmdArgs)), nil
+	}
+}
+
+// builtinCommandExists implements command_exists(command): it reports
+// whether the named command is registered right now. Tutorials use it
+// to branch on package-provided commands, so the lookup must stay live
+// across a `pkg install` performed mid-tutorial. It returns True when
+// no lookup func is wired so tutorials/tests without the wiring are
+// not spuriously blocked.
+func builtinCommandExists(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var name starlark.String
+		if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+			"command", &name); err != nil {
+			return nil, err
+		}
+		if t.commandManualLookup == nil {
+			return starlark.True, nil
+		}
+		_, ok := t.commandManualLookup(string(name))
+		return starlark.Bool(ok), nil
 	}
 }
 

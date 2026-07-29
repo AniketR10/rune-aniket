@@ -239,7 +239,10 @@ func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	content.hint = true
 	r.winContent = content
 	align := defaultStepAlignment
-	if r.kind == reqWaitShell {
+	switch {
+	case r.align != 0:
+		align = r.align
+	case r.kind == reqWaitShell:
 		align = consoleStepAlignment
 	}
 	r.win = t.winOverlay.Floating(content, browserapi.FloatingConfig{

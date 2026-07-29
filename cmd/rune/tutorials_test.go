@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
@@ -71,7 +72,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "46", tut.Version())
+	assert.Equal(t, "47", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -98,7 +99,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "46", tut.Version())
+	assert.Equal(t, "47", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -320,6 +321,7 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 		"windowresize decrease height",
 		"windowresize increase width",
 		"windowdefaultsplit h",
+		"windowdefaultsplit v",
 		"tabnext",
 		"tabprevious",
 		"tabmove left",
@@ -422,11 +424,13 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 
 	dismissPromptStep()
 	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
 	observe("windownew")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 	dismissPromptStep()
-	observe("windowdefaultsplit", "h")
+	observe("windowdefaultsplit", "v")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 
@@ -537,17 +541,17 @@ func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
 
 	dismissPromptStep()
 	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
 	wait("wait_command")
 	tut.ObserveCommand("windownew", "windownew", []string{"right"}, nil)
 	wait("wait_command")
 	tut.ObserveCommand("windownew", "windownew", []string{"down"}, nil)
 
 	dismissPromptStep()
-	observe("windownew", "right")
-	dismissPromptStep()
 	observe("terminalneworsplit")
 	dismissPromptStep()
-	observe("windowdefaultsplit", "h")
+	observe("windowdefaultsplit", "v")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 
@@ -570,7 +574,8 @@ func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
 	dismissPromptStep()
 	observe("windowcloseall")
 
-	assert.Contains(t, notis.successes(), "You used the Emacs split family.")
+	assert.Contains(t, notis.successes(), "Splits now land below.")
+	assert.Contains(t, notis.successes(), "Splits now land to the right.")
 	assert.Contains(t, notis.successes(), "You cleaned up the window layout.")
 }
 
@@ -658,9 +663,10 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	t.Parallel()
 
 	alwaysTrue := func() bool { return true }
-	// searchfile/searchtext only teach their full command+event flow
-	// when the fuzzy-search extension is "installed" (their key
-	// resolves); give them a bound key so the flow runs end to end.
+	// Give searchfile/searchtext bound keys so their copy renders the
+	// keypress wording. Whether the finder steps run at all is decided
+	// by command_exists, which defaults to true with no manual lookup
+	// wired, so this flow covers the already-installed path.
 	keyFor := func(cmd string, _ []string) string {
 		switch cmd {
 		case "searchfile":
@@ -799,6 +805,82 @@ func TestNavigationTutorialFlow(t *testing.T) {
 		"You walked the cursor history back and forth.",
 		"You asked the language server about a symbol.",
 	}, notis.successes())
+}
+
+// TestNavigationTutorialInstallsFuzzySearchFirst asserts that when the
+// fuzzy-search extension is missing, the tutorial walks the user
+// through installing it from the console before reaching the finder
+// steps. Without this, the first `searchfile` would trigger Rune's own
+// install prompt while the tutorial assumed a finder was already open.
+func TestNavigationTutorialInstallsFuzzySearchFirst(t *testing.T) {
+	t.Parallel()
+
+	alwaysTrue := func() bool { return true }
+	installed := map[string]bool{}
+	lookup := func(name string) (command.Manual, bool) {
+		if !installed[name] {
+			return command.Manual{}, false
+		}
+		return command.Manual{Name: name}, true
+	}
+	notis := &capturingNotis{}
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := starlarktutorial.New(
+		"navigation", navigationTutorial,
+		overlay, nil, notis, nil,
+		term.Attributes{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil, lookup,
+		alwaysTrue, // workspace_open()
+		alwaysTrue, // is_lsp_server_running()
+	)
+	require.NoError(t, err)
+	tut.Resize(80, 24)
+	tut.Reset()
+
+	wait := func(kind string) {
+		t.Helper()
+		require.True(t, tut.WaitActive(kind, 2*time.Second),
+			"expected a %s step", kind)
+	}
+	dismiss := func() {
+		t.Helper()
+		_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+
+	wait("floating_window") // clear the layout
+	dismiss()
+	wait("wait_command")
+	tut.ObserveCommand("windowcloseall", "windowcloseall", nil, nil)
+
+	wait("floating_window") // intro
+	dismiss()
+
+	wait("floating_window") // open the console
+	dismiss()
+	wait("wait_command")
+	tut.ObserveCommand("console", "console", nil, nil)
+
+	wait("floating_window") // pkg install fuzzy-search
+	// The install page has no dismiss_keys; <enter> advances it.
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	wait("wait_shell")
+	installed["searchfile"] = true
+	installed["searchtext"] = true
+	tut.ObserveCommand("console", "console",
+		[]string{"pkg", "install", "fuzzy-search"}, nil)
+
+	wait("floating_window") // searchfile, now that the command exists
+	dismiss()
+	wait("wait_command")
+	tut.ObserveCommand("searchfile", "searchfile", nil, nil)
+	wait("wait_event")
+	tut.ObserveEvent("open", "file:///workspace/a.go")
+
+	assert.Contains(t, notis.successes(), "Fuzzy search installed.")
+	assert.Contains(t, notis.successes(), "You found a file by name.")
 }
 
 // TestNavigationTutorialCursorKeysMoveCursor is a regression test for a
@@ -1051,7 +1133,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "11", tut.Version())
+	assert.Equal(t, "12", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1117,7 +1199,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "11", tut.Version())
+	assert.Equal(t, "12", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1143,7 +1225,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "11", tut.Version())
+	assert.Equal(t, "12", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
@@ -1182,5 +1264,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "46", tut.Version())
+	assert.Equal(t, "47", tut.Version())
 }

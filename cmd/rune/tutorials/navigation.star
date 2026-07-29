@@ -103,10 +103,33 @@ Open it now: """ + keypress("searchfile") + """. Type a few characters,
 pick a file, and press `<enter>` to open it.
 """
 
+console_md = """\
+`searchfile` and `searchtext` come from the **fuzzy-search** extension,
+which is not installed yet. Let's install it.
+
+Packages are installed from the **Rune console**, not the command
+prompt you have been using. The prompt (`""" + ck + """`) is the
+one-line prompt that closes as soon as the command runs. The console is
+a durable tab with its own REPL, wired with the commands that want a
+persistent output window, like installing a package.
+
+The console **sets up** Rune, the prompt **drives** it.
+
+Open the console: """ + keypress("console") + """.
+"""
+
+pkg_install_md = """\
+You're in Rune's console now. Install the fuzzy-search extension:
+
+1. Type `pkg install fuzzy-search`.
+2. Press Enter and wait for the install to finish.
+"""
+
 searchfile_missing_md = """\
-`searchfile` comes from the fuzzy-search extension, which is not
-installed here. Install it from Rune's console with
-`pkg install fuzzy-search`, then rerun this tutorial to try the finder.
+`searchfile` still isn't available, so the finder steps will be
+skipped. Install the fuzzy-search extension with
+`pkg install fuzzy-search` from Rune's console, then rerun this
+tutorial to try it.
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -242,8 +265,31 @@ def teach_cleanup():
     notify(level = success, message = "Layout cleared.")
 
 
+def teach_fuzzy_search_install():
+    # The finder steps below drive a package-provided command. Install
+    # it up front so the first `searchfile` is a real search instead of
+    # Rune's install prompt.
+    if command_exists("searchfile"):
+        return
+    floating_window(title = "Install the finder", text = console_md,
+                    dismiss_keys = dismiss_for("console"))
+    wait_command(
+        title    = "Install the finder",
+        command  = "console",
+        on_error = "Open Rune's console: run the `<cmd>console` command.",
+    )
+    floating_window(title = "Install the finder", text = pkg_install_md,
+                    alignment = "top")
+    wait_shell(
+        title    = "Install the finder",
+        args     = ["pkg", "install", "fuzzy-search"],
+        on_error = "In Rune's console, run `pkg install fuzzy-search`.",
+    )
+    notify(level = success, message = "Fuzzy search installed.")
+
+
 def teach_searchfile():
-    if not key_for("searchfile"):
+    if not command_exists("searchfile"):
         floating_window(title = "Find a file by name", text = searchfile_missing_md,
                         dismiss_keys = [ck])
         return
@@ -264,7 +310,7 @@ def teach_searchfile():
 
 
 def teach_searchtext():
-    if not key_for("searchtext"):
+    if not command_exists("searchtext"):
         floating_window(title = "Find where text lives", text = searchtext_missing_md,
                         dismiss_keys = [ck])
         return
@@ -381,6 +427,7 @@ def run():
 
     floating_window(title = "Navigate code", text = intro_md, dismiss_keys = [ck])
 
+    teach_fuzzy_search_install()
     teach_searchfile()
     teach_searchtext()
     teach_jump_symbol()
@@ -394,4 +441,4 @@ def run():
                     dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "11", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "12", entry = run)

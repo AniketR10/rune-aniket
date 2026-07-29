@@ -825,6 +825,43 @@ tutorial(entry=run)
 	}
 }
 
+// TestWaitStepAlignment asserts that wait_command and wait_event honour
+// the alignment kwarg, so a lesson can keep its page and its hint on
+// the same side of the screen instead of jumping between the two.
+func TestWaitStepAlignment(t *testing.T) {
+	t.Parallel()
+	const (
+		screenW = 80
+		screenH = 24
+		wmY     = 1
+	)
+	cases := []struct {
+		name string
+		step string
+	}{
+		{"wait_command", `wait_command(command="edit", alignment="top-left")`},
+		{"wait_event", `wait_event(event="open", text="hi", alignment="top-left")`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := fmt.Sprintf("def run():\n    %s\ntutorial(entry=run)\n", tc.step)
+			tut, _ := newTutorial(t, src)
+			tut.Resize(screenW, screenH)
+			resetAndWait(t, tut, time.Second)
+			tut.mu.Lock()
+			req := tut.active
+			tut.mu.Unlock()
+			require.NotNil(t, req)
+			pos, _, _, ok := tut.winOverlay.WindowRect(req.win)
+			require.True(t, ok, "step must open a live hint window")
+			assert.Equal(t, 0, pos.X, "x")
+			assert.Equal(t, wmY, pos.Y, "y")
+			tut.Stop()
+		})
+	}
+}
+
 // TestFloatingWindowAlignmentParses asserts that the alignment kwarg
 // accepts every documented keyword.
 func TestFloatingWindowAlignmentParses(t *testing.T) {
