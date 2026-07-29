@@ -26,6 +26,7 @@ package starlarktutorial
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -599,6 +600,138 @@ tutorial(entry=run)
 		"hint must mention the command's bound key")
 }
 
+// TestWaitCommandArgsSuppressBoundKey is a regression test for the
+// `! git log` lesson: `!` alone is bound to the companion terminal,
+// so offering that key as a way to "run it" sends the user somewhere
+// the step is not asking for. An argument-qualified awaited command
+// resolves the key for that exact invocation, and still matches on
+// the command name alone.
+func TestWaitCommandArgsSuppressBoundKey(t *testing.T) {
+	t.Parallel()
+	keyFor := func(cmd string, args []string) string {
+		if cmd == "!" && len(args) == 0 {
+			return "<shift-meta-enter>"
+		}
+		return ""
+	}
+	src := `
+def run():
+    wait_command(command="! git log")
+tutorial(entry=run)
+`
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := New(
+		"bang-args-test", src,
+		overlay, nil, nil, nil,
+		term.Attributes{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		"standard", keyFor,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	const screenW, screenH = 80, 60
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	g := newAttrGridWriter(screenW, screenH)
+	tut.Draw(g)
+	tut.winOverlay.Draw(g)
+	body := gridText(g)
+
+	assert.Contains(t, body, "! git log",
+		"hint must name the invocation the step asks for")
+	assert.NotContains(t, body, "<shift-meta-enter>",
+		"a key bound to the bare command runs something else")
+
+	assert.True(t, tut.ObserveCommand("!", "!", []string{"git", "log"}, nil),
+		"the step matches on the command name alone and is the last one")
+}
+
+func TestWaitCommandArgsIncludeExactBoundKey(t *testing.T) {
+	t.Parallel()
+	keyFor := func(cmd string, args []string) string {
+		if cmd == "windownew" && slices.Equal(args, []string{"right"}) {
+			return "<meta-r>"
+		}
+		return ""
+	}
+	r := &request{command: "windownew right", text: "Split to the right."}
+
+	hint := buildWaitCommandHint(r, "<alt-x>", nil, keyFor)
+
+	assert.Contains(t, hint, "windownew right")
+	assert.Contains(t, hint, "<meta-r>")
+}
+
+func TestWaitCommandTextDoesNotRepeatExactBoundKey(t *testing.T) {
+	t.Parallel()
+	keyFor := func(string, []string) string { return "<meta-r>" }
+	r := &request{
+		command: "windownew right",
+		text:    "Split to the right with `<meta-r>`.",
+	}
+
+	hint := buildWaitCommandHint(r, "<alt-x>", nil, keyFor)
+
+	assert.Equal(t, 1, strings.Count(hint, "<meta-r>"))
+	assert.NotContains(t, hint, "Or you can press")
+}
+
+// TestWaitCommandTextReplacesManualUpFront is a regression test for a
+// lesson that asks for two directions of the same command in a row:
+// once the first was dispatched, the second step fell back to the
+// generic "try the <command> command" hint plus its manual, which
+// cannot say which direction is still due. A step's own text must
+// show before any failed dispatch.
+func TestWaitCommandTextReplacesManualUpFront(t *testing.T) {
+	t.Parallel()
+	lookup := func(name string) (command.Manual, bool) {
+		return command.Manual{
+			Name:     name,
+			Synopsis: "(right|left|up|down)",
+			Summary:  "Switch focus to the window on the given side.",
+		}, true
+	}
+	src := `
+def run():
+    wait_command(command="windowfocus", text="Now focus the editor on the left.")
+tutorial(entry=run)
+`
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := New(
+		"hint-text-test", src,
+		overlay, nil, nil, nil,
+		term.Attributes{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		"standard", nil,
+		lookup,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	const screenW, screenH = 80, 60
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	g := newAttrGridWriter(screenW, screenH)
+	tut.Draw(g)
+	tut.winOverlay.Draw(g)
+	body := gridText(g)
+
+	assert.Contains(t, body, "Now focus the editor on the left.",
+		"the step's own instruction must show before any failed dispatch")
+	assert.NotContains(t, body, "Switch focus to the window on the given side.",
+		"the generic manual must not stand in for the step's instruction")
+}
+
 // TestWaitCommandHintStaysClearOfCommandPrompt asserts that a hint
 // window never covers the command prompt the step asks the user to
 // open. The prompt anchors at 0.2*height, so the hint must start
@@ -640,6 +773,42 @@ tutorial(entry=run)
 				"hint window must stay on screen")
 		})
 	}
+}
+
+// TestWaitEventHintShowsWholeBody is a regression test for a
+// wait_event step whose instructions were cut off mid-body: the
+// prompt-aware height cap (0.2*height) applied to every hint kind,
+// so a step that carries its call to action in the text lost the
+// last lines. Only a wait_command hint has a command prompt to stay
+// clear of.
+func TestWaitEventHintShowsWholeBody(t *testing.T) {
+	t.Parallel()
+	body := "Line one of the instructions.\n\n" +
+		"Line two of the instructions.\n\n" +
+		"Line three of the instructions.\n\n" +
+		"Line four of the instructions.\n\n" +
+		"Line five of the instructions.\n\n" +
+		"Finally, save the file."
+	src := fmt.Sprintf("def run():\n"+
+		"    wait_event(event=\"flush\", title=\"Make it stick\", text=%q)\n"+
+		"tutorial(entry=run)\n", body)
+	tut, _ := newTutorial(t, src)
+	const screenW, screenH = 80, 40
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	tut.mu.Lock()
+	content := tut.active.winContent
+	tut.mu.Unlock()
+	require.NotNil(t, content)
+
+	contentW, contentH := content.Dimensions()
+	want := content.Handler.Height(max(contentW-2, 1))
+	assert.GreaterOrEqual(t, contentH, want,
+		"wait_event hint must be tall enough for its whole body "+
+			"(%d rows), otherwise the closing instruction is cut off",
+		want)
 }
 
 // TestStepWindowsShareBottomAnchor asserts that a teaching window and

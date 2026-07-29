@@ -53,10 +53,11 @@ type floatingWindowContent struct {
 	// window layout under the overlay-browser lock, possibly from
 	// the run goroutine at open time.
 	screen atomic.Uint64
-	// hint caps the window height so it stays above the command
-	// prompt's anchor row, keeping the prompt the user is asked to
-	// open visible beneath the hint.
-	hint bool
+	// promptAware caps the window height so it stays clear of the
+	// command prompt's anchor row. It only applies to a step that
+	// asks the user to open the prompt from a bottom-anchored hint;
+	// any other step would just be truncating its own instructions.
+	promptAware bool
 	// onClose runs when the browser releases the content: the
 	// window-bar close click or a programmatic window close. It must
 	// only stamp state — it is called while the overlay-browser lock
@@ -117,7 +118,7 @@ func (c *floatingWindowContent) Dimensions() (int, int) {
 	markdownW := max(contentW-2, 1)
 	contentH := max(c.Handler.Height(markdownW), 1) + 1
 	switch {
-	case c.hint:
+	case c.promptAware:
 		hintCap := int(float64(sh)*commandPromptTopFraction) +
 			hintBoxMaxHeightSlack - 2
 		hintCap = max(hintCap, hintBoxMinInnerH-2)
@@ -236,7 +237,6 @@ func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	content := newFloatingWindowContent(md, width, height, func() {
 		r.winClosed.Store(true)
 	})
-	content.hint = true
 	r.winContent = content
 	align := defaultStepAlignment
 	switch {
@@ -245,6 +245,7 @@ func (t *Tutorial) openHintWindow(r *request, width, height int) {
 	case r.kind == reqWaitShell:
 		align = consoleStepAlignment
 	}
+	content.promptAware = r.kind == reqWaitCommand && align == defaultStepAlignment
 	r.win = t.winOverlay.Floating(content, browserapi.FloatingConfig{
 		Alignment: align,
 		Title:     floatingWindowTitle(r),

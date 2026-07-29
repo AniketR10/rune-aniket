@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -34,10 +35,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 )
+
+const tutorialPlaylistPromptDelay = 3 * time.Second
 
 func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 	files := i.ideConfig.tutorialFiles()
@@ -160,7 +164,16 @@ func (i *IDE) onTutorialCompleted(name string) {
 	if !ok || !i.tutorial.has(next.Name) {
 		return
 	}
-	i.promptRunTutorial(next.Name, next.Description)
+	i.options.afterFunc(tutorialPlaylistPromptDelay, func() {
+		debug.CapturePanicReport(func() {
+			i.options.scheduleFn(func() {
+				if i.tutorial.running() {
+					return
+				}
+				i.promptRunTutorial(next.Name, next.Description)
+			})
+		})
+	})
 }
 
 // promptRunTutorial asks the user whether to run a tutorial. It must run on

@@ -28,12 +28,14 @@ else:
     move_keys = arrow_keys
 
 # How to move through a location picker / finder list, phrased per mode.
-# Modal points with `<ctrl-j>` / `<ctrl-k>`; emacs and standard use the
-# arrow keys.
+# Keep the arrows as a universal fallback while naming each preset's
+# completion bindings.
 if editor_mode() == "modal":
-    move_phrase = "`<ctrl-j>` / `<ctrl-k>` (or the arrow keys)"
+    move_phrase = "`<ctrl-j>` / `<ctrl-k>` (or `<up>` / `<down>`)"
+elif editor_mode() == "emacs":
+    move_phrase = "`<ctrl-p>` / `<ctrl-n>` (or `<up>` / `<down>`)"
 else:
-    move_phrase = "the arrow keys `<up>` / `<down>`"
+    move_phrase = "`<ctrl-i>` / `<ctrl-k>` (or `<up>` / `<down>`)"
 
 if editor_mode() == "emacs":
     def_by_name_key = "<ctrl-alt-.>"
@@ -142,6 +144,12 @@ it.""" + keyhint("searchtext") + """
 
 Open it now: """ + keypress("searchtext") + """. Type something to
 search for, then pick a result to jump straight to that line.
+"""
+
+searchtext_picker_md = """\
+Type a word you want to search for, or just a few characters from that
+word. Scroll through the completion list with """ + move_phrase + """,
+then press `<enter>` to jump to the selected line.
 """
 
 searchtext_missing_md = """\
@@ -270,7 +278,7 @@ def teach_fuzzy_search_install():
     # it up front so the first `searchfile` is a real search instead of
     # Rune's install prompt.
     if command_exists("searchfile"):
-        return
+        return False
     floating_window(title = "Install the finder", text = console_md,
                     dismiss_keys = dismiss_for("console"))
     wait_command(
@@ -286,10 +294,11 @@ def teach_fuzzy_search_install():
         on_error = "In Rune's console, run `pkg install fuzzy-search`.",
     )
     notify(level = success, message = "Fuzzy search installed.")
+    return True
 
 
-def teach_searchfile():
-    if not command_exists("searchfile"):
+def teach_searchfile(just_installed):
+    if not just_installed and not command_exists("searchfile"):
         floating_window(title = "Find a file by name", text = searchfile_missing_md,
                         dismiss_keys = [ck])
         return
@@ -309,8 +318,8 @@ def teach_searchfile():
     notify(level = success, message = "You found a file by name.")
 
 
-def teach_searchtext():
-    if not command_exists("searchtext"):
+def teach_searchtext(just_installed):
+    if not just_installed and not command_exists("searchtext"):
         floating_window(title = "Find where text lives", text = searchtext_missing_md,
                         dismiss_keys = [ck])
         return
@@ -324,7 +333,7 @@ def teach_searchtext():
     wait_event(
         event    = "open",
         title    = "Find where text lives",
-        text     = "Pick a result to jump to that line.",
+        text     = searchtext_picker_md,
         on_error = "Choose a result and press `<enter>` to jump to that line.",
     )
     notify(level = success, message = "You found text across the workspace.")
@@ -337,6 +346,7 @@ def teach_jump_symbol():
     wait_command(
         title    = "Jump to a function in this file",
         command  = "jumptoast",
+        text     = "Pick a function to jump to with `" + jump_symbol_key + "`.",
         on_error = ("Press `" + jump_symbol_key + "` and pick a function to " +
                     "jump to."),
     )
@@ -354,7 +364,7 @@ def teach_definition_at_cursor():
                     dismiss_keys = dismiss_for("lsp", "definition"))
     wait_command(
         title    = "Go to definition",
-        command  = "lsp",
+        command  = "lsp definition",
         on_error = ("Put your cursor on a symbol and run `<cmd>lsp definition` " +
                     "(no argument) to jump to its definition."),
     )
@@ -367,7 +377,9 @@ def teach_definition_by_name():
                     dismiss_keys = def_by_name_dismiss)
     wait_command(
         title    = "Find a definition by name",
-        command  = "lsp",
+        command  = "lsp definition <name>",
+        text     = ("Type a symbol name after `lsp definition`, or press `" +
+                    def_by_name_key + "` to prefill it."),
         on_error = ("Run `<cmd>lsp definition <name>` with a symbol name, or " +
                     "press `" + def_by_name_key + "` to prefill `lsp definition ` and " +
                     "type the name."),
@@ -380,7 +392,7 @@ def teach_cursorhistory():
                     dismiss_keys = dismiss_for("cursorhistory", "prev"))
     wait_command(
         title    = "Jump back",
-        command  = "cursorhistory",
+        command  = "cursorhistory prev",
         on_error = "Go back with `<cmd>cursorhistory prev`.",
     )
     notify(level = success, message = "You jumped back.")
@@ -389,7 +401,7 @@ def teach_cursorhistory():
                     dismiss_keys = dismiss_for("cursorhistory", "next"))
     wait_command(
         title    = "Jump forward",
-        command  = "cursorhistory",
+        command  = "cursorhistory next",
         on_error = "Go forward again with `<cmd>cursorhistory next`.",
     )
     notify(level = success, message = "You walked the cursor history back and forth.")
@@ -401,7 +413,7 @@ def teach_lsp_more():
                     dismiss_keys = dismiss_for("lsp", "references"))
     wait_command(
         title    = "Ask about a symbol",
-        command  = "lsp",
+        command  = "lsp references",
         on_error = ("Put your cursor on a symbol and run `<cmd>lsp references`, " +
                     "`<cmd>lsp implementation`, or `<cmd>lsp hover`."),
     )
@@ -427,9 +439,9 @@ def run():
 
     floating_window(title = "Navigate code", text = intro_md, dismiss_keys = [ck])
 
-    teach_fuzzy_search_install()
-    teach_searchfile()
-    teach_searchtext()
+    fuzzy_search_installed = teach_fuzzy_search_install()
+    teach_searchfile(fuzzy_search_installed)
+    teach_searchtext(fuzzy_search_installed)
     teach_jump_symbol()
     teach_lsp_intro()
     teach_definition_at_cursor()
@@ -441,4 +453,4 @@ def run():
                     dismiss_keys = [ck])
 
 
-tutorial(id = "navigation", title = "Navigate code", version = "12", entry = run)
+tutorial(id = "navigation", title = "Navigate code", version = "14", entry = run)

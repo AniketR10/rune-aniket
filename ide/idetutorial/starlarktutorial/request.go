@@ -129,7 +129,11 @@ type request struct {
 	// wait_key.
 	waitKey string
 
-	// wait_command.
+	// wait_command: the awaited command, optionally argument-
+	// qualified ("! git log"). Matching only ever uses the command
+	// name; the arguments narrow the key the hint offers, so a step
+	// that asks for an invocation with arguments does not advertise
+	// a key bound to the bare command.
 	command string
 	onError string
 

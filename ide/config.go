@@ -551,9 +551,7 @@ func sortedCommandKeySequences(mappings map[handler.Sequence][][]string) []handl
 // command line in a binding maps to that binding's key, keyed by the
 // joined command+args. A multi-command sequence binding maps every
 // command line to the same key. Printable chords are preferred over
-// named-key aliases, then lexical order makes the choice stable. The
-// closure falls back to the bare command when an args-qualified lookup
-// misses.
+// named-key aliases, then lexical order makes the choice stable.
 func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
 	lookup := make(map[string]string)
 	mappings := c.commandKeyMappings()
@@ -574,11 +572,6 @@ func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
 		line := strings.Join(append([]string{cmd}, args...), " ")
 		if key, ok := lookup[line]; ok {
 			return key
-		}
-		if len(args) > 0 {
-			if key, ok := lookup[cmd]; ok {
-				return key
-			}
 		}
 		return ""
 	}

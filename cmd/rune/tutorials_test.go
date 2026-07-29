@@ -25,6 +25,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "47", tut.Version())
+	assert.Equal(t, "56", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -99,7 +100,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "47", tut.Version())
+	assert.Equal(t, "56", tut.Version())
 }
 
 func TestBasicsTutorialLayoutIntro(t *testing.T) {
@@ -321,7 +322,6 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 		"windowresize decrease height",
 		"windowresize increase width",
 		"windowdefaultsplit h",
-		"windowdefaultsplit v",
 		"tabnext",
 		"tabprevious",
 		"tabmove left",
@@ -381,6 +381,214 @@ func TestBasicsTutorialResolvesEmacsLayoutBindings(t *testing.T) {
 	}
 }
 
+// TestBasicsTutorialLayoutKeysPlayable asserts that the "Your current
+// layout keys" page lets the user actually try the bindings it lists:
+// they must reach the IDE root while the page stays up, otherwise the
+// table is just something to read past.
+func TestBasicsTutorialLayoutKeysPlayable(t *testing.T) {
+	t.Parallel()
+
+	layoutKeys := map[string]string{
+		"windowfocus up":    "<alt-i>",
+		"windowfocus left":  "<alt-j>",
+		"windowfocus down":  "<alt-k>",
+		"windowfocus right": "<alt-l>",
+		"windowmove right":  "<alt-shift-l>",
+	}
+	keyFor := func(cmd string, args []string) string {
+		return layoutKeys[strings.Join(append([]string{cmd}, args...), " ")]
+	}
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, &capturingNotis{}, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(100, 30)
+	tut.Reset()
+
+	wait := func(kind string) {
+		t.Helper()
+		require.True(t, tut.WaitActive(kind, time.Second),
+			"expected a %s step", kind)
+	}
+	dismissPromptStep := func() {
+		t.Helper()
+		wait("floating_window")
+		_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+	observe := func(command string, args ...string) {
+		t.Helper()
+		wait("wait_command")
+		tut.ObserveCommand(command, command, args, nil)
+	}
+
+	dismissPromptStep()
+	observe("workspaceopen", "/tmp/tutorial-workspace")
+	dismissPromptStep()
+	observe("edit", "README.md")
+	dismissPromptStep()
+	dismissPromptStep()
+	observe("windownew")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+
+	wait("floating_window")
+	for _, spec := range []string{"<alt-i>", "<alt-l>", "<alt-shift-l>"} {
+		ks, err := term.ParseKeys(spec)
+		require.NoError(t, err)
+		require.Len(t, ks, 1)
+		exit, handled := tut.Handle(term.Event{
+			Type: term.EventKey, Key: ks[0].Key, Mod: ks[0].Mod, Ch: ks[0].Ch,
+		})
+		assert.False(t, exit)
+		assert.Falsef(t, handled,
+			"%s must fall through to the IDE so the user can try it", spec)
+		assert.Truef(t, tut.WaitActive("floating_window", time.Second),
+			"%s must not advance past the layout table", spec)
+	}
+}
+
+// TestBasicsTutorialDirectionalHintNamesKey asserts that a follow-up
+// hint in a two-direction lesson names the chord it is waiting for.
+// The hint's generic "Or you can press ..." line resolves the bare
+// command name, which is unbound for direction-qualified commands, so
+// without this the second half of the lesson shows no key at all.
+func TestBasicsTutorialDirectionalHintNamesKey(t *testing.T) {
+	t.Parallel()
+
+	layoutKeys := map[string]string{
+		"windowfocus up":   "<alt-i>",
+		"windowfocus left": "<alt-j>",
+		"windowmove right": "<alt-shift-l>",
+		"windowmove left":  "<alt-shift-j>",
+	}
+	keyFor := func(cmd string, args []string) string {
+		return layoutKeys[strings.Join(append([]string{cmd}, args...), " ")]
+	}
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil, nil, &capturingNotis{}, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(100, 30)
+	tut.Reset()
+
+	dismissPromptStep := func() {
+		t.Helper()
+		require.True(t, tut.WaitActive("floating_window", time.Second))
+		_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+	observe := func(command string, args ...string) {
+		t.Helper()
+		require.True(t, tut.WaitActive("wait_command", time.Second))
+		tut.ObserveCommand(command, command, args, nil)
+	}
+
+	dismissPromptStep()
+	observe("workspaceopen", "/tmp/tutorial-workspace")
+	dismissPromptStep()
+	observe("edit", "README.md")
+	dismissPromptStep()
+	dismissPromptStep()
+	observe("windownew")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+	dismissPromptStep()
+	observe("windowdefaultsplit", "h")
+	dismissPromptStep()
+	observe("terminalneworsplit")
+
+	require.True(t, tut.WaitActive("floating_window", time.Second))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	dismissPromptStep()
+	require.True(t, tut.WaitActive("wait_command", time.Second))
+	assert.Contains(t, tut.ActiveText(), "<alt-i>")
+	tut.ObserveCommand("windowfocus", "windowfocus", []string{"up"}, nil)
+	require.True(t, tut.WaitActive("wait_command", time.Second))
+	assert.Contains(t, tut.ActiveText(), "<alt-j>")
+	tut.ObserveCommand("windowfocus", "windowfocus", []string{"left"}, nil)
+
+	dismissPromptStep()
+	require.True(t, tut.WaitActive("wait_command", time.Second))
+	assert.Contains(t, tut.ActiveText(), "<alt-shift-l>")
+	tut.ObserveCommand("windowmove", "windowmove", []string{"right"}, nil)
+	require.True(t, tut.WaitActive("wait_command", time.Second))
+	assert.Contains(t, tut.ActiveText(), "<alt-shift-j>")
+}
+
+func TestBasicsTutorialEmacsSplitHintNamesKey(t *testing.T) {
+	t.Parallel()
+
+	var (
+		lookupMu sync.Mutex
+		lookups  []string
+	)
+	keyFor := func(cmd string, args []string) string {
+		lookupMu.Lock()
+		lookups = append(lookups,
+			strings.Join(append([]string{cmd}, args...), " "))
+		lookupMu.Unlock()
+		if cmd == "windownew" && slices.Equal(args, []string{"right"}) {
+			return "<meta-r>"
+		}
+		return ""
+	}
+	overlay := idetutorial.NewOverlayBrowser(
+		browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		overlay, nil, &capturingNotis{}, nil,
+		term.Attributes{}, nil, nil,
+		term.KeyComb{Ch: ':'}, "emacs", keyFor,
+		nil, nil, nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(100, 30)
+	tut.Reset()
+
+	dismiss := func() {
+		t.Helper()
+		require.True(t, tut.WaitActive("floating_window", time.Second))
+		_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	}
+	observe := func(command string, args ...string) {
+		t.Helper()
+		require.True(t, tut.WaitActive("wait_command", time.Second))
+		tut.ObserveCommand(command, command, args, nil)
+	}
+
+	dismiss()
+	observe("workspaceopen", "/tmp/tutorial-workspace")
+	dismiss()
+	observe("edit", "README.md")
+	dismiss()
+	lookupMu.Lock()
+	lookups = nil
+	lookupMu.Unlock()
+	dismiss()
+	require.True(t, tut.WaitActive("wait_command", time.Second))
+	assert.Equal(t, "Split the active window to the right with `<meta-r>`.",
+		tut.ActiveText())
+	lookupMu.Lock()
+	require.NotEmpty(t, lookups)
+	assert.Equal(t, "windownew right", lookups[len(lookups)-1],
+		"the active wait hint must resolve the expected invocation, not its bare command")
+	lookupMu.Unlock()
+}
+
 func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	t.Parallel()
 
@@ -424,13 +632,11 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 
 	dismissPromptStep()
 	dismissPromptStep()
-	observe("windowdefaultsplit", "h")
-	dismissPromptStep()
 	observe("windownew")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 	dismissPromptStep()
-	observe("windowdefaultsplit", "v")
+	observe("windowdefaultsplit", "h")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 
@@ -439,13 +645,14 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 
 	dismissPromptStep()
 	observe("windowfocus", "up")
+	// A wrong direction keeps the step armed.
 	wait("wait_command")
-	tut.ObserveCommand("windowfocus", "windowfocus", []string{"left"}, nil)
-	observe("windowfocus", "right")
+	tut.ObserveCommand("windowfocus", "windowfocus", []string{"right"}, nil)
+	observe("windowfocus", "left")
 
 	dismissPromptStep()
-	observe("windowmove", "left")
 	observe("windowmove", "right")
+	observe("windowmove", "left")
 
 	dismissPromptStep()
 	observe("windowresize", "increase", "height")
@@ -457,6 +664,7 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 	dismissPromptStep()
 	observe("windowtogglemaximize")
 	dismissPromptStep()
+	observe("windowfocus", "right")
 	observe("windowclose")
 	dismissPromptStep()
 	observe("fexplorer")
@@ -541,17 +749,15 @@ func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
 
 	dismissPromptStep()
 	dismissPromptStep()
-	observe("windowdefaultsplit", "h")
-	dismissPromptStep()
-	wait("wait_command")
-	tut.ObserveCommand("windownew", "windownew", []string{"right"}, nil)
 	wait("wait_command")
 	tut.ObserveCommand("windownew", "windownew", []string{"down"}, nil)
+	wait("wait_command")
+	tut.ObserveCommand("windownew", "windownew", []string{"right"}, nil)
 
 	dismissPromptStep()
 	observe("terminalneworsplit")
 	dismissPromptStep()
-	observe("windowdefaultsplit", "v")
+	observe("windowdefaultsplit", "h")
 	dismissPromptStep()
 	observe("terminalneworsplit")
 
@@ -559,23 +765,23 @@ func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 
 	dismissPromptStep()
+	observe("windowfocus", "up")
 	observe("windowfocus", "left")
-	observe("windowfocus", "right")
 	dismissPromptStep()
-	observe("windowmove", "left")
 	observe("windowmove", "right")
+	observe("windowmove", "left")
 	dismissPromptStep()
 	observe("windowresize", "increase", "width")
 	observe("windowresize", "decrease", "width")
 	dismissPromptStep()
 	observe("windowtogglemaximize")
 	dismissPromptStep()
+	observe("windowfocus", "right")
 	observe("windowclose")
 	dismissPromptStep()
 	observe("windowcloseall")
 
 	assert.Contains(t, notis.successes(), "Splits now land below.")
-	assert.Contains(t, notis.successes(), "Splits now land to the right.")
 	assert.Contains(t, notis.successes(), "You cleaned up the window layout.")
 }
 
@@ -742,6 +948,14 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	waitCmd()
 	tut.ObserveCommand("searchtext", "searchtext", nil, nil)
 	waitEvent()
+	assert.Contains(t, tut.ActiveText(),
+		"Type a word you want to search for, or just a few characters from that")
+	assert.Contains(t, tut.ActiveText(),
+		"word. Scroll through the completion list")
+	assert.Contains(t, tut.ActiveText(), "<ctrl-i>")
+	assert.Contains(t, tut.ActiveText(), "<ctrl-k>")
+	assert.Contains(t, tut.ActiveText(), "<up>")
+	assert.Contains(t, tut.ActiveText(), "<down>")
 	tut.ObserveEvent("open", "file:///workspace/b.go")
 
 	// jumptoast: window -> command (fuzzy-jump to a function in the file).
@@ -807,6 +1021,50 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	}, notis.successes())
 }
 
+func TestNavigationTutorialSearchTextPickerKeysByMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		mode string
+		up   string
+		down string
+	}{
+		{mode: "modal", up: "<ctrl-k>", down: "<ctrl-j>"},
+		{mode: "standard", up: "<ctrl-i>", down: "<ctrl-k>"},
+		{mode: "emacs", up: "<ctrl-p>", down: "<ctrl-n>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			t.Parallel()
+			src := `
+def run():
+    wait_event(event="open", text=searchtext_picker_md)
+tutorial(entry=run)
+`
+			modeSrc := strings.Replace(navigationTutorial,
+				`tutorial(id = "navigation", title = "Navigate code", version = "14", entry = run)`,
+				"", 1) + src
+			tut, err := starlarktutorial.New(
+				"navigation-picker-keys", modeSrc,
+				nil, nil, nil, nil,
+				term.Attributes{}, nil, nil,
+				term.KeyComb{Ch: ':'}, tt.mode,
+				nil, nil, nil, nil,
+			)
+			require.NoError(t, err)
+			tut.Resize(80, 24)
+			tut.Reset()
+			require.True(t, tut.WaitActive("wait_event", time.Second))
+
+			text := tut.ActiveText()
+			assert.Contains(t, text, tt.up)
+			assert.Contains(t, text, tt.down)
+			assert.Contains(t, text, "<up>")
+			assert.Contains(t, text, "<down>")
+		})
+	}
+}
+
 // TestNavigationTutorialInstallsFuzzySearchFirst asserts that when the
 // fuzzy-search extension is missing, the tutorial walks the user
 // through installing it from the console before reaching the finder
@@ -816,12 +1074,8 @@ func TestNavigationTutorialInstallsFuzzySearchFirst(t *testing.T) {
 	t.Parallel()
 
 	alwaysTrue := func() bool { return true }
-	installed := map[string]bool{}
 	lookup := func(name string) (command.Manual, bool) {
-		if !installed[name] {
-			return command.Manual{}, false
-		}
-		return command.Manual{Name: name}, true
+		return command.Manual{}, false
 	}
 	notis := &capturingNotis{}
 	overlay := idetutorial.NewOverlayBrowser(
@@ -867,12 +1121,13 @@ func TestNavigationTutorialInstallsFuzzySearchFirst(t *testing.T) {
 	// The install page has no dismiss_keys; <enter> advances it.
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	wait("wait_shell")
-	installed["searchfile"] = true
-	installed["searchtext"] = true
 	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "fuzzy-search"}, nil)
 
-	wait("floating_window") // searchfile, now that the command exists
+	// Command registration is asynchronous after the install completes,
+	// so the live lookup can still be stale here. A successful install
+	// must proceed to the finder lesson rather than claim it failed.
+	wait("floating_window") // searchfile
 	dismiss()
 	wait("wait_command")
 	tut.ObserveCommand("searchfile", "searchfile", nil, nil)
@@ -1133,7 +1388,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "navigation", tut.ID())
 	assert.Equal(t, "Navigate code", tut.Title())
-	assert.Equal(t, "12", tut.Version())
+	assert.Equal(t, "14", tut.Version())
 }
 
 func TestAgentTutorialParses(t *testing.T) {
@@ -1199,7 +1454,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "12", tut.Version())
+	assert.Equal(t, "14", tut.Version())
 }
 
 // TestNavigationTutorialParsesEmacsMode asserts the embedded navigation
@@ -1225,7 +1480,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "12", tut.Version())
+	assert.Equal(t, "14", tut.Version())
 }
 
 func TestNavigationTutorialUsesEmacsNavigationPrefills(t *testing.T) {
@@ -1264,5 +1519,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "47", tut.Version())
+	assert.Equal(t, "56", tut.Version())
 }

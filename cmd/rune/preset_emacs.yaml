@@ -137,8 +137,8 @@ command:
 # Try `mullen` for a deep-purple / hot-pink feel, or `kernighan` for the
 # classic Windows-Terminal palette.
 # ---------------------------------------------------------------------------
-# gui:
-#   default_theme: romero
+gui:
+  default_theme: romero
 #   font_size: 13
 #   line_height_offset: 0
 #   column_width_offset: -1

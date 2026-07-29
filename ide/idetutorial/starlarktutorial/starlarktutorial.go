@@ -746,7 +746,8 @@ func (t *Tutorial) ObserveCommand(
 	if active.kind != reqWaitCommand {
 		return false
 	}
-	if active.command != typed && active.command != resolved {
+	want := commandName(active.command)
+	if want != typed && want != resolved {
 		return false
 	}
 	if err != nil {
@@ -758,7 +759,7 @@ func (t *Tutorial) ObserveCommand(
 		}
 		return false
 	}
-	t.resolve(active, response{cmdName: active.command, cmdArgs: args})
+	t.resolve(active, response{cmdName: want, cmdArgs: args})
 	return t.exitState()
 }
 
@@ -969,6 +970,18 @@ func (t *Tutorial) WaitActive(want string, d time.Duration) bool {
 		}
 		time.Sleep(time.Millisecond)
 	}
+}
+
+// ActiveText returns the hint markdown the active step declared, or
+// "" when no step is active or the step has none. Intended for tests
+// that assert a lesson's copy without a browser wired.
+func (t *Tutorial) ActiveText() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.active == nil {
+		return ""
+	}
+	return t.active.text
 }
 
 // WaitFinished blocks until the run goroutine has exited or d

@@ -102,10 +102,10 @@ const hintBoxMaxHeightSlack = 3
 // wait_command hint window. The body always opens with a one-line
 // prompt — "Waiting for you to open the command prompt `<cmd>` and
 // try the `<command>` command:" — followed by the command's
-// markdown-rendered manual when lookup returns one. When the
-// runtime has swapped in an on_error message (request.text is non-
-// empty), that message wins and is rendered verbatim after the
-// prompt opener so the user sees the recovery hint.
+// markdown-rendered manual when lookup returns one. A non-empty
+// request.text wins over the manual and is rendered verbatim after
+// the prompt opener: it is either the step's own instruction or the
+// on_error message the runtime swapped in after a failed dispatch.
 func buildWaitCommandHint(
 	r *request, cmdKey string, lookup CommandManualLookup,
 	keyForCommand func(cmd string, args []string) string,
@@ -118,20 +118,19 @@ func buildWaitCommandHint(
 	fmt.Fprintf(&b,
 		"Waiting for you to open the command prompt `%s` and try the `%s` command:\n\n",
 		cmdKey, cmdName)
-	if boundKey := waitCommandBoundKey(cmdName, keyForCommand); boundKey != "" {
+	if boundKey := waitCommandBoundKey(cmdName, keyForCommand); boundKey != "" &&
+		!strings.Contains(r.text, "`"+boundKey+"`") {
 		fmt.Fprintf(&b,
 			"Or you can press `%s` to run it.\n\n", boundKey)
 	}
 	if r.text != "" {
-		// on_error: append the (already expanded) recovery hint
-		// verbatim — it is markdown produced by the author and
-		// should be rendered as-is.
+		// Author-supplied markdown, rendered as-is.
 		b.WriteString(expandCmdTemplate(r.text, cmdKey))
 		b.WriteString("\n")
 		return b.String()
 	}
 	if lookup != nil {
-		if man, ok := lookup(cmdName); ok {
+		if man, ok := lookup(commandName(cmdName)); ok {
 			b.WriteString(renderCommandManual(man))
 			return b.String()
 		}
@@ -154,6 +153,16 @@ func waitCommandBoundKey(
 		return ""
 	}
 	return keyForCommand(fields[0], fields[1:])
+}
+
+// commandName is the command name of an awaited, possibly argument-
+// qualified wait_command spec ("! git log" -> "!").
+func commandName(cmd string) string {
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return cmd
+	}
+	return fields[0]
 }
 
 // buildWaitShellHint composes the markdown body for a wait_shell hint

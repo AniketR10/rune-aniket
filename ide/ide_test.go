@@ -2973,6 +2973,10 @@ tutorial(entry=run)
 		root.Resize(80, 24)
 		mu.Unlock()
 		i.WaitWorkspaces()
+		i.options.afterFunc = func(_ time.Duration, fn func()) *time.Timer {
+			fn()
+			return nil
+		}
 		return i, mu
 	}
 
@@ -3039,6 +3043,27 @@ tutorial(entry=run)
 		assert.Nil(t, i.tutorial.overlay)
 		assert.Empty(t, i.tutorial.activeName)
 		mu.Unlock()
+	})
+
+	t.Run("prompt waits before opening", func(t *testing.T) {
+		i, mu := newIDE(t, true)
+		var (
+			delay time.Duration
+			fire  func()
+		)
+		i.options.afterFunc = func(d time.Duration, fn func()) *time.Timer {
+			delay = d
+			fire = fn
+			return nil
+		}
+
+		completeBasics(t, i, mu)
+		assert.Equal(t, 0, countFloatingWindows(i, mu))
+		assert.Equal(t, 3*time.Second, delay)
+		require.NotNil(t, fire)
+
+		fire()
+		assert.Equal(t, 1, countFloatingWindows(i, mu))
 	})
 
 	t.Run("last and unavailable entries do not prompt", func(t *testing.T) {

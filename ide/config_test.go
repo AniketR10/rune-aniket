@@ -1748,8 +1748,7 @@ editor:
 
 // TestCommandKeyBindingLookup asserts that commandKeyBindingLookup
 // inverts the configured key bindings: each command line resolves to
-// its key, multi-command sequences map every line to the same key, and
-// an args-qualified miss falls back to the bare command.
+// its key and multi-command sequences map every line to the same key.
 func TestCommandKeyBindingLookup(t *testing.T) {
 	t.Parallel()
 	c := ideConfig{
@@ -1774,8 +1773,9 @@ func TestCommandKeyBindingLookup(t *testing.T) {
 	// Multi-command sequence: every command line maps to the key.
 	assert.Equal(t, "<meta-d>", lookup("openDoors", []string{"1"}))
 	assert.Equal(t, "<meta-d>", lookup("large", []string{"2"}))
-	// Args-qualified miss falls back to the bare command binding.
-	assert.Equal(t, "<meta-n>", lookup("windownew", []string{"down"}))
+	// A bare-command binding may perform a different action, so an
+	// args-qualified miss must not advertise it.
+	assert.Empty(t, lookup("windownew", []string{"down"}))
 	// Unbound command yields "".
 	assert.Equal(t, "", lookup("tabclose", nil))
 	assert.Empty(t, c.errors)

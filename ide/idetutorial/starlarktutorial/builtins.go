@@ -232,12 +232,14 @@ func builtinWaitCommand(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			onError starlark.String
 			title   starlark.String
 			align   starlark.String
+			text    starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_command", args, kwargs,
 			"command", &command,
 			"on_error?", &onError,
 			"title?", &title,
-			"alignment?", &align); err != nil {
+			"alignment?", &align,
+			"text?", &text); err != nil {
 			return nil, err
 		}
 		alignment, err := parseFloatingAlignment(string(align))
@@ -250,6 +252,7 @@ func builtinWaitCommand(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			onError: string(onError),
 			title:   string(title),
 			align:   alignment,
+			text:    string(text),
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {

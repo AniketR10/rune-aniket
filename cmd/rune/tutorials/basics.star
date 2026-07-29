@@ -23,50 +23,14 @@ if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
     modal_surface_allow_keys = ["<esc>"]
-    direction_pattern_md = """\
-You picked **modal** editing, so Rune keeps the familiar HJKL directions:
-
-```text
-    K
-  H J L
-```
-
-`K` points up, `H` left, `J` down, and `L` right.
-"""
 elif mode == "emacs":
     dir_phrase = "the motion keys `<ctrl-p>` / `<ctrl-n>` or the arrow keys"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
     modal_surface_allow_keys = []
-    direction_pattern_md = """\
-You picked **Emacs** editing. Rune leaves the Emacs `<ctrl>` and `<alt>`
-editing chords alone and reuses its directional vocabulary for windows:
-
-- `P` is previous/up
-- `N` next/down
-- `B` backward/left
-- `F` forward/right
-
-Your fingers already know those directions from `<ctrl-p>` / `<ctrl-n>` and
-`<ctrl-b>` / `<ctrl-f>`. Hold `<meta>` with PNBF to apply that muscle memory to
-window focus. Add `<shift>` to move the focused content instead.
-"""
 else:
     dir_phrase = "the arrow keys"
     completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
     modal_surface_allow_keys = []
-    direction_pattern_md = """\
-You picked **standard** editing. Native arrow keys stay available for text,
-while layout direction uses an IJKL cluster under your right hand:
-
-```text
-    I
-  J K L
-```
-
-`I` points up, `J` left, `K` down, and `L` right. Rune keeps Standard layout
-shortcuts centered on `<alt>`: hold it with IJKL to focus a window, add
-`<shift>` to move its content, or add `<meta>` to resize it.
-"""
 
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
@@ -130,14 +94,32 @@ def args_match(got, want):
             return False
     return True
 
+def with_key(text, cmd, args):
+    # The hint's own "Or you can press ..." line resolves the bare
+    # command name, which has no binding for direction-qualified
+    # commands. Name the exact chord the step is waiting for.
+    k = key_for(cmd, *args)
+    if not k:
+        return text
+    if text.endswith("."):
+        text = text[:-1]
+    return text + " with `" + k + "`."
+
 def wait_expected_command(title, command, expected_args, on_error, alignment = ""):
     # A successfully dispatched command has already taken effect, so keep the
     # lesson armed and ask for the intended direction rather than rejecting it.
+    #
+    # on_error doubles as the hint body. These steps come in sequences that
+    # ask for one direction and then another, and the generic "try the
+    # <command> command" hint plus its manual cannot say which one is due
+    # next -- the same command satisfies both halves.
+    hint = with_key(on_error, command, expected_args)
     for _ in range(1000):
         result = wait_command(
             title     = title,
-            command   = command,
-            on_error  = on_error,
+            command   = command_line(command, expected_args),
+            on_error  = hint,
+            text      = hint,
             alignment = alignment,
         )
         if args_match(result.args, expected_args):
@@ -166,7 +148,25 @@ resize_key_row = " | ".join([
     keylabel("windowresize", "decrease", "height"),
     keylabel("windowresize", "increase", "width"),
 ])
-split_window_args = ["down"] if mode == "emacs" else []
+# Every binding the layout table lists, so the page that shows it can
+# pass them through to the IDE and let the user try each one.
+layout_play_keys = [k for k in [
+    key_for("windowfocus", "up"),
+    key_for("windowfocus", "left"),
+    key_for("windowfocus", "down"),
+    key_for("windowfocus", "right"),
+    key_for("windowmove", "up"),
+    key_for("windowmove", "left"),
+    key_for("windowmove", "down"),
+    key_for("windowmove", "right"),
+    key_for("windowresize", "increase", "height"),
+    key_for("windowresize", "decrease", "width"),
+    key_for("windowresize", "decrease", "height"),
+    key_for("windowresize", "increase", "width"),
+] if k]
+# Emacs has no bare `windownew`; its split keys are direction-qualified.
+# Use the rightward one so every mode ends up with the same layout.
+split_window_args = ["right"] if mode == "emacs" else []
 
 if mode == "modal":
     layout_pattern_md = """\
@@ -201,8 +201,6 @@ layout actions fast, and the host Meta layer stays reachable from terminals.
 - """ + keylabel("tabclose") + """ closes a tab; adding `<shift>` escalates from the tab to the whole window.
 - """ + keylabel("tabprevious") + """ / """ + keylabel("tabnext") + """ cycle tabs, while
   """ + keylabel("tabmove", "left") + """ / """ + keylabel("tabmove", "right") + """ reorder the current tab.
-
-The next page shows the bindings active for you.
 """
 else:
     layout_pattern_md = """\
@@ -215,7 +213,7 @@ code and interface controls.
 
 Keyboard-driven does not have to mean learning an entirely new way to edit.
 Rune brings that advantage to a familiar, non-modal editor by treating IJKL
-as a second set of arrow keys used only for layout management:
+as a second set of arrow keys:
 
 ```text
     I
@@ -294,8 +292,7 @@ they follow a directional pattern.
 Press `<enter>` or `<space>` to continue.
 """
 
-directional_layout_md = direction_pattern_md + """
-
+directional_layout_md = """\
 ## Your current layout keys
 
 | Action | Up | Left | Down | Right |
@@ -306,18 +303,10 @@ directional_layout_md = direction_pattern_md + """
 
 The table follows your current configuration, including custom bindings.
 
+**Play with them and get comfortable.** They all work while this window
+is up: the editor and the two terminals are behind it.
+
 Press `<enter>` or `<space>` to continue.
-"""
-
-split_down_md = """\
-Splits have a direction. A new split lands **to the right** of the
-focused window unless you say otherwise, and `windowdefaultsplit` is
-what says otherwise.
-
-Send the next split **below** instead, so the terminals you are about
-to open sit under the editor rather than beside it.
-
-Flip the split direction: """ + keypress("windowdefaultsplit", "h") + """.
 """
 
 split_window_md = """\
@@ -325,7 +314,7 @@ A **window** is a tile on screen, and right now this workspace has just
 one.
 
 Split the focused window in two: """ + keypress("windownew", *split_window_args) + """.
-The new pane lands below.
+The new pane lands to the right.
 """
 
 terminal_md = """\
@@ -348,11 +337,13 @@ prompt (`""" + ck + """`), first switch back to NORMAL mode with
 `<esc>`.
 """
 
-split_right_md = """\
-The direction sticks until you change it again. Flip it back so the
-next split lands to the **right** of the focused window.
+split_horizontal_md = """\
+Splits have a direction, and so far every one has landed to the right.
+`windowdefaultsplit` aims the next one.
 
-Flip it back: """ + keypress("windowdefaultsplit", "v") + """.
+Send it **below** the focused window instead.
+
+Flip the split direction: """ + keypress("windowdefaultsplit", "h") + """.
 """
 
 terminal_split_md = """\
@@ -364,25 +355,26 @@ Open another terminal split: """ + keypress("terminalneworsplit") + """.
 """
 
 focus_window_md = """\
-The screen is split into several windows now. Directional layout commands
-move focus across the splits, so you can hop between them without the mouse.
+The screen holds three windows now: the editor on the left, and the two
+terminals stacked on the right. Directional layout commands move focus
+across the splits, so you can hop between them without the mouse.
 
+- `windowfocus up` focuses the window above.""" + keyhint("windowfocus", "up") + """
 - `windowfocus left` focuses the window to the left.""" + keyhint("windowfocus", "left") + """
-- `windowfocus right` focuses the window to the right.""" + keyhint("windowfocus", "right") + """
 
-First focus the window on the left (""" + keypress("windowfocus", "left") + """),
-then the window on the right (""" + keypress("windowfocus", "right") + """).
+First focus the terminal above (""" + keypress("windowfocus", "up") + """),
+then the editor on the left (""" + keypress("windowfocus", "left") + """).
 """
 
 move_window_md = """\
 `<shift>` turns "go to" into "move". Add it to the focus direction and the
 focused window's content swaps with its neighbor.
 
-- `windowmove left` moves the focused window to the left.""" + keyhint("windowmove", "left") + """
-- `windowmove right` moves it to the right.""" + keyhint("windowmove", "right") + """
+- `windowmove right` moves the focused window to the right.""" + keyhint("windowmove", "right") + """
+- `windowmove left` moves it back to the left.""" + keyhint("windowmove", "left") + """
 
-Move the focused window to the left (""" + keypress("windowmove", "left") + """),
-then back to the right (""" + keypress("windowmove", "right") + """).
+Move the editor to the right (""" + keypress("windowmove", "right") + """),
+then back to the left (""" + keypress("windowmove", "left") + """).
 """
 
 resize_direction_md = ("""\
@@ -415,11 +407,12 @@ Toggle fullscreen now: """ + keypress("windowtogglemaximize") + """.
 """
 
 close_window_md = """\
-`windowclose` closes the focused split and moves focus to the next
-window. It will not close your last window: a workspace always keeps at
-least one.""" + keyhint("windowclose") + """
+`windowclose` closes the focused split and hands focus back to the
+window you came from. It will not close your last window: a workspace
+always keeps at least one.""" + keyhint("windowclose") + """
 
-To close the split you just made, """ + keypress("windowclose") + """.
+Focus a terminal (""" + keypress("windowfocus", "right") + """), then close
+it (""" + keypress("windowclose") + """). Focus lands back on the editor.
 """
 
 emacs_close_others_md = """\
@@ -559,28 +552,15 @@ Open it now: """ + keypress("config") + """.
 
 def config_edit_md(theme):
     return """\
-This is your config. Two things to notice:
+`command.key_bindings` is active: every key this tutorial taught you
+lives there. Everything else is commented out at Rune's own defaults,
+so reading the file is how you find what is tunable.
 
-- `command.key_bindings` is **active**: every key this tutorial taught
-  you lives there, and you can rebind any of them.
-- Everything else is commented out, and the commented values are Rune's
-  own defaults. Reading the file is how you discover what is tunable.
-
-Scroll down to the **GUI theme** block and make your theme the default:
-uncomment the `gui:` line and the `default_theme:` line under it, then
-set the theme to `""" + theme + """`:
-
-```yaml
-gui:
-  default_theme: """ + theme + """
-```
-
-Then save it: """ + keypress("write") + """.
+Scroll to `gui.default_theme` and set it to `""" + theme + """`, then
+save: """ + keypress("write") + """.
 """
 
 config_done_md = """\
-That is the whole configuration loop: `:config` to open it, edit, save.
-
 Rune reads the config once at startup, so `gui.default_theme` takes
 effect the next time you launch. `guitheme` stays the quick way to
 change the theme for the session you are in right now.
@@ -614,24 +594,12 @@ def teach_layout():
 
 
 def teach_directional_layout():
-    # This lesson and the focus/move/resize ones anchor at the top: the
-    # terminals opened just before them sit at the bottom of the screen
-    # and the user needs to watch them move, swap, and resize.
+    # This lesson and the focus/move/resize ones anchor at the top so the
+    # lower half of the layout stays visible: the user needs to watch the
+    # windows they just opened move, swap, and resize.
     floating_window(title = "Your directional layout", text = directional_layout_md,
+                    allow_keys = layout_play_keys,
                     alignment = "top")
-
-
-def teach_split_down():
-    floating_window(title = "Aim the next split", text = split_down_md,
-                    dismiss_keys = dismiss_for("windowdefaultsplit", "h"))
-    wait_expected_command(
-        title         = "Aim the next split",
-        command       = "windowdefaultsplit",
-        expected_args = ["h"],
-        on_error      = ("Send the next split below with " +
-                         "`<cmd>windowdefaultsplit h`."),
-    )
-    notify(level = success, message = "Splits now land below.")
 
 
 def teach_split_window():
@@ -642,7 +610,7 @@ def teach_split_window():
             title         = "Split a window",
             command       = "windownew",
             expected_args = split_window_args,
-            on_error      = "Split the active window below.",
+            on_error      = "Split the active window to the right.",
         )
     else:
         wait_command(
@@ -675,17 +643,17 @@ def teach_modal_surfaces():
                     dismiss_keys = [ck])
 
 
-def teach_split_right():
-    floating_window(title = "Flip it back", text = split_right_md,
-                    dismiss_keys = dismiss_for("windowdefaultsplit", "v"))
+def teach_split_horizontal():
+    floating_window(title = "Aim the next split", text = split_horizontal_md,
+                    dismiss_keys = dismiss_for("windowdefaultsplit", "h"))
     wait_expected_command(
-        title         = "Flip it back",
+        title         = "Aim the next split",
         command       = "windowdefaultsplit",
-        expected_args = ["v"],
-        on_error      = ("Send the next split to the right with " +
-                         "`<cmd>windowdefaultsplit v`."),
+        expected_args = ["h"],
+        on_error      = ("Send the next split below with " +
+                         "`<cmd>windowdefaultsplit h`."),
     )
-    notify(level = success, message = "Splits now land to the right.")
+    notify(level = success, message = "Splits now land below.")
 
 
 def teach_terminal_split():
@@ -703,20 +671,20 @@ def teach_terminal_split():
 
 def teach_focus_window():
     floating_window(title = "Move between windows", text = focus_window_md,
-                    dismiss_keys = dismiss_for("windowfocus", "left"),
+                    dismiss_keys = dismiss_for("windowfocus", "up"),
                     alignment = "top")
     wait_expected_command(
         title         = "Move between windows",
         command       = "windowfocus",
-        expected_args = ["left"],
-        on_error      = "Focus the window to the left.",
+        expected_args = ["up"],
+        on_error      = "Focus the terminal above.",
         alignment     = "top",
     )
     wait_expected_command(
         title         = "Move between windows",
         command       = "windowfocus",
-        expected_args = ["right"],
-        on_error      = "Now focus the window to the right.",
+        expected_args = ["left"],
+        on_error      = "Now focus the editor on the left.",
         alignment     = "top",
     )
     notify(level = success, message = "You moved between windows.")
@@ -724,20 +692,20 @@ def teach_focus_window():
 
 def teach_move_window():
     floating_window(title = "Move a window", text = move_window_md,
-                    dismiss_keys = dismiss_for("windowmove", "left"),
+                    dismiss_keys = dismiss_for("windowmove", "right"),
                     alignment = "top")
     wait_expected_command(
         title         = "Move a window",
         command       = "windowmove",
-        expected_args = ["left"],
-        on_error      = "Move the focused window to the left.",
+        expected_args = ["right"],
+        on_error      = "Move the focused window to the right.",
         alignment     = "top",
     )
     wait_expected_command(
         title         = "Move a window",
         command       = "windowmove",
-        expected_args = ["right"],
-        on_error      = "Now move it back to the right.",
+        expected_args = ["left"],
+        on_error      = "Now move it back to the left.",
         alignment     = "top",
     )
     notify(level = success, message = "You moved a window.")
@@ -777,12 +745,19 @@ def teach_fullscreen_window():
 
 def teach_close_window():
     floating_window(title = "Close a window", text = close_window_md,
-                    dismiss_keys = dismiss_for("windowclose"))
+                    dismiss_keys = dismiss_for("windowfocus", "right"))
+    wait_expected_command(
+        title         = "Close a window",
+        command       = "windowfocus",
+        expected_args = ["right"],
+        on_error      = "Focus one of the terminals on the right.",
+    )
     wait_command(
         title    = "Close a window",
         command  = "windowclose",
         on_error = ("Close the focused split. It will not close your last " +
                     "window."),
+        text     = "Now close the terminal you just focused.",
     )
     notify(level = success, message = "You closed the window.")
 
@@ -842,6 +817,7 @@ def teach_switch_tabs():
         title    = "Switch tabs",
         command  = "tabprevious",
         on_error = "Now move back to the previous tab.",
+        text     = "Now move back to the previous tab.",
     )
     notify(level = success, message = "You switched tabs.")
 
@@ -880,7 +856,7 @@ def teach_terminals():
                     dismiss_keys = [ck])
     wait_command(
         title    = "Run a program",
-        command  = "!",
+        command  = "! git log",
         on_error = "At the command prompt, run `<cmd>! git log`.",
     )
     notify(level = success, message = "Program running in a window.")
@@ -967,11 +943,10 @@ def run():
     teach_edit()
 
     teach_layout()
-    teach_split_down()
     teach_split_window()
     teach_terminal()
     teach_modal_surfaces()
-    teach_split_right()
+    teach_split_horizontal()
     teach_terminal_split()
     teach_directional_layout()
     teach_focus_window()
@@ -992,4 +967,4 @@ def run():
     teach_cheatsheet()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "47", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "56", entry = run)
