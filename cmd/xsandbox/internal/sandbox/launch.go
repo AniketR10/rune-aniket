@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -51,6 +52,7 @@ import (
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/pkgtrust"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -135,7 +137,9 @@ func (s *sandbox) launch() error {
 		extension.EditorResources(s.browser, s.editor, publishEvent))
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd, authorizer))
-	res = extension.MergeResourceMap(res, extension.StorageResources(s.dataDir))
+	s.extStorage = localstorage.New(s.ctx,
+		filepath.Join(s.dataDir, "extensions"), docbson.Marshaler())
+	res = extension.MergeResourceMap(res, extension.StorageResources(s.extStorage))
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(s.cfg)))
 	res = extension.MergeResourceMap(res, extension.SyntaxResources(stubParser{}))
@@ -222,6 +226,9 @@ func (s *sandbox) shutdown() (crashed bool, exitDetail string) {
 	}
 	if s.runner != nil {
 		_ = s.runner.Close()
+	}
+	if s.extStorage != nil {
+		_ = s.extStorage.Close()
 	}
 	if s.scheme != nil {
 		_ = s.scheme.Close()

@@ -47,6 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -87,6 +88,7 @@ import (
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/llm/llamaserver"
 	"unstable.build/go-tui/llm/llmrouter"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/emacs"
 	"unstable.build/go-tui/text/exoeditor"
@@ -146,6 +148,7 @@ type workspaceManagerHandler struct {
 	extensionRunner         ExtensionsRunner
 	trust                   *pkgtrust.Store
 	sixDir                  string
+	extensionsStorage       storageapi.Service
 	configPath              string
 	llmRouter               *llmrouter.Router
 	frameCharSet            component.FrameCharSet
@@ -612,6 +615,10 @@ func (h *workspaceManagerHandler) init(
 	h.macro = idemacro.New(h.clip, h.notifications.current(), cfg.commandKey())
 	h.macroPlayer = idemacro.NewPlayer(h.clip, h.macro, h.events.globalPublisher())
 	h.sixDir = sixDir
+	// One extensions storage per process: every workspace's extension
+	// runner serves this same service. See extension.StorageResources.
+	h.extensionsStorage = localstorage.New(
+		ctx, filepath.Join(sixDir, "extensions"), docbson.Marshaler())
 	h.extensionRunner = extensionRunner
 	h.trust = trust
 	h.builtinExtensions = builtinExtensions
@@ -2060,7 +2067,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd, cmdAuthorizer))
 	res = extension.MergeResourceMap(res,
-		extension.StorageResources(h.sixDir))
+		extension.StorageResources(h.extensionsStorage))
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 	res = extension.MergeResourceMap(res,
@@ -2833,6 +2840,13 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	if h.llmRouter != nil {
 		if err := h.llmRouter.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	// Closed last: every workspace extension runner served this shared
+	// service and must release its partition handles first.
+	if h.extensionsStorage != nil {
+		if err := h.extensionsStorage.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

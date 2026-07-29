@@ -24,66 +24,61 @@
 package extension
 
 import (
-	"context"
 	"errors"
 	"io"
-	"path/filepath"
 	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
-	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/localstorage/storagerpc"
 	"unstable.build/go-tui/rpc"
 )
 
 type storageResourceServer struct {
-	storageDir string
+	svc storageapi.Service
 }
 
-func newStorageResourceServer(storageDir string) *storageResourceServer {
+func newStorageResourceServer(svc storageapi.Service) *storageResourceServer {
 	ret := new(storageResourceServer)
-	ret.storageDir = storageDir
+	ret.svc = svc
 	return ret
-}
-
-func (s *storageResourceServer) setupStorage() storageapi.Service {
-	path := filepath.Join(s.storageDir, "extensions")
-	svc := localstorage.New(context.Background(), path, docbson.Marshaler())
-	return svc
 }
 
 func (s *storageResourceServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	svc := s.setupStorage()
 	server := new(storagerpc.Server)
-	server.Init(svc, docbson.Marshaler())
+	server.Init(s.svc, docbson.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
-	return storageServerCloser{server: server, svc: svc}, nil
+	return storageServerCloser{server: server}, nil
 }
 
+// storageServerCloser releases the per-registration gRPC server. The
+// storage service is owned by the caller of StorageResources and shared
+// across every workspace, so it is deliberately not closed here.
 type storageServerCloser struct {
 	server *storagerpc.Server
-	svc    storageapi.Service
 }
 
 func (c storageServerCloser) Close() (err error) {
 	if c.server != nil {
 		err = errors.Join(err, c.server.Close())
 	}
-	if c.svc != nil {
-		err = errors.Join(err, c.svc.Close())
-	}
 	return err
 }
 
 // StorageResources returns a map of Permission to a ResourceServer
-// capable of serving a document.Service.
-func StorageResources(storageDir string) map[extensionapi.Permission]ResourceRegistrar {
-	s := newStorageResourceServer(storageDir)
+// capable of serving svc to extensions.
+//
+// svc is borrowed, not owned: callers must share a single service across
+// all workspaces and close it themselves. Constructing one service per
+// workspace makes every workspace but the first a firstmover follower of
+// its own process, so each extension storage call round-trips over a
+// loopback gRPC hop and is encoded and decoded twice.
+func StorageResources(svc storageapi.Service) map[extensionapi.Permission]ResourceRegistrar {
+	s := newStorageResourceServer(svc)
 	return map[extensionapi.Permission]ResourceRegistrar{
 		extensionapi.PermissionStorage: s,
 	}

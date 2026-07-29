@@ -40,6 +40,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -166,8 +167,9 @@ type sandbox struct {
 		Signal(workspaceapi.Pid, syscall.Signal) error
 		io.Closer
 	}
-	runner    extension.Runner
-	stderrLog *os.File
+	runner     extension.Runner
+	extStorage storageapi.Service
+	stderrLog  *os.File
 }
 
 var _ spec.Host = (*sandbox)(nil)
