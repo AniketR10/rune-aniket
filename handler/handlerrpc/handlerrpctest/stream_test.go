@@ -52,7 +52,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 		expectedWidth, expectedHeight := 11, 19
 		client, closeFn := setupIntTest(t, mock, func() {
 			mock.EXPECT().Dimensions().Return(expectedWidth, expectedHeight)
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Selection()
 			mock.EXPECT().Draw(gomock.Any())
 		}, nil)
@@ -73,7 +73,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, mock, func() {
 			mock.EXPECT().Selection().Return(expectedSelection, true)
 			mock.EXPECT().Dimensions()
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Draw(gomock.Any())
 		}, nil)
 		defer closeFn()
@@ -93,7 +93,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, mock, func() {
 			mock.EXPECT().Selection().Return(expectedSelection, true)
 			mock.EXPECT().Dimensions()
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Draw(gomock.Any())
 		}, nil)
 		defer closeFn()
@@ -110,7 +110,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, mock, func() {
 			mock.EXPECT().Selection().Return(expectedSelection, false)
 			mock.EXPECT().Dimensions()
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Draw(gomock.Any())
 		}, nil)
 		defer closeFn()
@@ -188,7 +188,7 @@ AAAAAAAAAAAAAAAAAAAA
 			})
 			mock.EXPECT().Selection()
 			mock.EXPECT().Dimensions()
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Draw(gomock.Any())
 			mock.EXPECT().Close().DoAndReturn(func() error {
 				wg.Done()
@@ -224,7 +224,7 @@ AAAAAAAAAAAAAAAAAAAA
 			})
 			mock.EXPECT().Selection()
 			mock.EXPECT().Dimensions()
-			mock.EXPECT().Cursor()
+			mock.EXPECT().Cursor().Times(2)
 			mock.EXPECT().Draw(gomock.Any())
 		}, func(_ev term.Event) error {
 			if _ev.Type == term.EventKey {
@@ -252,7 +252,7 @@ AAAAAAAAAAAAAAAAAAAA
 		var expectedStyle term.CursorStyle
 		expectedCursor := false
 		client, closeFn := setupIntTest(t, mock, func() {
-			mock.EXPECT().Cursor().Return(expectedCoordinates, expectedStyle, expectedCursor)
+			mock.EXPECT().Cursor().Return(expectedCoordinates, expectedStyle, expectedCursor).Times(2)
 			mock.EXPECT().Selection()
 			mock.EXPECT().Dimensions()
 			mock.EXPECT().Draw(gomock.Any())
@@ -274,7 +274,7 @@ AAAAAAAAAAAAAAAAAAAA
 		expectedStyle := term.CursorStyleSteadyBlock
 		expectedCursor := true
 		client, closeFn := setupIntTest(t, mock, func() {
-			mock.EXPECT().Cursor().Return(expectedCoordinates, expectedStyle, expectedCursor)
+			mock.EXPECT().Cursor().Return(expectedCoordinates, expectedStyle, expectedCursor).Times(2)
 			mock.EXPECT().Selection()
 			mock.EXPECT().Dimensions()
 			mock.EXPECT().Draw(gomock.Any())
@@ -286,6 +286,34 @@ AAAAAAAAAAAAAAAAAAAA
 		assert.Equal(t, expectedCoordinates, actualCoordinates)
 		assert.Equal(t, expectedStyle, actualStyle)
 		assert.Equal(t, expectedCursor, actualCursor)
+	})
+
+	// The host asks for the cursor before it asks for the frame, so a
+	// handler whose cursor moves while drawing would report a position
+	// belonging to the previous frame. SDKs piggyback the cursor on the
+	// draw response to keep the two atomic.
+	t.Run("cursor from the draw response supersedes the pre-draw cursor", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := browsertest.NewMockFloating(ctrl)
+
+		stale := term.Coordinates{X: 1, Y: 1}
+		fresh := term.Coordinates{X: 7, Y: 3}
+		client, closeFn := setupIntTest(t, mock, func() {
+			gomock.InOrder(
+				mock.EXPECT().Cursor().Return(stale, term.CursorStyleSteadyBlock, true),
+				mock.EXPECT().Cursor().Return(fresh, term.CursorStyleSteadyBar, true),
+			)
+			mock.EXPECT().Selection()
+			mock.EXPECT().Dimensions()
+			mock.EXPECT().Draw(gomock.Any())
+		}, nil)
+		defer closeFn()
+
+		actualCoordinates, actualStyle, actualShow := client.Cursor()
+
+		assert.True(t, actualShow)
+		assert.Equal(t, fresh, actualCoordinates)
+		assert.Equal(t, term.CursorStyleSteadyBar, actualStyle)
 	})
 }
 

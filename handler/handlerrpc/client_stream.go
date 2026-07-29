@@ -70,6 +70,9 @@ type ClientStream[T handlerrpc.StreamMessage] struct {
 	cursor         *handlerrpc.CursorStreamResponse
 	selection      *handlerrpc.SelectionStreamResponse
 	dimensions     *handlerrpc.DimensionsStreamResponse
+	// cursorInDraw records that the peer piggybacks the cursor on the draw
+	// response, which makes the separate cursor request redundant.
+	cursorInDraw bool
 
 	req struct {
 		height, width int
@@ -366,7 +369,11 @@ func (s *ClientStream[T]) scheduleDrawRequest(ctx context.Context, reqIsTick boo
 	s.req.height = s.height
 	s.req.ctx = ctx
 
-	{
+	// SDKs that piggyback the cursor on the draw response make this
+	// request redundant, and answering it before the draw is what makes
+	// the cursor lag the frame it belongs to. Old SDKs never set it, so
+	// keep asking until the peer proves otherwise.
+	if !s.cursorInDraw {
 		var req handlerrpc.CursorStreamRequest
 		sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Cursor, Cursor: &req}
 		err := s.stream.SendMsg(&sendMsg)
@@ -422,6 +429,17 @@ func (s *ClientStream[T]) processDraw(resp *handlerrpc.DrawStreamResponse) {
 	defer s.publisher(term.Event{Type: term.EventInterrupt, Raw: payload})
 
 	s.resp.DrawStreamResponse = resp
+
+	if cursor := resp.GetCursor(); cursor != nil {
+		// The cursor was computed against the frame we just received, so
+		// it supersedes any answer to the separate cursor request.
+		s.cursorInDraw = true
+		s.cursor = &handlerrpc.CursorStreamResponse{
+			Position: cursor.GetPosition(),
+			Style:    cursor.GetStyle(),
+			Show:     cursor.GetShow(),
+		}
+	}
 
 	s.resp.ctx = s.req.ctx
 	s.resp.height = int(s.req.height)
