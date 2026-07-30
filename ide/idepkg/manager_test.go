@@ -482,6 +482,10 @@ func TestTranslateReleaseErrors(t *testing.T) {
 		// Empty URL marks the signed-URL data download branch.
 		Status: http.StatusForbidden,
 	}
+	missingArtifactErr := &cdnrelease.StatusError{
+		// Empty URL marks the signed-URL data download branch.
+		Status: http.StatusNotFound,
+	}
 
 	t.Run("DescribePackage 404 -> ErrPackageNotFound", func(t *testing.T) {
 		t.Parallel()
@@ -540,6 +544,20 @@ func TestTranslateReleaseErrors(t *testing.T) {
 		_, err := m.DescribeRelease(context.Background(), "go", "1")
 		require.ErrorIs(t, err, ErrServerUnavailable)
 		assert.Contains(t, err.Error(), `download of "go" version "1" failed`)
+	})
+
+	t.Run("DescribeRelease signed-URL 404 -> ErrArtifactMissing", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}}))
+		r.ExpectReturnErr(missingArtifactErr)
+
+		_, err := m.DescribeRelease(context.Background(), "go", "1")
+		require.ErrorIs(t, err, ErrArtifactMissing)
+		assert.NotErrorIs(t, err, ErrServerUnavailable)
+		assert.Contains(t, err.Error(), `"go" version "1"`)
+		assert.NotContains(t, err.Error(), "status 404")
 	})
 
 	t.Run("non-StatusError passes through", func(t *testing.T) {

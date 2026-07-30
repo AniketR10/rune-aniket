@@ -82,6 +82,11 @@ var (
 	// ErrServerUnavailable is returned for transient (5xx) failures
 	// from the package server or the signed-URL download backend.
 	ErrServerUnavailable = errors.New("package server unavailable")
+	// ErrArtifactMissing is returned when the package server knows a
+	// version but its artifact is absent from the download backend. The
+	// version is published yet uninstallable, so retrying cannot help and
+	// the message must not read as a transient outage.
+	ErrArtifactMissing = errors.New("release artifact is missing from the download server")
 	// ErrForbidden is returned when the package server rejects the
 	// caller with a 403 (no valid token or insufficient subscription).
 	// The wrapped message is rendered directly to the user.
@@ -118,6 +123,11 @@ func translateVersionErr(err error, pkgID, version string) error {
 		return err
 	}
 	switch {
+	case se.URL == "" && se.Status == http.StatusNotFound:
+		// Signed-URL download from GCS: a 404 describes the artifact
+		// object, not the package server.
+		return fmt.Errorf("%q version %q: %w",
+			pkgID, version, ErrArtifactMissing)
 	case se.URL == "":
 		// Signed-URL download from GCS failed
 		return fmt.Errorf("download of %q version %q failed: %w (status %d)",
