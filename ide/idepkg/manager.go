@@ -1065,7 +1065,7 @@ type ConfigMergeResult struct {
 func (m *Manager) applyConfigMerge(
 	pkgID string, pkgVersion release.Version, userDoc, addDoc *yaml.Node,
 ) (ConfigMergeResult, error) {
-	starConfig := strings.HasSuffix(strings.ToLower(m.configPath), ".star")
+	starConfig := m.starUserConfig()
 	merged, err := buildMergedConfig(userDoc, addDoc, starConfig)
 	if err != nil {
 		return ConfigMergeResult{}, err
@@ -1150,8 +1150,13 @@ func (m *Manager) processConfig(
 		return fmt.Errorf("load user config: %w", err)
 	}
 
+	userDoc, err := m.userConfigDocument()
+	if err != nil {
+		return fmt.Errorf("load user config document: %w", err)
+	}
+
 	plan, err := planConfigChange(
-		pkgConfigFile, data, userCfg,
+		pkgConfigFile, data, userCfg, userDoc,
 		pkgID, pkgVersion, m.dataDir, m.editorMode,
 	)
 	if err != nil {
@@ -1176,6 +1181,20 @@ func (m *Manager) processConfig(
 	}
 
 	return nil
+}
+
+func (m *Manager) starUserConfig() bool {
+	return strings.HasSuffix(strings.ToLower(m.configPath), ".star")
+}
+
+// userConfigDocument parses the user config into a yaml document so a
+// package merge only rewrites the keys it adds: the decoded config map
+// used for diffing has already lost comments, key order and formatting.
+func (m *Manager) userConfigDocument() (*yaml.Node, error) {
+	if m.starUserConfig() {
+		return nil, nil
+	}
+	return loadOrCreateUserConfig(m.configPath)
 }
 
 func (m *Manager) untar(

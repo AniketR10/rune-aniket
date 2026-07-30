@@ -124,7 +124,23 @@ func applyConfigDiff(dst, src *yaml.Node) {
 			applyConfigDiff(dstVal, srcVal)
 			continue
 		}
-		dst.Content[dstIdx+1] = cloneNode(srcVal)
+		newVal := cloneNode(srcVal)
+		// The comments around the replaced value are the user's prose,
+		// not the package's: only the value itself is overwritten.
+		inheritComments(dstVal, newVal)
+		dst.Content[dstIdx+1] = newVal
+	}
+}
+
+func inheritComments(from, to *yaml.Node) {
+	if to.HeadComment == "" {
+		to.HeadComment = from.HeadComment
+	}
+	if to.LineComment == "" {
+		to.LineComment = from.LineComment
+	}
+	if to.FootComment == "" {
+		to.FootComment = from.FootComment
 	}
 }
 

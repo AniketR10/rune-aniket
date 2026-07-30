@@ -32,8 +32,12 @@ import (
 
 type configChangePlan struct {
 	// prompt is true only when conflictCfg is non-empty.
-	prompt       bool
-	missingYAML  []byte
+	prompt      bool
+	missingYAML []byte
+	// userDoc is the user config exactly as parsed from disk, so merging
+	// into it keeps comments, key order and formatting the user (or the
+	// shipped preset) wrote. It is nil for starlark configs, which are
+	// merged through their own writer.
 	userDoc      *yaml.Node
 	pkgDoc       *yaml.Node
 	autoApplyDoc *yaml.Node
@@ -41,7 +45,7 @@ type configChangePlan struct {
 
 func planConfigChange(
 	pkgConfigFile string, pkgConfigData []byte,
-	userCfg map[string]any,
+	userCfg map[string]any, userDoc *yaml.Node,
 	pkgID string, pkgVersion release.Version,
 	dataDir, editorMode string,
 ) (configChangePlan, error) {
@@ -85,11 +89,6 @@ func planConfigChange(
 	newCfg, conflictCfg := idePkgConfigDiff(userCfg, pkgOverlayCfg, versionDependent, nil)
 	if newCfg == nil && conflictCfg == nil {
 		return configChangePlan{}, nil
-	}
-
-	userDoc, err := mapToYAMLDocument(userCfg)
-	if err != nil {
-		return configChangePlan{}, fmt.Errorf("user config to yaml: %w", err)
 	}
 
 	plan := configChangePlan{userDoc: userDoc}

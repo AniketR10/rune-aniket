@@ -2736,9 +2736,11 @@ func TestProcessConfigAutoApply(t *testing.T) {
 		require.NoError(t, os.WriteFile(pkgConfig, []byte(
 			"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"), 0o644))
 
+		userDoc, err := loadOrCreateUserConfig(m.configPath)
+		require.NoError(t, err)
 		plan, err := planConfigChange(pkgConfig,
 			[]byte("env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"),
-			readUserConfigMap(t, m.configPath), "vpkg", release.Version("2"),
+			readUserConfigMap(t, m.configPath), userDoc, "vpkg", release.Version("2"),
 			m.dataDir, m.editorMode)
 		require.NoError(t, err)
 		require.True(t, plan.prompt)
@@ -4294,4 +4296,463 @@ func pkgTarball(t *testing.T, entrypoint, prefix string) []byte {
 	require.NoError(t, tw.Close())
 	require.NoError(t, gzw.Close())
 	return buf.Bytes()
+}
+
+// TestInstallPackagePreservesUserConfigComments pins that merging a
+// package overlay into a YAML user config rewrites only the keys the
+// package adds. The merge used to round-trip the decoded config map,
+// which stripped every comment and re-sorted keys alphabetically, so a
+// freshly bootstrapped preset config lost all of its documentation the
+// first time an extension installed.
+func TestInstallPackagePreservesUserConfigComments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		userConfig string
+	}{
+		{
+			name: "comment at the top of the file",
+			userConfig: "" +
+				"# Rune user configuration.\n" +
+				"# Second header line.\n" +
+				"editor:\n" +
+				"  mode: emacs\n",
+		},
+		{
+			name: "banner comment block separated by blank lines",
+			userConfig: "" +
+				"# ------------------------------------------\n" +
+				"# GUI theme\n" +
+				"#\n" +
+				"# Run `:guitheme` to preview live.\n" +
+				"# ------------------------------------------\n" +
+				"gui:\n" +
+				"  default_theme: romero\n",
+		},
+		{
+			name: "inline comment on a top-level scalar",
+			userConfig: "" +
+				"config_version: 2 # schema version\n" +
+				"editor:\n" +
+				"  mode: emacs\n",
+		},
+		{
+			name: "head comment on a nested key",
+			userConfig: "" +
+				"editor:\n" +
+				"  # emacs keeps host bindings\n" +
+				"  mode: emacs\n" +
+				"  auto_pair: true\n",
+		},
+		{
+			name: "inline comment on a nested value",
+			userConfig: "" +
+				"editor:\n" +
+				"  mode: emacs # not vim\n" +
+				"  tabspaces: 4 # soft tabs\n",
+		},
+		{
+			name: "indented commented-out example keys",
+			userConfig: "" +
+				"editor:\n" +
+				"  mode: emacs\n" +
+				"  # tabspaces: 4\n" +
+				"  # ruler: 90\n" +
+				"  auto_pair: true\n",
+		},
+		{
+			name: "commented-out example keys at column zero",
+			userConfig: "" +
+				"gui:\n" +
+				"  default_theme: romero\n" +
+				"#   font_size: 13\n" +
+				"#   window_blur_radius: 100\n" +
+				"editor:\n" +
+				"  mode: emacs\n",
+		},
+		{
+			name: "comments three levels deep",
+			userConfig: "" +
+				"editor:\n" +
+				"  # level one\n" +
+				"  status_bar:\n" +
+				"    # level two\n" +
+				"    layout:\n" +
+				"      # level three\n" +
+				"      left: path # innermost inline\n",
+		},
+		{
+			name: "comment at the end of the file",
+			userConfig: "" +
+				"editor:\n" +
+				"  mode: emacs\n" +
+				"# trailing note about the config\n",
+		},
+		{
+			name: "comment at the end of a nested block",
+			userConfig: "" +
+				"editor:\n" +
+				"  mode: emacs\n" +
+				"  # note under the last nested key\n" +
+				"gui:\n" +
+				"  default_theme: romero\n",
+		},
+		{
+			name: "comments on sequence items",
+			userConfig: "" +
+				"# workspaces to reopen\n" +
+				"workspaces:\n" +
+				"  # the first one\n" +
+				"  - /src/rune # main checkout\n" +
+				"  - /src/blue\n",
+		},
+		{
+			name: "comments around a key the package extends",
+			userConfig: "" +
+				"# environment shared with subprocesses\n" +
+				"env:\n" +
+				"  # kept as the user wrote it\n" +
+				"  PATH: /usr/bin # no package chunk\n" +
+				"# after the env block\n",
+		},
+		{
+			name: "comments around a flow-style value",
+			userConfig: "" +
+				"editor:\n" +
+				"  # flow mapping\n" +
+				"  standard:\n" +
+				"    attr: {fg: default, bg: default} # inline after flow\n",
+		},
+		{
+			name: "comments only, at every position",
+			userConfig: "" +
+				"# top of file\n" +
+				"config_version: 2 # inline top level\n" +
+				"# between top-level keys\n" +
+				"editor:\n" +
+				"  # head of nested key\n" +
+				"  mode: emacs # inline nested\n" +
+				"  # commented-out: value\n" +
+				"gui:\n" +
+				"  default_theme: romero\n" +
+				"# end of file\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			configPath, merged := installConfigPkgOver(t, tt.userConfig)
+
+			assert.Equal(t,
+				yamlComments(tt.userConfig), yamlComments(merged),
+				"every comment must survive the package config merge")
+			assertKeyOrderPreserved(t, tt.userConfig, merged)
+			assertConfigPkgMerged(t, configPath)
+		})
+	}
+}
+
+// TestInstallPackagePreservesShippedPresetComments runs the merge over
+// the emacs preset bootstrap writes into a fresh datadir, which is where
+// the comment loss was reported.
+func TestInstallPackagePreservesShippedPresetComments(t *testing.T) {
+	t.Parallel()
+
+	preset, err := os.ReadFile(filepath.Join(
+		"..", "..", "cmd", "rune", "preset_emacs.yaml"))
+	require.NoError(t, err)
+
+	configPath, merged := installConfigPkgOver(t, string(preset))
+
+	assert.Equal(t, yamlComments(string(preset)), yamlComments(merged),
+		"the shipped preset must keep every comment after a package install")
+	assertKeyOrderPreserved(t, string(preset), merged)
+	assertConfigPkgMerged(t, configPath)
+}
+
+func TestInstallPackagePreservesStarConfigComments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		beforeManaged string
+		afterManaged  string
+		managedConfig map[string]any
+	}{
+		{
+			name: "comments-only file",
+			beforeManaged: "" +
+				"# Rune user configuration.\n" +
+				"# The managed block must be appended below.\n",
+		},
+		{
+			name: "comments at beginning and top level",
+			beforeManaged: "" +
+				"# beginning of file\n" +
+				"# before the config assignment\n" +
+				"config = {\"editor\": {\"mode\": \"emacs\"}} # top-level inline\n" +
+				"# after the config assignment\n",
+		},
+		{
+			name: "comments on inner properties",
+			beforeManaged: "" +
+				"config = {\n" +
+				"    # before an inner mapping\n" +
+				"    \"editor\": {\n" +
+				"        # before a deeply nested property\n" +
+				"        \"mode\": \"emacs\", # inner inline comment\n" +
+				"        # \"tabspaces\": 4,\n" +
+				"    },\n" +
+				"}\n",
+		},
+		{
+			name: "indented comments in user logic",
+			beforeManaged: "" +
+				"def configure(cfg):\n" +
+				"    # comment inside a function\n" +
+				"    if \"editor\" not in cfg:\n" +
+				"        # comment inside a conditional\n" +
+				"        cfg[\"editor\"] = {\"mode\": \"emacs\"}\n" +
+				"    return cfg # inline function comment\n" +
+				"\n" +
+				"config = configure({})\n",
+		},
+		{
+			name: "unindented commented-out statements",
+			beforeManaged: "" +
+				"config = {}\n" +
+				"# config[\"editor\"] = {\"mode\": \"emacs\"}\n" +
+				"# config[\"gui\"] = {\"default_theme\": \"romero\"}\n",
+		},
+		{
+			name: "comments inside a sequence",
+			beforeManaged: "" +
+				"config = {\n" +
+				"    \"workspaces\": [\n" +
+				"        # primary checkout\n" +
+				"        \"/src/rune\", # opened first\n" +
+				"        # secondary checkout\n" +
+				"        \"/src/blue\",\n" +
+				"    ],\n" +
+				"}\n",
+		},
+		{
+			name: "banner comments separated by blank lines",
+			beforeManaged: "" +
+				"# ------------------------------------------\n" +
+				"# Editor settings\n" +
+				"# ------------------------------------------\n" +
+				"\n" +
+				"config = {\n" +
+				"    \"editor\": {\"mode\": \"emacs\"},\n" +
+				"}\n" +
+				"\n" +
+				"# end of user settings\n",
+		},
+		{
+			name: "comment at end of file without newline",
+			beforeManaged: "" +
+				"config = {\"editor\": {\"mode\": \"emacs\"}}\n" +
+				"# final comment without newline",
+		},
+		{
+			name: "comments before and after existing managed section",
+			beforeManaged: "" +
+				"# before config\n" +
+				"config = {\"editor\": {\"mode\": \"emacs\"}}\n" +
+				"# immediately before managed settings\n" +
+				"\n",
+			afterManaged: "" +
+				"# immediately after managed settings\n" +
+				"# final comment at end of file\n",
+			managedConfig: map[string]any{
+				"previous_package": map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			userConfig := tt.beforeManaged
+			if tt.managedConfig != nil {
+				managed, err := starlarkconfig.RenderManagedSection(tt.managedConfig, false)
+				require.NoError(t, err)
+				userConfig += string(managed) + tt.afterManaged
+			}
+
+			m, n, configPath := newStarCommentTestManager(t, userConfig)
+			for _, install := range []struct {
+				pkgID   string
+				version release.Version
+			}{
+				{pkgID: "configpkgstar", version: "1"},
+				{pkgID: "configpkg", version: "2"},
+			} {
+				require.NoError(t, m.InstallPackageVersion(
+					context.Background(), install.pkgID, install.version,
+					repl.NopProgressWriter()))
+				n.RequireNoErrorNotification()
+
+				merged := readFileString(t, configPath)
+				assert.True(t, strings.HasPrefix(merged, tt.beforeManaged),
+					"user source before the managed section must remain byte-for-byte intact")
+				if tt.afterManaged != "" {
+					assert.True(t, strings.HasSuffix(merged, tt.afterManaged),
+						"user source after the managed section must remain byte-for-byte intact")
+				}
+				assert.Equal(t, 1, strings.Count(merged, starlarkconfig.ManagedBegin))
+				assert.Equal(t, 1, strings.Count(merged, starlarkconfig.ManagedEnd))
+			}
+
+			cfg := readUserConfigMap(t, configPath)
+			env, ok := cfg["env"].(map[string]any)
+			require.True(t, ok, "env not merged: %#v", cfg)
+			assert.Equal(t, filepath.Join(
+				filepath.Dir(configPath), "pkg", "configpkg", "2", "go"),
+				env["GOROOT"])
+		})
+	}
+}
+
+// TestUpgradePackagePreservesUserConfigComments covers the prompt path:
+// a version-dependent key the user approved is overwritten in place
+// without disturbing the rest of the file.
+func TestUpgradePackagePreservesUserConfigComments(t *testing.T) {
+	t.Parallel()
+
+	userConfig := "" +
+		"# top of file\n" +
+		"env:\n" +
+		"  # package-owned below\n" +
+		"  GOROOT: /stale/go # will be updated\n" +
+		"editor:\n" +
+		"  mode: emacs\n" +
+		"# end of file\n"
+
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{
+		{Package: "configpkg", Version: "1"},
+		{Package: "configpkg", Version: "2"},
+	})
+	m, n, _, datadir := newTestManager(t, pkgs, versions)
+	configPath := filepath.Join(datadir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(userConfig), 0o644))
+
+	require.NoError(t, m.InstallPackageVersion(
+		context.Background(), "configpkg", "2", repl.NopProgressWriter()))
+	n.RequireNoErrorNotification()
+
+	merged := readFileString(t, configPath)
+	assert.Equal(t, yamlComments(userConfig), yamlComments(merged))
+	assertKeyOrderPreserved(t, userConfig, merged)
+
+	cfg := readUserConfigMap(t, configPath)
+	env, ok := cfg["env"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(datadir, "pkg", "configpkg", "2", "go"),
+		env["GOROOT"], "the approved version-dependent key must be updated")
+}
+
+// installConfigPkgOver writes userConfig as the user config of a fresh
+// test manager, installs the configpkg fixture over it and returns the
+// config path plus the merged file body.
+func installConfigPkgOver(t *testing.T, userConfig string) (string, string) {
+	t.Helper()
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{
+		{Package: "configpkg", Version: "1"},
+	})
+	m, n, _, datadir := newTestManager(t, pkgs, versions)
+	configPath := filepath.Join(datadir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(userConfig), 0o644))
+
+	require.NoError(t, m.InstallPackageVersion(
+		context.Background(), "configpkg", "1", repl.NopProgressWriter()))
+	n.RequireNoErrorNotification()
+
+	return configPath, readFileString(t, configPath)
+}
+
+func newStarCommentTestManager(
+	t *testing.T, userConfig string,
+) (*Manager, *idepkgtest.Notifications, string) {
+	t.Helper()
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles(
+		[]release.Bundle{{Package: "configpkgstar", Version: "1"}},
+		[]release.Bundle{{Package: "configpkg", Version: "2"}},
+	)
+	m, n, _, datadir := newTestManager(t, pkgs, versions)
+	configPath := filepath.Join(datadir, "config.star")
+	m.configPath = configPath
+	require.NoError(t, os.WriteFile(configPath, []byte(userConfig), 0o644))
+	return m, n, configPath
+}
+
+func assertConfigPkgMerged(t *testing.T, configPath string) {
+	t.Helper()
+	cfg := readUserConfigMap(t, configPath)
+	env, ok := cfg["env"].(map[string]any)
+	require.True(t, ok, "env not merged: %#v", cfg)
+	assert.Contains(t, env, "GOROOT")
+	settings, ok := cfg["settings"].(map[string]any)
+	require.True(t, ok, "settings not merged: %#v", cfg)
+	assert.Equal(t, "dark", settings["theme"])
+}
+
+// assertKeyOrderPreserved checks that the top-level keys the user had
+// keep their original relative order, with merged keys appended.
+func assertKeyOrderPreserved(t *testing.T, before, after string) {
+	t.Helper()
+	want := topLevelKeys(t, before)
+	got := topLevelKeys(t, after)
+	require.GreaterOrEqual(t, len(got), len(want))
+	assert.Equal(t, want, got[:len(want)],
+		"pre-existing keys must keep their order")
+}
+
+func topLevelKeys(t *testing.T, src string) []string {
+	t.Helper()
+	var doc yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(src), &doc))
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	require.Equal(t, yaml.MappingNode, root.Kind)
+	keys := make([]string, 0, len(root.Content)/2)
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		keys = append(keys, root.Content[i].Value)
+	}
+	return keys
+}
+
+// yamlComments returns every comment in src in file order: whole-line
+// comments and inline trailing comments, each trimmed of surrounding
+// whitespace. Indentation is ignored because the encoder is free to
+// re-indent, but no comment may be dropped, added or reordered.
+func yamlComments(src string) []string {
+	var out []string
+	for line := range strings.SplitSeq(src, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			out = append(out, trimmed)
+			continue
+		}
+		if idx := strings.Index(line, " #"); idx >= 0 {
+			out = append(out, strings.TrimSpace(line[idx:]))
+		}
+	}
+	return out
+}
+
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(data)
 }

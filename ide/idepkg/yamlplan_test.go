@@ -222,8 +222,10 @@ func TestPlanConfigChange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			userDoc, err := mapToYAMLDocument(tt.userCfg)
+			require.NoError(t, err)
 			plan, err := planConfigChange(
-				"config.yaml", []byte(tt.pkgConfig), tt.userCfg,
+				"config.yaml", []byte(tt.pkgConfig), tt.userCfg, userDoc,
 				pkgID, tt.version, dataDir, editorMode,
 			)
 			if tt.wantErr {
