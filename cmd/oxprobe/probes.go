@@ -62,6 +62,12 @@ func buildProbes(cfg EnvConfig, client *http.Client, skipDownloadsCDN bool) []pr
 			AuthURL: cfg.authURL(), IsCritical: false, Client: client,
 		},
 	}
+	if len(cfg.Archs) > 0 {
+		probes = append(probes, probe.PkgLatestProbe{
+			APIURL: cfg.apiURL(), Archs: cfg.Archs,
+			IsCritical: true, Client: client,
+		})
+	}
 	if !skipDownloadsCDN {
 		probes = append(probes, probe.DownloadsCDNProbe{
 			DownloadsHost: cfg.downloadsURL(), Archs: cfg.Archs,

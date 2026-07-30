@@ -22,6 +22,7 @@
 # ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 import importlib.util
+import json
 import sys
 import types
 import unittest
@@ -87,10 +88,73 @@ class fake_paging_client:
         return False
 
 
+class fake_release_client:
+    """Serves the release API surface probe_pkg_latest walks, plus the
+    bucket its signed URLs point at, so a missing artifact is reproduced
+    exactly as GCS reports it.
+
+    index maps arch -> pkg -> {"latest", "language", "bundles", "blobs",
+    "empty"}, where listing a version under "blobs" implies a bundle row
+    for it.
+    """
+
+    def __init__(self, index):
+        self.index = index
+        self.get_calls = []
+        self.downloaded = []
+
+    async def get(self, url, **kwargs):
+        self.get_calls.append((url, kwargs))
+        parts = url.split("://", 1)[1].split("/", 1)[1].strip("/").split("/")
+
+        if parts[0] == "blob":
+            _, arch, pkg, version = parts
+            state = self.index.get(arch, {}).get(pkg)
+            if state is None or version not in state.get("blobs", []):
+                return fake_response(status_code=404)
+            self.downloaded.append(f"{arch}/{pkg}")
+            if state.get("empty", False):
+                return fake_response(status_code=206, content=b"")
+            return fake_response(status_code=206, content=b"t")
+
+        arch = parts[2]
+        pkgs = self.index.get(arch)
+        if pkgs is None:
+            return fake_response(status_code=404)
+        if len(parts) == 4:
+            return fake_response(
+                body=[
+                    {
+                        "Name": name,
+                        "Latest": st.get("latest", ""),
+                        "Metadata": (
+                            {"language": "true"} if st.get("language") else {}
+                        ),
+                    }
+                    for name, st in sorted(pkgs.items())
+                ]
+            )
+        pkg = parts[4]
+        state = pkgs.get(pkg)
+        if state is None:
+            return fake_response(status_code=404)
+        version = parts[6]
+        known = list(state.get("bundles", [])) + list(state.get("blobs", []))
+        if version not in known:
+            return fake_response(status_code=404)
+        return fake_response(
+            body={"url": f"https://cdn.example/blob/{arch}/{pkg}/{version}"}
+        )
+
+
 class fake_env:
     def __init__(self, **values):
         for name, value in values.items():
             setattr(self, name, value)
+
+
+def published(version, language=False):
+    return {"latest": version, "blobs": [version], "language": language}
 
 
 class EntryTest(unittest.IsolatedAsyncioTestCase):
@@ -198,6 +262,174 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "darwin-arm64 manifest status 403"):
             await entry.probe_downloads(client, cfg)
+
+    async def test_pkg_latest_checks_owned_packages_and_skips_grammars(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {
+                "darwin-arm64": {
+                    "rune-agent": published("v1.1.2"),
+                    "rg": published("v1.0.0"),
+                    "go": published("v1.26.5", language=True),
+                    "ada": published("v0.0.1", language=True),
+                    "zig": published("v0.0.1", language=True),
+                }
+            }
+        )
+
+        detail = await entry.probe_pkg_latest(client, cfg)
+
+        self.assertEqual("3 latest versions downloadable (3 packages, 1 archs)", detail)
+        self.assertEqual(
+            ["darwin-arm64/go", "darwin-arm64/rg", "darwin-arm64/rune-agent"],
+            sorted(client.downloaded),
+        )
+
+    async def test_pkg_latest_grammar_marker_on_one_arch_filters_every_arch(self):
+        # Only darwin-arm64 marks grammars, so an arch-local rule would
+        # drag every grammar on the other archs into the owned set.
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64", "linux-amd64"]}
+        client = fake_release_client(
+            {
+                "darwin-arm64": {
+                    "ada": published("v0.0.1", language=True),
+                    "rune-agent": published("v1.1.2"),
+                },
+                "linux-amd64": {
+                    "ada": published("v0.0.1"),
+                    "rune-agent": published("v1.1.2"),
+                },
+            }
+        )
+
+        await entry.probe_pkg_latest(client, cfg)
+
+        self.assertEqual(
+            ["darwin-arm64/rune-agent", "linux-amd64/rune-agent"],
+            sorted(client.downloaded),
+        )
+
+    async def test_pkg_latest_rejects_bundle_whose_artifact_is_missing(self):
+        # The rune-agent v1.1.2 regression: the bundle row exists and the
+        # API mints a signed URL, but the object is not in the bucket.
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {"darwin-arm64": {"rune-agent": {"latest": "v1.1.2", "bundles": ["v1.1.2"]}}}
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"1/1 latest versions not downloadable: "
+            r"darwin-arm64/rune-agent: v1\.1\.2: artifact: status 404",
+        ):
+            await entry.probe_pkg_latest(client, cfg)
+
+    async def test_pkg_latest_rejects_latest_without_a_bundle(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {"darwin-arm64": {"rune-agent": {"latest": "v9.9.9", "blobs": ["v1.1.0"]}}}
+        )
+
+        with self.assertRaisesRegex(RuntimeError, r"v9\.9\.9: bundle: status 404"):
+            await entry.probe_pkg_latest(client, cfg)
+
+    async def test_pkg_latest_skips_package_without_latest(self):
+        # package_versions.sh skips these rather than reporting them: not
+        # publishing a package for an arch is routine.
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {"darwin-arm64": {"rune-agent": published("v1.1.2"), "runectl": {}}}
+        )
+
+        detail = await entry.probe_pkg_latest(client, cfg)
+
+        self.assertEqual("1 latest versions downloadable (1 packages, 1 archs)", detail)
+        self.assertEqual(["darwin-arm64/rune-agent"], client.downloaded)
+
+    async def test_pkg_latest_rejects_registry_with_nothing_installable(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {"darwin-arm64": {"ada": published("v0.0.1", language=True)}}
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError, "no owned package advertises a Latest version"
+        ):
+            await entry.probe_pkg_latest(client, cfg)
+
+    async def test_pkg_latest_rejects_unreachable_registry(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+
+        with self.assertRaisesRegex(RuntimeError, "list darwin-arm64: status 404"):
+            await entry.probe_pkg_latest(fake_release_client({}), cfg)
+
+    async def test_pkg_latest_rejects_empty_artifact(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {
+                "darwin-arm64": {
+                    "rune-agent": {
+                        "latest": "v1.1.2",
+                        "blobs": ["v1.1.2"],
+                        "empty": True,
+                    }
+                }
+            }
+        )
+
+        with self.assertRaisesRegex(RuntimeError, r"v1\.1\.2: artifact is empty"):
+            await entry.probe_pkg_latest(client, cfg)
+
+    async def test_pkg_latest_reports_every_broken_target(self):
+        broken = {"latest": "v1.1.2", "bundles": ["v1.1.2"]}
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-amd64", "darwin-arm64"]}
+        client = fake_release_client(
+            {
+                "darwin-amd64": {
+                    "rune-agent": broken,
+                    "fuzzy-search": published("v1.1.2"),
+                },
+                "darwin-arm64": {
+                    "rune-agent": broken,
+                    "fuzzy-search": published("v1.1.2"),
+                },
+            }
+        )
+
+        with self.assertRaises(RuntimeError) as caught:
+            await entry.probe_pkg_latest(client, cfg)
+
+        detail = str(caught.exception)
+        self.assertIn("2/4 latest versions not downloadable", detail)
+        self.assertIn("darwin-amd64/rune-agent: v1.1.2: artifact: status 404", detail)
+        self.assertIn("darwin-arm64/rune-agent: v1.1.2: artifact: status 404", detail)
+
+    async def test_pkg_latest_uses_ranged_get_for_artifacts(self):
+        cfg = {"api_host": "api.example.com", "archs": ["darwin-arm64"]}
+        client = fake_release_client(
+            {"darwin-arm64": {"rune-agent": published("v1.1.2")}}
+        )
+
+        await entry.probe_pkg_latest(client, cfg)
+
+        artifact = [c for c in client.get_calls if "/blob/" in c[0]]
+        self.assertEqual(
+            [
+                (
+                    "https://cdn.example/blob/darwin-arm64/rune-agent/v1.1.2",
+                    {"headers": {"range": "bytes=0-0"}},
+                )
+            ],
+            artifact,
+        )
+
+    def test_owned_languages_matches_script(self):
+        script = (
+            Path(__file__).parents[3] / "package_versions.sh"
+        ).read_text()
+        literal = script.split("OWNED_LANGUAGES='", 1)[1].split("'", 1)[0]
+
+        self.assertCountEqual(json.loads(literal), entry.OWNED_LANGUAGES)
 
     async def test_pkg_download_uses_signed_url(self):
         cfg = {"pkg_download_arch": "darwin-arm64"}

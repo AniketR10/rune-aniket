@@ -41,6 +41,19 @@ STATUS_FAIL = "fail"
 # mitigation guide and metrics dashboard from the incident.
 RUNBOOK_URL = "https://x.unstable.build/docs/runbooks/oxprobe"
 
+# Mirrors OWNED_LANGUAGES in deploy/package_versions.sh: grammar packages
+# are excluded from the owned set, except these toolchains, which we build
+# and release ourselves.
+OWNED_LANGUAGES = ["go", "python", "rust"]
+
+# Marks the tree-sitter grammar packages, which we republish wholesale
+# rather than build.
+LANGUAGE_METADATA_KEY = "language"
+
+# Bounds the in-flight pkg_latest target checks so a wide matrix still
+# finishes inside the worker's request budget.
+PKG_LATEST_CONCURRENCY = 8
+
 ENVIRONMENTS = {
     "staging": {
         "api_host": "api.unstable.build",
@@ -115,6 +128,7 @@ async def run_worker_probe(env: Any) -> dict[str, Any]:
             run_check("oauth_config", True, lambda: probe_oauth_config(client, cfg)),
             run_check("auth0", False, lambda: probe_auth0(client, cfg)),
             run_check("downloads_cdn", False, lambda: probe_downloads(client, cfg)),
+            run_check("pkg_latest", True, lambda: probe_pkg_latest(client, cfg)),
             probe_deep(client, cfg, probe_secret),
         ]
         groups = await asyncio.gather(*tasks)
@@ -254,6 +268,116 @@ async def probe_downloads(client: httpx.AsyncClient, cfg: dict[str, Any]) -> str
         if resp.status_code not in (200, 206):
             raise RuntimeError(f"{arch} manifest status {resp.status_code}")
     return f"{len(cfg['archs'])} manifests reachable"
+
+
+async def probe_pkg_latest(client: httpx.AsyncClient, cfg: dict[str, Any]) -> str:
+    """Assert every package we own advertises an installable Latest.
+
+    The release index, the bundle record, and the artifact in the bucket
+    are owned by different systems, so a Latest pointer can outlive its
+    artifact: a publish that registers bundle metadata but never uploads
+    the tarball breaks `pkg install <name>` for every client on that arch
+    while every other layer stays green.
+
+    The owned set is discovered per run using the same rules as
+    deploy/package_versions.sh, so a package published after this code was
+    written is covered the moment it lands.
+    """
+    archs = sorted(cfg["archs"])
+    listed = [await list_packages(client, cfg["api_host"], arch) for arch in archs]
+
+    # Only one arch's registry carries the language marker, so a name
+    # counts as a grammar when any arch flags it. Without the union the
+    # unmarked archs drag all ~300 grammars into the owned set.
+    grammars = {
+        pkg.get("Name")
+        for pkgs in listed
+        for pkg in pkgs
+        if (pkg.get("Metadata") or {}).get(LANGUAGE_METADATA_KEY) == "true"
+    }
+
+    rows = []
+    for arch, pkgs in zip(archs, listed):
+        for pkg in pkgs:
+            name = pkg.get("Name") or ""
+            if name in grammars and name not in OWNED_LANGUAGES:
+                continue
+            # An empty Latest means the package is not published for this
+            # arch, which is routine rather than an outage.
+            latest = pkg.get("Latest") or ""
+            if not latest:
+                continue
+            rows.append((arch, name, latest))
+    rows.sort()
+
+    # A registry advertising nothing installable is itself an outage, and
+    # would otherwise pass as zero targets checked.
+    if not rows:
+        raise RuntimeError("no owned package advertises a Latest version")
+
+    limit = asyncio.Semaphore(PKG_LATEST_CONCURRENCY)
+
+    async def verify(arch: str, pkg: str, latest: str) -> str:
+        async with limit:
+            try:
+                await check_pkg_latest(client, cfg["api_host"], arch, pkg, latest)
+            except Exception as exc:
+                return f"{arch}/{pkg}: {exc}"
+        return ""
+
+    # Every target is reported, not just the first failure, so one run
+    # tells on-call exactly which arch/package pairs are broken.
+    results = await asyncio.gather(*(verify(*row) for row in rows))
+    failures = [r for r in results if r]
+    if failures:
+        raise RuntimeError(
+            f"{len(failures)}/{len(rows)} latest versions not downloadable: "
+            + "; ".join(failures)
+        )
+    names = {name for _, name, _ in rows}
+    return (
+        f"{len(rows)} latest versions downloadable "
+        f"({len(names)} packages, {len(archs)} archs)"
+    )
+
+
+async def list_packages(
+    client: httpx.AsyncClient, api_host: str, arch: str
+) -> list[dict[str, Any]]:
+    resp = await client.get(
+        f"https://{api_host}/api/releases/{arch}/packages",
+        headers={"accept": "application/json"},
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"list {arch}: status {resp.status_code}")
+    return resp.json()
+
+
+async def check_pkg_latest(
+    client: httpx.AsyncClient, api_host: str, arch: str, pkg: str, latest: str
+) -> None:
+    # Mirrors cdnrelease.Manager, which cmd/oxprobe drives directly:
+    # same URL shape, same list -> bundle -> artifact legs, and the same
+    # failure vocabulary so both probes page with one wording.
+    base = f"https://{api_host}/api/releases/{arch}/packages/{pkg}"
+    resp = await client.get(
+        f"{base}/bundles/{latest}/download", headers={"accept": "application/json"}
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"{latest}: bundle: status {resp.status_code}")
+    signed = get_any(resp.json(), "url", "URL") or ""
+    if not signed:
+        raise RuntimeError(f"{latest}: bundle: no url")
+
+    # A ranged GET is the worker's equivalent of the Go probe hanging up
+    # after cdnrelease's first chunk: it proves the object is readable
+    # without pulling a multi-hundred-MB artifact every minute. HEAD is
+    # not an option because the URL is signed for GET.
+    resp = await client.get(signed, headers={"range": "bytes=0-0"})
+    if resp.status_code not in (200, 206):
+        raise RuntimeError(f"{latest}: artifact: status {resp.status_code}")
+    if not resp.content:
+        raise RuntimeError(f"{latest}: artifact is empty")
 
 
 async def probe_deep(

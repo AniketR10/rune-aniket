@@ -47,6 +47,28 @@ Implemented:
   mints in the verbose `/health` report (`signed_downloads[<arch>]`) and does an
   anonymous GET, proving the full `pkg install ada` path. ox-api owns signing;
   the worker only verifies the signed URL is usable.
+- `pkg_latest` (critical): for every package we own, on every arch, resolves the
+  advertised `Latest` to a bundle download URL and range-GETs the artifact. The
+  release index, the bundle record, and the bucket object are owned by different
+  systems, so a `Latest` pointer can outlive its artifact — a publish that
+  registers bundle metadata but never uploads the tarball breaks
+  `pkg install <name>` on that arch while every other layer stays green. The
+  check reports every broken arch/package pair, not just the first.
+
+  The owned set is **discovered per run**, not pinned, using the same rules as
+  `deploy/package_versions.sh`: list each arch's registry, drop the tree-sitter
+  grammar packages (`Metadata.language == "true"`), keep the toolchains in
+  `OWNED_LANGUAGES`, and skip packages with no `Latest` for that arch. Only the
+  darwin-arm64 registry carries the language marker, so the marker is unioned
+  across archs before filtering — without that, the unmarked archs pull ~300
+  grammars into the set. A pinned list would silently stop covering packages
+  published after it was written.
+
+  `cmd/oxprobe` runs this check through `cdnrelease.Manager`, the same client
+  the editor installs with, and hangs up after the first streamed chunk. Workers
+  cannot use that Go client, so this file reimplements the same URL shape, the
+  same list/bundle/artifact legs, and the same failure wording; the ranged GET
+  stands in for the early hang-up. Keep the two in step when either changes.
 
 The ox-api report deliberately omits each layer's `critical` flag from JSON. If
 the server reports overall `fail`, the worker adds a critical synthetic `deep`
