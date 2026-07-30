@@ -5034,13 +5034,16 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	// also point at this scheduler (callers that build the manager
 	// outside this helper should use newTestScheduler).
 	if cfg.scheduleNextTick == nil {
-		cfg.scheduleNextTick, drainSched = newTestScheduler(mu)
+		cfg.scheduleNextTick, drainSched = newTestScheduler(t, mu)
 	}
 
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	var storage storageapi.Service = localstorage.New(
 		context.Background(), dir, docbson.Marshaler())
+	// init treats the storage as borrowed and never closes it, so
+	// without this the helper leaks a firstmover gRPC server per test.
+	t.Cleanup(func() { _ = storage.Close() })
 	if newTestStorageWrap != nil {
 		storage = newTestStorageWrap(storage)
 	}
@@ -5082,7 +5085,7 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 // the in-flight count to zero briefly between hops; without yielding
 // a single drain can observe an intermediate clean count and return
 // mid-chain.
-func newTestScheduler(mu sync.Locker) (
+func newTestScheduler(t *testing.T, mu sync.Locker) (
 	sched func(func()) bool, drain func(),
 ) {
 	// A single consumer goroutine drains a FIFO queue, running each
@@ -5096,11 +5099,16 @@ func newTestScheduler(mu sync.Locker) (
 	schedCond := sync.NewCond(&schedMu)
 	var queue []func()
 	running := false
+	stopped := false
 	go debug.CapturePanicReport(func() {
 		for {
 			schedMu.Lock()
-			for len(queue) == 0 {
+			for len(queue) == 0 && !stopped {
 				schedCond.Wait()
+			}
+			if stopped {
+				schedMu.Unlock()
+				return
 			}
 			fn := queue[0]
 			queue = queue[1:]
@@ -5116,6 +5124,14 @@ func newTestScheduler(mu sync.Locker) (
 			schedCond.Broadcast()
 			schedMu.Unlock()
 		}
+	})
+	// Registered before any caller cleanup so it runs last (LIFO):
+	// teardown that still schedules callbacks keeps a live consumer.
+	t.Cleanup(func() {
+		schedMu.Lock()
+		stopped = true
+		schedCond.Broadcast()
+		schedMu.Unlock()
 	})
 	sched = func(fn func()) bool {
 		schedMu.Lock()
@@ -5142,11 +5158,11 @@ func newTestScheduler(mu sync.Locker) (
 // be threaded through newTestWorkspaceManagerHandlerWithManagerMu so
 // the workspace.Manager, the IDE event-loop locker and the cfg
 // scheduler all share the same goroutine/lock pair.
-func buildTestSchedulerForCfg(cc *ideConfig) (
+func buildTestSchedulerForCfg(t *testing.T, cc *ideConfig) (
 	*sync.Mutex, func(func()) bool, func(),
 ) {
 	mu := new(sync.Mutex)
-	sched, drain := newTestScheduler(mu)
+	sched, drain := newTestScheduler(t, mu)
 	if cc.scheduleNextTick == nil {
 		cc.scheduleNextTick = sched
 	}
@@ -5190,7 +5206,7 @@ func newTestWorkspaceManagerHandlerWithDir(
 	t *testing.T, cc ideConfig, dir string,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
-	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cc)
 	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
@@ -5228,7 +5244,7 @@ func newTestWorkspaceManagerHandlerWithDirs(
 	t *testing.T, cc ideConfig, dir, dataDir string,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
-	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cc)
 	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
@@ -6024,7 +6040,7 @@ func newPendingTeardownTestHandler(
 ) (*testWorkspaceManagerHandler, *workspace.Manager, workspaceapi.URI, *pendingTeardownTracker) {
 	t.Helper()
 	cfg := defaultCfg()
-	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(&cfg)
+	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(t, &cfg)
 	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", t.TempDir()))
 	require.NoError(t, err)
 	tracker := &pendingTeardownTracker{target: uri, firstRelease: firstRelease}
@@ -6127,7 +6143,7 @@ func (s *closeUnblocksOpenScheme) Close() error {
 
 func TestPendingWorkspaceCancellationClosesSchemeToAbortBuild(t *testing.T) {
 	cfg := defaultCfg()
-	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(&cfg)
+	mu, scheduleNextTick, drain := buildTestSchedulerForCfg(t, &cfg)
 	manager := workspace.NewManager(config.NopConfig(), scheduleNextTick)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
@@ -7012,7 +7028,7 @@ func (silentExtHandler) Complete(
 func newTestWorkspaceManagerHandlerWithRunner(
 	t *testing.T, cc ideConfig, dir string, runner extension.Runner,
 ) *testWorkspaceManagerHandler {
-	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cc)
 	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))

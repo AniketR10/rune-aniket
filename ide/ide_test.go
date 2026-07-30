@@ -707,6 +707,11 @@ func TestWonAliasIntegration(t *testing.T) {
 	repoA := t.TempDir()
 	repoB := t.TempDir()
 
+	// The {file} completer traverses the home workspace root when the
+	// last argument is empty, so an unpinned HOME makes this test walk
+	// the whole real home directory.
+	t.Setenv("HOME", t.TempDir())
+
 	// Real config file with the `won` alias in YAML form, identical to
 	// what the user has in ~/.runedev/config.yaml.
 	configPath := filepath.Join(dataDir, "rune.yaml")
@@ -816,6 +821,11 @@ func TestWorkspaceOpenCompletionSurfacesHistory(t *testing.T) {
 	dataDir := t.TempDir()
 	repoA := t.TempDir()
 	repoB := t.TempDir()
+
+	// workspaceopen completes directories relative to the home
+	// workspace root when the last argument is empty, so an unpinned
+	// HOME makes this test walk the whole real home directory.
+	t.Setenv("HOME", t.TempDir())
 
 	configPath := filepath.Join(dataDir, "rune.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(`
@@ -933,7 +943,7 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 
 			configFile, _ := makeTestFiles(t)
 			mu := new(sync.Mutex)
-			scheduleNextTick, drain := newTestScheduler(mu)
+			scheduleNextTick, drain := newTestScheduler(t, mu)
 			i, err := New(repoB, configFile.Name(), dataDir,
 				pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
 				WithPublishEvent(nopPublishEvent),
@@ -1065,7 +1075,7 @@ command:
 	// EventInterrupt at a time from a single channel). A goroutine
 	// per call would let two dispatches race for mu and reorder, which
 	// production never does.
-	scheduleNextTick, _ := newTestScheduler(mu)
+	scheduleNextTick, _ := newTestScheduler(t, mu)
 	runner := newPerIDReadyRunner("dummy")
 	runnerFn := func(
 		_ workspaceapi.URI,
@@ -1181,7 +1191,7 @@ command:
 `), 0o666))
 
 	mu := new(sync.Mutex)
-	scheduleNextTick, _ := newTestScheduler(mu)
+	scheduleNextTick, _ := newTestScheduler(t, mu)
 	runner := newPerIDReadyRunner("dummy")
 	runnerFn := func(
 		_ workspaceapi.URI,
@@ -2340,9 +2350,14 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 
 // newTestStorage returns the localstorage flavor every IDE test uses.
 // Tests pass it as the storage argument to ide.New / IDE.init.
+// IDE.Close treats the storage as borrowed and does not close it, so
+// the test owns its lifetime; without this cleanup every test leaks a
+// firstmover gRPC server and its listener for the whole package run.
 func newTestStorage(t *testing.T, dataDir string) storageapi.Service {
 	t.Helper()
-	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+	storage := localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+	t.Cleanup(func() { _ = storage.Close() })
+	return storage
 }
 
 func testRunnerFn(
@@ -3089,7 +3104,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		dataDir := t.TempDir()
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New("", configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
@@ -3122,7 +3137,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		dataDir := t.TempDir()
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New("", configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
@@ -3185,7 +3200,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		dataDir := t.TempDir()
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New("", configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
@@ -3248,7 +3263,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		dataDir := t.TempDir()
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New("", configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
@@ -3287,7 +3302,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 			filepath.Join(repo, "seed.txt"), nil, 0666))
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New(repo, configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
@@ -3321,7 +3336,7 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 		dataDir := t.TempDir()
 
 		mu := new(sync.Mutex)
-		scheduleNextTick, drain := newTestScheduler(mu)
+		scheduleNextTick, drain := newTestScheduler(t, mu)
 
 		i, err := New("", configFile.Name(), dataDir,
 			pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),

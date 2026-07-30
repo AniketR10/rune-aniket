@@ -95,7 +95,7 @@ func TestSetWorkspaceRequiresAttentionRace(t *testing.T) {
 	require.NoError(t, err)
 
 	mu := new(sync.Mutex)
-	sched, drain := newTestScheduler(mu)
+	sched, drain := newTestScheduler(t, mu)
 	cfg := defaultCfg()
 	cfg.scheduleNextTick = sched
 

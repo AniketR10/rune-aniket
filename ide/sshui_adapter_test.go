@@ -125,7 +125,7 @@ func TestPromptChoiceBrowserLifecycle(t *testing.T) {
 
 	configFile, _ := makeTestFiles(t)
 	mu := new(sync.Mutex)
-	scheduleNextTick, drain := newTestScheduler(mu)
+	scheduleNextTick, drain := newTestScheduler(t, mu)
 	i, err := New(
 		workspaceDir,
 		configFile.Name(),
