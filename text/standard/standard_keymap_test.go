@@ -40,7 +40,7 @@ import (
 // in-memory clipboard, positions the cursor, and returns the handler
 // plus the backing buffer and clipboard for assertions.
 func newStandardKeymapHandler(
-	t *testing.T, content string, at term.Coordinates,
+	t *testing.T, content string, at term.Coordinates, opts ...Option,
 ) (text.Handler, *cell.Buffer, clipboard.Register) {
 	t.Helper()
 	uri, err := workspaceapi.ParseURI("test:///")
@@ -49,9 +49,7 @@ func newStandardKeymapHandler(
 	buf.ReadFrom(strings.NewReader(content))
 	clip := clipboard.NewInMemory()
 	h := NewHandler(buf, uri, text.IndentRuneTab, 0,
-		WithClipboard(clip),
-		WithTabspaces(1),
-	)
+		append([]Option{WithClipboard(clip), WithTabspaces(1)}, opts...)...)
 	h.Resize(80, 20)
 	if at.X != 0 || at.Y != 0 {
 		require.True(t, h.SetCursorAtScroll(at))
@@ -338,6 +336,239 @@ func TestStandardKeymapDeletion(t *testing.T) {
 		require.True(t, handled)
 		assert.Equal(t, "one\nthree", buf.String())
 	})
+}
+
+// TestStandardKeymapTypingReplacesSelection pins the TextEdit/Sublime
+// convention: typing or pasting with an active selection replaces the
+// selected text instead of only deleting it and swallowing the input.
+// Deletion keys remove the selection without inserting, and tab keeps
+// its indent semantics instead of replacing.
+func TestStandardKeymapTypingReplacesSelection(t *testing.T) {
+	const word = "<s-right><s-right><s-right>"
+	paste := func(s string) *string { return &s }
+	for _, tc := range []struct {
+		name    string
+		content string
+		at      term.Coordinates
+		opts    []Option
+		clip    string  // seeded into the clipboard default register
+		setup   string  // input tokens that establish the selection
+		wantSel string  // selection after setup; empty expects none
+		input   string  // input tokens dispatched after setup
+		paste   *string // bracketed paste payload dispatched after setup
+		want    string
+		undos   []string // buffer after each successive undo
+	}{
+		{
+			name:    "typed char replaces word selection",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "X",
+			want:    "X two",
+			undos:   []string{" two", "one two"},
+		},
+		{
+			name:    "typed char replaces reverse selection",
+			content: "one two",
+			at:      term.Coordinates{X: 3},
+			setup:   "<s-left><s-left><s-left>",
+			wantSel: "one",
+			input:   "X",
+			want:    "X two",
+		},
+		{
+			name:    "typed char replaces multi-line selection",
+			content: "one\ntwo\nthree",
+			setup:   "<s-down><s-down>",
+			wantSel: "one\ntwo\n",
+			input:   "X",
+			want:    "Xthree",
+		},
+		{
+			name:    "typed char replaces line selection",
+			content: "one\ntwo",
+			setup:   "<m-l>",
+			wantSel: "one\n",
+			input:   "X",
+			want:    "Xtwo",
+		},
+		{
+			name:    "typed char replaces select-all",
+			content: "one\ntwo",
+			setup:   "<m-a>",
+			wantSel: "one\ntwo\n",
+			input:   "X",
+			want:    "X",
+		},
+		{
+			name:    "typed wide char replaces wide selection",
+			content: "界界 tail",
+			setup:   "<s-right><s-right>",
+			wantSel: "界界",
+			input:   "界",
+			want:    "界 tail",
+		},
+		{
+			name:    "typed char replaces null-cell selection",
+			content: "ab\x00\x00cd",
+			setup:   "<s-right><s-right><s-right><s-right>",
+			wantSel: "ab\x00\x00",
+			input:   "X",
+			want:    "Xcd",
+		},
+		{
+			name:    "typed char with collapsed selection inserts",
+			content: "one two",
+			setup:   "<s-right><s-left>",
+			input:   "X",
+			want:    "Xone two",
+		},
+		{
+			name:    "auto-pair opener replaces selection with the pair",
+			content: "one two",
+			opts:    []Option{WithAutoPair(true)},
+			setup:   word,
+			wantSel: "one",
+			input:   "(",
+			want:    "() two",
+		},
+		{
+			name:    "enter replaces selection with newline",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "<enter>",
+			want:    "\n two",
+		},
+		{
+			name:    "space replaces selection with space",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "<space>",
+			want:    "  two",
+		},
+		{
+			name:    "backspace deletes selection without inserting",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "<backspace>",
+			want:    " two",
+		},
+		{
+			name:    "delete deletes selection without inserting",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "<delete>",
+			want:    " two",
+		},
+		{
+			name:    "tab indents selection instead of replacing",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			input:   "<tab>",
+			want:    "\tone two",
+		},
+		{
+			name:    "bracketed paste replaces selection",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			paste:   paste("AB"),
+			want:    "AB two",
+			undos:   []string{"one two"},
+		},
+		{
+			name:    "bracketed multi-line paste replaces mid-buffer selection",
+			content: "one two three",
+			at:      term.Coordinates{X: 4},
+			setup:   word,
+			wantSel: "two",
+			paste:   paste("mid\nline"),
+			want:    "one mid\nline three",
+			undos:   []string{"one two three"},
+		},
+		{
+			name:    "bracketed wide paste replaces wide selection",
+			content: "界界 tail",
+			setup:   "<s-right><s-right>",
+			wantSel: "界界",
+			paste:   paste("宽"),
+			want:    "宽 tail",
+			undos:   []string{"界界 tail"},
+		},
+		{
+			name:    "empty bracketed paste deletes selection",
+			content: "one two",
+			setup:   word,
+			wantSel: "one",
+			paste:   paste(""),
+			want:    " two",
+			undos:   []string{"one two"},
+		},
+		{
+			name:    "empty bracketed paste without selection is a no-op",
+			content: "one two",
+			paste:   paste(""),
+			want:    "one two",
+		},
+		{
+			name:    "bracketed paste without selection inserts",
+			content: "one two",
+			paste:   paste("new "),
+			want:    "new one two",
+		},
+		{
+			name:    "clipboard paste replaces selection",
+			content: "one two",
+			clip:    "PASTED",
+			setup:   word,
+			wantSel: "one",
+			input:   "<m-v>",
+			want:    "PASTED two",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, buf, clip := newStandardKeymapHandler(t, tc.content, tc.at, tc.opts...)
+			if tc.clip != "" {
+				require.NoError(t, clip.Copy(clipboard.DefaultRegisterID,
+					clipboard.Data{Text: tc.clip, Metadata: text.StandardSelection}))
+			}
+			if tc.setup != "" {
+				feedKeys(t, h, tc.setup)
+			}
+			sel, selected := h.Selection()
+			if tc.wantSel != "" {
+				require.True(t, selected, "setup must select")
+				require.Equal(t, tc.wantSel, sel)
+			} else {
+				require.False(t, selected, "setup must not report a selection")
+			}
+
+			if tc.paste != nil {
+				h.Handle(term.Event{Type: term.EventPasteStart})
+				for _, r := range *tc.paste {
+					h.Handle(term.Event{Type: term.EventKey, Ch: r})
+				}
+				_, handled := h.Handle(term.Event{Type: term.EventPasteEnd})
+				require.True(t, handled)
+			} else {
+				feedKeys(t, h, tc.input)
+			}
+
+			assert.Equal(t, tc.want, buf.String())
+			_, selected = h.Selection()
+			assert.False(t, selected, "no selection must survive the input")
+			for i, undo := range tc.undos {
+				feedKeys(t, h, "<m-z>")
+				assert.Equal(t, undo, buf.String(), "undo step %d", i+1)
+			}
+		})
+	}
 }
 
 // TestStandardKeymapLineInsert pins ctrl-enter (below) and

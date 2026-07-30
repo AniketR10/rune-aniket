@@ -239,6 +239,21 @@ func TestSearchFloatingUsesStandardInputEditing(t *testing.T) {
 	})
 }
 
+// TestSearchEscThenTypeReplacesMatch pins that the match selection left
+// behind when the search widget is dismissed behaves like any other
+// selection: typing replaces the selected occurrence.
+func TestSearchEscThenTypeReplacesMatch(t *testing.T) {
+	h := newSearchSequenceHarness(t, "one two one", searchModeFind)
+	h.Resize(48, 5)
+	handlertest.RunHandlerSequence(t, h, 48, 5, []handlertest.SequenceTestCase{
+		{InputSequence: "<meta-f>one<enter><esc>X", Expected: golden(48,
+			"one two X▐", "", "", "", "")},
+	})
+	require.NoError(t, h.closeErr)
+	root := h.owner.Handler.(*standardHandler)
+	assert.Equal(t, "one two X", root.buf.String())
+}
+
 type searchBrowserWindowManager struct {
 	browser *browser.Component
 }

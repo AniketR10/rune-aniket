@@ -339,12 +339,16 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.EventPasteEnd:
 		str := h.pasteBuf.String()
 		if _, ok := h.cursor.SelectionMode(); ok {
-			handled = h.cursor.DeleteSelection()
+			// Pasting over a selection replaces it with the pasted text.
+			h.buf.MarkStartUndo()
+			h.cursor.DeleteSelection()
 			h.cursor.Unselect()
+			h.cursor.InsertString(str)
+			h.buf.GroupUndo()
 		} else {
 			h.cursor.InsertString(str)
-			handled = true
 		}
+		handled = true
 		h.pasteStarted = false
 		return
 	case term.EventKey:
@@ -736,9 +740,12 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		default:
 			if ev.Ch != 0 {
 				if _, ok := h.cursor.SelectionMode(); ok {
-					handled = h.cursor.DeleteSelection()
+					// Like RET, SPC and paste, a typed character replaces
+					// the selection rather than just deleting it.
+					h.cursor.DeleteSelection()
 					h.cursor.Unselect()
-				} else if h.cfg.autoPair {
+				}
+				if h.cfg.autoPair {
 					handled = h.cursor.InsertWithAutoPair(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
 				} else {
 					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
