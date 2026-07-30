@@ -881,9 +881,9 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 	wait("wait_command")
 	tut.ObserveCommand("console", "console", nil, nil)
 
-	// Installation requires the console's shell observation.
-	wait("floating_window")
-	dismiss(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	// Installation requires the console's shell observation. The hint is
+	// rendered by wait_shell itself so console keystrokes pass through
+	// instead of being swallowed by a blocking window.
 	wait("wait_shell")
 	tut.ObserveCommand("console", "console", []string{"pkg", "install", "rune-agent"}, nil)
 
@@ -993,6 +993,9 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	waitCmd()
 	tut.ObserveCommand("searchfile", "searchfile", nil, nil)
 	waitEvent()
+	assert.Contains(t, tut.ActiveText(), "do not have to be contiguous")
+	assert.Contains(t, tut.ActiveText(), "<up>")
+	assert.Contains(t, tut.ActiveText(), "<down>")
 	tut.ObserveEvent("open", "file:///workspace/a.go")
 
 	// searchtext: window -> command -> file-open event.
@@ -1003,8 +1006,7 @@ func TestNavigationTutorialFlow(t *testing.T) {
 	waitEvent()
 	assert.Contains(t, tut.ActiveText(),
 		"Type a word you want to search for, or just a few characters from that")
-	assert.Contains(t, tut.ActiveText(),
-		"word. Scroll through the completion list")
+	assert.Contains(t, tut.ActiveText(), "do not have to be contiguous")
 	assert.Contains(t, tut.ActiveText(), "<up>")
 	assert.Contains(t, tut.ActiveText(), "<down>")
 	assert.NotContains(t, tut.ActiveText(), "<ctrl-i>")
@@ -1145,7 +1147,7 @@ tutorial(entry=run)
 	}
 }
 
-func TestNavigationTutorialSearchTextPickerKeysByMode(t *testing.T) {
+func TestNavigationTutorialFinderPickerKeysByMode(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1163,38 +1165,41 @@ func TestNavigationTutorialSearchTextPickerKeysByMode(t *testing.T) {
 		},
 		{mode: "emacs", up: "<ctrl-p>", down: "<ctrl-n>"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.mode, func(t *testing.T) {
-			t.Parallel()
-			src := `
+	pickers := []string{"searchfile_picker_md", "searchtext_picker_md"}
+	for _, picker := range pickers {
+		for _, tt := range tests {
+			t.Run(picker+"/"+tt.mode, func(t *testing.T) {
+				t.Parallel()
+				src := `
 def run():
-    wait_event(event="open", text=searchtext_picker_md)
+    wait_event(event="open", text=` + picker + `)
 tutorial(entry=run)
 `
-			modeSrc := strings.Replace(navigationTutorial,
-				`tutorial(id = "navigation", title = "Navigate code", version = "17", entry = run)`,
-				"", 1) + src
-			tut, err := starlarktutorial.New(
-				"navigation-picker-keys", modeSrc,
-				nil, nil, nil, nil,
-				term.Attributes{}, nil, nil,
-				term.KeyComb{Ch: ':'}, tt.mode,
-				nil, nil, nil, nil,
-			)
-			require.NoError(t, err)
-			tut.Resize(80, 24)
-			tut.Reset()
-			require.True(t, tut.WaitActive("wait_event", time.Second))
+				modeSrc := strings.Replace(navigationTutorial,
+					`tutorial(id = "navigation", title = "Navigate code", version = "17", entry = run)`,
+					"", 1) + src
+				tut, err := starlarktutorial.New(
+					"navigation-picker-keys", modeSrc,
+					nil, nil, nil, nil,
+					term.Attributes{}, nil, nil,
+					term.KeyComb{Ch: ':'}, tt.mode,
+					nil, nil, nil, nil,
+				)
+				require.NoError(t, err)
+				tut.Resize(80, 24)
+				tut.Reset()
+				require.True(t, tut.WaitActive("wait_event", time.Second))
 
-			text := tut.ActiveText()
-			assert.Contains(t, text, tt.up)
-			assert.Contains(t, text, tt.down)
-			assert.Contains(t, text, "<up>")
-			assert.Contains(t, text, "<down>")
-			for _, key := range tt.forbidden {
-				assert.NotContains(t, text, key)
-			}
-		})
+				text := tut.ActiveText()
+				assert.Contains(t, text, tt.up)
+				assert.Contains(t, text, tt.down)
+				assert.Contains(t, text, "<up>")
+				assert.Contains(t, text, "<down>")
+				for _, key := range tt.forbidden {
+					assert.NotContains(t, text, key)
+				}
+			})
+		}
 	}
 }
 

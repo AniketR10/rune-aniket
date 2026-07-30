@@ -70,12 +70,9 @@ Open the console now:
 """
 
 agent_pkg_install_md = """\
-You're in Rune's console now. Install the agent package:
-
-1. Type `pkg install rune-agent`.
-2. Press Enter and wait for the install to finish.
-
-Press `<enter>` or `<space>` to continue.
+You're in Rune's console now: type `pkg install rune-agent` and press
+Enter. The install takes a few seconds; this hint clears once it
+finishes.
 """
 
 agent_open_md = """\
@@ -133,11 +130,10 @@ def teach_agent():
         on_error = "Open Rune's console: run the `<cmd>console` command.",
     )
 
-    floating_window(title = "Install the agent package", text = agent_pkg_install_md,
-                    alignment = "top")
     wait_shell(
         title    = "Install the agent package",
         args     = ["pkg", "install", "rune-agent"],
+        text     = agent_pkg_install_md,
         on_error = "In Rune's console, run `pkg install rune-agent`.",
     )
     notify(level = success, message = "Rune Agent installed.")

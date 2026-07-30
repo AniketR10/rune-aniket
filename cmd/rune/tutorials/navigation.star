@@ -103,8 +103,13 @@ searchfile_md = """\
 file in the workspace. Type part of a name and it ranks matches as you
 go, so `navistar` finds `navigation.star`.""" + keyhint("searchfile") + """
 
-Open it now: """ + keypress("searchfile") + """. Type a few characters,
-pick a file, and press `<enter>` to open it.
+Open it now: """ + keypress("searchfile") + """.
+"""
+
+searchfile_picker_md = """\
+Type a few characters of a file name. They do not have to be contiguous,
+and the closest matches rank first. Move through the results with
+""" + move_phrase + """, then press `<enter>` to open the selected file.
 """
 
 console_md = """\
@@ -149,7 +154,8 @@ search for, then pick a result to jump straight to that line.
 
 searchtext_picker_md = """\
 Type a word you want to search for, or just a few characters from that
-word. Scroll through the completion list with """ + move_phrase + """,
+word. The characters do not have to be contiguous, and the closest
+matches rank first. Move through the results with """ + move_phrase + """,
 then press `<enter>` to jump to the selected line.
 """
 
@@ -312,7 +318,7 @@ def teach_searchfile(just_installed):
     wait_event(
         event    = "open",
         title    = "Find a file by name",
-        text     = "Pick a file from the finder and press `<enter>` to open it.",
+        text     = searchfile_picker_md,
         on_error = "Choose a file in the finder and press `<enter>` to open it.",
     )
     notify(level = success, message = "You found a file by name.")
