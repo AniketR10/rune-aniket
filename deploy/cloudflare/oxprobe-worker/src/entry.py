@@ -369,10 +369,9 @@ async def check_pkg_latest(
     if not signed:
         raise RuntimeError(f"{latest}: bundle: no url")
 
-    # A ranged GET is the worker's equivalent of the Go probe hanging up
-    # after cdnrelease's first chunk: it proves the object is readable
-    # without pulling a multi-hundred-MB artifact every minute. HEAD is
-    # not an option because the URL is signed for GET.
+    # A ranged GET proves the object is readable without pulling a
+    # multi-hundred-MB artifact every minute. HEAD is not an option
+    # because the URL is signed for GET. cmd/oxprobe does the same.
     resp = await client.get(signed, headers={"range": "bytes=0-0"})
     if resp.status_code not in (200, 206):
         raise RuntimeError(f"{latest}: artifact: status {resp.status_code}")
@@ -441,8 +440,10 @@ async def probe_pkg_download(
             f"no signed download url for {arch} in /health report", started,
         )
     try:
-        resp = await client.get(signed)
-        if resp.status_code != 200:
+        # Ranged for the same reason as check_pkg_latest: this runs every
+        # minute against a real release artifact.
+        resp = await client.get(signed, headers={"range": "bytes=0-0"})
+        if resp.status_code not in (200, 206):
             raise RuntimeError(f"{arch} signed download status {resp.status_code}")
         if not resp.content:
             raise RuntimeError(f"{arch} signed download returned zero bytes")
@@ -450,7 +451,7 @@ async def probe_pkg_download(
         return check_result("pkg_download", CHECK_FAIL, True, str(exc), started)
     return check_result(
         "pkg_download", CHECK_OK, True,
-        f"downloaded {arch} ({len(resp.content)} bytes)", started,
+        f"signed download readable ({arch})", started,
     )
 
 

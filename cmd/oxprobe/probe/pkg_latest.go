@@ -25,8 +25,10 @@ package probe
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -55,9 +57,9 @@ const languageMetadataKey = "language"
 var ownedLanguages = []string{"go", "python", "rust"}
 
 // PkgLatestProbe asserts that the version each package we own advertises
-// as Latest is actually installable, driving the same cdnrelease.Manager
-// the editor installs through so the probe cannot diverge from what
-// `pkg install <name>` really does.
+// as Latest is actually installable, walking the same list -> bundle ->
+// artifact legs `pkg install <name>` walks, against the same URL shapes,
+// so the probe cannot diverge from what a real install does.
 //
 // The release index, the bundle record, and the bucket object are owned
 // by different systems, so a Latest pointer can outlive its artifact — a
@@ -202,19 +204,74 @@ func (p PkgLatestProbe) listPackages(ctx context.Context, arch string) ([]releas
 }
 
 func (p PkgLatestProbe) verify(ctx context.Context, rel pkgRelease) error {
-	// A discarding writer takes cdnrelease's IsDiscard fast path and
-	// returns the bundle without ever touching the bucket, which is the
-	// exact failure this probe exists to catch. Streaming into a real
-	// writer forces the signed-URL leg.
-	var sink firstChunkWriter
-	if _, err := p.manager(rel.arch).Get(ctx, rel.pkg, rel.version, &sink); err != nil &&
-		!errors.Is(err, errEnoughRead) {
-		return fmt.Errorf("%s: %s: %s", rel.version, leg(err), statusOrError(err))
+	signed, err := p.downloadURL(ctx, rel)
+	if err != nil {
+		return err
 	}
-	if sink.n == 0 {
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signed, nil)
+	if err != nil {
+		return err
+	}
+	// HEAD is not an option: the URL is signed for GET. A ranged GET is
+	// the only way to prove the bucket object is readable without paying
+	// egress for the whole artifact every minute.
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: artifact: %s", rel.version, statusOrError(err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("%s: artifact: status %d", rel.version, resp.StatusCode)
+	}
+
+	// Bounded regardless of whether the backend honoured Range, so a
+	// bucket that ignores it cannot silently restore the full download.
+	n, err := io.CopyN(io.Discard, resp.Body, 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("%s: artifact: %s", rel.version, statusOrError(err))
+	}
+	if n == 0 {
 		return fmt.Errorf("%s: artifact is empty", rel.version)
 	}
 	return nil
+}
+
+// downloadURL resolves the signed artifact URL for rel. The artifact leg
+// deliberately bypasses cdnrelease.Manager: signed URLs must not receive
+// credentials, and Manager.Get issues an unranged GET with no way to
+// bound the read, so aborting it still bills the full object. We give up
+// "drives the exact client the editor installs with" on the artifact hop
+// only; the failure this probe exists to catch — a Latest pointer whose
+// bucket object is missing — is fully covered by a ranged GET.
+func (p PkgLatestProbe) downloadURL(ctx context.Context, rel pkgRelease) (string, error) {
+	u := fmt.Sprintf("%s/packages/%s/bundles/%s/download",
+		releasesURL(p.APIURL, rel.arch), url.PathEscape(rel.pkg), url.PathEscape(string(rel.version)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("%s: bundle: %s", rel.version, statusOrError(err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%s: bundle: status %d", rel.version, resp.StatusCode)
+	}
+	// encoding/json matches "url" and "URL" against the same field.
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", fmt.Errorf("%s: bundle: %s", rel.version, err)
+	}
+	if body.URL == "" {
+		return "", fmt.Errorf("%s: bundle: no url", rel.version)
+	}
+	return body.URL, nil
 }
 
 func (p PkgLatestProbe) manager(arch string) release.Manager {
@@ -229,38 +286,15 @@ func releasesURL(api *url.URL, arch string) string {
 	return strings.TrimSuffix(api.String(), "/") + "/api/releases/" + arch
 }
 
-// leg names which hop failed. cdnrelease reports a bucket failure as a
-// StatusError with no URL and a release-API failure with one, the same
-// split idepkg keys its user-facing errors off.
-func leg(err error) string {
-	if se, ok := errors.AsType[*cdnrelease.StatusError](err); ok && se.URL == "" {
-		return "artifact"
-	}
-	return "bundle"
-}
-
 // statusOrError keeps signed URLs out of pages: cdnrelease renders the
-// full request URL in StatusError.Error, and those carry credentials.
+// full request URL in StatusError.Error and net/http renders it in
+// url.Error, and those carry credentials.
 func statusOrError(err error) string {
 	if se, ok := errors.AsType[*cdnrelease.StatusError](err); ok {
 		return fmt.Sprintf("status %d", se.Status)
 	}
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		return ue.Err.Error()
+	}
 	return err.Error()
 }
-
-// errEnoughRead stops cdnrelease's streaming copy once any bytes have
-// arrived. Artifacts run to hundreds of megabytes and the probe runs
-// every minute, so reading the first chunk is all the proof the bucket
-// object is readable that is worth paying for.
-var errEnoughRead = errors.New("read enough")
-
-type firstChunkWriter struct{ n int64 }
-
-func (w *firstChunkWriter) Write(p []byte) (int, error) {
-	w.n += int64(len(p))
-	return len(p), errEnoughRead
-}
-
-func (w *firstChunkWriter) Progress(int64, int64, string) {}
-
-var _ release.ProgressWriter = (*firstChunkWriter)(nil)

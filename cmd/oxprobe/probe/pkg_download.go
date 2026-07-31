@@ -25,6 +25,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,21 +52,26 @@ func PkgDownloadResult(ctx context.Context, client *http.Client, arch, signedURL
 		if err != nil {
 			return "", err
 		}
+		// The URL is signed for GET, so HEAD is not an option; a ranged
+		// GET proves it is usable without paying egress for the whole
+		// artifact every minute.
+		req.Header.Set("Range", "bytes=0-0")
 		resp, err := client.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("download %s: %w", arch, err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 			return "", fmt.Errorf("%s signed download status %d", arch, resp.StatusCode)
 		}
-		n, err := io.Copy(io.Discard, resp.Body)
-		if err != nil {
+		// Bounded regardless of whether the backend honoured Range.
+		n, err := io.CopyN(io.Discard, resp.Body, 1)
+		if err != nil && !errors.Is(err, io.EOF) {
 			return "", fmt.Errorf("read %s body: %w", arch, err)
 		}
 		if n == 0 {
 			return "", fmt.Errorf("%s signed download returned zero bytes", arch)
 		}
-		return fmt.Sprintf("downloaded %s (%d bytes)", arch, n), nil
+		return fmt.Sprintf("signed download readable (%s)", arch), nil
 	})
 }

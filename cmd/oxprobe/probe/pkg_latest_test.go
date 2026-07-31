@@ -24,8 +24,10 @@
 package probe
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -229,26 +231,37 @@ func TestPkgLatestProbe(t *testing.T) {
 	}
 }
 
-// TestFirstChunkWriterStopsAfterFirstWrite pins the mechanism that keeps
-// the probe from pulling whole artifacts: cdnrelease aborts its copy loop
-// as soon as the writer errors.
-func TestFirstChunkWriterStopsAfterFirstWrite(t *testing.T) {
-	var w firstChunkWriter
-
-	n, err := w.Write(make([]byte, 32*1024))
-
-	require.Equal(t, 32*1024, n)
-	require.ErrorIs(t, err, errEnoughRead)
-	require.Equal(t, int64(32*1024), w.n)
-}
-
 // TestPkgLatestProbeDoesNotDrainArtifacts guards the bandwidth budget: the
 // probe runs every minute against artifacts that run to hundreds of
-// megabytes, so it must hang up after the first chunk rather than download
-// the bundle the way a real install does.
+// megabytes, so it must ask the bucket for a single byte rather than
+// download the bundle the way a real install does. Aborting an unranged
+// GET is not enough — those bytes are already in flight, and billed.
 func TestPkgLatestProbeDoesNotDrainArtifacts(t *testing.T) {
 	const size = 8 << 20
 	state := &pkgState{latest: "v1.1.2", blobs: []string{"v1.1.2"}, size: size}
+	srv, _ := newReleaseServer(releaseIndex{"darwin-arm64": {"rune-agent": state}})
+
+	p := PkgLatestProbe{
+		APIURL: mustURL(t, srv.URL),
+		Archs:  []string{"darwin-arm64"},
+		Client: srv.Client(),
+	}
+
+	require.Equal(t, oxapi.CheckOK, p.Run(context.Background()).Status)
+	srv.Close()
+
+	require.Equal(t, "bytes=0-0", state.rangeSeen())
+	require.LessOrEqual(t, state.bytesServed(), int64(1))
+}
+
+// TestPkgLatestProbeBoundsReadWhenRangeIgnored keeps the bandwidth budget
+// independent of bucket configuration: a backend that answers 200 with the
+// whole object must still not be drained.
+func TestPkgLatestProbeBoundsReadWhenRangeIgnored(t *testing.T) {
+	const size = 8 << 20
+	state := &pkgState{
+		latest: "v1.1.2", blobs: []string{"v1.1.2"}, size: size, ignoreRange: true,
+	}
 	srv, _ := newReleaseServer(releaseIndex{"darwin-arm64": {"rune-agent": state}})
 
 	p := PkgLatestProbe{
@@ -263,6 +276,34 @@ func TestPkgLatestProbeDoesNotDrainArtifacts(t *testing.T) {
 	require.Less(t, state.bytesServed(), int64(size/2))
 }
 
+// TestPkgLatestProbeKeepsSignedURLsOutOfPages guards the credential in the
+// signed URL: net/http renders the full request URL in url.Error, and that
+// error text lands in a PagerDuty payload.
+func TestPkgLatestProbeKeepsSignedURLsOutOfPages(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	dead.Close() // nothing is listening, so the artifact leg fails to dial
+
+	const secret = "x-goog-signature=deadbeef"
+	state := &pkgState{
+		latest: "v1.1.2", blobs: []string{"v1.1.2"},
+		signedURL: dead.URL + "/blob?" + secret,
+	}
+	srv, _ := newReleaseServer(releaseIndex{"darwin-arm64": {"rune-agent": state}})
+	defer srv.Close()
+
+	p := PkgLatestProbe{
+		APIURL: mustURL(t, srv.URL),
+		Archs:  []string{"darwin-arm64"},
+		Client: srv.Client(),
+	}
+
+	res := p.Run(context.Background())
+
+	require.Equal(t, oxapi.CheckFail, res.Status)
+	require.Contains(t, res.Detail, "v1.1.2: artifact: ")
+	require.NotContains(t, res.Detail, secret)
+}
+
 type pkgState struct {
 	latest   string
 	language bool
@@ -275,9 +316,15 @@ type pkgState struct {
 	// size, when set, makes the artifact handler stream that many bytes
 	// so a test can observe how much the probe actually pulls.
 	size int
+	// ignoreRange models a backend that answers a ranged GET with the
+	// whole object.
+	ignoreRange bool
+	// signedURL, when set, replaces the bundle leg's minted URL.
+	signedURL string
 
 	mu     sync.Mutex
 	served int64
+	rngHdr string
 }
 
 func published(version string) *pkgState {
@@ -318,6 +365,18 @@ func (s *pkgState) bytesServed() int64 {
 	return s.served
 }
 
+func (s *pkgState) recordRange(v string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rngHdr = v
+}
+
+func (s *pkgState) rangeSeen() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rngHdr
+}
+
 type releaseIndex map[string]map[string]*pkgState
 
 type downloadLog struct {
@@ -356,7 +415,15 @@ func newReleaseServer(idx releaseIndex) (*httptest.Server, *downloadLog) {
 				return
 			}
 			log.record(arch + "/" + pkg)
+			rng := r.Header.Get("Range")
+			st.recordRange(rng)
 			if st.empty {
+				return
+			}
+			if rng == "bytes=0-0" && !st.ignoreRange {
+				w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-0/%d", max(st.size, 1)))
+				w.WriteHeader(http.StatusPartialContent)
+				st.serve(w, 1)
 				return
 			}
 			st.serve(w, max(st.size, 1))
@@ -401,7 +468,7 @@ func newReleaseServer(idx releaseIndex) (*httptest.Server, *downloadLog) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"url": srv.URL + "/blob/" + arch + "/" + name + "/" + version,
+			"url": cmp.Or(st.signedURL, srv.URL+"/blob/"+arch+"/"+name+"/"+version),
 		})
 	}))
 	return srv, log

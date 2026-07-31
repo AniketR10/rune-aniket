@@ -64,11 +64,14 @@ Implemented:
   grammars into the set. A pinned list would silently stop covering packages
   published after it was written.
 
-  `cmd/oxprobe` runs this check through `cdnrelease.Manager`, the same client
-  the editor installs with, and hangs up after the first streamed chunk. Workers
-  cannot use that Go client, so this file reimplements the same URL shape, the
-  same list/bundle/artifact legs, and the same failure wording; the ranged GET
-  stands in for the early hang-up. Keep the two in step when either changes.
+  Both implementations fetch the artifact with a ranged `GET`
+  (`Range: bytes=0-0`) and read a single byte: that proves the bucket object is
+  readable without paying egress for a multi-hundred-MB artifact every minute.
+  `HEAD` is not an option because the URL is signed for `GET`. `cmd/oxprobe`
+  still lists packages through `cdnrelease.Manager`, the client the editor
+  installs with; workers cannot use that Go client, so this file reimplements
+  the same URL shape, the same list/bundle/artifact legs, and the same failure
+  wording. Keep the two in step when either changes.
 
 The ox-api report deliberately omits each layer's `critical` flag from JSON. If
 the server reports overall `fail`, the worker adds a critical synthetic `deep`

@@ -434,14 +434,21 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
     async def test_pkg_download_uses_signed_url(self):
         cfg = {"pkg_download_arch": "darwin-arm64"}
         report = {"signed_downloads": {"darwin-arm64": "https://signed.example/ada"}}
-        client = fake_client(fake_response(content=b"ada-bytes"))
+        client = fake_client(fake_response(status_code=206, content=b"a"))
 
         res = await entry.probe_pkg_download(client, cfg, report)
 
         self.assertEqual("pkg_download", res["layer"])
         self.assertEqual(entry.CHECK_OK, res["status"], res.get("detail"))
+        self.assertEqual("signed download readable (darwin-arm64)", res["detail"])
         self.assertEqual(
-            [("https://signed.example/ada", {})], client.get_calls
+            [
+                (
+                    "https://signed.example/ada",
+                    {"headers": {"range": "bytes=0-0"}},
+                )
+            ],
+            client.get_calls,
         )
 
     async def test_pkg_download_missing_url_fails(self):
