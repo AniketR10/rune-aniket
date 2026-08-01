@@ -1,0 +1,164 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package appmenu
+
+import (
+	"sync"
+
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// Item is a single entry in an application menu. The set of
+// implementations is closed: Command, Native and Separator.
+type Item interface {
+	item()
+}
+
+// Command is a menu item that dispatches a Rune command.
+type Command struct {
+	Title   string
+	Command string
+	Args    []string
+	// Key is the key combination the command is bound to. It is
+	// displayed as the item's accelerator and, when the user presses
+	// it, AppKit routes it here instead of to the window. The zero
+	// value renders the item without an accelerator.
+	Key term.KeyComb
+}
+
+// Native is a menu item wired to a standard AppKit action such as
+// "toggleFullScreen:". It is dispatched through the responder chain
+// rather than through Rune's handler tree.
+type Native struct {
+	Title    string
+	Selector string
+	Key      term.KeyComb
+}
+
+// Separator is a horizontal rule between menu items.
+type Separator struct{}
+
+func (Command) item()   {}
+func (Native) item()    {}
+func (Separator) item() {}
+
+// Menu is a top-level menu in the application menu bar.
+type Menu struct {
+	Title string
+	Items []Item
+}
+
+// menuSpec is the flattened, platform-neutral description handed to the
+// platform layer. Keeping the translation in Go leaves the Objective-C
+// layer free of any logic.
+type menuSpec struct {
+	title string
+	items []itemSpec
+}
+
+// itemSpec describes one menu entry. Exactly one of separator, tag or
+// selector is meaningful: a separator entry, a Rune command identified
+// by its callback tag, or a native AppKit selector.
+type itemSpec struct {
+	title     string
+	selector  string
+	keyEquiv  string
+	modifiers uint
+	tag       int
+	separator bool
+}
+
+var (
+	mu        sync.Mutex
+	commands  = map[int]Command{}
+	activated func(Command)
+)
+
+// Install replaces the application menu bar with menus. Selecting a
+// Command item invokes activate with that item; Native items are
+// dispatched by the platform. On platforms without a native menu bar
+// Install does nothing.
+//
+// It must be called on the main thread.
+func Install(menus []Menu, activate func(Command)) {
+	spec, byTag := buildSpec(menus)
+
+	mu.Lock()
+	commands = byTag
+	activated = activate
+	mu.Unlock()
+
+	installMenus(spec)
+}
+
+// activateTag runs the callback registered by the most recent Install
+// for the command item carrying tag.
+func activateTag(tag int) {
+	mu.Lock()
+	cmd, ok := commands[tag]
+	activate := activated
+	mu.Unlock()
+
+	if ok && activate != nil {
+		activate(cmd)
+	}
+}
+
+func buildSpec(menus []Menu) ([]menuSpec, map[int]Command) {
+	byTag := map[int]Command{}
+	// Tag 0 is AppKit's default and must not address a command.
+	nextTag := 1
+	specs := make([]menuSpec, 0, len(menus))
+
+	for _, menu := range menus {
+		spec := menuSpec{title: menu.Title, items: make([]itemSpec, 0, len(menu.Items))}
+		for _, item := range menu.Items {
+			switch it := item.(type) {
+			case Separator:
+				spec.items = append(spec.items, itemSpec{separator: true})
+			case Native:
+				equiv, mods, _ := keyEquivalent(it.Key)
+				spec.items = append(spec.items, itemSpec{
+					title:     it.Title,
+					selector:  it.Selector,
+					keyEquiv:  equiv,
+					modifiers: mods,
+				})
+			case Command:
+				equiv, mods, _ := keyEquivalent(it.Key)
+				byTag[nextTag] = it
+				spec.items = append(spec.items, itemSpec{
+					title:     it.Title,
+					keyEquiv:  equiv,
+					modifiers: mods,
+					tag:       nextTag,
+				})
+				nextTag++
+			}
+		}
+		specs = append(specs, spec)
+	}
+
+	return specs, byTag
+}

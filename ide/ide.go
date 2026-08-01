@@ -389,6 +389,14 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 	return i.workspaceHandler.openURI(file, true /* focus */)
 }
 
+// DispatchCommand runs cmd in the focused workspace, as if it had been
+// typed in the command prompt. Commands that exit the IDE cannot be run
+// this way: the exit signal is only observable on the handler event
+// path, so those must be triggered through their key binding.
+func (i *IDE) DispatchCommand(cmd string, args ...string) error {
+	return i.workspaceHandler.focusEx().dispatchCommand(cmd, args...)
+}
+
 // WaitWorkspaces blocks until every async addWorkspace launched by
 // the IDE has either installed its workspace or had its pending
 // reservation cleaned up, and every background workspace teardown

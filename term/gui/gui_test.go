@@ -413,6 +413,89 @@ func TestSetFontUnknownFamilyDoesNotPanic(t *testing.T) {
 		gui.resize(1200, 900, gui.fontManager.DeviceScale())
 	})
 }
+
+// stubWindowClosing installs a processWindowClosed that reports one
+// pending close request for ev, mirroring ebiten consuming the closing
+// flag on the first read of a frame.
+func stubWindowClosing(gui *GUI, ev term.Event) {
+	closing := true
+	gui.processWindowClosed = func() []term.Event {
+		if !closing {
+			return nil
+		}
+		closing = false
+		return []term.Event{ev}
+	}
+}
+
+func TestCloseRequest(t *testing.T) {
+	quit := term.Event{Type: term.EventKey, Mod: term.ModMeta, Ch: 'q'}
+
+	t.Run("publishes the configured event to the handler", func(t *testing.T) {
+		var got []term.Event
+		mock := mockHandler{
+			assertDraw:  func(term.Writer) {},
+			assertEvent: func(ev term.Event) (bool, bool) { got = append(got, ev); return false, true },
+		}
+		gui, _ := newTestGUI(t, &mock)
+		stubWindowClosing(gui, quit)
+
+		require.NoError(t, gui.Update())
+		assert.Equal(t, []term.Event{quit}, got)
+
+		// The request is consumed: a later tick must not republish it.
+		require.NoError(t, gui.Update())
+		assert.Equal(t, []term.Event{quit}, got)
+	})
+
+	t.Run("keeps running when the handler declines to exit", func(t *testing.T) {
+		mock := mockHandler{
+			assertDraw:  func(term.Writer) {},
+			assertEvent: func(term.Event) (bool, bool) { return false, true },
+		}
+		gui, _ := newTestGUI(t, &mock)
+		stubWindowClosing(gui, quit)
+
+		assert.NoError(t, gui.Update())
+	})
+
+	t.Run("exits when the handler exits", func(t *testing.T) {
+		mock := mockHandler{
+			assertDraw:  func(term.Writer) {},
+			assertEvent: func(term.Event) (bool, bool) { return true, true },
+		}
+		gui, _ := newTestGUI(t, &mock)
+		stubWindowClosing(gui, quit)
+
+		assert.ErrorIs(t, gui.Update(), ErrHandlerExited)
+	})
+
+	t.Run("without the option no close event is produced", func(t *testing.T) {
+		var got []term.Event
+		mock := mockHandler{
+			assertDraw:  func(term.Writer) {},
+			assertEvent: func(ev term.Event) (bool, bool) { got = append(got, ev); return false, true },
+		}
+		gui, _ := newTestGUI(t, &mock)
+
+		require.NoError(t, gui.Update())
+		assert.Empty(t, got)
+	})
+
+	t.Run("option installs the close request processor", func(t *testing.T) {
+		mock := mockHandler{
+			assertDraw:  func(term.Writer) {},
+			assertEvent: func(term.Event) (bool, bool) { return false, true },
+		}
+		gui, _ := newTestGUI(t, &mock)
+		require.NoError(t, WithCloseRequestEvent(quit)(gui))
+
+		require.True(t, gui.closingHandled)
+		require.NotNil(t, gui.processWindowClosed)
+		// Headless: no close request is pending.
+		assert.Empty(t, gui.processWindowClosed())
+	})
+}
 func newTestGUI(t *testing.T, mock *mockHandler) (*GUI, *mockInputManager) {
 	gui, err := New(mock)
 	require.NoError(t, err)

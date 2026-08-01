@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -1833,4 +1834,41 @@ func TestCommandKeyBindingLookupPrefersSingleChord(t *testing.T) {
 		assert.Equal(t, "<ctrl-x>0", lookup("windowclose", nil))
 	}
 	assert.Empty(t, c.errors)
+}
+
+func TestCommandKeyBindings(t *testing.T) {
+	t.Parallel()
+	cfg := config.MapConfig(map[string]any{
+		"command": map[string]any{
+			"key_bindings": map[string]any{
+				"<m-q>":        "quit",
+				"<m-,>":        "config",
+				"<c-x><c-c>":   "quit",
+				"<c-x>0":       "windowclose",
+				"<c-a-m-left>": "windowresize decrease width",
+				"<c-a-m-j>":    "windowresize decrease width",
+				"<m-d>":        []any{"openDoors 1", "large 2"},
+			},
+		},
+	})
+
+	for range 20 {
+		lookup := CommandKeyBindings(cfg)
+		assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'q'}, lookup["quit"])
+		assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: ','}, lookup["config"])
+		// Printable chords win over named-key aliases.
+		assert.Equal(t, term.KeyComb{Mod: term.ModCtrlAltMeta, Ch: 'j'},
+			lookup["windowresize decrease width"])
+		// Every command line of a multi-command binding maps to the key.
+		assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'd'}, lookup["openDoors 1"])
+		assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'd'}, lookup["large 2"])
+		// A two-key sequence cannot be a menu accelerator.
+		assert.NotContains(t, lookup, "windowclose")
+		assert.NotContains(t, lookup, "tabclose")
+	}
+}
+
+func TestCommandKeyBindingsWithoutCommandConfig(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, CommandKeyBindings(config.MapConfig(map[string]any{})))
 }

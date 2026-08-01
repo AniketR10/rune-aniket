@@ -472,15 +472,21 @@ func (c ideConfig) debuggerArgsTemplate(
 }
 
 func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
-	ret := make(map[handler.Sequence][][]string)
 	cfg, ok := c.command()
 	if !ok {
-		return ret
+		return make(map[handler.Sequence][][]string)
 	}
+	return parseCommandKeyMappings(cfg, c.errors)
+}
+
+func parseCommandKeyMappings(
+	cfg config.Config, errs map[string]error,
+) map[handler.Sequence][][]string {
+	ret := make(map[handler.Sequence][][]string)
 	m, err := cfg.GetMap("key_bindings")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["key_bindings"] = err
+			errs["key_bindings"] = err
 		}
 		return ret
 	}
@@ -490,7 +496,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 		if err != nil {
 			seq.First, err = term.ParseKey(k)
 			if err != nil {
-				c.errors["key_bindings."+k] = err
+				errs["key_bindings."+k] = err
 				continue
 			}
 		}
@@ -500,7 +506,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 			for _, ifc := range cmdsAndArgsSliceIfc {
 				cmdAndArgs, ok := ifc.(string)
 				if !ok {
-					c.errors["key_bindings."+k] = errors.New(
+					errs["key_bindings."+k] = errors.New(
 						"expected space-separated multi-word " +
 							"string or []string but found unknown type")
 					cmdsAndArgs = nil
@@ -515,7 +521,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 		} else {
 			cmd, ok := v.(string)
 			if !ok {
-				c.errors["key_bindings."+k] = errors.New(
+				errs["key_bindings."+k] = errors.New(
 					"expected space-separated multi-word string or " +
 						"[]string but found unknown type")
 				continue
@@ -526,6 +532,33 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 	}
 
 	return ret
+}
+
+// CommandKeyBindings inverts cfg's `command.key_bindings` into a map
+// from full command line ("quit", "echo hello") to the single chord
+// bound to it. Two-key sequences are omitted: a native menu accelerator
+// can only be a single chord. Printable chords win over named-key
+// aliases, then lexical order makes the choice stable.
+func CommandKeyBindings(cfg config.Config) map[string]term.KeyComb {
+	cmdCfg, err := cfg.GetConfig("command")
+	if err != nil {
+		return nil
+	}
+	mappings := parseCommandKeyMappings(cmdCfg, map[string]error{})
+
+	lookup := make(map[string]term.KeyComb)
+	for _, seq := range sortedCommandKeySequences(mappings) {
+		if seq.Last != (term.KeyComb{}) {
+			continue
+		}
+		for _, cmdAndArgs := range mappings[seq] {
+			line := strings.Join(cmdAndArgs, " ")
+			if _, ok := lookup[line]; !ok {
+				lookup[line] = seq.First
+			}
+		}
+	}
+	return lookup
 }
 
 func sortedCommandKeySequences(mappings map[handler.Sequence][][]string) []handler.Sequence {

@@ -52,6 +52,8 @@ import (
 	"unstable.build/go-tui/ide/ideupgrade"
 	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/term/gui"
+	"unstable.build/go-tui/term/gui/appmenu"
+	"unstable.build/go-tui/term/gui/openpanel"
 )
 
 type bootstrapHandler struct {
@@ -459,7 +461,85 @@ func (b *bootstrapHandler) performSwap() error {
 		}
 		b.preIDE = nil
 	}
+	b.publishAppMenuInstall()
 	return errors.Join(setupErr, closeErr)
+}
+
+// installAppMenu replaces the application menu bar. It must run on the
+// main thread, so callers publish it as an EventInterrupt rather than
+// calling it directly.
+func (b *bootstrapHandler) installAppMenu() {
+	appmenu.Install(appMenus(appMenuKeyBindings(b.config())), b.activateAppMenuCommand)
+}
+
+// publishAppMenuInstall schedules a menu (re)install on the main
+// thread. Bindings change when the bootstrap wizard writes the chosen
+// editor preset, so the menu is rebuilt after the IDE swap.
+func (b *bootstrapHandler) publishAppMenuInstall() {
+	b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: b.installAppMenu})
+}
+
+func (b *bootstrapHandler) activateAppMenuCommand(cmd appmenu.Command) {
+	// The panel table takes precedence over chord replay: a menu click
+	// must open the native panel even when the command is bound.
+	if opts, ok := appMenuPanelCommands[cmd.Command]; ok {
+		b.activateOpenPanel(cmd, opts)
+		return
+	}
+	// Replaying the chord runs the command through the full handler
+	// chain, so authorization, macros, tutorials and the confirm-exit
+	// prompt behave exactly as they do for a real keypress.
+	if cmd.Key != (term.KeyComb{}) {
+		b.publishEvent(term.Event{
+			Type: term.EventKey,
+			Mod:  cmd.Key.Mod,
+			Key:  cmd.Key.Key,
+			Ch:   cmd.Key.Ch,
+		})
+		return
+	}
+	b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
+		if b.realIDE == nil {
+			// The wizard is still writing the configuration this
+			// command would act on.
+			_, _ = b.notifications().Notify(browserapi.LevelWarn,
+				"%s is not available during setup", cmd.Title)
+			return
+		}
+		if err := b.realIDE.DispatchCommand(cmd.Command, cmd.Args...); err != nil {
+			_, _ = b.notifications().Notify(browserapi.LevelError,
+				"%s: %v", cmd.Title, err)
+		}
+	}})
+}
+
+// activateOpenPanel collects cmd's path argument through the native
+// open panel and dispatches the command once per selected path. It
+// runs on the main thread — the menu callback — which is also where
+// the panel must be shown.
+func (b *bootstrapHandler) activateOpenPanel(cmd appmenu.Command, opts openpanel.Options) {
+	if b.realIDE == nil {
+		// The wizard is still writing the configuration this
+		// command would act on.
+		b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
+			_, _ = b.notifications().Notify(browserapi.LevelWarn,
+				"%s is not available during setup", cmd.Title)
+		}})
+		return
+	}
+	showOpenPanel(opts, func(paths []string) {
+		if len(paths) == 0 {
+			return
+		}
+		b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
+			for _, path := range paths {
+				if err := b.realIDE.DispatchCommand(cmd.Command, path); err != nil {
+					_, _ = b.notifications().Notify(browserapi.LevelError,
+						"%s: %v", cmd.Title, err)
+				}
+			}
+		}})
+	})
 }
 
 func (b *bootstrapHandler) writePresetConfig() error {

@@ -776,6 +776,7 @@ func runGUI(
 			return 1
 		}
 	}
+	root.publishAppMenuInstall()
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {
 		fmt.Printf("%s", err)
@@ -814,6 +815,7 @@ func buildGUIOptions(
 		gui.WithLocker(mu),
 		gui.WithPrintFPS(printFPS),
 		gui.WithKeyMapping(getGUIKeyMapping(b, cfg)),
+		gui.WithCloseRequestEvent(quitEvent(appMenuKeyBindings(cfg))),
 	}
 }
 

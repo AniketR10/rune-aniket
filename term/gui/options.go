@@ -26,6 +26,7 @@ package gui
 import (
 	"sync"
 
+	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 )
@@ -159,6 +160,26 @@ func WithPublishChannel(ch chan term.Event) Option {
 func WithLocker(mu sync.Locker) Option {
 	return func(g *GUI) error {
 		g.mu = mu
+		return nil
+	}
+}
+
+// WithCloseRequestEvent routes window close requests (the window's
+// close button, or the platform asking the application to quit) to the
+// handler as ev instead of ending the run loop, so the handler decides
+// whether to exit. Without it, a close request tears the window down
+// immediately.
+func WithCloseRequestEvent(ev term.Event) Option {
+	return func(g *GUI) error {
+		g.closingHandled = true
+		// ebiten consumes the closing flag on the first read of a
+		// frame, so each request yields the event exactly once.
+		g.processWindowClosed = func() []term.Event {
+			if ebiten.IsWindowBeingClosed() {
+				return []term.Event{ev}
+			}
+			return nil
+		}
 		return nil
 	}
 }

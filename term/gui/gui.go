@@ -108,6 +108,12 @@ type GUI struct {
 	lastPositionY int
 	iteration     int64
 	deviceScale   float64
+
+	// processWindowClosed turns a pending window close request into
+	// events for the handler. WithCloseRequestEvent installs it; it
+	// defaults to a no-op, leaving ebiten's default behavior in place.
+	processWindowClosed func() []term.Event
+	closingHandled      bool
 }
 
 // New allocates storage for a new GUI and initializes it with the given
@@ -147,6 +153,9 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		if err := option(ret); err != nil {
 			return nil, fmt.Errorf("option: %w", err)
 		}
+	}
+	if ret.processWindowClosed == nil {
+		ret.processWindowClosed = func() []term.Event { return nil }
 	}
 
 	// clone original values for restoration
@@ -192,6 +201,9 @@ func (g *GUI) Run(title string) error {
 		ebiten.SetWindowBackgroundBlur(g.bgBlurRadius)
 	}
 	ebiten.SetWindowDecorations(ebiten.DecorationsButtonsOnly)
+	if g.closingHandled {
+		ebiten.SetWindowClosingHandled(true)
+	}
 
 	gameOpts := g.buildRunGameOptions()
 	return ebiten.RunGameWithOptions(g, &gameOpts)
@@ -240,6 +252,7 @@ func (g *GUI) NeedsRender() bool {
 func (g *GUI) Update() error {
 	g.pendingEvents = append(g.pendingEvents, g.mouse.processMouse()...)
 	g.pendingEvents = g.input.processEvents(g.pendingEvents)
+	g.pendingEvents = append(g.pendingEvents, g.processWindowClosed()...)
 	needsDraw := g.needsDraw
 
 	var interruptPending bool
