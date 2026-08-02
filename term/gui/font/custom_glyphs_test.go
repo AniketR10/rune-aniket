@@ -29,7 +29,39 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/image/math/fixed"
 )
+
+// TestCustomGlyphRendersToCPUMask guards that custom-rendered runes
+// (box drawing, blocks, shades, braille) rasterize into a CPU image and
+// never a GPU-backed *ebiten.Image. Returning an ebiten image forced a
+// ReadPixels round-trip during glyph rasterization, which stalls the
+// pipeline per cache miss and panics under a headless graphics driver.
+func TestCustomGlyphRendersToCPUMask(t *testing.T) {
+	m, err := NewManager(0, 0)
+	assert.NoError(t, err)
+	face := m.RegularFontFace()
+
+	// '─' (U+2500) is a full-width horizontal line: it must fill exactly
+	// the stroke row across the whole cell.
+	dot := fixed.Point26_6{X: 0, Y: fixed.I(20)}
+	_, mask, _, _, ok := face.Glyph(dot, '─')
+	assert.True(t, ok)
+
+	_, isRGBA := mask.(*image.RGBA)
+	assert.Truef(t, isRGBA, "custom glyph mask type = %T, want *image.RGBA", mask)
+
+	coverage := 0
+	b := mask.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := mask.At(x, y).RGBA(); a != 0 {
+				coverage++
+			}
+		}
+	}
+	assert.Positivef(t, coverage, "box-drawing glyph rendered no pixels")
+}
 
 func TestPlusGlyphBounds(t *testing.T) {
 	suite := []struct {

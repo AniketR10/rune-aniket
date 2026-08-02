@@ -27,12 +27,16 @@ import (
 	"image"
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
 
 var _ font.Face = (*custom)(nil)
+
+// clearRGBA zeroes an RGBA glyph scratch buffer for reuse across glyphs.
+func clearRGBA(img *image.RGBA) {
+	clear(img.Pix)
+}
 
 // handles special runes used to build (T)UIs for
 // pixel perfect rendering.
@@ -45,8 +49,8 @@ type custom struct {
 	overlapY      int
 
 	// re-use allocs
-	mask    *ebiten.Image
-	altMask *ebiten.Image
+	mask    *image.RGBA
+	altMask *image.RGBA
 }
 
 func newCustomFace(
@@ -56,8 +60,8 @@ func newCustomFace(
 ) *custom {
 	w := int(math.Max(width, 1))
 	h := int(math.Max(height, 1))
-	mask := ebiten.NewImage(w, h)
-	altMask := ebiten.NewImage(w, h)
+	mask := image.NewRGBA(image.Rect(0, 0, w, h))
+	altMask := image.NewRGBA(image.Rect(0, 0, w, h))
 	return &custom{
 		boldFont: bold,
 		mask:     mask,
@@ -76,8 +80,8 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 	dr image.Rectangle, mask image.Image,
 	maskp image.Point, advance fixed.Int26_6, ok bool,
 ) {
-	m.mask.Clear()
-	m.altMask.Clear()
+	clearRGBA(m.mask)
+	clearRGBA(m.altMask)
 
 	dr = image.Rect(
 		dot.X.Floor(),
@@ -778,7 +782,6 @@ func (m *custom) GlyphAdvance(r rune) (
 }
 
 func (m *custom) Close() (ret error) {
-	m.mask.Deallocate()
 	// it's assumed that m.face is closed elsewhere
 	return
 }

@@ -26,9 +26,8 @@ package font
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"math"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type style uint8
@@ -111,23 +110,33 @@ func (m *custom) arcPlusGlyph(
 
 func (m *custom) drawArcPlusGlyphBottomLeft(bounds image.Rectangle) {
 	m.drawArcPlusGlyphTopLeft(m.altMask, bounds)
-
-	var opt ebiten.DrawImageOptions
-	opt.GeoM.Scale(1, -1)
-	opt.GeoM.Translate(0, float64(bounds.Max.Y-bounds.Min.Y))
-	m.mask.DrawImage(m.altMask, &opt)
+	flipVerticalInto(m.mask, m.altMask, bounds.Max.Y-bounds.Min.Y)
 }
 
 func (m *custom) drawArcPlusGlyphBottomRight(bounds image.Rectangle) {
 	m.drawArcPlusGlyphTopRight(m.altMask, bounds)
-
-	var opt ebiten.DrawImageOptions
-	opt.GeoM.Scale(1, -1)
-	opt.GeoM.Translate(0, float64(bounds.Max.Y-bounds.Min.Y))
-	m.mask.DrawImage(m.altMask, &opt)
+	flipVerticalInto(m.mask, m.altMask, bounds.Max.Y-bounds.Min.Y)
 }
 
-func (m *custom) drawArcPlusGlyphTopRight(image *ebiten.Image, bounds image.Rectangle) {
+// flipVerticalInto copies src into dst mirrored across the horizontal
+// axis of a height-tall region, matching the previous ebiten
+// Scale(1,-1)+Translate(0,height) blit used for the bottom arc glyphs.
+// Source row y lands on dst row height-1-y; only opaque source pixels
+// are written so the reused dst scratch keeps its cleared background.
+func flipVerticalInto(dst, src *image.RGBA, height int) {
+	b := src.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		dy := height - 1 - y
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := src.At(x, y).RGBA(); a == 0 {
+				continue
+			}
+			dst.Set(x, dy, src.At(x, y))
+		}
+	}
+}
+
+func (m *custom) drawArcPlusGlyphTopRight(dst draw.Image, bounds image.Rectangle) {
 	strokeWidth := m.strokeWidthFromMask(bounds, styleSingle)
 
 	xv := centerX(bounds)
@@ -150,7 +159,7 @@ func (m *custom) drawArcPlusGlyphTopRight(image *ebiten.Image, bounds image.Rect
 			y = math.Min(math.Max(y, float64(bounds.Min.Y)), hBoundsTo-1)
 			x = centerToX(x, bounds, strokeWidth)
 			y = centerFromY(y, bounds, strokeWidth)
-			image.Set(int(x), int(y), colorFill)
+			dst.Set(int(x), int(y), colorFill)
 		}
 
 		quarter = ry2 / math.Sqrt(rx2+ry2)
@@ -160,16 +169,16 @@ func (m *custom) drawArcPlusGlyphTopRight(image *ebiten.Image, bounds image.Rect
 			x = float64(bounds.Max.X) - (x + 1 - float64(bounds.Min.X))
 			x = centerToX(x, bounds, strokeWidth)
 			y = centerFromY(y, bounds, strokeWidth)
-			image.Set(int(x), int(y), colorFill)
+			dst.Set(int(x), int(y), colorFill)
 		}
 	}
 
 	// ensure the part closer to the edge of the cell is filled
-	m.drawVerticalLine(bounds, image, xv, float64(bounds.Min.Y),
+	m.drawVerticalLine(bounds, dst, xv, float64(bounds.Min.Y),
 		math.Max(1, float64(strokeWidth)/2), strokeWidth)
 }
 
-func (m *custom) drawArcPlusGlyphTopLeft(image *ebiten.Image, bounds image.Rectangle) {
+func (m *custom) drawArcPlusGlyphTopLeft(dst draw.Image, bounds image.Rectangle) {
 	strokeWidth := m.strokeWidthFromMask(bounds, styleSingle)
 
 	xv := centerX(bounds)
@@ -189,7 +198,7 @@ func (m *custom) drawArcPlusGlyphTopLeft(image *ebiten.Image, bounds image.Recta
 			y := ry1 * math.Sqrt(1-x*x/rx2)
 			x := math.Min(math.Max(x+1, float64(bounds.Min.X)), rx1)
 			y = math.Min(math.Max(y, float64(bounds.Min.Y)), hBoundsTo-1)
-			image.Set(int(x), int(y), colorFill)
+			dst.Set(int(x), int(y), colorFill)
 		}
 
 		quarter = ry2 / math.Sqrt(rx2+ry2)
@@ -197,14 +206,14 @@ func (m *custom) drawArcPlusGlyphTopLeft(image *ebiten.Image, bounds image.Recta
 			x := rx1 * math.Sqrt(1-y*y/ry2)
 			y := math.Min(math.Max(y, float64(bounds.Min.Y)), ry1)
 			x = math.Min(math.Max(x+1, float64(bounds.Min.X)), vBoundsTo-1)
-			image.Set(int(x), int(y), colorFill)
+			dst.Set(int(x), int(y), colorFill)
 		}
 	}
 
 	// ensure the part closer to the edge of the cell is filled
-	m.drawHorizontalLine(bounds, image, float64(bounds.Min.X), yh,
+	m.drawHorizontalLine(bounds, dst, float64(bounds.Min.X), yh,
 		math.Max(1, float64(strokeWidth)/2), strokeWidth)
-	m.drawVerticalLine(bounds, image, xv, float64(bounds.Min.Y),
+	m.drawVerticalLine(bounds, dst, xv, float64(bounds.Min.Y),
 		math.Max(1, float64(strokeWidth)/2), strokeWidth)
 }
 
@@ -337,24 +346,24 @@ func (m *custom) blockGlyphOuterSquare(
 }
 
 func (m *custom) drawVerticalLine(
-	bounds image.Rectangle, image *ebiten.Image,
+	bounds image.Rectangle, dst draw.Image,
 	x, y, size float64, width int,
 ) {
 	startx := centerFromX(x, bounds, width)
 	endx := centerToX(x, bounds, width)
-	m.drawRect(bounds, image, startx, y, endx-startx, size, colorFill)
+	m.drawRect(bounds, dst, startx, y, endx-startx, size, colorFill)
 }
 
 func (m *custom) drawHorizontalLine(
-	bounds image.Rectangle, image *ebiten.Image,
+	bounds image.Rectangle, dst draw.Image,
 	x, y, size float64, width int) {
 	starty := centerFromY(y, bounds, width)
 	endy := centerToY(y, bounds, width)
-	m.drawRect(bounds, image, x, starty, size, endy-starty, colorFill)
+	m.drawRect(bounds, dst, x, starty, size, endy-starty, colorFill)
 }
 
 func (m *custom) drawRect(
-	bounds image.Rectangle, image *ebiten.Image,
+	bounds image.Rectangle, dst draw.Image,
 	x, y, width, height float64, color color.RGBA,
 ) {
 	startx := int(x)
@@ -365,7 +374,7 @@ func (m *custom) drawRect(
 
 	for y := starty; y <= endy; y++ {
 		for x := startx; x <= endx; x++ {
-			image.Set(x, y, color)
+			dst.Set(x, y, color)
 		}
 	}
 }

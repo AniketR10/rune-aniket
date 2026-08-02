@@ -87,7 +87,7 @@ func benchmarkRendererContent(
 	cells := make([][]term.Cell, height)
 	for i := 0; i < height; i++ {
 		cells[i] = make([]term.Cell, width)
-		for j := 0; j < height; j++ {
+		for j := 0; j < width; j++ {
 			cells[i][j].Ch = []rune(strconv.Itoa(i))[0]
 			cells[i][j].Fg = term.NewColor(255, 0, 255)
 			cells[i][j].Bg = term.NewColor(0, 0, 255)
@@ -123,7 +123,7 @@ func benchmarkRenderLigatures(b *testing.B, pixelsWidth, pixelsHeight int) {
 	cells := make([][]term.Cell, height)
 	for i := 0; i < height; i++ {
 		cells[i] = make([]term.Cell, width)
-		for j := 0; j < height; j++ {
+		for j := 0; j < width; j++ {
 			if j%2 == 0 {
 				cells[i][j].Ch = '='
 			} else {

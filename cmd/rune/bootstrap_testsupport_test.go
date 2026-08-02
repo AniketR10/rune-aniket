@@ -44,23 +44,29 @@ import (
 
 type bootstrapFlagOverrides struct {
 	httpAddress    string
+	grpcAddress    string
 	dataPath       string
 	configPath     string
 	websiteAddress string
 }
 
-func overrideBootstrapFlags(t *testing.T, o bootstrapFlagOverrides) func() {
+func overrideBootstrapFlags(t testing.TB, o bootstrapFlagOverrides) func() {
 	t.Helper()
 	prevHTTP := *flagHTTPAddress
+	prevGRPC := *flagGRPCAddress
 	prevData := *flagDataPath
 	prevConfig := *flagConfigPath
 	prevWebsite := *flagWebsiteAddress
 	*flagHTTPAddress = o.httpAddress
+	if o.grpcAddress != "" {
+		*flagGRPCAddress = o.grpcAddress
+	}
 	*flagDataPath = o.dataPath
 	*flagConfigPath = o.configPath
 	*flagWebsiteAddress = o.websiteAddress
 	return func() {
 		*flagHTTPAddress = prevHTTP
+		*flagGRPCAddress = prevGRPC
 		*flagDataPath = prevData
 		*flagConfigPath = prevConfig
 		*flagWebsiteAddress = prevWebsite

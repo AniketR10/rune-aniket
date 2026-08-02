@@ -55,6 +55,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cmd/rune/crashreport"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/component/shader"
@@ -731,31 +732,14 @@ func runGUI(
 		cfg = config.NopConfig()
 	}
 
-	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)
-	themes := getGUIColorThemes(browser, cfg)
 	transparentWindow := getGUITransparentWindow(browser, cfg)
 
 	if envErr != nil {
 		_, _ = browser.Notify(browserapi.LevelError, "%s", envErr)
 	}
 
-	options := []gui.Option{
-		gui.WithColorThemes(defaultColorTheme, themes),
-		gui.WithFontDPI(getGUIFontDPI(browser, cfg)),
-		gui.WithFontSize(getGUIFontSize(browser, cfg)),
-		gui.WithFontFamily(getGUIFontFamily(browser, cfg)),
-		gui.WithColumnWidthOffset(getGUIColumnWidthOffset(browser, cfg)),
-		gui.WithLineHeightOffset(getGUILineHeightOffset(browser, cfg)),
-		gui.WithScrollMultiplier(getGUIScrollMultiplier(browser, cfg)),
-		gui.WithRenderOffset(0, 10),
-		gui.WithLigatures(getGUILigatures(browser, cfg)),
-		gui.WithTransparentWindow(transparentWindow),
-		gui.WithBackgroundBlur(getGUIBackgroundBlur(browser, cfg)),
-		gui.WithPublishChannel(publishChan),
-		gui.WithLocker(mu),
-		gui.WithPrintFPS(*flagFPS),
-		gui.WithKeyMapping(getGUIKeyMapping(browser, cfg)),
-	}
+	options := buildGUIOptions(browser, cfg, transparentWindow,
+		publishChan, mu, *flagFPS)
 
 	storage := root.storage
 	width, height, ok := getLastSize(storage)
@@ -804,6 +788,33 @@ func runGUI(
 	saveLastSize(storage, g)
 	saveLastPosition(storage, g)
 	return 0
+}
+
+// buildGUIOptions builds the gui.Option list for the production GUI
+// runtime from the gui config section. It is shared between runGUI and
+// the GUI benchmark harness so benchmarks measure the exact production
+// GUI wiring.
+func buildGUIOptions(
+	b browser.Browser, cfg config.Config, transparentWindow bool,
+	publishChan chan term.Event, mu sync.Locker, printFPS bool,
+) []gui.Option {
+	return []gui.Option{
+		gui.WithColorThemes(getGUIDefaultColorTheme(b, cfg), getGUIColorThemes(b, cfg)),
+		gui.WithFontDPI(getGUIFontDPI(b, cfg)),
+		gui.WithFontSize(getGUIFontSize(b, cfg)),
+		gui.WithFontFamily(getGUIFontFamily(b, cfg)),
+		gui.WithColumnWidthOffset(getGUIColumnWidthOffset(b, cfg)),
+		gui.WithLineHeightOffset(getGUILineHeightOffset(b, cfg)),
+		gui.WithScrollMultiplier(getGUIScrollMultiplier(b, cfg)),
+		gui.WithRenderOffset(0, 10),
+		gui.WithLigatures(getGUILigatures(b, cfg)),
+		gui.WithTransparentWindow(transparentWindow),
+		gui.WithBackgroundBlur(getGUIBackgroundBlur(b, cfg)),
+		gui.WithPublishChannel(publishChan),
+		gui.WithLocker(mu),
+		gui.WithPrintFPS(printFPS),
+		gui.WithKeyMapping(getGUIKeyMapping(b, cfg)),
+	}
 }
 
 // applyShellPATHAndGUIEnv applies the login-shell PATH resolution and gui.env.

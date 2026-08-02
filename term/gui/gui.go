@@ -82,6 +82,7 @@ type GUI struct {
 	bgBlurRadius      int
 	enableTransparent bool
 	enableLigatures   bool
+	forceFullRepaint  bool
 	renderOffset      image.Point
 	cursorAttributes  term.Attributes
 	defaultAttr       term.Attributes
@@ -225,6 +226,14 @@ func (g *GUI) Draw(screen *ebiten.Image) {
 	if g.printFPS {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf("FPS: %0.2f", ebiten.ActualFPS()))
 	}
+}
+
+// NeedsRender reports whether the next Draw will repaint the screen,
+// i.e. the handler produced new content since the last render. It is
+// false on an idle frame that Draw would early-out. Draw clears the flag
+// after repainting.
+func (g *GUI) NeedsRender() bool {
+	return g.needsRender
 }
 
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
@@ -548,6 +557,7 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 	g.renderer = newRenderer(g.width, g.height, g.deviceScale,
 		g.fontManager, g.bgOpacity, g.fgOpacity, g.enableLigatures,
 		g.cursorAttributes, g.defaultAttr)
+	g.renderer.forceFullRepaint = g.forceFullRepaint
 	g.needsDraw = true
 }
 

@@ -24,6 +24,7 @@
 package gui
 
 import (
+	"image"
 	"image/color"
 	"math"
 
@@ -42,27 +43,6 @@ const (
 )
 
 var (
-	// NOTE: if you change this, you must manually test that white/light themes
-	// look good, that the initial shader looks good, and that when opacity
-	// is 0.4 or less things look ok.
-	defaultDrawTextOptions = ebiten.DrawImageOptions{
-		Blend: ebiten.Blend{
-			BlendFactorSourceRGB:      ebiten.BlendFactorOne,
-			BlendFactorDestinationRGB: ebiten.BlendFactorOneMinusSourceAlpha,
-			BlendOperationRGB:         ebiten.BlendOperationAdd,
-			BlendOperationAlpha:       ebiten.BlendOperationMax,
-		},
-	}
-	backgroundRuneDrawTextOptions = ebiten.DrawImageOptions{
-		Blend: ebiten.Blend{
-			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
-			BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
-			BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
-			BlendFactorDestinationAlpha: ebiten.BlendFactorOne,
-			BlendOperationRGB:           ebiten.BlendOperationAdd,
-			BlendOperationAlpha:         ebiten.BlendOperationAdd,
-		},
-	}
 	frameToScreenOptions = ebiten.DrawImageOptions{
 		Blend: ebiten.Blend{
 			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
@@ -102,6 +82,35 @@ type renderer struct {
 	bufPath     drawrect.Path
 	bufVertices []ebiten.Vertex
 	bufIndices  []uint16
+
+	// rectBatch accumulates all background rectangles and underline
+	// strokes for a repaint so they issue as a single DrawTriangles,
+	// separated from the glyph pass to let ebiten merge each class.
+	rectBatch drawrect.Batch
+
+	// Row-damage tracking. prevCells holds the grid drawn into frame
+	// on the previous Draw; only rows that differ from it (plus the
+	// old and new cursor rows and neighbours of vertical-offset rows)
+	// are repainted into the persistent frame. prevValid is false
+	// until the first full paint and after any full invalidation
+	// (resize / font / theme / opacity / render-offset change), which
+	// forces the next Draw to repaint every row.
+	prevCells  [][]term.Cell
+	prevCursor cursorState
+	prevValid  bool
+	dirtyRows  []bool
+
+	// forceFullRepaint disables row-damage tracking: every Draw repaints
+	// the whole frame. It exists so the differential correctness harness
+	// can compare the damage-tracked path against the reference
+	// full-repaint path in the same process, and as a runtime fallback.
+	forceFullRepaint bool
+}
+
+type cursorState struct {
+	pos   term.Coordinates
+	style term.CursorStyle
+	show  bool
 }
 
 type fontFace struct {
@@ -169,25 +178,198 @@ func (r *renderer) Draw(
 	cursorStyle term.CursorStyle,
 	offsetX, offsetY float64,
 ) {
-	// fill default background so we can skip drawing individual
-	// cells with default background.
-	r.frame.Fill(r.bgColor)
-	r.renderContent(r.frame, cells)
+	cursor := cursorState{pos: cursorPos, style: cursorStyle, show: drawCursor}
+	full := r.computeDirtyRows(cells, cursor)
+	if full {
+		// fill default background so we can skip drawing individual
+		// cells with default background.
+		r.frame.Fill(r.bgColor)
+		r.renderContent(r.frame, cells)
+	} else {
+		r.repaintRows(cells)
+	}
 	if drawCursor {
 		r.renderCursor(r.frame, cells, cursorPos, cursorStyle)
 	}
 	screen.DrawImage(r.frame, &frameToScreenOptions)
+	r.snapshot(cells, cursor)
 }
 
+// computeDirtyRows marks r.dirtyRows for the rows that must be
+// repainted this frame and reports whether the whole frame must be
+// repainted (full). A full repaint is required on the first paint
+// after an invalidation and whenever the grid dimensions change.
+// Otherwise a row is dirty when its cells differ from the previous
+// frame, when it is the old or new cursor row, or when it neighbours a
+// row carrying a vertical render offset (those cells paint half a cell
+// outside their own row).
+func (r *renderer) computeDirtyRows(cells [][]term.Cell, cursor cursorState) (full bool) {
+	height := len(cells)
+	if r.forceFullRepaint || !r.prevValid || len(r.prevCells) != height {
+		return true
+	}
+	if cap(r.dirtyRows) < height {
+		r.dirtyRows = make([]bool, height)
+	}
+	r.dirtyRows = r.dirtyRows[:height]
+	for y := range r.dirtyRows {
+		r.dirtyRows[y] = false
+	}
+
+	for y := range height {
+		if len(cells[y]) != len(r.prevCells[y]) {
+			return true
+		}
+		if !rowsEqual(cells[y], r.prevCells[y]) {
+			r.markDirty(y, height)
+		}
+	}
+
+	// Repaint the old and new cursor rows so a moved or hidden cursor
+	// is erased and redrawn even when the underlying cells are equal.
+	if r.prevCursor.show {
+		r.markDirty(r.prevCursor.pos.Y, height)
+	}
+	if cursor.show {
+		r.markDirty(cursor.pos.Y, height)
+	}
+	return false
+}
+
+// markDirty flags row y and, because vertical-offset cells paint into
+// the adjacent row, its immediate neighbours.
+func (r *renderer) markDirty(y, height int) {
+	for dy := y - 1; dy <= y+1; dy++ {
+		if dy >= 0 && dy < height {
+			r.dirtyRows[dy] = true
+		}
+	}
+}
+
+// clearRow resets a single row strip of the frame to the default
+// background so renderRow can repaint it, mirroring the whole-frame
+// Fill used on a full repaint.
+func (r *renderer) clearRow(y int) {
+	top := int(math.Floor(r.fontManager.PixelY(y)))
+	bottom := int(math.Ceil(r.fontManager.PixelY(y) + r.font.CellSize.Y))
+	w, h := r.frame.Bounds().Dx(), r.frame.Bounds().Dy()
+	if top < 0 {
+		top = 0
+	}
+	if bottom > h {
+		bottom = h
+	}
+	if top >= bottom {
+		return
+	}
+	strip := r.frame.SubImage(image.Rect(0, top, w, bottom)).(*ebiten.Image)
+	strip.Fill(r.bgColor)
+}
+
+// snapshot records the grid and cursor drawn this frame so the next
+// Draw can diff against it. The cell grid is copied row by row into a
+// reused backing store; the pointer-valued Combining field is compared
+// by identity in rowsEqual, so a conservative copy is sufficient.
+func (r *renderer) snapshot(cells [][]term.Cell, cursor cursorState) {
+	if cap(r.prevCells) < len(cells) {
+		r.prevCells = make([][]term.Cell, len(cells))
+	}
+	r.prevCells = r.prevCells[:len(cells)]
+	for y := range cells {
+		if cap(r.prevCells[y]) < len(cells[y]) {
+			r.prevCells[y] = make([]term.Cell, len(cells[y]))
+		}
+		r.prevCells[y] = r.prevCells[y][:len(cells[y])]
+		copy(r.prevCells[y], cells[y])
+	}
+	r.prevCursor = cursor
+	r.prevValid = true
+}
+
+// rowsEqual reports whether two cell rows are identical. Cells are
+// compared field by field; Combining is compared by pointer identity,
+// which never yields a false "equal" (a genuinely changed combining
+// sequence gets a fresh backing slice from the writer), so at worst a
+// row is conservatively repainted.
+func rowsEqual(a, b []term.Cell) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// renderPass selects which class of geometry a single pass over the
+// cells emits. Separating solid geometry from glyphs lets ebiten merge
+// each class into a small number of GPU commands instead of thrashing
+// pipeline state on every cell.
+type renderPass int
+
+const (
+	// passRects accumulates background rectangles and underline strokes
+	// into the shared rect batch.
+	passRects renderPass = iota
+	// passGlyphs draws ordinary (source-over) glyphs and counts
+	// per-cell stats.
+	passGlyphs
+	// passGlyphsBackground draws background-rune glyphs, which use the
+	// additive blend. Splitting the two blends into separate passes
+	// keeps each atlas run uniform-blend so a whole page batches into
+	// one DrawTriangles even when normal and background cells alternate.
+	passGlyphsBackground
+)
+
 func (r *renderer) renderContent(screen *ebiten.Image, cells [][]term.Cell) {
-	// draw base content for each row
-	for viewY := len(cells) - 1; viewY >= 0; viewY-- {
-		r.renderRow(screen, cells, viewY)
+	// Pass 1 accumulates every row's solid geometry into one rect batch
+	// and flushes it as a single DrawTriangles so backgrounds land under
+	// the glyphs. Passes 2 and 3 draw glyphs grouped by blend so each
+	// atlas page batches into one DrawTriangles per blend.
+	for _, pass := range glyphPasses {
+		for viewY := len(cells) - 1; viewY >= 0; viewY-- {
+			r.renderRow(screen, cells, viewY, pass)
+		}
+		r.endPass(screen, pass)
+	}
+}
+
+// repaintRows re-renders the given dirty rows using the same two-pass
+// (rects then glyphs) structure as a full repaint, so batching still
+// applies to a partial frame.
+func (r *renderer) repaintRows(cells [][]term.Cell) {
+	for pass := range glyphPasses {
+		for viewY := len(cells) - 1; viewY >= 0; viewY-- {
+			if !r.dirtyRows[viewY] {
+				continue
+			}
+			if pass == 0 {
+				r.clearRow(viewY)
+			}
+			r.renderRow(r.frame, cells, viewY, glyphPasses[pass])
+		}
+		r.endPass(r.frame, glyphPasses[pass])
+	}
+}
+
+// glyphPasses is the fixed pass order for a repaint: solid geometry
+// first, then ordinary glyphs, then additive background-rune glyphs.
+var glyphPasses = [...]renderPass{passRects, passGlyphs, passGlyphsBackground}
+
+// endPass flushes the batch a pass accumulated into dst.
+func (r *renderer) endPass(dst *ebiten.Image, pass renderPass) {
+	switch pass {
+	case passRects:
+		r.rectBatch.Flush(dst)
+	case passGlyphs, passGlyphsBackground:
+		r.drawer.Flush(dst)
 	}
 }
 
 func (r *renderer) renderRow(
-	screen *ebiten.Image, cells [][]term.Cell, viewY int,
+	screen *ebiten.Image, cells [][]term.Cell, viewY int, pass renderPass,
 ) {
 	row := cells[viewY]
 	pixelY := r.fontManager.PixelY(viewY)
@@ -242,21 +424,15 @@ func (r *renderer) renderRow(
 			if bg == r.bgColor {
 				continue
 			}
-			r.bufVertices, r.bufIndices = drawrect.DrawRect(
-				&r.bufPath, r.bufVertices, r.bufIndices,
-				screen, float32(pixelX), float32(pixelY),
-				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg)
+			if pass == passRects {
+				r.rectBatch.AddRect(float32(pixelX), float32(pixelY),
+					float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg)
+			}
 			continue
 		}
 
 		isBold := cell.Attrs&term.AttrBold != 0
 		isItalic := cell.Attrs&term.AttrItalic != 0
-
-		drawTextOptions := defaultDrawTextOptions
-		if isBackground {
-			drawTextOptions = backgroundRuneDrawTextOptions
-		}
-		drawTextOptions.GeoM.Translate(pixelX, textPixelY)
 
 		// pick a font face for the cell
 		if !isBold && !isItalic {
@@ -268,29 +444,21 @@ func (r *renderer) renderRow(
 		} else if isItalic {
 			useFace = r.font.Italic
 		}
-		cr, cg, cb, ca := fg.RGBA()
-		drawTextOptions.ColorScale.Scale(
-			float32(cr)/0xffff,
-			float32(cg)/0xffff,
-			float32(cb)/0xffff,
-			float32(ca)/0xffff,
-		)
-
-		// dim fg text if AttrDim
-		if cell.Attrs&term.AttrDim != 0 {
-			drawTextOptions.ColorScale.ScaleAlpha(dimAlphaPerc)
-		}
 
 		if cell.Attrs&term.AttrUnderline != 0 {
-			underlinePixelY := pixelY + r.font.CellSize.Y - 1
-			r.bufVertices, r.bufIndices = drawrect.DrawStroke(&r.bufPath, r.bufVertices, r.bufIndices,
-				screen, float32(pixelX), float32(underlinePixelY),
-				float32(pixelX+r.font.CellSize.X),
-				float32(underlinePixelY), 2, fg)
+			if pass == passRects {
+				underlinePixelY := pixelY + r.font.CellSize.Y - 1
+				r.rectBatch.AddStroke(float32(pixelX), float32(underlinePixelY),
+					float32(pixelX+r.font.CellSize.X),
+					float32(underlinePixelY), 2, fg)
+			}
 		}
 
 		if r.enableLigatures && skipRunes == 0 {
-			skipRunes = r.handleLigatures(screen, cells, viewX, viewY, useFace, fg)
+			skipRunes = r.ligatureLength(cells, viewX, viewY)
+			if skipRunes > 0 && pass == passGlyphs {
+				r.handleLigatures(screen, cells, viewX, viewY, useFace, fg)
+			}
 		}
 
 		if skipRunes > 0 {
@@ -301,15 +469,15 @@ func (r *renderer) renderRow(
 		cellWidth := math.Max(1, float64(cell.Width))
 		// do not draw default background as a rect, since it's already
 		// been instructed via frame.Fill above.
-		if bg != r.bgColor {
-			r.bufVertices, r.bufIndices = drawrect.DrawRect(
-				&r.bufPath, r.bufVertices, r.bufIndices,
-				screen, float32(pixelX), float32(pixelY),
-				float32(r.font.CellSize.X*cellWidth), float32(r.font.CellSize.Y), bg)
+		if pass == passRects {
+			if bg != r.bgColor {
+				r.rectBatch.AddRect(float32(pixelX), float32(pixelY),
+					float32(r.font.CellSize.X*cellWidth), float32(r.font.CellSize.Y), bg)
+			}
+		} else if (pass == passGlyphs) != isBackground {
+			r.drawer.DrawGlyph(screen, cell.Ch, useFace, pixelX, textPixelY,
+				glyphColor(fg, cell.Attrs&term.AttrDim != 0), isBackground)
 		}
-
-		// draw text
-		r.drawer.DrawWithOptions(screen, cell.Ch, cell.CombiningRunes(), useFace, &drawTextOptions)
 		if cell.Width > 1 {
 			skipRunes += int(cell.Width) - 1
 		}
@@ -321,6 +489,32 @@ func (r *renderer) handleLigatures(
 	face imagefont.Face, color color.RGBA,
 ) (length int) {
 	return handleLigatures(r.drawer, cells, sx, sy, face, color, r.font, screen)
+}
+
+// ligatureLength reports how many cells starting at (sx, sy) collapse
+// into a single ligature glyph, without drawing anything. It mirrors
+// the candidate-matching in handleLigatures so the rect pass and the
+// glyph pass agree on which cells a ligature consumes.
+func (r *renderer) ligatureLength(cells [][]term.Cell, sx, sy int) int {
+	if !r.enableLigatures {
+		return 0
+	}
+	var c [longestLigature]rune
+	candidate := c[:0]
+	for i := range longestLigature {
+		x := sx + i
+		if sy >= len(cells) || x >= len(cells[sy]) || cells[sy][x].Ch == 0 {
+			break
+		}
+		candidate = append(candidate, cells[sy][x].Ch)
+	}
+	for len(candidate) > 1 {
+		if _, ok := ligatures[string(candidate)]; ok {
+			return len(candidate)
+		}
+		candidate = candidate[:len(candidate)-1]
+	}
+	return 0
 }
 
 func (r *renderer) renderCursor(
@@ -377,16 +571,9 @@ func (r *renderer) renderCursor(
 			screen, float32(pixelX), float32(pixelY),
 			float32(pixelW), float32(pixelH), r.cursorBackground)
 		if cell.Ch != 0 {
-			var opts ebiten.DrawImageOptions
-			opts.GeoM.Translate(pixelX, textPixelY)
-			cr, cg, cb, ca := r.cursorForeground.RGBA()
-			opts.ColorScale.Scale(
-				float32(cr)/0xffff,
-				float32(cg)/0xffff,
-				float32(cb)/0xffff,
-				float32(ca)/0xffff,
-			)
-			r.drawer.DrawWithOptions(screen, cell.Ch, cell.CombiningRunes(), useFace, &opts)
+			r.drawer.DrawGlyph(screen, cell.Ch, useFace, pixelX, textPixelY,
+				glyphColor(r.cursorForeground, false), false)
+			r.drawer.Flush(screen)
 		}
 	}
 }
@@ -425,16 +612,7 @@ func handleLigatures(
 			// draw ligature
 			ligX := (float64(sx) * font.CellSize.X) + ((float64(len(candidate)-1) * font.CellSize.X) / 2)
 			ligY := float64(sy)*font.CellSize.Y + font.OffsetY
-			var opts ebiten.DrawImageOptions
-			opts.GeoM.Translate(ligX, ligY)
-			cr, cg, cb, ca := color.RGBA()
-			opts.ColorScale.Scale(
-				float32(cr)/0xffff,
-				float32(cg)/0xffff,
-				float32(cb)/0xffff,
-				float32(ca)/0xffff,
-			)
-			drawer.DrawWithOptions(frame, ru, nil, face, &opts)
+			drawer.DrawGlyph(frame, ru, face, ligX, ligY, glyphColor(color, false), false)
 			return len(candidate)
 		}
 		candidate = candidate[:len(candidate)-1]
@@ -451,4 +629,27 @@ func applyOpacity(r, g, b int32, opacity float64) color.RGBA {
 		B: uint8(float64(b) * opacity),
 		A: alpha,
 	}
+}
+
+// glyphColor converts a straight-alpha foreground color into the
+// premultiplied per-vertex scale the glyph atlas expects. It mirrors the
+// previous per-glyph path, which set a fresh ebiten ColorScale via
+// Scale(r,g,b,a) on the white glyph mask and, for dim cells, multiplied
+// it by dimAlphaPerc with ScaleAlpha. Because the mask is opaque white,
+// that scale is exactly the resulting premultiplied vertex color.
+func glyphColor(fg color.RGBA, dim bool) [4]float32 {
+	r, g, b, a := fg.RGBA()
+	col := [4]float32{
+		float32(r) / 0xffff,
+		float32(g) / 0xffff,
+		float32(b) / 0xffff,
+		float32(a) / 0xffff,
+	}
+	if dim {
+		col[0] *= dimAlphaPerc
+		col[1] *= dimAlphaPerc
+		col[2] *= dimAlphaPerc
+		col[3] *= dimAlphaPerc
+	}
+	return col
 }

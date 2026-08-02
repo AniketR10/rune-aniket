@@ -243,6 +243,25 @@ fuzz-list:
 		for t in $$targets; do echo "  $$t"; done; \
 	done
 
+# bench-gui runs the end-to-end GUI renderer benchmark battery
+# (BenchmarkGUI in cmd/rune) and writes the results to
+# benchmarks/results/<git-sha>.txt so runs can be compared across
+# commits with benchstat. Override BENCH_COUNT / BENCHTIME as needed:
+#   make bench-gui BENCH_COUNT=6 BENCHTIME=30x
+# Compare two runs:
+#   benchstat benchmarks/results/<old>.txt benchmarks/results/<new>.txt
+# See benchmarks/README.md for how to interpret the reported metrics
+# and the fidelity caveats of the harness.
+BENCH_COUNT ?= 10
+BENCHTIME   ?= 50x
+BENCH_GUI_OUT ?= benchmarks/results/$(shell git rev-parse --short HEAD).txt
+bench-gui: docs-init
+	@ mkdir -p benchmarks/results
+	@ echo "==> BenchmarkGUI -> $(BENCH_GUI_OUT)"
+	@ go test -run '^$$' -bench '^BenchmarkGUI$$' -benchmem \
+		-benchtime=$(BENCHTIME) -count=$(BENCH_COUNT) -timeout=0 \
+		./cmd/rune/ 2>/dev/null | tee $(BENCH_GUI_OUT)
+
 generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate: docs-init
 	@ rm -rf **/*rpc*/*.pb.go

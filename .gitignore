@@ -3,6 +3,11 @@
 *.dll
 *.dylib
 
+# GUI benchmark battery outputs are machine-specific and keyed by git
+# SHA; keep the results directory but not its per-run contents.
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+
 # Test binary, build with `go test -c`
 *.test
 

@@ -199,6 +199,18 @@ func WithPrintFPS(print bool) Option {
 	}
 }
 
+// WithForceFullRepaint disables the renderer's row-damage tracking so
+// every frame repaints the whole grid. It is a debug/benchmark knob:
+// the differential correctness harness compares the damage-tracked path
+// against this reference full-repaint path, and it doubles as a runtime
+// fallback if damage tracking is ever suspected of a rendering bug.
+func WithForceFullRepaint(force bool) Option {
+	return func(g *GUI) error {
+		g.forceFullRepaint = force
+		return nil
+	}
+}
+
 // WithScrollMultiplier sets the mouse wheel scroll multiplier: the number of
 // lines scrolled per unit of wheel movement reported by the host. Higher values
 // scroll faster. Fractional wheel deltas from high-resolution devices such as
