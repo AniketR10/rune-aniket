@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -472,8 +473,34 @@ func (b *bootstrapHandler) performSwap() error {
 // calling it directly.
 func (b *bootstrapHandler) installAppMenu() {
 	appmenu.Install(
-		appMenus(appMenuKeyBindings(b.config()), b.mergedRecentWorkspaces()),
+		appMenus(appMenuKeyBindings(b.config()), b.mergedRecentWorkspaces(),
+			b.appMenuModels(), b.appMenuTutorials()),
 		b.activateAppMenuCommand)
+}
+
+func (b *bootstrapHandler) appMenuModels() []string {
+	if b.realIDE == nil {
+		return nil
+	}
+	it := b.realIDE.Models()
+	defer func() { _ = it.Close() }()
+	var models []string
+	for {
+		model, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+		models = append(models, model.Provider+"/"+model.Name)
+	}
+	slices.Sort(models)
+	return slices.Compact(models)
+}
+
+func (b *bootstrapHandler) appMenuTutorials() []string {
+	if b.realIDE == nil {
+		return nil
+	}
+	return b.realIDE.TutorialNames()
 }
 
 // mergedRecentWorkspaces combines the projects opened through the app

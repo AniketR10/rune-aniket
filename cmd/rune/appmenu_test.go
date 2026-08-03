@@ -64,6 +64,28 @@ func itemCommands(items []appmenu.Item) []appmenu.Command {
 	return cmds
 }
 
+func menuByTitle(t *testing.T, menus []appmenu.Menu, title string) appmenu.Menu {
+	t.Helper()
+	for _, menu := range menus {
+		if menu.Title == title {
+			return menu
+		}
+	}
+	t.Fatalf("menu %q not found", title)
+	return appmenu.Menu{}
+}
+
+func submenuByTitle(t *testing.T, items []appmenu.Item, title string) appmenu.Submenu {
+	t.Helper()
+	for _, item := range items {
+		if submenu, ok := item.(appmenu.Submenu); ok && submenu.Title == title {
+			return submenu
+		}
+	}
+	t.Fatalf("submenu %q not found", title)
+	return appmenu.Submenu{}
+}
+
 // appMenuPresetFiles are the presets that can back a macOS menu bar.
 // The Linux standard preset is excluded: the menu bar is macOS-only.
 var appMenuPresetFiles = []string{
@@ -71,6 +93,9 @@ var appMenuPresetFiles = []string{
 	"preset_standard_darwin.yaml",
 	"preset_emacs.yaml",
 }
+
+var appMenuTestModels = []string{"anthropic/claude"}
+var appMenuTestTutorials = []string{"agent", "basics", "navigation"}
 
 // TestAppMenusShippedPresetsBindCommands asserts that every shipped
 // editor preset binds each exit-capable menu command to a single chord
@@ -91,7 +116,7 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 			require.NoError(t, yaml.Unmarshal(raw, &cfg))
 
 			bindings := ide.CommandKeyBindings(config.MapConfig(cfg))
-			menus := appMenus(bindings, nil)
+			menus := appMenus(bindings, nil, appMenuTestModels, appMenuTestTutorials)
 
 			cmds := menuCommands(menus)
 			require.NotEmpty(t, cmds)
@@ -131,14 +156,12 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 // in the title signalling that further input is required.
 func TestAppMenusItemInvariants(t *testing.T) {
 	titles := map[string]bool{}
-	for _, menu := range appMenus(map[string]term.KeyComb{}, nil) {
+	for _, menu := range appMenus(
+		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
+	) {
 		require.NotEmpty(t, menu.Title)
 		require.NotEmpty(t, menu.Items, "%s: empty menu", menu.Title)
-		for _, item := range menu.Items {
-			cmd, ok := item.(appmenu.Command)
-			if !ok {
-				continue
-			}
+		for _, cmd := range itemCommands(menu.Items) {
 			require.NotEmpty(t, cmd.Title)
 			require.NotEmpty(t, cmd.Command)
 			assert.False(t, titles[cmd.Title],
@@ -165,7 +188,9 @@ func TestAppMenusItemInvariants(t *testing.T) {
 // must not carry stale entries no menu item can reach.
 func TestAppMenusPanelCommands(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
+	for _, cmd := range menuCommands(appMenus(
+		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
+	)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -211,7 +236,9 @@ func TestAppMenusPanelCommands(t *testing.T) {
 // subcommand", so the item must carry the interactive subcommand.
 func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
+	for _, cmd := range menuCommands(appMenus(
+		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
+	)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -226,7 +253,9 @@ func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 // user confirms in place, matching the other Find entries.
 func TestFindMenuLSPPrefills(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
+	for _, cmd := range menuCommands(appMenus(
+		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
+	)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -245,6 +274,100 @@ func TestFindMenuLSPPrefills(t *testing.T) {
 
 	// The location picker item was removed from the Find menu.
 	assert.NotContains(t, byTitle, "Location Picker…")
+}
+
+func TestAppMenusToolsAgentAndTasks(t *testing.T) {
+	menus := appMenus(map[string]term.KeyComb{}, nil,
+		appMenuTestModels, appMenuTestTutorials)
+	tools := menuByTitle(t, menus, "Tools")
+	agent := submenuByTitle(t, tools.Items, "Agent")
+
+	model := submenuByTitle(t, agent.Items, "Change Model")
+	assert.Equal(t, []appmenu.Item{appmenu.Command{
+		Title: "anthropic/claude", Command: "chatmodel", Args: []string{"anthropic/claude"},
+	}}, model.Items)
+
+	effort := submenuByTitle(t, agent.Items, "Change Effort")
+	assert.Equal(t, []appmenu.Item{
+		appmenu.Command{Title: "None", Command: "chateffort", Args: []string{"none"}},
+		appmenu.Command{Title: "Minimal", Command: "chateffort", Args: []string{"minimal"}},
+		appmenu.Command{Title: "Low", Command: "chateffort", Args: []string{"low"}},
+		appmenu.Command{Title: "Medium", Command: "chateffort", Args: []string{"medium"}},
+		appmenu.Command{Title: "High", Command: "chateffort", Args: []string{"high"}},
+		appmenu.Command{Title: "XHigh", Command: "chateffort", Args: []string{"xhigh"}},
+		appmenu.Command{Title: "Max", Command: "chateffort", Args: []string{"max"}},
+		appmenu.Command{Title: "Ultra", Command: "chateffort", Args: []string{"ultra"}},
+	}, effort.Items)
+
+	byTitle := map[string]appmenu.Command{}
+	for _, cmd := range itemCommands(tools.Items) {
+		byTitle[cmd.Title] = cmd
+	}
+	assert.Equal(t, appmenu.Command{
+		Title: "New Terminal", Command: "terminalnew", Args: []string{},
+	}, byTitle["New Terminal"])
+	assert.Equal(t, appmenu.Command{
+		Title: "New Terminal Tab", Command: "terminalnewtab", Args: []string{},
+	}, byTitle["New Terminal Tab"])
+	assert.Equal(t, appmenu.Command{
+		Title: "New Terminal Or Split", Command: "terminalneworsplit", Args: []string{},
+	}, byTitle["New Terminal Or Split"])
+	assert.Equal(t, appmenu.Command{Title: "New", Command: "agent", Args: []string{}},
+		byTitle["New"])
+	assert.Equal(t, appmenu.Command{
+		Title: "Change Maximum Tokens…", Command: "echo",
+		Args: []string{"{prompt}chatmaxtokens<space>"},
+	}, byTitle["Change Maximum Tokens…"])
+	assert.Equal(t, "chatcompact", byTitle["Compact"].Command)
+	assert.Equal(t, "chatfork", byTitle["Fork"].Command)
+	assert.Equal(t, "chatclear", byTitle["Clear"].Command)
+	assert.Equal(t, "chatexport", byTitle["Export"].Command)
+	assert.Equal(t, appmenu.Command{
+		Title: "Invoke Skill…", Command: "echo",
+		Args: []string{"{prompt}chatskill<space>"},
+	}, byTitle["Invoke Skill…"])
+	assert.Equal(t, []string{"{prompt}tasknew<space>"}, byTitle["New Task…"].Args)
+	assert.Equal(t, []string{"{prompt}tasknewtab<space>"}, byTitle["New Task Tab…"].Args)
+	assert.Equal(t, appmenu.Command{
+		Title: "Console", Command: "console", Args: []string{"help"},
+	}, byTitle["Console"])
+}
+
+func TestAppMenusTutorialActions(t *testing.T) {
+	help := menuByTitle(t,
+		appMenus(map[string]term.KeyComb{}, nil,
+			appMenuTestModels, appMenuTestTutorials), "Help")
+	start := submenuByTitle(t, help.Items, "Start Tutorial")
+	assert.Equal(t, []appmenu.Item{
+		appmenu.Command{Title: "agent", Command: "tutorial", Args: []string{"start", "agent"}},
+		appmenu.Command{Title: "basics", Command: "tutorial", Args: []string{"start", "basics"}},
+		appmenu.Command{Title: "navigation", Command: "tutorial", Args: []string{"start", "navigation"}},
+	}, start.Items)
+
+	byTitle := map[string]appmenu.Command{}
+	for _, cmd := range itemCommands(help.Items) {
+		byTitle[cmd.Title] = cmd
+	}
+	assert.Equal(t, appmenu.Command{
+		Title: "Stop Tutorial", Command: "tutorial", Args: []string{"stop"},
+	}, byTitle["Stop Tutorial"])
+}
+
+func TestAppMenuDirectChoicesAvailableFromHomeWorkspace(t *testing.T) {
+	b := newConfiguredBootstrapForEnvTest(t, configFilename,
+		"editor:\n  mode: modal\n", t.TempDir())
+	models := b.appMenuModels()
+	tutorials := b.appMenuTutorials()
+	require.NotEmpty(t, models)
+	assert.Contains(t, models, "openai/gpt-5")
+	assert.Equal(t, []string{"agent", "basics", "navigation"}, tutorials)
+
+	menus := appMenus(map[string]term.KeyComb{}, nil, models, tutorials)
+	agent := submenuByTitle(t, menuByTitle(t, menus, "Tools").Items, "Agent")
+	modelItems := submenuByTitle(t, agent.Items, "Change Model").Items
+	assert.Contains(t, modelItems, appmenu.Command{
+		Title: "openai/gpt-5", Command: "chatmodel", Args: []string{"openai/gpt-5"},
+	})
 }
 
 // TestAppMenuKeyBindingsBootstrapFallback asserts the quit accelerator
@@ -280,7 +403,7 @@ func TestAppMenusDeriveAccelerators(t *testing.T) {
 		"quit":                              {Mod: term.ModMeta, Ch: 'q'},
 		"lsp definition":                    {Mod: term.ModMeta, Ch: 'd'},
 		"echo {prompt}workspaceopen<space>": {Mod: term.ModMeta, Ch: 't'},
-	}, nil)
+	}, nil, appMenuTestModels, appMenuTestTutorials)
 
 	byTitle := map[string]appmenu.Command{}
 	for _, cmd := range menuCommands(menus) {
@@ -491,7 +614,8 @@ func TestAppMenusOpenRecentSubmenu(t *testing.T) {
 		{label: "app/web", path: "/home/app/web"},
 		{label: "api/web", path: "/home/api/web"},
 	}
-	sub := find(appMenus(map[string]term.KeyComb{}, recents))
+	sub := find(appMenus(map[string]term.KeyComb{}, recents,
+		appMenuTestModels, appMenuTestTutorials))
 	require.Len(t, sub.Items, 2)
 	assert.Equal(t, appmenu.Command{
 		Title:   "app/web",
@@ -504,7 +628,8 @@ func TestAppMenusOpenRecentSubmenu(t *testing.T) {
 		Args:    []string{"/home/api/web"},
 	}, sub.Items[1])
 
-	empty := find(appMenus(map[string]term.KeyComb{}, nil))
+	empty := find(appMenus(map[string]term.KeyComb{}, nil,
+		appMenuTestModels, appMenuTestTutorials))
 	require.Len(t, empty.Items, 1)
 	placeholder, ok := empty.Items[0].(appmenu.Command)
 	require.True(t, ok)

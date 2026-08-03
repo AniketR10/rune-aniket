@@ -96,7 +96,10 @@ func quitEvent(bindings map[string]term.KeyComb) term.Event {
 // chord is unbound in every shipped preset: AppKit intercepts menu key
 // equivalents before they reach the window, so a colliding one would
 // shadow the preset binding.
-func appMenus(bindings map[string]term.KeyComb, recents []recentEntry) []appmenu.Menu {
+func appMenus(
+	bindings map[string]term.KeyComb, recents []recentEntry,
+	models, tutorials []string,
+) []appmenu.Menu {
 	cmd := func(title string, cmdAndArgs ...string) appmenu.Command {
 		return appmenu.Command{
 			Title:   title,
@@ -111,6 +114,38 @@ func appMenus(bindings map[string]term.KeyComb, recents []recentEntry) []appmenu
 	prefill := func(title string, cmdAndArgs ...string) appmenu.Command {
 		return cmd(title, "echo",
 			"{prompt}"+strings.Join(cmdAndArgs, "<space>")+"<space>")
+	}
+	submenuItems := func(
+		values []string, emptyTitle string, command func(string) appmenu.Command,
+	) []appmenu.Item {
+		if len(values) == 0 {
+			return []appmenu.Item{appmenu.Command{Title: emptyTitle, Disabled: true}}
+		}
+		items := make([]appmenu.Item, 0, len(values))
+		for _, value := range values {
+			items = append(items, command(value))
+		}
+		return items
+	}
+	modelItems := submenuItems(models, "No Models Available", func(model string) appmenu.Command {
+		return cmd(model, "chatmodel", model)
+	})
+	tutorialItems := submenuItems(
+		tutorials, "No Tutorials Available", func(tutorial string) appmenu.Command {
+			return cmd(tutorial, "tutorial", "start", tutorial)
+		})
+	effortItems := make([]appmenu.Item, 0, 8)
+	for _, effort := range []struct{ label, value string }{
+		{"None", "none"},
+		{"Minimal", "minimal"},
+		{"Low", "low"},
+		{"Medium", "medium"},
+		{"High", "high"},
+		{"XHigh", "xhigh"},
+		{"Max", "max"},
+		{"Ultra", "ultra"},
+	} {
+		effortItems = append(effortItems, cmd(effort.label, "chateffort", effort.value))
 	}
 	sep := appmenu.Separator{}
 	return []appmenu.Menu{
@@ -220,13 +255,29 @@ func appMenus(bindings map[string]term.KeyComb, recents []recentEntry) []appmenu
 			prefill("Remove Worktree…", "worktreeremove"),
 		}},
 		{Title: "Tools", Items: []appmenu.Item{
-			cmd("New Terminal", "terminalneworsplit"),
+			cmd("New Terminal", "terminalnew"),
+			cmd("New Terminal Tab", "terminalnewtab"),
+			cmd("New Terminal Or Split", "terminalneworsplit"),
 			cmd("Open Companion Terminal", "!"),
 			prefill("Run…", "!"),
 			sep,
-			cmd("New Agent Session", "agent"),
+			appmenu.Submenu{Title: "Agent", Items: []appmenu.Item{
+				cmd("New", "agent"),
+				appmenu.Submenu{Title: "Change Model", Items: modelItems},
+				appmenu.Submenu{Title: "Change Effort", Items: effortItems},
+				prefill("Change Maximum Tokens…", "chatmaxtokens"),
+				sep,
+				cmd("Compact", "chatcompact"),
+				cmd("Fork", "chatfork"),
+				cmd("Clear", "chatclear"),
+				prefill("Invoke Skill…", "chatskill"),
+				cmd("Export", "chatexport"),
+			}},
+			prefill("New Task…", "tasknew"),
+			prefill("New Task Tab…", "tasknewtab"),
+			sep,
 			cmd("Debugger", "debugger"),
-			cmd("Console", "console"),
+			cmd("Console", "console", "help"),
 		}},
 		{Title: "Help", Items: []appmenu.Item{
 			cmd("Rune Help", "help"),
@@ -235,7 +286,8 @@ func appMenus(bindings map[string]term.KeyComb, recents []recentEntry) []appmenu
 			cmd("Cheatsheet", "cheatsheet"),
 			cmd("Key Bindings", "keybindings"),
 			sep,
-			cmd("Basics Tutorial", "tutorial", "start", "basics"),
+			appmenu.Submenu{Title: "Start Tutorial", Items: tutorialItems},
+			cmd("Stop Tutorial", "tutorial", "stop"),
 			cmd("Check for Updates", "upgrade"),
 		}},
 	}

@@ -32,16 +32,18 @@ import (
 	"os/user"
 	"path"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -397,6 +399,23 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 // path, so those must be triggered through their key binding.
 func (i *IDE) DispatchCommand(cmd string, args ...string) error {
 	return i.workspaceHandler.focusEx().dispatchCommand(cmd, args...)
+}
+
+// Models returns the models available through the IDE's host-side LLM
+// service. The service belongs to the IDE rather than any workspace, so it is
+// available while the home workspace is focused.
+func (i *IDE) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return i.workspaceHandler.llmRouter.Models()
+}
+
+// TutorialNames returns the registered tutorial names in display order.
+func (i *IDE) TutorialNames() []string {
+	names := make([]string, 0, len(i.tutorial.tutorials))
+	for name := range i.tutorial.tutorials {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // CloseCommandPrompt dismisses the command prompt in the focused
