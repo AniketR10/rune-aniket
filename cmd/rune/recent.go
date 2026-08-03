@@ -42,6 +42,10 @@ const recentWorkspacesDocumentID = "recent-workspaces:appmenu"
 // recentWorkspacesMax caps the persisted menu-open history.
 const recentWorkspacesMax = 20
 
+// recentMenuLimit caps how many entries the Open Recent menu shows
+// after merging the menu-open and command-prompt histories.
+const recentMenuLimit = 10
+
 // recentWorkspaces records the projects opened via the app menu so they
 // can be offered under Open Recent alongside the command-prompt history.
 type recentWorkspaces struct {

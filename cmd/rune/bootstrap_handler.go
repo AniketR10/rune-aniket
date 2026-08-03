@@ -86,6 +86,7 @@ type bootstrapHandler struct {
 	lastResizeH       int
 	chosenEditor      string
 	closingPreIDE     bool
+	recent            *recentWorkspaces
 }
 
 func newBootstrapHandler(
@@ -116,6 +117,7 @@ func newBootstrapHandler(
 		clip:             clip,
 		installBackupDir: installBackupDir,
 	}
+	bh.recent = newRecentWorkspaces(bh.storage)
 
 	if isBootstrapped(dataDir) {
 		migrateBootstrappedConfig(configPath)
@@ -469,7 +471,26 @@ func (b *bootstrapHandler) performSwap() error {
 // main thread, so callers publish it as an EventInterrupt rather than
 // calling it directly.
 func (b *bootstrapHandler) installAppMenu() {
-	appmenu.Install(appMenus(appMenuKeyBindings(b.config())), b.activateAppMenuCommand)
+	appmenu.Install(
+		appMenus(appMenuKeyBindings(b.config()), b.mergedRecentWorkspaces()),
+		b.activateAppMenuCommand)
+}
+
+// mergedRecentWorkspaces combines the projects opened through the app
+// menu with those opened from the command prompt into one recency-
+// ordered, de-duplicated, disambiguated list for the Open Recent menu.
+// Menu opens lead because they are the most recent user action taken
+// through the menu itself.
+func (b *bootstrapHandler) mergedRecentWorkspaces() []recentEntry {
+	paths := b.recent.paths()
+	if b.realIDE != nil {
+		paths = append(paths, b.realIDE.RecentWorkspaceOpens()...)
+	}
+	entries := recentLabels(paths)
+	if len(entries) > recentMenuLimit {
+		entries = entries[:recentMenuLimit]
+	}
+	return entries
 }
 
 // publishAppMenuInstall schedules a menu (re)install on the main
@@ -480,8 +501,16 @@ func (b *bootstrapHandler) publishAppMenuInstall() {
 }
 
 func (b *bootstrapHandler) activateAppMenuCommand(cmd appmenu.Command) {
-	// The panel table takes precedence over chord replay: a menu click
-	// must open the native panel even when the command is bound.
+	// An Open Recent item is a panel-table command carrying an explicit
+	// path, so it must dispatch straight to the IDE instead of opening
+	// the panel to ask for one.
+	if _, ok := appMenuPanelCommands[cmd.Command]; ok && len(cmd.Args) > 0 {
+		b.activateRecentCommand(cmd)
+		return
+	}
+	// The panel table otherwise takes precedence over chord replay: a
+	// menu click must open the native panel even when the command is
+	// bound.
 	if opts, ok := appMenuPanelCommands[cmd.Command]; ok {
 		b.activateOpenPanel(cmd, opts)
 		return
@@ -513,6 +542,25 @@ func (b *bootstrapHandler) activateAppMenuCommand(cmd appmenu.Command) {
 	}})
 }
 
+// activateRecentCommand dispatches an Open Recent item — a workspaceopen
+// with a fixed path — on the main thread, recording the open so the
+// menu stays ordered by recency.
+func (b *bootstrapHandler) activateRecentCommand(cmd appmenu.Command) {
+	b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
+		if b.realIDE == nil {
+			_, _ = b.notifications().Notify(browserapi.LevelWarn,
+				"%s is not available during setup", cmd.Title)
+			return
+		}
+		if err := b.realIDE.DispatchCommand(cmd.Command, cmd.Args...); err != nil {
+			_, _ = b.notifications().Notify(browserapi.LevelError,
+				"%s: %v", cmd.Title, err)
+			return
+		}
+		b.recordRecentOpen(cmd.Command, cmd.Args...)
+	}})
+}
+
 // activateOpenPanel collects cmd's path argument through the native
 // open panel and dispatches the command once per selected path. It
 // runs on the main thread — the menu callback — which is also where
@@ -536,10 +584,24 @@ func (b *bootstrapHandler) activateOpenPanel(cmd appmenu.Command, opts openpanel
 				if err := b.realIDE.DispatchCommand(cmd.Command, path); err != nil {
 					_, _ = b.notifications().Notify(browserapi.LevelError,
 						"%s: %v", cmd.Title, err)
+					continue
 				}
+				b.recordRecentOpen(cmd.Command, path)
 			}
 		}})
 	})
+}
+
+// recordRecentOpen remembers a successful project open so the Open
+// Recent menu reflects it, and republishes the menu. Only workspaceopen
+// feeds the recent list; other panel commands (edit, view) open files,
+// not projects.
+func (b *bootstrapHandler) recordRecentOpen(command string, args ...string) {
+	if command != cmdWorkspaceOpen || len(args) == 0 {
+		return
+	}
+	b.recent.record(args[0])
+	b.publishAppMenuInstall()
 }
 
 func (b *bootstrapHandler) writePresetConfig() error {

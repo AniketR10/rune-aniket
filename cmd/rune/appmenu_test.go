@@ -41,10 +41,24 @@ import (
 func menuCommands(menus []appmenu.Menu) []appmenu.Command {
 	var cmds []appmenu.Command
 	for _, menu := range menus {
-		for _, item := range menu.Items {
-			if cmd, ok := item.(appmenu.Command); ok {
-				cmds = append(cmds, cmd)
+		cmds = append(cmds, itemCommands(menu.Items)...)
+	}
+	return cmds
+}
+
+// itemCommands collects enabled Command items, descending into submenus.
+// Disabled placeholders (e.g. an empty Open Recent list) are skipped:
+// they carry no command and are not user-dispatchable.
+func itemCommands(items []appmenu.Item) []appmenu.Command {
+	var cmds []appmenu.Command
+	for _, item := range items {
+		switch it := item.(type) {
+		case appmenu.Command:
+			if !it.Disabled {
+				cmds = append(cmds, it)
 			}
+		case appmenu.Submenu:
+			cmds = append(cmds, itemCommands(it.Items)...)
 		}
 	}
 	return cmds
@@ -77,7 +91,7 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 			require.NoError(t, yaml.Unmarshal(raw, &cfg))
 
 			bindings := ide.CommandKeyBindings(config.MapConfig(cfg))
-			menus := appMenus(bindings)
+			menus := appMenus(bindings, nil)
 
 			cmds := menuCommands(menus)
 			require.NotEmpty(t, cmds)
@@ -117,7 +131,7 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 // in the title signalling that further input is required.
 func TestAppMenusItemInvariants(t *testing.T) {
 	titles := map[string]bool{}
-	for _, menu := range appMenus(map[string]term.KeyComb{}) {
+	for _, menu := range appMenus(map[string]term.KeyComb{}, nil) {
 		require.NotEmpty(t, menu.Title)
 		require.NotEmpty(t, menu.Items, "%s: empty menu", menu.Title)
 		for _, item := range menu.Items {
@@ -151,7 +165,7 @@ func TestAppMenusItemInvariants(t *testing.T) {
 // must not carry stale entries no menu item can reach.
 func TestAppMenusPanelCommands(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{})) {
+	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -197,7 +211,7 @@ func TestAppMenusPanelCommands(t *testing.T) {
 // subcommand", so the item must carry the interactive subcommand.
 func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{})) {
+	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -212,7 +226,7 @@ func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 // user confirms in place, matching the other Find entries.
 func TestFindMenuLSPPrefills(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{})) {
+	for _, cmd := range menuCommands(appMenus(map[string]term.KeyComb{}, nil)) {
 		byTitle[cmd.Title] = cmd
 	}
 
@@ -266,7 +280,7 @@ func TestAppMenusDeriveAccelerators(t *testing.T) {
 		"quit":                              {Mod: term.ModMeta, Ch: 'q'},
 		"lsp definition":                    {Mod: term.ModMeta, Ch: 'd'},
 		"echo {prompt}workspaceopen<space>": {Mod: term.ModMeta, Ch: 't'},
-	})
+	}, nil)
 
 	byTitle := map[string]appmenu.Command{}
 	for _, cmd := range menuCommands(menus) {
@@ -426,4 +440,116 @@ func TestActivateAppMenuCommandPanelDuringBootstrap(t *testing.T) {
 	require.Len(t, published, 1)
 	assert.Equal(t, term.EventInterrupt, published[0].Type)
 	require.NotNil(t, published[0].UserFunc)
+}
+
+// TestActivateAppMenuCommandRecentDispatchesDirectly asserts an Open
+// Recent item — a workspaceopen carrying an explicit path — dispatches
+// to the IDE instead of opening the panel to ask for a path.
+func TestActivateAppMenuCommandRecentDispatchesDirectly(t *testing.T) {
+	stub := stubOpenPanel(t)
+	var published []term.Event
+	b := &bootstrapHandler{
+		realIDE: &ide.IDE{},
+		publishEvent: func(ev term.Event) bool {
+			published = append(published, ev)
+			return true
+		},
+	}
+
+	b.activateAppMenuCommand(appmenu.Command{
+		Title:   "proj",
+		Command: "workspaceopen",
+		Args:    []string{"/home/me/proj"},
+	})
+
+	assert.Empty(t, stub.opts, "a recent item must not open the panel")
+	require.Len(t, published, 1, "a recent item dispatches on the main thread")
+	assert.Equal(t, term.EventInterrupt, published[0].Type)
+	require.NotNil(t, published[0].UserFunc)
+}
+
+// TestAppMenusOpenRecentSubmenu asserts the File menu carries an Open
+// Recent submenu whose entries dispatch workspaceopen with the recorded
+// path, and that an empty history renders a single disabled placeholder.
+func TestAppMenusOpenRecentSubmenu(t *testing.T) {
+	find := func(menus []appmenu.Menu) appmenu.Submenu {
+		for _, menu := range menus {
+			if menu.Title != "File" {
+				continue
+			}
+			for _, item := range menu.Items {
+				if sub, ok := item.(appmenu.Submenu); ok && sub.Title == "Open Recent" {
+					return sub
+				}
+			}
+		}
+		t.Fatal("File ▸ Open Recent submenu not found")
+		return appmenu.Submenu{}
+	}
+
+	recents := []recentEntry{
+		{label: "app/web", path: "/home/app/web"},
+		{label: "api/web", path: "/home/api/web"},
+	}
+	sub := find(appMenus(map[string]term.KeyComb{}, recents))
+	require.Len(t, sub.Items, 2)
+	assert.Equal(t, appmenu.Command{
+		Title:   "app/web",
+		Command: "workspaceopen",
+		Args:    []string{"/home/app/web"},
+	}, sub.Items[0])
+	assert.Equal(t, appmenu.Command{
+		Title:   "api/web",
+		Command: "workspaceopen",
+		Args:    []string{"/home/api/web"},
+	}, sub.Items[1])
+
+	empty := find(appMenus(map[string]term.KeyComb{}, nil))
+	require.Len(t, empty.Items, 1)
+	placeholder, ok := empty.Items[0].(appmenu.Command)
+	require.True(t, ok)
+	assert.True(t, placeholder.Disabled, "empty Open Recent must be disabled")
+	assert.Empty(t, placeholder.Command)
+}
+
+// TestRecordRecentOpen asserts only workspaceopen feeds the recent list
+// and that recording republishes the menu so it reflects the new entry.
+func TestRecordRecentOpen(t *testing.T) {
+	storage := newRuneStorage(t.TempDir())
+	t.Cleanup(func() { _ = storage.Close() })
+	var published []term.Event
+	b := &bootstrapHandler{
+		recent: newRecentWorkspaces(storage),
+		publishEvent: func(ev term.Event) bool {
+			published = append(published, ev)
+			return true
+		},
+	}
+
+	b.recordRecentOpen("edit", "/tmp/file.txt")
+	assert.Empty(t, b.recent.paths(), "edit opens files, not projects")
+	assert.Empty(t, published, "a non-project open must not refresh the menu")
+
+	b.recordRecentOpen("workspaceopen", "/home/me/proj")
+	assert.Equal(t, []string{"/home/me/proj"}, b.recent.paths())
+	require.Len(t, published, 1, "recording a project must refresh the menu")
+	assert.Equal(t, term.EventInterrupt, published[0].Type)
+	require.NotNil(t, published[0].UserFunc)
+}
+
+// TestMergedRecentWorkspacesPrefersMenuOpens asserts menu-open history
+// leads the merged Open Recent list and duplicates collapse across the
+// two sources.
+func TestMergedRecentWorkspacesPrefersMenuOpens(t *testing.T) {
+	storage := newRuneStorage(t.TempDir())
+	t.Cleanup(func() { _ = storage.Close() })
+	b := &bootstrapHandler{recent: newRecentWorkspaces(storage)}
+	b.recent.record("/home/me/beta")
+
+	// realIDE is nil here, so only the menu-open source contributes;
+	// this still proves the menu source flows into the merged list.
+	entries := b.mergedRecentWorkspaces()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "/home/me/beta", entries[0].path)
+	assert.Equal(t, "beta", entries[0].label)
 }

@@ -58,6 +58,10 @@ var appMenuPanelCommands = map[string]openpanel.Options{
 // showOpenPanel is a seam over openpanel.Show for tests.
 var showOpenPanel = openpanel.Show
 
+// cmdWorkspaceOpen is the command that opens a project; the Open Recent
+// items dispatch it with an explicit path.
+const cmdWorkspaceOpen = "workspaceopen"
+
 // bootstrapQuitChord is the fallback for the quit accelerator. Before
 // the wizard writes an editor preset the config binds nothing, and this
 // is the chord the wizard itself recognizes as a clean exit.
@@ -92,7 +96,7 @@ func quitEvent(bindings map[string]term.KeyComb) term.Event {
 // chord is unbound in every shipped preset: AppKit intercepts menu key
 // equivalents before they reach the window, so a colliding one would
 // shadow the preset binding.
-func appMenus(bindings map[string]term.KeyComb) []appmenu.Menu {
+func appMenus(bindings map[string]term.KeyComb, recents []recentEntry) []appmenu.Menu {
 	cmd := func(title string, cmdAndArgs ...string) appmenu.Command {
 		return appmenu.Command{
 			Title:   title,
@@ -122,6 +126,7 @@ func appMenus(bindings map[string]term.KeyComb) []appmenu.Menu {
 			cmd("Open File…", "edit"),
 			cmd("Open Read-Only…", "view"),
 			cmd("Open Project…", "workspaceopen"),
+			openRecentMenu(recents),
 			sep,
 			cmd("Save", "write"),
 			cmd("Reload File", "reloadfile!"),
@@ -234,4 +239,27 @@ func appMenus(bindings map[string]term.KeyComb) []appmenu.Menu {
 			cmd("Check for Updates", "upgrade"),
 		}},
 	}
+}
+
+// openRecentMenu builds the File ▸ Open Recent submenu. Each entry
+// dispatches workspaceopen with an explicit path, which
+// activateAppMenuCommand routes straight to the IDE (bypassing the open
+// panel). When there are no recents the submenu shows a single disabled
+// placeholder so the entry is still discoverable.
+func openRecentMenu(recents []recentEntry) appmenu.Submenu {
+	items := make([]appmenu.Item, 0, len(recents))
+	for _, r := range recents {
+		items = append(items, appmenu.Command{
+			Title:   r.label,
+			Command: cmdWorkspaceOpen,
+			Args:    []string{r.path},
+		})
+	}
+	if len(items) == 0 {
+		items = append(items, appmenu.Command{
+			Title:    "No Recent Projects",
+			Disabled: true,
+		})
+	}
+	return appmenu.Submenu{Title: "Open Recent", Items: items}
 }
