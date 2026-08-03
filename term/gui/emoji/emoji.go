@@ -112,20 +112,17 @@ func emojiPresented(cluster []rune) bool {
 }
 
 func (f *Face) bitmap(cluster []rune) (gofont.GlyphBitmap, bool) {
-	var gid gofont.GID
 	if len(cluster) == 1 {
-		var ok bool
-		gid, ok = f.face.NominalGlyph(cluster[0])
+		gid, ok := f.face.NominalGlyph(cluster[0])
 		if !ok {
 			return gofont.GlyphBitmap{}, false
 		}
-	} else {
-		var ok bool
-		gid, ok = f.shape(cluster)
-		if !ok {
-			return gofont.GlyphBitmap{}, false
-		}
+		return f.colorBitmap(gid)
 	}
+	return f.shape(cluster)
+}
+
+func (f *Face) colorBitmap(gid gofont.GID) (gofont.GlyphBitmap, bool) {
 	bm, ok := f.face.GlyphData(gid).(gofont.GlyphBitmap)
 	if !ok {
 		return gofont.GlyphBitmap{}, false
@@ -138,7 +135,15 @@ func (f *Face) bitmap(cluster []rune) (gofont.GlyphBitmap, bool) {
 	}
 }
 
-func (f *Face) shape(cluster []rune) (gofont.GID, bool) {
+// shape returns the cluster's sole color bitmap. Fonts disagree on how
+// to treat default-ignorable code points: Noto consumes a variation
+// selector while shaping, whereas Apple Color Emoji emits a blank glyph
+// for it beside the emoji. Keying off the number of color bitmaps rather
+// than the number of glyphs keeps those placeholders from disqualifying
+// a cluster, while still rejecting a sequence the font cannot ligate,
+// which yields one bitmap per component and would otherwise render as
+// whichever component happened to come first.
+func (f *Face) shape(cluster []rune) (gofont.GlyphBitmap, bool) {
 	out := f.shaper.Shape(shaping.Input{
 		Text:      cluster,
 		RunStart:  0,
@@ -148,10 +153,17 @@ func (f *Face) shape(cluster []rune) (gofont.GID, bool) {
 		Script:    language.LookupScript(cluster[0]),
 		Direction: di.DirectionLTR,
 	})
-	if len(out.Glyphs) != 1 {
-		return 0, false
+	var found gofont.GlyphBitmap
+	var n int
+	for _, g := range out.Glyphs {
+		if bm, ok := f.colorBitmap(g.GlyphID); ok {
+			found, n = bm, n+1
+		}
 	}
-	return out.Glyphs[0].GlyphID, true
+	if n != 1 {
+		return gofont.GlyphBitmap{}, false
+	}
+	return found, true
 }
 
 // Glyph decodes the cluster's color bitmap and scales it to fit a

@@ -97,6 +97,55 @@ func TestHasRejectsTextClustersWithCombining(t *testing.T) {
 	}
 }
 
+// TestHasRejectsClusterFontCannotLigate asserts a ZWJ sequence the font
+// has no single glyph for stays on the monochrome path: shaping yields
+// one color bitmap per component, and drawing only the first would
+// render a different emoji than the one typed.
+func TestHasRejectsClusterFontCannotLigate(t *testing.T) {
+	f := newTestFace(t)
+
+	assert.False(t, f.Has([]rune{'\U0001F468', '\u200D', '\U0001F469'}))
+}
+
+// systemEmojiFace opens the host's color-emoji font, skipping when there
+// is none. The bundled Noto consumes a variation selector while shaping,
+// so only a system face exercises fonts that keep it as its own glyph.
+func systemEmojiFace(t *testing.T) *Face {
+	t.Helper()
+	for _, path := range []string{
+		"/System/Library/Fonts/Apple Color Emoji.ttc",
+		"/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+		"/usr/share/fonts/noto/NotoColorEmoji.ttf",
+	} {
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		if f, err := NewFaceFromFile(path); err == nil {
+			return f
+		}
+	}
+	t.Skip("no system color-emoji font on this host")
+	return nil
+}
+
+// TestHasAcceptsClusterWhenFontKeepsIgnorableGlyph asserts an
+// emoji-presented cluster is recognized even when the font shapes the
+// variation selector into a separate blank glyph rather than consuming
+// it. Apple Color Emoji does exactly that, so demanding a single shaped
+// glyph pushed every variation-selected emoji down the monochrome path
+// on macOS.
+func TestHasAcceptsClusterWhenFontKeepsIgnorableGlyph(t *testing.T) {
+	f := systemEmojiFace(t)
+
+	for _, cl := range [][]rune{
+		{'\U0001F577', '\uFE0F'}, // spider, default text presentation
+		{'\u23F1', '\uFE0F'},     // stopwatch
+		{'\u2764', '\uFE0F'},     // heart
+	} {
+		assert.Truef(t, f.Has(cl), "%q must be a color emoji cluster", string(cl))
+	}
+}
+
 // TestGlyphProducesColorRGBA asserts Glyph returns a decoded,
 // downscaled, premultiplied RGBA that is actually multi-color — the
 // exact property the monochrome mask path fails to preserve.
