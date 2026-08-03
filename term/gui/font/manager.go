@@ -79,6 +79,9 @@ type Manager struct {
 	emojiFace     *emoji.Face
 	emojiSource   string
 	emojiResolved bool
+	// Overrides the system emoji font candidates; nil means the
+	// platform defaults.
+	emojiPaths func() []string
 }
 
 // CharSize represent a character dimensions in pixels.
@@ -814,18 +817,18 @@ func (m *Manager) EmojiFace() (*emoji.Face, string) {
 }
 
 func (m *Manager) resolveEmojiFace() (*emoji.Face, string) {
-	for _, family := range emojiFontFamilies() {
-		path, ok := m.findEmojiFontPath(family)
-		if !ok {
-			continue
-		}
+	candidates := emojiFontPaths
+	if m.emojiPaths != nil {
+		candidates = m.emojiPaths
+	}
+	for _, path := range candidates() {
 		face, err := emoji.NewFaceFromFile(path)
 		if err != nil {
 			m.log(log.DebugLevel,
-				"emoji font %q at %q unusable, skipping: %v", family, path, err)
+				"emoji font %q unusable, skipping: %v", path, err)
 			continue
 		}
-		return face, "system: " + family
+		return face, "system: " + path
 	}
 
 	face, err := emoji.NewFace(builtinfont.EmojiTTF)
@@ -834,18 +837,4 @@ func (m *Manager) resolveEmojiFace() (*emoji.Face, string) {
 		return nil, "unavailable"
 	}
 	return face, "bundled: Noto Color Emoji"
-}
-
-func (m *Manager) findEmojiFontPath(family string) (string, bool) {
-	fonts, err := m.findfont.findByFamily(family)
-	if err != nil {
-		return "", false
-	}
-	ctx := context.Background()
-	defer fonts.Close()
-	meta, ok := fonts.Next(ctx)
-	if !ok {
-		return "", false
-	}
-	return meta.path, true
 }

@@ -25,6 +25,6 @@
 
 package font
 
-func emojiFontFamilies() []string {
-	return []string{"Apple Color Emoji"}
+func emojiFontPaths() []string {
+	return []string{"/System/Library/Fonts/Apple Color Emoji.ttc"}
 }

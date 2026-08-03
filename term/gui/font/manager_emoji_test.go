@@ -24,58 +24,33 @@
 package font
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/iterator"
 
 	"unstable.build/go-tui/term/gui/font/builtinfont"
 )
 
-// stubFindFont resolves family→path mappings so the emoji resolver runs
+// stubEmojiPaths pins the candidate list so the emoji resolver runs
 // deterministically regardless of the host's installed fonts.
-type stubFindFont struct {
-	byFamily map[string]string
-}
-
-func (s stubFindFont) findByFamily(family string) (iterator.Iterator[metadata], error) {
-	path, ok := s.byFamily[family]
-	if !ok {
-		return nil, fmt.Errorf("font '%s' not found", family)
-	}
-	return iterator.FromSlice([]metadata{{family: family, path: path}}), nil
-}
-
-func (s stubFindFont) list() (iterator.Iterator[metadata], error) {
-	return iterator.Empty[metadata](), nil
+func stubEmojiPaths(paths ...string) func() []string {
+	return func() []string { return paths }
 }
 
 // TestEmojiFacePrefersSystemFont asserts a usable system font is
 // preferred over the bundled fallback and labeled as such.
 func TestEmojiFacePrefersSystemFont(t *testing.T) {
-	// Advertise the bundled font under every candidate family so the
-	// first one the resolver tries is usable on any platform.
 	path := filepath.Join(t.TempDir(), "SystemColorEmoji.ttf")
 	require.NoError(t, os.WriteFile(path, builtinfont.EmojiTTF, 0o600))
 
-	families := emojiFontFamilies()
-	if len(families) == 0 {
-		t.Skip("platform advertises no system emoji families")
-	}
-	byFamily := make(map[string]string, len(families))
-	for _, f := range families {
-		byFamily[f] = path
-	}
-
-	m := &Manager{findfont: stubFindFont{byFamily: byFamily}}
+	m := &Manager{emojiPaths: stubEmojiPaths(path)}
 	face, source := m.EmojiFace()
 
 	require.NotNil(t, face)
-	assert.Equal(t, "system: "+families[0], source)
+	assert.Equal(t, "system: "+path, source)
 	assert.True(t, face.Has([]rune{'😀'}))
 }
 
@@ -83,7 +58,8 @@ func TestEmojiFacePrefersSystemFont(t *testing.T) {
 // font the resolver falls back to the bundled Noto, holding even on CI
 // hosts with no color-emoji fonts.
 func TestEmojiFaceFallsBackToBundled(t *testing.T) {
-	m := &Manager{findfont: stubFindFont{byFamily: map[string]string{}}}
+	missing := filepath.Join(t.TempDir(), "NotThere.ttf")
+	m := &Manager{emojiPaths: stubEmojiPaths(missing)}
 	face, source := m.EmojiFace()
 
 	require.NotNil(t, face)
@@ -91,18 +67,14 @@ func TestEmojiFaceFallsBackToBundled(t *testing.T) {
 	assert.True(t, face.Has([]rune{'😀'}))
 }
 
-// TestEmojiFaceSkipsUnusableSystemFont asserts a family resolving to a
-// non-color font is skipped in favor of the bundled fallback.
+// TestEmojiFaceSkipsUnusableSystemFont asserts a candidate path holding
+// a non-color font is skipped in favor of the bundled fallback.
 func TestEmojiFaceSkipsUnusableSystemFont(t *testing.T) {
-	families := emojiFontFamilies()
-	if len(families) == 0 {
-		t.Skip("platform advertises no system emoji families")
-	}
 	// A non-font file makes NewFaceFromFile reject the candidate.
 	bad := filepath.Join(t.TempDir(), "notafont.ttf")
 	require.NoError(t, os.WriteFile(bad, []byte("not a font"), 0o600))
 
-	m := &Manager{findfont: stubFindFont{byFamily: map[string]string{families[0]: bad}}}
+	m := &Manager{emojiPaths: stubEmojiPaths(bad)}
 	face, source := m.EmojiFace()
 
 	require.NotNil(t, face)
@@ -112,7 +84,7 @@ func TestEmojiFaceSkipsUnusableSystemFont(t *testing.T) {
 // TestEmojiFaceResolvesOnce asserts resolution happens once and is
 // cached, so repeated calls do not re-parse a system font collection.
 func TestEmojiFaceResolvesOnce(t *testing.T) {
-	m := &Manager{findfont: stubFindFont{byFamily: map[string]string{}}}
+	m := &Manager{emojiPaths: stubEmojiPaths()}
 	face1, source1 := m.EmojiFace()
 	face2, source2 := m.EmojiFace()
 

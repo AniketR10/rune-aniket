@@ -149,12 +149,11 @@ type metadata struct {
 	path   string
 }
 
-func readMetadata(path string, r io.ReadSeeker) ([]metadata, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("read font: %w", err)
-	}
-	col, err := sfnt.ParseCollection(data)
+// readMetadata reads family names through r without loading the whole
+// file: system collections such as Apple Color Emoji are hundreds of
+// megabytes and discovery only needs their names.
+func readMetadata(path string, r io.ReaderAt) ([]metadata, error) {
+	col, err := sfnt.ParseCollectionReaderAt(r)
 	if err != nil {
 		return nil, fmt.Errorf("sfnt parse collection: %w", err)
 	}

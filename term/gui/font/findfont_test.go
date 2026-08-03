@@ -21,26 +21,56 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//go:build unix && !darwin
-
 package font
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"unstable.build/go-tui/term/gui/font/builtinfont"
 )
 
-func emojiFontPaths() []string {
-	var paths []string
-	if dataPath := os.Getenv("XDG_DATA_HOME"); dataPath != "" {
-		paths = append(paths, filepath.Join(expandUser(dataPath), "fonts", "NotoColorEmoji.ttf"))
-	}
-	return append(paths,
-		expandUser("~/.local/share/fonts/NotoColorEmoji.ttf"),
-		expandUser("~/.fonts/NotoColorEmoji.ttf"),
-		"/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-		"/usr/share/fonts/noto/NotoColorEmoji.ttf",
-		"/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
-		"/usr/local/share/fonts/NotoColorEmoji.ttf",
-	)
+// countingReaderAt records how many bytes were read through it.
+type countingReaderAt struct {
+	r     io.ReaderAt
+	bytes atomic.Int64
+}
+
+func (c *countingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	n, err := c.r.ReadAt(p, off)
+	c.bytes.Add(int64(n))
+	return n, err
+}
+
+// TestReadMetadataDoesNotReadWholeFile guards against font discovery
+// regressing to slurping every candidate file: system collections are
+// hundreds of megabytes and only their family names are needed.
+func TestReadMetadataDoesNotReadWholeFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "NotoColorEmoji.ttf")
+	require.NoError(t, os.WriteFile(path, builtinfont.EmojiTTF, 0o600))
+
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	info, err := f.Stat()
+	require.NoError(t, err)
+
+	counter := &countingReaderAt{r: f}
+	meta, err := readMetadata(path, counter)
+	require.NoError(t, err)
+	require.NotEmpty(t, meta)
+	assert.Equal(t, "Noto Color Emoji", meta[0].family)
+	assert.Equal(t, path, meta[0].path)
+
+	read := counter.bytes.Load()
+	assert.Less(t, read, info.Size()/10,
+		"read %d of %d bytes; metadata must not slurp the whole file",
+		read, info.Size())
 }
