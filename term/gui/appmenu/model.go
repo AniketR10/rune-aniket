@@ -30,7 +30,7 @@ import (
 )
 
 // Item is a single entry in an application menu. The set of
-// implementations is closed: Command, Native and Separator.
+// implementations is closed: Command, Native, Separator and Submenu.
 type Item interface {
 	item()
 }
@@ -45,6 +45,9 @@ type Command struct {
 	// it, AppKit routes it here instead of to the window. The zero
 	// value renders the item without an accelerator.
 	Key term.KeyComb
+	// Disabled renders the item greyed out and unclickable. It is used
+	// for placeholder entries such as an empty "Open Recent" list.
+	Disabled bool
 }
 
 // Native is a menu item wired to a standard AppKit action such as
@@ -59,9 +62,16 @@ type Native struct {
 // Separator is a horizontal rule between menu items.
 type Separator struct{}
 
+// Submenu is a menu item that expands into a nested list of items.
+type Submenu struct {
+	Title string
+	Items []Item
+}
+
 func (Command) item()   {}
 func (Native) item()    {}
 func (Separator) item() {}
+func (Submenu) item()   {}
 
 // Menu is a top-level menu in the application menu bar.
 type Menu struct {
@@ -79,7 +89,8 @@ type menuSpec struct {
 
 // itemSpec describes one menu entry. Exactly one of separator, tag or
 // selector is meaningful: a separator entry, a Rune command identified
-// by its callback tag, or a native AppKit selector.
+// by its callback tag, a native AppKit selector, or a submenu carrying
+// nested children.
 type itemSpec struct {
 	title     string
 	selector  string
@@ -87,6 +98,8 @@ type itemSpec struct {
 	modifiers uint
 	tag       int
 	separator bool
+	disabled  bool
+	children  []itemSpec
 }
 
 var (
@@ -132,33 +145,49 @@ func buildSpec(menus []Menu) ([]menuSpec, map[int]Command) {
 	specs := make([]menuSpec, 0, len(menus))
 
 	for _, menu := range menus {
-		spec := menuSpec{title: menu.Title, items: make([]itemSpec, 0, len(menu.Items))}
-		for _, item := range menu.Items {
-			switch it := item.(type) {
-			case Separator:
-				spec.items = append(spec.items, itemSpec{separator: true})
-			case Native:
-				equiv, mods, _ := keyEquivalent(it.Key)
-				spec.items = append(spec.items, itemSpec{
-					title:     it.Title,
-					selector:  it.Selector,
-					keyEquiv:  equiv,
-					modifiers: mods,
-				})
-			case Command:
-				equiv, mods, _ := keyEquivalent(it.Key)
-				byTag[nextTag] = it
-				spec.items = append(spec.items, itemSpec{
-					title:     it.Title,
-					keyEquiv:  equiv,
-					modifiers: mods,
-					tag:       nextTag,
-				})
-				nextTag++
-			}
-		}
-		specs = append(specs, spec)
+		specs = append(specs, menuSpec{
+			title: menu.Title,
+			items: buildItems(menu.Items, byTag, &nextTag),
+		})
 	}
 
 	return specs, byTag
+}
+
+// buildItems flattens items into itemSpecs, recursing into submenus.
+// Command tags are drawn from the shared nextTag so every command in
+// the tree — nested or not — gets a unique callback tag.
+func buildItems(items []Item, byTag map[int]Command, nextTag *int) []itemSpec {
+	specs := make([]itemSpec, 0, len(items))
+	for _, item := range items {
+		switch it := item.(type) {
+		case Separator:
+			specs = append(specs, itemSpec{separator: true})
+		case Native:
+			equiv, mods, _ := keyEquivalent(it.Key)
+			specs = append(specs, itemSpec{
+				title:     it.Title,
+				selector:  it.Selector,
+				keyEquiv:  equiv,
+				modifiers: mods,
+			})
+		case Submenu:
+			specs = append(specs, itemSpec{
+				title:    it.Title,
+				children: buildItems(it.Items, byTag, nextTag),
+			})
+		case Command:
+			equiv, mods, _ := keyEquivalent(it.Key)
+			byTag[*nextTag] = it
+			specs = append(specs, itemSpec{
+				title:     it.Title,
+				keyEquiv:  equiv,
+				modifiers: mods,
+				tag:       *nextTag,
+				disabled:  it.Disabled,
+			})
+			*nextTag++
+		}
+	}
+	return specs
 }

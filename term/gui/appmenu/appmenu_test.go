@@ -170,6 +170,76 @@ func TestBuildSpec(t *testing.T) {
 	}
 }
 
+func TestBuildSpecNestedSubmenu(t *testing.T) {
+	open := Command{Title: "Open File…", Command: "edit"}
+	recentA := Command{Title: "proj-a", Command: "workspaceopen", Args: []string{"/a"}}
+	recentB := Command{Title: "proj-b", Command: "workspaceopen", Args: []string{"/b"}}
+	empty := Command{Title: "No Recent Projects", Command: "", Disabled: true}
+	quit := Command{Title: "Quit", Command: "quit"}
+
+	specs, byTag := buildSpec([]Menu{
+		{Title: "File", Items: []Item{
+			open,
+			Submenu{Title: "Open Recent", Items: []Item{recentA, recentB}},
+			quit,
+		}},
+		{Title: "Help", Items: []Item{
+			Submenu{Title: "Empty", Items: []Item{empty}},
+		}},
+	})
+
+	want := []menuSpec{
+		{
+			title: "File",
+			items: []itemSpec{
+				{title: "Open File…", tag: 1},
+				{title: "Open Recent", children: []itemSpec{
+					{title: "proj-a", tag: 2},
+					{title: "proj-b", tag: 3},
+				}},
+				{title: "Quit", tag: 4},
+			},
+		},
+		{
+			title: "Help",
+			items: []itemSpec{
+				{title: "Empty", children: []itemSpec{
+					{title: "No Recent Projects", tag: 5, disabled: true},
+				}},
+			},
+		},
+	}
+	if !reflect.DeepEqual(specs, want) {
+		t.Errorf("specs = %+v, want %+v", specs, want)
+	}
+
+	// Nested commands are addressable by unique tags.
+	wantTags := map[int]Command{1: open, 2: recentA, 3: recentB, 4: quit, 5: empty}
+	if !reflect.DeepEqual(byTag, wantTags) {
+		t.Errorf("byTag = %+v, want %+v", byTag, wantTags)
+	}
+}
+
+// TestActivateNestedTag asserts a command inside a submenu routes to
+// the activation callback by its tag, like any top-level command.
+func TestActivateNestedTag(t *testing.T) {
+	recent := Command{Title: "proj", Command: "workspaceopen", Args: []string{"/p"}}
+
+	var got []Command
+	Install([]Menu{
+		{Title: "File", Items: []Item{
+			Submenu{Title: "Open Recent", Items: []Item{recent}},
+		}},
+	}, func(c Command) { got = append(got, c) })
+
+	activateTag(1)
+
+	want := []Command{recent}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("activated = %+v, want %+v", got, want)
+	}
+}
+
 func TestActivateTag(t *testing.T) {
 	quit := Command{Title: "Quit Rune", Command: "quit"}
 	settings := Command{Title: "Settings...", Command: "config"}

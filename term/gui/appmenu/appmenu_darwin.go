@@ -33,9 +33,12 @@ package appmenu
 
 void runeAppMenuBegin(void);
 void runeAppMenuAddMenu(const char *title);
+void runeAppMenuBeginSubmenu(const char *title);
+void runeAppMenuEndSubmenu(void);
 void runeAppMenuAddSeparator(void);
 void runeAppMenuAddItem(const char *title, const char *selector,
-                        const char *keyEquiv, unsigned long modifiers, int tag);
+                        const char *keyEquiv, unsigned long modifiers, int tag,
+                        int disabled);
 void runeAppMenuCommit(void);
 */
 import "C"
@@ -49,15 +52,28 @@ func installMenus(menus []menuSpec) {
 		C.runeAppMenuAddMenu(title)
 		C.free(unsafe.Pointer(title))
 
-		for _, item := range menu.items {
-			if item.separator {
-				C.runeAppMenuAddSeparator()
-				continue
-			}
+		addItems(menu.items)
+	}
+	C.runeAppMenuCommit()
+}
+
+// addItems appends items to the current menu, descending into any
+// submenu children so the whole tree is materialized.
+func addItems(items []itemSpec) {
+	for _, item := range items {
+		switch {
+		case item.separator:
+			C.runeAppMenuAddSeparator()
+		case item.children != nil:
+			title := C.CString(item.title)
+			C.runeAppMenuBeginSubmenu(title)
+			C.free(unsafe.Pointer(title))
+			addItems(item.children)
+			C.runeAppMenuEndSubmenu()
+		default:
 			addItem(item)
 		}
 	}
-	C.runeAppMenuCommit()
 }
 
 func addItem(item itemSpec) {
@@ -68,7 +84,15 @@ func addItem(item itemSpec) {
 	keyEquiv := C.CString(item.keyEquiv)
 	defer C.free(unsafe.Pointer(keyEquiv))
 
-	C.runeAppMenuAddItem(title, selector, keyEquiv, C.ulong(item.modifiers), C.int(item.tag))
+	C.runeAppMenuAddItem(title, selector, keyEquiv, C.ulong(item.modifiers),
+		C.int(item.tag), cbool(item.disabled))
+}
+
+func cbool(b bool) C.int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 //export runeAppMenuActivate

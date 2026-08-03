@@ -40,37 +40,71 @@
 // mutation to happen anyway.
 static RuneMenuTarget *gTarget = nil;
 static NSMenu *gMainMenu = nil;
-static NSMenu *gCurrentMenu = nil;
+// gMenuStack is the path from the top-level menu down to the submenu
+// currently being filled. Items are always appended to its last entry,
+// so nested submenus push a child and pop back when finished.
+static NSMutableArray<NSMenu *> *gMenuStack = nil;
+
+static NSMenu *runeCurrentMenu(void) {
+  return [gMenuStack lastObject];
+}
 
 void runeAppMenuBegin(void) {
   if (gTarget == nil) {
     gTarget = [[RuneMenuTarget alloc] init];
   }
   gMainMenu = [[NSMenu alloc] initWithTitle:@""];
-  gCurrentMenu = nil;
+  if (gMenuStack == nil) {
+    gMenuStack = [[NSMutableArray alloc] init];
+  }
+  [gMenuStack removeAllObjects];
 }
 
 void runeAppMenuAddMenu(const char *title) {
   NSString *name = [NSString stringWithUTF8String:title];
   NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:name action:NULL keyEquivalent:@""];
-  gCurrentMenu = [[NSMenu alloc] initWithTitle:name];
-  [item setSubmenu:gCurrentMenu];
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:name];
+  [item setSubmenu:menu];
   [gMainMenu addItem:item];
+  [gMenuStack removeAllObjects];
+  [gMenuStack addObject:menu];
+}
+
+// runeAppMenuBeginSubmenu adds a submenu item under the current menu
+// and descends into it, so subsequent items land in the child until
+// runeAppMenuEndSubmenu pops back.
+void runeAppMenuBeginSubmenu(const char *title) {
+  NSString *name = [NSString stringWithUTF8String:title];
+  NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:name action:NULL keyEquivalent:@""];
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:name];
+  [item setSubmenu:menu];
+  [runeCurrentMenu() addItem:item];
+  [gMenuStack addObject:menu];
+}
+
+void runeAppMenuEndSubmenu(void) {
+  if ([gMenuStack count] > 1) {
+    [gMenuStack removeLastObject];
+  }
 }
 
 void runeAppMenuAddSeparator(void) {
-  [gCurrentMenu addItem:[NSMenuItem separatorItem]];
+  [runeCurrentMenu() addItem:[NSMenuItem separatorItem]];
 }
 
 void runeAppMenuAddItem(const char *title, const char *selector,
-                        const char *keyEquiv, unsigned long modifiers, int tag) {
+                        const char *keyEquiv, unsigned long modifiers, int tag,
+                        int disabled) {
   NSMenuItem *item =
       [[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:title]
                                  action:NULL
                           keyEquivalent:[NSString stringWithUTF8String:keyEquiv]];
   [item setKeyEquivalentModifierMask:(NSEventModifierFlags)modifiers];
 
-  if (selector[0] != '\0') {
+  if (disabled) {
+    // A disabled item has no action, so AppKit greys it out.
+    [item setEnabled:NO];
+  } else if (selector[0] != '\0') {
     // Target nil sends the action down the responder chain, which is
     // what standard AppKit actions expect.
     [item setAction:NSSelectorFromString([NSString stringWithUTF8String:selector])];
@@ -80,10 +114,10 @@ void runeAppMenuAddItem(const char *title, const char *selector,
     [item setAction:@selector(runeMenuAction:)];
   }
 
-  [gCurrentMenu addItem:item];
+  [runeCurrentMenu() addItem:item];
 }
 
 void runeAppMenuCommit(void) {
   [NSApp setMainMenu:gMainMenu];
-  gCurrentMenu = nil;
+  [gMenuStack removeAllObjects];
 }
