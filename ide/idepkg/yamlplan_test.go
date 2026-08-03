@@ -49,6 +49,9 @@ func TestPlanConfigChange(t *testing.T) {
 		wantPrompt    bool
 		wantConflict  map[string]any
 		wantAutoApply map[string]any
+		wantPathID    string
+		wantPathFrom  string
+		wantPathTo    string
 		wantErr       bool
 	}{
 		{
@@ -134,6 +137,35 @@ func TestPlanConfigChange(t *testing.T) {
 			name:       "non-version var differing, no prompt",
 			pkgConfig:  "datadir: $RUNE_DATADIR/cache\n",
 			userCfg:    map[string]any{"datadir": "/old/cache"},
+			version:    "1",
+			wantPrompt: false,
+		},
+		{
+			name:      "installed extension with stale path prompts",
+			pkgConfig: "extensions:\n  testpkg:\n    path: $RUNE_DATADIR/bin/testpkg\n",
+			userCfg: map[string]any{"extensions": map[string]any{
+				"testpkg": map[string]any{"path": "/old/testpkg"},
+			}},
+			version:      "1",
+			wantPathID:   "testpkg",
+			wantPathFrom: "/old/testpkg",
+			wantPathTo:   "/data/bin/testpkg",
+		},
+		{
+			name:      "extension path using data directory variable does not prompt",
+			pkgConfig: "extensions:\n  testpkg:\n    path: $RUNE_DATADIR/bin/testpkg\n",
+			userCfg: map[string]any{"extensions": map[string]any{
+				"testpkg": map[string]any{"path": "$RUNE_DATADIR/bin/testpkg"},
+			}},
+			version:    "1",
+			wantPrompt: false,
+		},
+		{
+			name:      "extension path outside data directory does not prompt",
+			pkgConfig: "extensions:\n  testpkg:\n    path: /usr/local/bin/testpkg\n",
+			userCfg: map[string]any{"extensions": map[string]any{
+				"testpkg": map[string]any{"path": "/old/testpkg"},
+			}},
 			version:    "1",
 			wantPrompt: false,
 		},
@@ -226,7 +258,7 @@ func TestPlanConfigChange(t *testing.T) {
 			require.NoError(t, err)
 			plan, err := planConfigChange(
 				"config.yaml", []byte(tt.pkgConfig), tt.userCfg, userDoc,
-				pkgID, tt.version, dataDir, editorMode,
+				pkgID, tt.version, dataDir, editorMode, true,
 			)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -254,7 +286,21 @@ func TestPlanConfigChange(t *testing.T) {
 				assert.Nil(t, plan.autoApplyDoc)
 			}
 
-			if tt.wantConflict == nil && tt.wantAutoApply == nil {
+			if tt.wantPathTo != "" {
+				require.Len(t, plan.pathChanges, 1)
+				assert.Equal(t, tt.wantPathID, plan.pathChanges[0].extensionID)
+				assert.Equal(t, tt.wantPathFrom, plan.pathChanges[0].currentPath)
+				assert.Equal(t, tt.wantPathTo, plan.pathChanges[0].installedPath)
+				assert.Equal(t, normalizeYAML(t, map[string]any{
+					"extensions": map[string]any{
+						"testpkg": map[string]any{"path": tt.wantPathTo},
+					},
+				}), docToMap(t, plan.pathChanges[0].pkgDoc))
+			} else {
+				assert.Empty(t, plan.pathChanges)
+			}
+
+			if tt.wantConflict == nil && tt.wantAutoApply == nil && tt.wantPathTo == "" {
 				assert.Nil(t, plan.userDoc)
 			}
 		})

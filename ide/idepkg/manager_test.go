@@ -1803,6 +1803,106 @@ func TestPromptConfigChangeRender(t *testing.T) {
 	assert.Contains(t, rendered, "Deny")
 }
 
+func TestInstallConfigExtensionPathPrompt(t *testing.T) {
+	t.Parallel()
+	const pkgID = "rune-agent"
+
+	for _, tt := range []struct {
+		name     string
+		accept   bool
+		wantPath string
+	}{
+		{name: "yes updates the path", accept: true, wantPath: "new"},
+		{name: "no preserves the path", accept: false, wantPath: "old"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pkgs := idepkgtest.MakePackages()
+			versions := idepkgtest.MakeBundles([]release.Bundle{{Package: pkgID, Version: "1"}})
+			m, n, rm, datadir := newTestManager(t, pkgs, versions)
+
+			oldPath := "/usr/local/bin/rune-agent"
+			newPath := filepath.Join(datadir, "bin", pkgID)
+			userConfig := fmt.Sprintf("extensions:\n  %s:\n    path: %q\n", pkgID, oldPath)
+			require.NoError(t, os.WriteFile(m.configPath, []byte(userConfig), 0o644))
+
+			var rendered string
+			var mergeHookCalls int
+			m.afterConfigMerge = func(ConfigMergeEvent) (ConfigMergeResult, error) {
+				mergeHookCalls++
+				return ConfigMergeResult{LiveApplied: true}, nil
+			}
+			m.wm = &mockWindowManager{
+				floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+					width, height := h.Dimensions()
+					assert.LessOrEqual(t, width, 80)
+					h.Resize(width, height)
+					rendered = handlertest.DrawHandler(h, width, height)
+					if !tt.accept {
+						h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+					}
+					h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+					return &mockWindow{}, nil
+				},
+			}
+
+			rm.SetTarball(pkgID, pkgTarball(t, pkgID, ""))
+			require.NoError(t, m.InstallPackageVersion(
+				context.Background(), pkgID, release.Version("1"), repl.NopProgressWriter()))
+			n.RequireNoErrorNotification()
+			assert.Contains(t, rendered, "Package rune-agent wants to install extension rune-agent at:")
+			assert.Contains(t, rendered, newPath)
+			assert.Contains(t, rendered, "An extension with the same ID is already registered at:")
+			assert.Contains(t, rendered, oldPath)
+			assert.Contains(t, rendered, "Do you want to replace it?")
+			assert.Contains(t, rendered, "Yes")
+			assert.Contains(t, rendered, "No")
+
+			cfg := readUserConfigMap(t, m.configPath)
+			extensions := cfg["extensions"].(map[string]any)
+			extension := extensions[pkgID].(map[string]any)
+			if tt.wantPath == "new" {
+				assert.Equal(t, newPath, fmt.Sprint(extension["path"]))
+				assert.Zero(t, mergeHookCalls,
+					"an existing extension must not be started again after its path changes")
+			} else {
+				assert.Equal(t, oldPath, fmt.Sprint(extension["path"]))
+				assert.Zero(t, mergeHookCalls)
+			}
+		})
+	}
+}
+
+func TestProcessInstalledSettingsDoesNotPromptForExtensionPath(t *testing.T) {
+	t.Parallel()
+
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "testpkg", Version: "1"}})
+	m, _, rm, datadir := newTestManager(t, pkgs, versions)
+	require.NoError(t, os.WriteFile(m.configPath, []byte("{}\n"), 0o644))
+	rm.SetTarball("testpkg", pkgTarball(t, "testpkg", ""))
+	require.NoError(t, m.InstallPackageVersion(
+		context.Background(), "testpkg", release.Version("1"), repl.NopProgressWriter()))
+
+	oldPath := filepath.Join(t.TempDir(), "testpkg")
+	userConfig := fmt.Sprintf("extensions:\n  testpkg:\n    path: %q\n", oldPath)
+	require.NoError(t, os.WriteFile(m.configPath, []byte(userConfig), 0o644))
+	m.wm = &mockWindowManager{
+		floatingFn: func(_ browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+			t.Fatal("extension path prompts must only be scheduled during installation")
+			return nil, nil
+		},
+	}
+
+	require.NoError(t, m.ProcessInstalledSettings(context.Background()))
+	cfg := readUserConfigMap(t, m.configPath)
+	extensions := cfg["extensions"].(map[string]any)
+	extension := extensions["testpkg"].(map[string]any)
+	assert.Equal(t, oldPath, fmt.Sprint(extension["path"]))
+	assert.NotEqual(t, filepath.Join(datadir, "bin", "testpkg"), fmt.Sprint(extension["path"]))
+}
+
 // TestInstallPackageVersionConfigMissingUserConfig asserts that when the user
 // config file does not exist, installing a package still merges the package's
 // env block by creating the config file. Without this, a fresh datadir (e.g. a
@@ -2759,7 +2859,7 @@ func TestProcessConfigAutoApply(t *testing.T) {
 		plan, err := planConfigChange(pkgConfig,
 			[]byte("env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"),
 			readUserConfigMap(t, m.configPath), userDoc, "vpkg", release.Version("2"),
-			m.dataDir, m.editorMode)
+			m.dataDir, m.editorMode, false)
 		require.NoError(t, err)
 		require.True(t, plan.prompt)
 		require.Nil(t, plan.autoApplyDoc, "no new keys to auto-apply")

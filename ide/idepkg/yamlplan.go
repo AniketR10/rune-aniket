@@ -25,6 +25,8 @@ package idepkg
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/unstablebuild/blue/release"
 	"gopkg.in/yaml.v3"
@@ -41,13 +43,21 @@ type configChangePlan struct {
 	userDoc      *yaml.Node
 	pkgDoc       *yaml.Node
 	autoApplyDoc *yaml.Node
+	pathChanges  []extensionPathChange
+}
+
+type extensionPathChange struct {
+	extensionID   string
+	currentPath   string
+	installedPath string
+	pkgDoc        *yaml.Node
 }
 
 func planConfigChange(
 	pkgConfigFile string, pkgConfigData []byte,
 	userCfg map[string]any, userDoc *yaml.Node,
 	pkgID string, pkgVersion release.Version,
-	dataDir, editorMode string,
+	dataDir, editorMode string, promptExtensionPaths bool,
 ) (configChangePlan, error) {
 	runeVarMapping := func(key string) (string, bool) {
 		switch key {
@@ -85,13 +95,20 @@ func planConfigChange(
 		return configChangePlan{}, err
 	}
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
+	var pathChanges []extensionPathChange
+	if promptExtensionPaths {
+		pathChanges, err = extractExtensionPathChanges(userCfg, pkgOverlayCfg, dataDir)
+		if err != nil {
+			return configChangePlan{}, err
+		}
+	}
 
 	newCfg, conflictCfg := idePkgConfigDiff(userCfg, pkgOverlayCfg, versionDependent, nil)
-	if newCfg == nil && conflictCfg == nil {
+	if newCfg == nil && conflictCfg == nil && len(pathChanges) == 0 {
 		return configChangePlan{}, nil
 	}
 
-	plan := configChangePlan{userDoc: userDoc}
+	plan := configChangePlan{userDoc: userDoc, pathChanges: pathChanges}
 
 	if newCfg != nil {
 		autoApplyDoc, err := mapToYAMLDocument(newCfg)
@@ -116,6 +133,71 @@ func planConfigChange(
 	}
 
 	return plan, nil
+}
+
+func extractExtensionPathChanges(
+	userCfg, pkgOverlayCfg map[string]any, dataDir string,
+) ([]extensionPathChange, error) {
+	userExtensions, ok := userCfg["extensions"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	pkgExtensions, ok := pkgOverlayCfg["extensions"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+
+	var changes []extensionPathChange
+	for id, pkgExtensionValue := range pkgExtensions {
+		pkgExtension, ok := pkgExtensionValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		installedPath, ok := pkgExtension["path"].(string)
+		if !ok || !pathWithinDir(installedPath, dataDir) {
+			continue
+		}
+		userExtension, ok := userExtensions[id].(map[string]any)
+		if !ok {
+			continue
+		}
+		currentPath, ok := userExtension["path"].(string)
+		if !ok || equivalentExtensionPath(currentPath, installedPath, dataDir) {
+			continue
+		}
+
+		pkgDoc, err := mapToYAMLDocument(map[string]any{
+			"extensions": map[string]any{
+				id: map[string]any{"path": installedPath},
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("extension path change to yaml: %w", err)
+		}
+		changes = append(changes, extensionPathChange{
+			extensionID:   id,
+			currentPath:   currentPath,
+			installedPath: installedPath,
+			pkgDoc:        pkgDoc,
+		})
+		delete(pkgExtension, "path")
+	}
+	return changes, nil
+}
+
+func equivalentExtensionPath(currentPath, installedPath, dataDir string) bool {
+	currentPath = expandRuneVars(currentPath, func(name string) (string, bool) {
+		return dataDir, name == "RUNE_DATADIR"
+	})
+	return filepath.Clean(currentPath) == filepath.Clean(installedPath)
+}
+
+func pathWithinDir(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || rel == "." || filepath.IsAbs(rel) {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 type mergedConfig struct {

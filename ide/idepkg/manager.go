@@ -833,7 +833,7 @@ func (m *Manager) runDownload(
 		return fmt.Errorf("update storage field: %w", err)
 	}
 
-	if err := m.processConfig(pkgID, version, configFile); err != nil {
+	if err := m.processInstalledConfig(pkgID, version, configFile); err != nil {
 		return fmt.Errorf("process configuration for %s version %s: %w",
 			pkgID, version, err)
 	}
@@ -984,6 +984,60 @@ func (m *Manager) promptConfigChange(
 		"Extension %s (version %s) wants to **update** your configuration "+
 			"with the following settings:\n\n```yaml\n%s\n```\n\nDo you want to allow this?",
 		pkgID, pkgVersion, string(configYAML))
+	return m.promptConfigMerge(
+		pkgID, pkgVersion, message,
+		[]string{"    Allow    ", "    Deny    "},
+		[]term.KeyComb{{Ch: 'a'}, {Ch: 'd'}}, userDoc, pkgDoc,
+	)
+}
+
+func (m *Manager) promptExtensionPathChange(
+	pkgID string, pkgVersion release.Version, userDoc *yaml.Node,
+	change extensionPathChange,
+) error {
+	message := fmt.Sprintf(
+		"Package **%s** wants to install extension **%s** at:\n\n`%s`\n\n"+
+			"An extension with the same ID is already registered at:\n\n`%s`\n\n"+
+			"Do you want to replace it?",
+		pkgID, change.extensionID, change.installedPath, change.currentPath)
+	return m.promptConfigMergeWithResult(
+		pkgID, pkgVersion, message,
+		[]string{"    Yes    ", "    No    "},
+		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}}, userDoc, change.pkgDoc,
+		false,
+		80,
+		func(_ ConfigMergeResult) {
+			_, _ = m.n.Notify(browserapi.LevelSuccess,
+				"updated %s extension path. Restart the program to load the changes.", pkgID)
+		},
+	)
+}
+
+func (m *Manager) promptConfigMerge(
+	pkgID string, pkgVersion release.Version, message string,
+	options []string, bindings []term.KeyComb, userDoc, pkgDoc *yaml.Node,
+) error {
+	return m.promptConfigMergeWithResult(
+		pkgID, pkgVersion, message, options, bindings, userDoc, pkgDoc,
+		true,
+		0,
+		func(result ConfigMergeResult) {
+			m.notifyConfigApplied(browserapi.LevelSuccess, pkgID, result)
+		},
+	)
+}
+
+func (m *Manager) promptConfigMergeWithResult(
+	pkgID string, pkgVersion release.Version, message string,
+	options []string, bindings []term.KeyComb, userDoc, pkgDoc *yaml.Node,
+	runAfterMerge bool,
+	maxWidth int,
+	onApplied func(ConfigMergeResult),
+) error {
+	newMessage := markdownOrFallback(m.parser, m.scheduleNextTick)
+	if maxWidth > 0 {
+		newMessage = boundedFloatingMessage(newMessage, maxWidth)
+	}
 
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
@@ -994,23 +1048,29 @@ func (m *Manager) promptConfigChange(
 			Attrs: term.AttrBold,
 			Bg:    term.ColorGray,
 		},
-		OptionBindings: []term.KeyComb{{Ch: 'a'}, {Ch: 'd'}},
+		OptionBindings: bindings,
 		PromptConfig: component.PromptConfig{
 			Message:    message,
-			Options:    []string{"    Allow    ", "    Deny    "},
-			NewMessage: markdownOrFallback(m.parser, m.scheduleNextTick),
+			Options:    options,
+			NewMessage: newMessage,
 		},
 		PromptHandler: handler.FuncPromptHandler(func(idx int, _ string) {
 			allowed := idx == 0
 			if !allowed {
 				return
 			}
-			result, err := m.applyConfigMerge(pkgID, pkgVersion, userDoc, pkgDoc)
+			var result ConfigMergeResult
+			var err error
+			if runAfterMerge {
+				result, err = m.applyConfigMerge(pkgID, pkgVersion, userDoc, pkgDoc)
+			} else {
+				err = m.writeConfigMerge(userDoc, pkgDoc)
+			}
 			if err != nil {
 				_, _ = m.n.Notify(browserapi.LevelError, "apply configuration: %s", err)
 				return
 			}
-			m.notifyConfigApplied(browserapi.LevelSuccess, pkgID, result)
+			onApplied(result)
 		}, func() error { return nil }),
 	})
 
@@ -1028,6 +1088,30 @@ func (m *Manager) promptConfigChange(
 	}
 
 	return nil
+}
+
+func boundedFloatingMessage(
+	newMessage func(string) component.Floating, maxWidth int,
+) func(string) component.Floating {
+	return func(message string) component.Floating {
+		return &maxWidthFloating{
+			Floating: newMessage(message),
+			maxWidth: maxWidth,
+		}
+	}
+}
+
+type maxWidthFloating struct {
+	component.Floating
+	maxWidth int
+}
+
+func (f *maxWidthFloating) Dimensions() (width, height int) {
+	width, height = f.Floating.Dimensions()
+	if width <= f.maxWidth {
+		return width, height
+	}
+	return f.maxWidth, f.Floating.(component.Responsive).Height(f.maxWidth)
 }
 
 // ConfigMergeEvent describes a package config merge that was just written to
@@ -1075,15 +1159,22 @@ type ConfigMergeResult struct {
 func (m *Manager) applyConfigMerge(
 	pkgID string, pkgVersion release.Version, userDoc, addDoc *yaml.Node,
 ) (ConfigMergeResult, error) {
+	if err := m.writeConfigMerge(userDoc, addDoc); err != nil {
+		return ConfigMergeResult{}, err
+	}
+	return m.runAfterConfigMerge(pkgID, pkgVersion, addDoc)
+}
+
+func (m *Manager) writeConfigMerge(userDoc, addDoc *yaml.Node) error {
 	starConfig := m.starUserConfig()
 	merged, err := buildMergedConfig(userDoc, addDoc, starConfig)
 	if err != nil {
-		return ConfigMergeResult{}, err
+		return err
 	}
 
 	backup, err := backupUserConfig(m.configPath)
 	if err != nil {
-		return ConfigMergeResult{}, fmt.Errorf("backup user config: %w", err)
+		return fmt.Errorf("backup user config: %w", err)
 	}
 
 	m.log(log.InfoLevel, "created config backup "+
@@ -1091,14 +1182,14 @@ func (m *Manager) applyConfigMerge(
 
 	if starConfig {
 		if err := starlarkconfig.WriteManagedConfigFileAtomic(m.configPath, merged.starDiff); err != nil {
-			return ConfigMergeResult{}, fmt.Errorf("write starlark config: %w", err)
+			return fmt.Errorf("write starlark config: %w", err)
 		}
-		return m.runAfterConfigMerge(pkgID, pkgVersion, addDoc)
+		return nil
 	}
 	if err := writeYAMLAtomic(m.configPath, merged.yamlDoc, addDoc.Content[0]); err != nil {
-		return ConfigMergeResult{}, fmt.Errorf("write config: %w", err)
+		return fmt.Errorf("write config: %w", err)
 	}
-	return m.runAfterConfigMerge(pkgID, pkgVersion, addDoc)
+	return nil
 }
 
 func (m *Manager) runAfterConfigMerge(
@@ -1130,6 +1221,19 @@ func (m *Manager) notifyConfigApplied(
 
 func (m *Manager) processConfig(
 	pkgID string, pkgVersion release.Version, pkgConfigFile string,
+) error {
+	return m.processConfigFile(pkgID, pkgVersion, pkgConfigFile, false)
+}
+
+func (m *Manager) processInstalledConfig(
+	pkgID string, pkgVersion release.Version, pkgConfigFile string,
+) error {
+	return m.processConfigFile(pkgID, pkgVersion, pkgConfigFile, true)
+}
+
+func (m *Manager) processConfigFile(
+	pkgID string, pkgVersion release.Version, pkgConfigFile string,
+	promptExtensionPaths bool,
 ) error {
 	_, err := os.Stat(pkgConfigFile)
 	if err != nil && !os.IsNotExist(err) {
@@ -1167,7 +1271,7 @@ func (m *Manager) processConfig(
 
 	plan, err := planConfigChange(
 		pkgConfigFile, data, userCfg, userDoc,
-		pkgID, pkgVersion, m.dataDir, m.editorMode,
+		pkgID, pkgVersion, m.dataDir, m.editorMode, promptExtensionPaths,
 	)
 	if err != nil {
 		return err
@@ -1179,6 +1283,13 @@ func (m *Manager) processConfig(
 			return fmt.Errorf("auto-apply config change: %w", err)
 		}
 		m.notifyConfigApplied(browserapi.LevelInfo, pkgID, result)
+	}
+	for _, change := range plan.pathChanges {
+		if err := m.promptExtensionPathChange(
+			pkgID, pkgVersion, plan.userDoc, change,
+		); err != nil {
+			return fmt.Errorf("prompt extension path change: %w", err)
+		}
 	}
 
 	if plan.prompt {
