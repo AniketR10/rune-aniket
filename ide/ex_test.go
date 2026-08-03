@@ -3993,6 +3993,33 @@ func TestReplacingActivePromptFromDispatch(t *testing.T) {
 	assert.Same(t, newCmd, b.ex.cmd, "the new prompt must remain active")
 }
 
+// TestCloseCommandPrompt pins that closeCommandPrompt dismisses an open
+// prompt — clearing e.cmd and marking its window closed — and is a
+// no-op returning nil when no prompt is open. Menu-driven dispatch
+// relies on this to reveal a command's own picker instead of leaving it
+// behind the always-on-top prompt overlay.
+func TestCloseCommandPrompt(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+
+	// No-op when nothing is open.
+	require.Nil(t, b.ex.cmd)
+	require.NoError(t, b.ex.closeCommandPrompt())
+
+	b.ex.openCommandPrompt()
+	win := b.ex.cmdWin
+	require.NotNil(t, b.ex.cmd)
+	require.NotNil(t, win)
+
+	require.NoError(t, b.ex.closeCommandPrompt())
+	assert.Nil(t, b.ex.cmd, "closing must clear the active prompt")
+	assert.True(t, win.Closed(), "closing must retire the floating window")
+
+	// Idempotent: a second call after the prompt is gone still succeeds.
+	require.NoError(t, b.ex.closeCommandPrompt())
+}
+
 type closeCountingPartitionStore struct {
 	storageapi.Service
 	partitionCloseCount atomic.Int32

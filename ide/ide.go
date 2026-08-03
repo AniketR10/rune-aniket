@@ -399,6 +399,15 @@ func (i *IDE) DispatchCommand(cmd string, args ...string) error {
 	return i.workspaceHandler.focusEx().dispatchCommand(cmd, args...)
 }
 
+// CloseCommandPrompt dismisses the command prompt in the focused
+// workspace if one is open, and is a no-op otherwise. Callers that
+// dispatch a command opening its own prompt or picker (for example the
+// native menu bar) use this first so the new surface is not hidden
+// behind the always-on-top command prompt overlay.
+func (i *IDE) CloseCommandPrompt() error {
+	return i.workspaceHandler.focusEx().closeCommandPrompt()
+}
+
 // RecentWorkspaceOpens returns the paths previously passed to the
 // workspaceopen command from the command prompt, most-recent-first and
 // de-duplicated. It reflects only prompt-driven opens; menu-driven

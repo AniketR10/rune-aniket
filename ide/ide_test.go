@@ -3433,6 +3433,58 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 	})
 }
 
+// TestIDECloseCommandPrompt pins the public CloseCommandPrompt seam the
+// native menu bar uses before dispatching a command: it dismisses an
+// open prompt in the focused workspace and is a no-op when none is
+// open. Without it, a menu command that opens its own picker would sit
+// behind the always-on-top command prompt overlay.
+func TestIDECloseCommandPrompt(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+
+	mu := new(sync.Mutex)
+	scheduleNextTick, drain := newTestScheduler(t, mu)
+
+	i, err := New("", configFile.Name(), dataDir,
+		pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+	drain()
+
+	// The home workspace pre-opens the command prompt on Ready.
+	mu.Lock()
+	cmd := i.workspaceHandler.focusEx().cmd
+	mu.Unlock()
+	require.NotNil(t, cmd, "the home prompt should be open after Ready")
+
+	mu.Lock()
+	err = i.CloseCommandPrompt()
+	mu.Unlock()
+	require.NoError(t, err)
+
+	mu.Lock()
+	cmd = i.workspaceHandler.focusEx().cmd
+	mu.Unlock()
+	assert.Nil(t, cmd, "CloseCommandPrompt must dismiss the open prompt")
+
+	// Idempotent: closing again with no prompt open still succeeds.
+	mu.Lock()
+	err = i.CloseCommandPrompt()
+	mu.Unlock()
+	assert.NoError(t, err)
+}
+
 // TestCloseDoesNotCloseBorrowedStorage verifies that closing an IDE does
 // not propagate Close to the storage service it borrowed from the caller.
 //

@@ -2842,6 +2842,23 @@ func (e *ex) stopPromptShader() {
 	e.promptShader = nil
 }
 
+// closeCommandPrompt dismisses the command prompt if one is open. It is
+// a no-op otherwise. Closing the floating window runs the prompt's
+// onClose callback, which clears e.cmd and stops the shader; the direct
+// e.cmd.Close() fallback covers the rare case where the window is
+// already gone. Callers dispatching a command that opens its own prompt
+// use this first so the new surface is not hidden behind the
+// always-on-top command prompt overlay.
+func (e *ex) closeCommandPrompt() error {
+	if e.cmd == nil {
+		return nil
+	}
+	if e.cmdWin != nil && !e.cmdWin.Closed() {
+		return e.cmdWin.Close()
+	}
+	return e.cmd.Close()
+}
+
 // Editor returns the underlying Editor implementation.
 func (e *ex) Editor() text.Editor {
 	return e.editorObserver
@@ -2889,16 +2906,8 @@ func (e *ex) Close() (ret error) {
 		}
 		e.fileExplorerHandler = nil
 	}
-	if e.cmd != nil {
-		var err error
-		if e.cmdWin != nil && !e.cmdWin.Closed() {
-			err = e.cmdWin.Close()
-		} else {
-			err = e.cmd.Close()
-		}
-		if err != nil {
-			ret = multierror.Append(ret, err)
-		}
+	if err := e.closeCommandPrompt(); err != nil {
+		ret = multierror.Append(ret, err)
 	}
 	e.stopPromptShader()
 	if err := e.container.Close(); err != nil {

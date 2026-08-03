@@ -535,10 +535,7 @@ func (b *bootstrapHandler) activateAppMenuCommand(cmd appmenu.Command) {
 				"%s is not available during setup", cmd.Title)
 			return
 		}
-		if err := b.realIDE.DispatchCommand(cmd.Command, cmd.Args...); err != nil {
-			_, _ = b.notifications().Notify(browserapi.LevelError,
-				"%s: %v", cmd.Title, err)
-		}
+		_ = b.dispatchAppMenuCommand(cmd, cmd.Args...)
 	}})
 }
 
@@ -552,9 +549,7 @@ func (b *bootstrapHandler) activateRecentCommand(cmd appmenu.Command) {
 				"%s is not available during setup", cmd.Title)
 			return
 		}
-		if err := b.realIDE.DispatchCommand(cmd.Command, cmd.Args...); err != nil {
-			_, _ = b.notifications().Notify(browserapi.LevelError,
-				"%s: %v", cmd.Title, err)
+		if err := b.dispatchAppMenuCommand(cmd, cmd.Args...); err != nil {
 			return
 		}
 		b.recordRecentOpen(cmd.Command, cmd.Args...)
@@ -581,15 +576,28 @@ func (b *bootstrapHandler) activateOpenPanel(cmd appmenu.Command, opts openpanel
 		}
 		b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
 			for _, path := range paths {
-				if err := b.realIDE.DispatchCommand(cmd.Command, path); err != nil {
-					_, _ = b.notifications().Notify(browserapi.LevelError,
-						"%s: %v", cmd.Title, err)
+				if err := b.dispatchAppMenuCommand(cmd, path); err != nil {
 					continue
 				}
 				b.recordRecentOpen(cmd.Command, path)
 			}
 		}})
 	})
+}
+
+// dispatchAppMenuCommand closes the command prompt, then runs cmd with
+// the given args against the IDE, reporting any error as a notification.
+// Menu-driven commands often open their own prompt or picker, so the
+// always-on-top command prompt must be dismissed first or the new
+// surface renders behind it. Runs on the main thread.
+func (b *bootstrapHandler) dispatchAppMenuCommand(cmd appmenu.Command, args ...string) error {
+	_ = b.realIDE.CloseCommandPrompt()
+	if err := b.realIDE.DispatchCommand(cmd.Command, args...); err != nil {
+		_, _ = b.notifications().Notify(browserapi.LevelError,
+			"%s: %v", cmd.Title, err)
+		return err
+	}
+	return nil
 }
 
 // recordRecentOpen remembers a successful project open so the Open
