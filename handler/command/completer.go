@@ -92,6 +92,12 @@ func DirsCompleter(reader walkdir.Reader) Completer {
 	return walkDirCompleter(reader, true)
 }
 
+// NonRecursiveDirsCompleter returns a directory path completer that lists
+// only the immediate children of the directory implied by the last argument.
+func NonRecursiveDirsCompleter(reader walkdir.Reader) Completer {
+	return nonRecursiveDirsCompleter(reader)
+}
+
 func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 	traverse := func(
 		ctx context.Context, w walkdir.Reader, root string,
@@ -188,6 +194,116 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 		}
 		return iterator.Map(it, ShellQuote), modifiedLast, nil
 	})
+}
+
+func nonRecursiveDirsCompleter(reader walkdir.Reader) Completer {
+	return FuncCompleter(func(
+		_ context.Context, args []string,
+	) (iterator.Iterator[string], string, error) {
+		last := ""
+		if len(args) != 0 {
+			last = UnquoteToken(args[len(args)-1])
+		}
+
+		var (
+			results     []string
+			initialized bool
+			initErr     error
+			idx         int
+		)
+		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+			if !initialized {
+				results, initErr = listNonRecursiveDirCompletions(ctx, reader, last)
+				initialized = true
+			}
+			if initErr != nil {
+				return "", false, initErr
+			}
+			if idx >= len(results) {
+				return "", false, nil
+			}
+			result := results[idx]
+			idx++
+			return result, true, nil
+		}, func() error { return nil }), "", nil
+	})
+}
+
+func listNonRecursiveDirCompletions(
+	ctx context.Context, reader walkdir.Reader, last string,
+) ([]string, error) {
+	cwd, err := reader.URI(".")
+	if err != nil {
+		return nil, err
+	}
+
+	pathURI := cwd
+	completeURI := false
+	if last != "" {
+		pathURI, err = workspaceapi.ParseURI(last)
+		if err == nil {
+			completeURI = true
+		} else {
+			pathURI, err = reader.URI(last)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if pathURI.Scheme() != cwd.Scheme() || pathURI.Host() != cwd.Host() ||
+		pathURI.User() != cwd.User() {
+		return nil, nil
+	}
+
+	enteredDir := last == "" || last == "~" || last == "/~" ||
+		strings.HasSuffix(last, "/") || strings.HasSuffix(last, string(filepath.Separator))
+	dirPath := pathURI.Path()
+	if !enteredDir {
+		dirPath = filepath.Dir(dirPath)
+	}
+
+	entries, err := reader.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+	filter := vctrl.AnyMatcher(
+		vctrl.ProtectedDirMatcher(reader), vctrl.HiddenBaseMatcher())
+	outputBase := filepath.Dir(last)
+	if enteredDir {
+		outputBase = filepath.Clean(last)
+	}
+
+	results := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		if !entry.Type().IsDir() {
+			continue
+		}
+		childURI, err := workspaceapi.WithPath(
+			pathURI, filepath.Join(dirPath, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if filter.Match(childURI, true) {
+			continue
+		}
+
+		var result string
+		switch {
+		case completeURI:
+			result = workspaceapi.RelPath(cwd, childURI)
+		case outputBase == "." || outputBase == "":
+			result = entry.Name()
+		default:
+			result = filepath.Join(outputBase, entry.Name())
+		}
+		results = append(results, ShellQuote(result))
+	}
+	return results, nil
 }
 
 // OutputLinesCompleter returns a files path completer with the given

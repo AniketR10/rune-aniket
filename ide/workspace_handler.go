@@ -3129,7 +3129,7 @@ func (h *workspaceManagerHandler) completeCommand(
 		argv := append([]string{cmd.Name}, cmd.Args...)
 		return command.MultiCompleter(
 			command.HistoryCompleter(h.commandHistory),
-			command.DirsCompleter(h.empty.workspace),
+			command.NonRecursiveDirsCompleter(h.empty.workspace),
 		).Complete(ctx, argv)
 	case cmdMoveWorkspace:
 		if len(cmd.Args) <= 1 {

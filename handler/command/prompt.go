@@ -740,7 +740,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 	isEmpty := h.list.Buffer().Size() == 0
 	h.buf.WriteString(string(ev.Ch))
 	h.list.Buffer().WriteString(string(ev.Ch))
-	if isEmpty {
+	if isEmpty || (ev.Ch == '/' && !h.bracketedPaste) {
 		h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
 	}
 	return

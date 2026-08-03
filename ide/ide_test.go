@@ -829,10 +829,12 @@ func TestWorkspaceOpenCompletionSurfacesHistory(t *testing.T) {
 	repoA := t.TempDir()
 	repoB := t.TempDir()
 
-	// workspaceopen completes directories relative to the home
-	// workspace root when the last argument is empty, so an unpinned
-	// HOME makes this test walk the whole real home directory.
+	// Keep the configured workspace home distinct from the OS home so this
+	// test catches accidental use of user.Current or $HOME by the completer.
 	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(
+		filepath.Join(home, "projects", "nested"), 0o700))
 
 	configPath := filepath.Join(dataDir, "rune.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(`
@@ -841,6 +843,8 @@ editor:
 command:
   show_manual: false
   key: ":"
+workspace:
+  home: `+home+`
 `), 0666))
 
 	// Seed repoB so it can be the initial workspace; the command prompt
@@ -899,6 +903,18 @@ command:
 	assert.Equal(t, repoA, got[0],
 		"first completion must be the prior workspaceopen argument from "+
 			"history; got %q. full result: %v", got[0], got)
+	assert.Contains(t, got, "projects")
+	assert.NotContains(t, got, "projects/nested")
+
+	mu.Lock()
+	nested, _, err := ex.comp.CompleteCommand(t.Context(),
+		textapi.Command{Name: "workspaceopen", Args: []string{"projects/"}})
+	mu.Unlock()
+	require.NoError(t, err)
+	defer func() { _ = nested.Close() }()
+	nestedGot, err := iterator.ToSlice(t.Context(), nested)
+	require.NoError(t, err)
+	assert.Contains(t, nestedGot, "projects/nested")
 }
 
 // TestRecentWorkspaceOpensReflectsPromptHistory asserts the exported
@@ -971,11 +987,10 @@ command:
 // scope here.
 //
 // The flow mirrors a real user: with HOME pointing at a directory that
-// holds a single adversarially named child, type `:workspaceopen `, press
-// Tab to accept the sole completion, then Enter to dispatch. Scoping the
-// completion to a one-entry HOME keeps the directory walk cheap and the
-// selection deterministic; syncCommandPrompt runs it on the test
-// goroutine so no settling races remain.
+// holds a single adversarially named child, paste that home path, type a
+// trailing slash, press Tab to accept the sole completion, then Enter to
+// dispatch. syncCommandPrompt runs it on the test goroutine so no settling
+// races remain.
 func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -991,11 +1006,8 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dataDir := t.TempDir()
 
-			// HOME holds exactly one (adversarially named) child. The
-			// workspaceopen completer lists directories relative to HOME,
-			// so an empty argument yields a single, deterministic entry
-			// to accept with Tab without typing an absolute path (which
-			// would walk the filesystem root).
+			// HOME holds exactly one (adversarially named) child, making
+			// completion from its absolute path deterministic.
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			target := filepath.Join(home, tc.dirName)
@@ -1042,8 +1054,6 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 			wh.focusEx().syncCommandPrompt = true
 			mu.Unlock()
 
-			// `:workspaceopen ` (command + space) lists HOME's children;
-			// with one entry the empty-argument completion is unambiguous.
 			keys, err := term.ParseKeys(":workspaceopen<space>")
 			require.NoError(t, err)
 			for _, k := range keys {
@@ -1051,6 +1061,14 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 				root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
 				mu.Unlock()
 			}
+			mu.Lock()
+			root.Handle(term.Event{Type: term.EventPasteStart})
+			for _, ch := range home {
+				root.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+			root.Handle(term.Event{Type: term.EventPasteEnd})
+			root.Handle(term.Event{Type: term.EventKey, Ch: filepath.Separator})
+			mu.Unlock()
 			wh.focusEx().Wait()
 
 			// Tab accepts the sole completion (the quoted child path),

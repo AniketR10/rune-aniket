@@ -652,6 +652,47 @@ func TestPathCompletersCompleteSameOriginURI(t *testing.T) {
 	}
 }
 
+func TestNonRecursiveDirsCompleterUsesReaderRoot(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+	c := NonRecursiveDirsCompleter(fix.reader)
+
+	tests := []struct {
+		path    string
+		want    []string
+		wantNot []string
+	}{
+		{
+			want:    []string{"src", "docs"},
+			wantNot: []string{"src/cmd", "src/cmd/rune"},
+		},
+		{
+			path:    "src/",
+			want:    []string{"src/cmd", "src/pkg"},
+			wantNot: []string{"src/cmd/rune"},
+		},
+		{
+			path:    "src/c",
+			want:    []string{"src/cmd", "src/pkg"},
+			wantNot: []string{"src/cmd/rune"},
+		},
+	}
+
+	for _, tc := range tests {
+		it, newLastArg, err := c.Complete(
+			t.Context(), []string{"workspaceopen", tc.path})
+		require.NoError(t, err)
+		assert.Empty(t, newLastArg)
+		got := collectAll(t, it)
+		for _, want := range tc.want {
+			assert.Contains(t, got, want)
+		}
+		for _, wantNot := range tc.wantNot {
+			assert.NotContains(t, got, wantNot)
+		}
+	}
+}
+
 func TestPathCompletersDoNotCompleteMismatchedOriginURI(t *testing.T) {
 	t.Parallel()
 	fix := newCompleterFixture(t)

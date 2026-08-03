@@ -158,6 +158,7 @@ func TestBasicsTutorialWorkspaceOpenCopyByOS(t *testing.T) {
 		})
 	}
 }
+
 // TestBasicsTutorialCompleterKeysByMode asserts the completion-list
 // phrasing names each preset's own list bindings rather than a single
 // hardcoded arrow-key spelling.
