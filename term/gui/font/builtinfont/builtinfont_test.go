@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,31 +21,35 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//revive:disable:exported
 package builtinfont
 
-import _ "embed"
+import (
+	"bytes"
+	"testing"
 
-//go:embed JetBrainsMonoNerdFontPropo-ExtraBold.ttf
-var BoldTTF []byte
+	gofont "github.com/go-text/typesetting/font"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
-//go:embed JetBrainsMonoNerdFontPropo-Regular.ttf
-var RegularTTF []byte
+// TestEmojiTTFEmbeddedAndColor proves the bundled color emoji asset
+// shipped, parses with the go-text font stack, and exposes 😀 as a PNG
+// color bitmap glyph. This is the foundation the color-emoji renderer
+// relies on; if the asset is missing or is not a bitmap-emoji font the
+// whole color path is unavailable.
+func TestEmojiTTFEmbeddedAndColor(t *testing.T) {
+	require.NotEmpty(t, EmojiTTF, "NotoColorEmoji.ttf must be embedded")
 
-//go:embed JetBrainsMonoNerdFontPropo-Italic.ttf
-var ItalicTTF []byte
+	face, err := gofont.ParseTTF(bytes.NewReader(EmojiTTF))
+	require.NoError(t, err, "bundled emoji font must parse with go-text")
 
-//go:embed JetBrainsMonoNerdFontPropo-ExtraBoldItalic.ttf
-var BoldItalicTTF []byte
+	gid, ok := face.NominalGlyph('😀')
+	require.True(t, ok, "grinning face must resolve to a glyph")
 
-//go:embed Braille.ttf
-var BrailleTTF []byte
-
-//go:embed MesloLGL-Regular.ttf
-var FallbackTTF []byte
-
-//go:embed Symbola.ttf
-var SymbolTTF []byte
-
-//go:embed NotoColorEmoji.ttf
-var EmojiTTF []byte
+	bm, ok := face.GlyphData(gid).(gofont.GlyphBitmap)
+	require.True(t, ok, "grinning face glyph must be a color bitmap")
+	assert.Equal(t, gofont.PNG, bm.Format, "Noto color emoji stores PNG bitmaps")
+	assert.Positive(t, bm.Width)
+	assert.Positive(t, bm.Height)
+	assert.NotEmpty(t, bm.Data)
+}

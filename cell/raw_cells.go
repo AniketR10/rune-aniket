@@ -718,6 +718,15 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 func (c *rawCells) Edit(_ context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
+	// Merge a grapheme-cluster continuation typed one keystroke after its
+	// base (skin-tone modifier, variation selector, joiner) into the
+	// preceding cell so it stays one undoable edit instead of a broken box.
+	if start == end {
+		if s, e, base, ok := c.continuationReplace(start, str); ok {
+			start, end, str = s, e, base+str
+		}
+	}
+
 	from = start
 	to = start
 	if start != end {
@@ -729,6 +738,38 @@ func (c *rawCells) Edit(_ context.Context, start, end term.Coordinates, str stri
 		from, to = c.insert(from, str)
 	}
 
+	return
+}
+
+// continuationReplace reports whether inserting str at pos extends the
+// preceding cell's grapheme cluster and, if so, returns the replace range
+// [pos-1, pos) covering that cell together with its current content, so
+// the caller can rewrite the insert as an undoable replace that keeps the
+// cluster in one cell. Routing joiners here instead of the re-cluster in
+// insertAt keeps every keystroke coordinate-stable, which undo relies on.
+func (c *rawCells) continuationReplace(pos term.Coordinates, str string) (
+	start, end term.Coordinates, base string, ok bool,
+) {
+	if str == "" || str == "\n" {
+		return
+	}
+	if pos.X <= 0 || pos.Y >= len(c.cells) || pos.X > len(c.cells[pos.Y]) {
+		return
+	}
+	prev := c.cells[pos.Y][pos.X-1]
+	if prev.Ch == 0 || prev.Ch == '\n' {
+		return
+	}
+	base = string(append([]rune{prev.Ch}, prev.CombiningRunes()...))
+	// Reject boundary-forming runes (TAB, newline) that are zero-width but
+	// start their own cluster: only merge when base+str stays one cluster.
+	if _, rest, _, _ := graphemecluster.StepString(base+str, -1); rest != "" {
+		base = ""
+		return
+	}
+	start = term.Coordinates{X: pos.X - 1, Y: pos.Y}
+	end = pos
+	ok = true
 	return
 }
 

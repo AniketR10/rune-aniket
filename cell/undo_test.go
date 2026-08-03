@@ -350,3 +350,56 @@ public class Rotor {
 
 	})
 }
+
+// TestUndoEmojiSequenceTypedRuneByRune types an emoji ZWJ sequence one
+// keystroke at a time and then undoes every step. Merging each
+// continuation (joiner and following emoji) as a coordinate-stable
+// replace of the base cell keeps the undo timeline valid: previously it
+// re-clustered the whole row, collapsed a column, and left an undo op
+// pointing past the shortened row, which panicked on the first undo.
+func TestUndoEmojiSequenceTypedRuneByRune(t *testing.T) {
+	cases := []struct {
+		name  string
+		runes []rune
+		steps []string
+	}{
+		{
+			name:  "zwj family",
+			runes: []rune{'\U0001F468', '\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+			steps: []string{
+				"// \U0001F468\u200D\U0001F469\u200D",
+				"// \U0001F468\u200D\U0001F469",
+				"// \U0001F468\u200D",
+				"// \U0001F468",
+				"// ",
+				"//",
+				"/",
+				"",
+			},
+		},
+		{
+			name:  "skin tone",
+			runes: []rune{'\U0001F91F', '\U0001F3FC'},
+			steps: []string{"// \U0001F91F", "// ", "//", "/", ""},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := NewBuffer()
+			b.Init()
+			ctx := context.Background()
+			pos := term.Coordinates{}
+			for _, r := range append([]rune("// "), tc.runes...) {
+				_, pos, _ = b.editor.Edit(ctx, pos, pos, string(r))
+			}
+
+			for i, want := range tc.steps {
+				ok, _ := b.Undo()
+				require.True(t, ok, "undo %d must succeed", i)
+				assert.Equal(t, want, b.String(), "after undo %d", i)
+			}
+			ok, _ := b.Undo()
+			assert.False(t, ok, "no edits remain to undo")
+		})
+	}
+}

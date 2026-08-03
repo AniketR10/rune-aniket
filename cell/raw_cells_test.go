@@ -393,6 +393,56 @@ func TestRawCellsInsertGraphemeCluster(t *testing.T) {
 	}, c.RawCells())
 }
 
+// TestRawCellsInsertModifierCluster verifies that a grapheme-cluster
+// continuation typed one rune per keystroke (skin-tone modifier,
+// variation selector, joiner) merges into the preceding cell.
+func TestRawCellsInsertModifierCluster(t *testing.T) {
+	t.Run("skin tone modifier", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		_, next, _ := c.Edit(context.Background(), term.Coordinates{}, term.Coordinates{}, "\U0001F91F")
+		_, _, _ = c.Edit(context.Background(), next, next, "\U0001F3FC")
+
+		assert.Equal(t, [][]term.Cell{
+			{{Ch: '\U0001F91F', Combining: &[]rune{'\U0001F3FC'}, Bytes: 8, Width: 2}},
+		}, c.RawCells())
+	})
+
+	t.Run("emoji variation selector", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		_, next, _ := c.Edit(context.Background(), term.Coordinates{}, term.Coordinates{}, "\u2764")
+		_, _, _ = c.Edit(context.Background(), next, next, "\uFE0F")
+
+		assert.Equal(t, [][]term.Cell{
+			{{Ch: '\u2764', Combining: &[]rune{'\uFE0F'}, Bytes: 6, Width: 2}},
+		}, c.RawCells())
+	})
+
+	t.Run("zwj family typed rune by rune", func(t *testing.T) {
+		var c rawCells
+		c.init()
+		ctx := context.Background()
+		pos := term.Coordinates{}
+		for _, r := range []rune{
+			'\U0001F468', '\u200D', '\U0001F469', '\u200D', '\U0001F467',
+		} {
+			_, pos, _ = c.Edit(ctx, pos, pos, string(r))
+		}
+
+		assert.Equal(t, [][]term.Cell{
+			{{
+				Ch:        '\U0001F468',
+				Combining: &[]rune{'\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+				Bytes:     18,
+				Width:     2,
+			}},
+		}, c.RawCells())
+		assert.Equal(t, term.Coordinates{X: 1}, pos,
+			"the whole cluster occupies one cell, so the cursor lands after column 0")
+	})
+}
+
 func TestRawCellsDelete(t *testing.T) {
 	const baseRawCells = `
 syntax = "proto2";

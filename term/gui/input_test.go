@@ -985,3 +985,26 @@ func TestInputKeyMapping(t *testing.T) {
 		})
 	}
 }
+
+// TestInputForwardsEmojiSequenceRunes asserts that the character stream is
+// forwarded rune for rune, including the zero-width joiner that composes a
+// family emoji. The emoji picker delivers a ZWJ sequence through
+// AppendInputChars; the runtime must emit a key event for every rune so the
+// buffer can coalesce them into one grapheme cluster. Dropping the joiner
+// here (as the upstream ebiten IsPrint filter used to) would split the emoji.
+func TestInputForwardsEmojiSequenceRunes(t *testing.T) {
+	mock, input := newTestInput(t)
+	family := []rune{'\U0001F468', '\u200d', '\U0001F469', '\u200d', '\U0001F467'}
+	mock.chars = family
+
+	events := input.processEvents(nil)
+
+	require.Len(t, events, len(family))
+	for i, r := range family {
+		assert.Equal(t, term.Event{
+			Type: term.EventKey,
+			Ch:   r,
+			Raw:  getCharEscapeSequence(r, 0),
+		}, events[i], "rune %d (%#U) must be forwarded as a key event", i, r)
+	}
+}

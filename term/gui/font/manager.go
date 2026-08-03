@@ -41,6 +41,7 @@ import (
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
+	"unstable.build/go-tui/term/gui/emoji"
 	"unstable.build/go-tui/term/gui/font/builtinfont"
 	"unstable.build/go-tui/workspace"
 )
@@ -71,6 +72,13 @@ type Manager struct {
 	cellOffsetY    float64
 	cellOverlapX   int
 	cellOverlapY   int
+
+	// Resolved lazily and cached because resolution may parse a large
+	// system font collection. emojiResolved guards the one-time resolution
+	// even when no face was found.
+	emojiFace     *emoji.Face
+	emojiSource   string
+	emojiResolved bool
 }
 
 // CharSize represent a character dimensions in pixels.
@@ -789,4 +797,55 @@ func (m *Manager) setOffsetY(y float64) bool {
 	}
 	m.offset.Y = fixedY
 	return true
+}
+
+// EmojiFace returns the color-emoji face and a short origin label for
+// logging, resolving both once and caching them. It prefers a usable
+// system color-emoji font and falls back to the bundled Noto. A nil face
+// means no font parsed and the caller must render emoji monochrome.
+func (m *Manager) EmojiFace() (*emoji.Face, string) {
+	if m.emojiResolved {
+		return m.emojiFace, m.emojiSource
+	}
+	m.emojiResolved = true
+	m.emojiFace, m.emojiSource = m.resolveEmojiFace()
+	m.log(log.InfoLevel, "emoji font: %s", m.emojiSource)
+	return m.emojiFace, m.emojiSource
+}
+
+func (m *Manager) resolveEmojiFace() (*emoji.Face, string) {
+	for _, family := range emojiFontFamilies() {
+		path, ok := m.findEmojiFontPath(family)
+		if !ok {
+			continue
+		}
+		face, err := emoji.NewFaceFromFile(path)
+		if err != nil {
+			m.log(log.DebugLevel,
+				"emoji font %q at %q unusable, skipping: %v", family, path, err)
+			continue
+		}
+		return face, "system: " + family
+	}
+
+	face, err := emoji.NewFace(builtinfont.EmojiTTF)
+	if err != nil {
+		m.log(log.WarnLevel, "bundled emoji font failed to parse: %v", err)
+		return nil, "unavailable"
+	}
+	return face, "bundled: Noto Color Emoji"
+}
+
+func (m *Manager) findEmojiFontPath(family string) (string, bool) {
+	fonts, err := m.findfont.findByFamily(family)
+	if err != nil {
+		return "", false
+	}
+	ctx := context.Background()
+	defer fonts.Close()
+	meta, ok := fonts.Next(ctx)
+	if !ok {
+		return "", false
+	}
+	return meta.path, true
 }

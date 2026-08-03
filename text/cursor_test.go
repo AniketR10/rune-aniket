@@ -3570,6 +3570,79 @@ func TestCursorInsertLongStream(t *testing.T) {
 	}
 }
 
+// TestCursorInsertMultiRuneEmoji types multi-rune emoji one rune per
+// keystroke, exactly as the vi/modeless insert path does (Cursor.Insert
+// per key event), and asserts each grapheme cluster lands in a single
+// cell with the continuation runes stored as combining. A skin-tone
+// modifier or emoji variation selector that is left in its own cell
+// renders as a broken box beside the base emoji.
+func TestCursorInsertMultiRuneEmoji(t *testing.T) {
+	cases := []struct {
+		name  string
+		runes []rune
+		want  string
+	}{
+		{"skin tone", []rune{'\U0001F91F', '\U0001F3FC'}, "\U0001F91F\U0001F3FC"},
+		{"variation selector", []rune{'\u2764', '\uFE0F'}, "\u2764\uFE0F"},
+		{"zwj family", []rune{'\U0001F468', '\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+			"\U0001F468\u200D\U0001F469\u200D\U0001F467"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupCursorContent(t, 8, 4, "", false)
+			for _, r := range tc.runes {
+				e.Insert(r)
+			}
+			buf := e.scroll.Buffer()
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, 1, buf.Columns(0),
+				"the cluster must occupy a single cell, not one per rune")
+		})
+	}
+}
+
+// TestCursorInsertMultiRuneEmojiInLine types multi-rune emoji one rune at
+// a time between surrounding text, reproducing the reported editor bug
+// where a ZWJ family (or skin-tone) sequence typed into a comment line
+// fragmented into one cell per rune instead of coalescing into a single
+// grapheme-cluster cell.
+func TestCursorInsertMultiRuneEmojiInLine(t *testing.T) {
+	cases := []struct {
+		name  string
+		runes []rune
+		// wantCols is the expected column count of the whole line after
+		// insertion: 4 (two ASCII prefix, the emoji cell, one ASCII
+		// suffix) once the cluster occupies a single cell.
+		wantCols int
+		want     string
+	}{
+		{"skin tone", []rune{'\U0001F91F', '\U0001F3FC'}, 4, "//\U0001F91F\U0001F3FCx"},
+		{"variation selector", []rune{'\u2764', '\uFE0F'}, 4, "//\u2764\uFE0Fx"},
+		{
+			name:     "zwj family",
+			runes:    []rune{'\U0001F468', '\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+			wantCols: 4,
+			want:     "//\U0001F468\u200D\U0001F469\u200D\U0001F467x",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupCursorContent(t, 16, 4, "//x", false)
+			e.MoveFirstLine()
+			e.MoveStartLine()
+			require.True(t, e.MoveRight())
+			require.True(t, e.MoveRight())
+			for _, r := range tc.runes {
+				e.Insert(r)
+			}
+			buf := e.scroll.Buffer()
+			assert.Equal(t, tc.want, buf.String())
+			assert.Equal(t, tc.wantCols, buf.Columns(0),
+				"the cluster must occupy a single cell between the surrounding text")
+		})
+	}
+}
+
 func TestCursorBackspace(t *testing.T) {
 	suite := []struct {
 		wrap           bool

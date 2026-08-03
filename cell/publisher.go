@@ -50,11 +50,29 @@ func (p *syncPublisher) Edit(ctx context.Context, start, end term.Coordinates, s
 	for _, sub := range p.subscribers {
 		sub.OnWillEdit(ctx, start, end, str)
 	}
+	// Pair every OnWillEdit with an OnDidEdit even if Edit panics:
+	// subscribers release in-flight edit state in OnDidEdit, which
+	// workspace.file waits on while closing, so a missed call wedges
+	// teardown instead of surfacing the panic as a crash report.
+	notified := false
+	defer func() {
+		if !notified {
+			p.notifyDidEdit(ctx, start, start, "")
+		}
+	}()
+
 	from, to, old = p.w.Edit(ctx, start, end, str)
+	notified = true
+	p.notifyDidEdit(ctx, from, to, old)
+	return
+}
+
+func (p *syncPublisher) notifyDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 	for _, sub := range p.subscribers {
 		sub.OnDidEdit(ctx, from, to, old)
 	}
-	return
 }
 
 func (p *syncPublisher) Subscribe(s Subscriber) {

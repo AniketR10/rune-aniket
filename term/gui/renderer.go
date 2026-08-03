@@ -70,6 +70,7 @@ type renderer struct {
 	fontManager      *font.Manager
 	drawer           *drawtext.Drawer
 	font             fontFace
+	emojiFace        colorEmojiFace
 	bgOpacity        float64
 	fgOpacity        float64
 	bgColor          color.RGBA
@@ -82,6 +83,10 @@ type renderer struct {
 	bufPath     drawrect.Path
 	bufVertices []ebiten.Vertex
 	bufIndices  []uint16
+
+	// Reusable scratch for a cell's cluster so routing to the color path
+	// does not allocate per frame; valid only within one cell's handling.
+	emojiCluster []rune
 
 	// rectBatch accumulates all background rectangles and underline
 	// strokes for a repaint so they issue as a single DrawTriangles,
@@ -120,6 +125,15 @@ type fontFace struct {
 	BoldItalic imagefont.Face
 	CellSize   font.CharSize
 	OffsetY    float64
+}
+
+// colorEmojiFace is the renderer's view of the color-emoji source: the
+// predicate that routes a cluster to the color path plus the rasterizer
+// the color atlas draws from. *emoji.Face satisfies it; a nil value
+// disables the color path. A test double can stand in to observe routing.
+type colorEmojiFace interface {
+	Has(cluster []rune) bool
+	drawtext.ColorGlyphSource
 }
 
 func newFontFace(fontManager *font.Manager) fontFace {
@@ -164,12 +178,21 @@ func newRenderer(
 		frame:            ebiten.NewImage(imageWidth, imageHeight),
 		fgColor:          tcellToColor(defaultAttr.Fg, fgWhite, fgOpacity),
 		font:             newFontFace(fontManager),
+		emojiFace:        resolveColorEmojiFace(fontManager),
 		bgOpacity:        bgOpacity,
 		fgOpacity:        fgOpacity,
 		enableLigatures:  enableLigatures,
 		cursorForeground: cursorForeground,
 		cursorBackground: cursorBackground,
 	}
+}
+
+func resolveColorEmojiFace(fontManager *font.Manager) colorEmojiFace {
+	face, _ := fontManager.EmojiFace()
+	if face == nil {
+		return nil
+	}
+	return face
 }
 
 func (r *renderer) Draw(
@@ -445,13 +468,11 @@ func (r *renderer) renderRow(
 			useFace = r.font.Italic
 		}
 
-		if cell.Attrs&term.AttrUnderline != 0 {
-			if pass == passRects {
-				underlinePixelY := pixelY + r.font.CellSize.Y - 1
-				r.rectBatch.AddStroke(float32(pixelX), float32(underlinePixelY),
-					float32(pixelX+r.font.CellSize.X),
-					float32(underlinePixelY), 2, fg)
-			}
+		if pass == passRects && cell.Attrs&term.AttrUnderline != 0 {
+			underlinePixelY := pixelY + r.font.CellSize.Y - 1
+			r.rectBatch.AddStroke(float32(pixelX), float32(underlinePixelY),
+				float32(pixelX+r.font.CellSize.X),
+				float32(underlinePixelY), 2, fg)
 		}
 
 		if r.enableLigatures && skipRunes == 0 {
@@ -475,13 +496,30 @@ func (r *renderer) renderRow(
 					float32(r.font.CellSize.X*cellWidth), float32(r.font.CellSize.Y), bg)
 			}
 		} else if (pass == passGlyphs) != isBackground {
-			r.drawer.DrawGlyph(screen, cell.Ch, useFace, pixelX, textPixelY,
-				glyphColor(fg, cell.Attrs&term.AttrDim != 0), isBackground)
+			// An emoji-presented cluster the face can render takes the
+			// untinted color path; everything else takes the mask path.
+			cluster := r.cellCluster(cell)
+			if !isBackground && r.emojiFace != nil && r.emojiFace.Has(cluster) {
+				r.drawer.DrawColorGlyph(screen, cluster, r.emojiFace,
+					pixelX, pixelY,
+					int(r.font.CellSize.X*cellWidth), int(r.font.CellSize.Y))
+			} else {
+				r.drawer.DrawGlyph(screen, cell.Ch, useFace, pixelX, textPixelY,
+					glyphColor(fg, cell.Attrs&term.AttrDim != 0), isBackground)
+			}
 		}
 		if cell.Width > 1 {
 			skipRunes += int(cell.Width) - 1
 		}
 	}
+}
+
+// cellCluster returns the cell's cluster (Ch plus combining runes) in a
+// reused scratch buffer; the result is valid only until the next call.
+func (r *renderer) cellCluster(cell term.Cell) []rune {
+	r.emojiCluster = append(r.emojiCluster[:0], cell.Ch)
+	r.emojiCluster = append(r.emojiCluster, cell.CombiningRunes()...)
+	return r.emojiCluster
 }
 
 func (r *renderer) handleLigatures(

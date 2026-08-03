@@ -78,10 +78,14 @@ var additiveGlyphOptions = ebiten.DrawTrianglesOptions{
 // A Drawer is not safe for concurrent use; the renderer drives it from
 // the single GUI goroutine.
 type Drawer struct {
-	atlas *glyphAtlas
+	atlas      *glyphAtlas
+	colorAtlas *colorAtlas
 
 	// Current run being accumulated. runPage is -1 when no run is open.
+	// runColor selects the color atlas over the mask atlas; the two never
+	// share a DrawTriangles because they draw from different textures.
 	runPage     int
+	runColor    bool
 	runAdditive bool
 	vertices    []ebiten.Vertex
 	indices     []uint16
@@ -90,8 +94,9 @@ type Drawer struct {
 // New allocates storage for a new Drawer and initializes it.
 func New() *Drawer {
 	return &Drawer{
-		atlas:   newGlyphAtlas(),
-		runPage: -1,
+		atlas:      newGlyphAtlas(),
+		colorAtlas: newColorAtlas(),
+		runPage:    -1,
 	}
 }
 
@@ -114,15 +119,9 @@ func (d *Drawer) Draw(
 // DrawGlyph accumulates one glyph quad for ch drawn with face at the
 // destination pixel origin (dstX, dstY), tinted with the premultiplied
 // color col. additive selects the additive background-rune blend mode.
-// The glyph is packed into the atlas on first use and its quad is added
-// to the current run-length batch for (page, blend); when the (page,
-// blend) pair changes, the pending run is flushed to dst first so
-// submission order is preserved.
 //
 // col holds premultiplied scale values in the same convention as
-// ebiten's ColorScale (i.e. what DrawImage passes to its quad
-// vertices), so batched output matches the previous per-glyph DrawImage
-// path pixel for pixel.
+// ebiten's ColorScale.
 func (d *Drawer) DrawGlyph(
 	dst *ebiten.Image, ch rune, face font.Face,
 	dstX, dstY float64, col [4]float32, additive bool,
@@ -132,8 +131,9 @@ func (d *Drawer) DrawGlyph(
 		return
 	}
 
-	if d.runPage != g.page || d.runAdditive != additive {
+	if d.runColor || d.runPage != g.page || d.runAdditive != additive {
 		d.flushRun(dst)
+		d.runColor = false
 		d.runPage = g.page
 		d.runAdditive = additive
 	}
@@ -143,16 +143,52 @@ func (d *Drawer) DrawGlyph(
 	// origin (b.Min - offset).
 	topX := dstX + fixed26_6ToFloat64(g.bounds.Min.X-g.offset.X)
 	topY := dstY + fixed26_6ToFloat64(g.bounds.Min.Y-g.offset.Y)
-	w := float32(g.rect.Dx())
-	h := float32(g.rect.Dy())
-	dx0 := float32(topX)
-	dy0 := float32(topY)
-	dx1 := dx0 + w
-	dy1 := dy0 + h
-	sx0 := float32(g.rect.Min.X)
-	sy0 := float32(g.rect.Min.Y)
-	sx1 := float32(g.rect.Max.X)
-	sy1 := float32(g.rect.Max.Y)
+	d.appendQuad(float32(topX), float32(topY), g.rect, col)
+}
+
+// DrawColorGlyph accumulates one color emoji quad for cluster, rasterized
+// through src into the cell box at (dstX, dstY) sized cellW×cellH. The
+// glyph draws untinted so its own multi-color bitmap survives. A change of
+// source page, or a switch to or from the mask path, flushes the pending
+// run first to preserve submission order.
+func (d *Drawer) DrawColorGlyph(
+	dst *ebiten.Image, cluster []rune, src ColorGlyphSource,
+	dstX, dstY float64, cellW, cellH int,
+) {
+	g := d.colorAtlas.get(src, cluster, cellW, cellH)
+	if g.empty {
+		return
+	}
+
+	if !d.runColor || d.runPage != g.page {
+		d.flushRun(dst)
+		d.runColor = true
+		d.runAdditive = false
+		d.runPage = g.page
+	}
+
+	// Identity color leaves the bitmap's own premultiplied pixels
+	// untouched under ColorScaleModePremultipliedAlpha.
+	identity := [4]float32{1, 1, 1, 1}
+	topX := float32(dstX) + float32(g.offX)
+	topY := float32(dstY) + float32(g.offY)
+	d.appendQuad(topX, topY, g.rect, identity)
+}
+
+// appendQuad appends a textured quad at (dstX, dstY) sampling atlas region
+// rect, tinted per-vertex by col. Both glyph paths funnel through it so
+// vertex layout and winding stay identical.
+func (d *Drawer) appendQuad(
+	dstX, dstY float32, rect image.Rectangle, col [4]float32,
+) {
+	w := float32(rect.Dx())
+	h := float32(rect.Dy())
+	dx0, dy0 := dstX, dstY
+	dx1, dy1 := dx0+w, dy0+h
+	sx0 := float32(rect.Min.X)
+	sy0 := float32(rect.Min.Y)
+	sx1 := float32(rect.Max.X)
+	sy1 := float32(rect.Max.Y)
 
 	base := uint16(len(d.vertices))
 	d.vertices = append(d.vertices,
@@ -186,10 +222,17 @@ func (d *Drawer) flushRun(dst *ebiten.Image) {
 	if d.runAdditive {
 		opts = &additiveGlyphOptions
 	}
-	dst.DrawTriangles(d.vertices, d.indices, d.atlas.page(d.runPage), opts)
+	var src *ebiten.Image
+	if d.runColor {
+		src = d.colorAtlas.page(d.runPage)
+	} else {
+		src = d.atlas.page(d.runPage)
+	}
+	dst.DrawTriangles(d.vertices, d.indices, src, opts)
 	d.vertices = d.vertices[:0]
 	d.indices = d.indices[:0]
 	d.runPage = -1
+	d.runColor = false
 }
 
 // BoundString returns the measured size of a given string using a given font.

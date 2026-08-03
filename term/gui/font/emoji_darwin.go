@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,31 +21,10 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//revive:disable:exported
-package builtinfont
+//go:build darwin
 
-import _ "embed"
+package font
 
-//go:embed JetBrainsMonoNerdFontPropo-ExtraBold.ttf
-var BoldTTF []byte
-
-//go:embed JetBrainsMonoNerdFontPropo-Regular.ttf
-var RegularTTF []byte
-
-//go:embed JetBrainsMonoNerdFontPropo-Italic.ttf
-var ItalicTTF []byte
-
-//go:embed JetBrainsMonoNerdFontPropo-ExtraBoldItalic.ttf
-var BoldItalicTTF []byte
-
-//go:embed Braille.ttf
-var BrailleTTF []byte
-
-//go:embed MesloLGL-Regular.ttf
-var FallbackTTF []byte
-
-//go:embed Symbola.ttf
-var SymbolTTF []byte
-
-//go:embed NotoColorEmoji.ttf
-var EmojiTTF []byte
+func emojiFontFamilies() []string {
+	return []string{"Apple Color Emoji"}
+}
