@@ -38,6 +38,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -51,6 +52,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idenag"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/pkgtrust"
@@ -395,6 +397,34 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 // path, so those must be triggered through their key binding.
 func (i *IDE) DispatchCommand(cmd string, args ...string) error {
 	return i.workspaceHandler.focusEx().dispatchCommand(cmd, args...)
+}
+
+// RecentWorkspaceOpens returns the paths previously passed to the
+// workspaceopen command from the command prompt, most-recent-first and
+// de-duplicated. It reflects only prompt-driven opens; menu-driven
+// opens are tracked separately by the caller. Returns nil when the
+// history is empty or unavailable.
+func (i *IDE) RecentWorkspaceOpens() []string {
+	acc := i.workspaceHandler.commandHistory
+	if acc == nil {
+		return nil
+	}
+	// The trailing empty token makes HistoryCompleter keep entries
+	// beginning with "workspaceopen " and strip that prefix, yielding
+	// just the path arguments.
+	it, _, err := command.HistoryCompleter(acc).
+		Complete(context.Background(), []string{cmdAddWorkspace, ""})
+	if err != nil {
+		return nil
+	}
+	paths, err := iterator.ToSlice(context.Background(), it)
+	if err != nil {
+		return nil
+	}
+	for idx, p := range paths {
+		paths[idx] = command.UnquoteToken(p)
+	}
+	return paths
 }
 
 // WaitWorkspaces blocks until every async addWorkspace launched by

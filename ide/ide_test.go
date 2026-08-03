@@ -901,6 +901,65 @@ command:
 			"history; got %q. full result: %v", got[0], got)
 }
 
+// TestRecentWorkspaceOpensReflectsPromptHistory asserts the exported
+// accessor lists prompt-driven workspaceopen paths most-recent-first
+// and de-duplicated, which backs the Open Recent menu.
+func TestRecentWorkspaceOpensReflectsPromptHistory(t *testing.T) {
+	dataDir := t.TempDir()
+	repoA := t.TempDir()
+	repoB := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  show_manual: false
+  key: ":"
+`), 0666))
+
+	repoBFile := filepath.Join(repoB, "seed.txt")
+	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
+
+	mu := new(sync.Mutex)
+	i, err := New(repoB, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	root := i.Ready()
+	root.Resize(80, 24)
+
+	repoBURI, err := workspaceapi.CurrentUserHostURI(repoBFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(repoBURI))
+	mu.Unlock()
+
+	wh := i.workspaceHandler
+	openViaPrompt := func(path string) {
+		keys, err := term.ParseKeys(":workspaceopen<space>" + path + "<enter>")
+		require.NoError(t, err)
+		for _, k := range keys {
+			mu.Lock()
+			root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+			mu.Unlock()
+		}
+		wh.focusEx().Wait()
+	}
+
+	// Open A, then B, then A again: history is newest-first and deduped,
+	// so A should lead and appear once.
+	openViaPrompt(repoA)
+	openViaPrompt(repoB)
+	openViaPrompt(repoA)
+
+	assert.Equal(t, []string{repoA, repoB}, i.RecentWorkspaceOpens())
+}
+
 // TestWorkspaceOpenCompletionDispatchesQuotedPath is an end-to-end guard
 // for the completion-quoting fix: completing workspaceopen on a directory
 // whose name contains characters the prompt tokenizer treats specially
