@@ -47,6 +47,7 @@ func builtins(t *Tutorial) starlark.StringDict {
 		"tutorial":       starlark.NewBuiltin("tutorial", builtinTutorial(t)),
 		"command_key":    starlark.NewBuiltin("command_key", builtinCommandKey(t)),
 		"editor_mode":    starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
+		"os":             starlark.NewBuiltin("os", builtinOS(t)),
 		"key_for":        starlark.NewBuiltin("key_for", builtinKeyFor(t)),
 		"command_exists": starlark.NewBuiltin("command_exists", builtinCommandExists(t)),
 		"workspace_open": starlark.NewBuiltin("workspace_open", builtinWorkspaceOpen(t)),
@@ -726,6 +727,19 @@ func builtinEditorMode(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 		_ starlark.Tuple, _ []starlark.Tuple,
 	) (starlark.Value, error) {
 		return starlark.String(t.editorMode), nil
+	}
+}
+
+// builtinOS implements os(): it returns the host operating system
+// (runtime.GOOS, e.g. "darwin", "linux"). Tutorials branch on it to
+// teach OS-specific flows such as the native macOS menu bar.
+func builtinOS(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, _ *starlark.Builtin,
+		_ starlark.Tuple, _ []starlark.Tuple,
+	) (starlark.Value, error) {
+		return starlark.String(t.os), nil
 	}
 }
 

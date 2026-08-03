@@ -62,7 +62,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"standard",
+		"standard", "",
 		nil,
 		nil,
 		nil,
@@ -73,7 +73,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "57", tut.Version())
+	assert.Equal(t, "58", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -92,7 +92,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"modal",
+		"modal", "",
 		nil,
 		nil,
 		nil,
@@ -100,9 +100,64 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "57", tut.Version())
+	assert.Equal(t, "58", tut.Version())
 }
 
+// TestBasicsTutorialWorkspaceOpenCopyByOS asserts the welcome window's
+// workspace-open step teaches the native macOS File ▸ Open Project…
+// flow on darwin and keeps the command-prompt steps on other systems.
+func TestBasicsTutorialWorkspaceOpenCopyByOS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		os        string
+		contains  []string
+		forbidden []string
+	}{
+		{
+			os:        "darwin",
+			contains:  []string{"Opening a project", "Open Project…", "File"},
+			forbidden: []string{"Opening a workspace"},
+		},
+		{
+			os:        "linux",
+			contains:  []string{"Opening a workspace", "workspaceopen"},
+			forbidden: []string{"Open Project…"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.os, func(t *testing.T) {
+			t.Parallel()
+			overlay := idetutorial.NewOverlayBrowser(
+				browser.NewComponent(idetutorial.DefaultOverlayBrowserConfig()))
+			tut, err := starlarktutorial.New(
+				"basics", basicsTutorial,
+				overlay, nil, nil, nil,
+				term.Attributes{}, nil, nil,
+				term.KeyComb{Ch: ':'},
+				"standard", tt.os, nil,
+				nil, nil, nil,
+			)
+			require.NoError(t, err)
+			tut.Resize(120, 40)
+			tut.Reset()
+			require.True(t, tut.WaitActive("floating_window", time.Second))
+
+			w := term.NewStringWriter(120, 40)
+			tut.Draw(w)
+			overlay.Draw(w)
+			require.NoError(t, w.Flush())
+			rendered := strings.Join(strings.Fields(
+				strings.ReplaceAll(w.String(), "│", " ")), " ")
+			for _, expected := range tt.contains {
+				assert.Contains(t, rendered, expected)
+			}
+			for _, forbidden := range tt.forbidden {
+				assert.NotContains(t, rendered, forbidden)
+			}
+		})
+	}
+}
 // TestBasicsTutorialCompleterKeysByMode asserts the completion-list
 // phrasing names each preset's own list bindings rather than a single
 // hardcoded arrow-key spelling.
@@ -131,13 +186,13 @@ def run():
 tutorial(entry=run)
 `
 			modeSrc := strings.Replace(basicsTutorial,
-				`tutorial(id = "basics", title = "Rune basics", version = "57", entry = run)`,
+				`tutorial(id = "basics", title = "Rune basics", version = "58", entry = run)`,
 				"", 1) + src
 			tut, err := starlarktutorial.New(
 				"basics-completer-keys", modeSrc,
 				nil, nil, nil, nil,
 				term.Attributes{}, nil, nil,
-				term.KeyComb{Ch: ':'}, tt.mode,
+				term.KeyComb{Ch: ':'}, tt.mode, "",
 				nil, nil, nil, nil,
 			)
 			require.NoError(t, err)
@@ -247,7 +302,7 @@ func TestBasicsTutorialLayoutIntro(t *testing.T) {
 				overlay, nil, nil, nil,
 				term.Attributes{}, nil, nil,
 				term.KeyComb{Ch: ':'},
-				tt.mode, keyFor,
+				tt.mode, "", keyFor,
 				nil, nil, nil,
 			)
 			require.NoError(t, err)
@@ -298,7 +353,7 @@ func TestBasicsTutorialWelcomeUsesResolvedBindings(t *testing.T) {
 		overlay, nil, nil, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", keyFor,
+		"standard", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -356,7 +411,7 @@ func TestBasicsTutorialResolvesDirectionalBindings(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", keyFor,
+		"standard", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -399,7 +454,7 @@ func TestBasicsTutorialResolvesEmacsLayoutBindings(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"emacs", keyFor,
+		"emacs", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -456,7 +511,7 @@ func TestBasicsTutorialLayoutKeysPlayable(t *testing.T) {
 		nil, nil, &capturingNotis{}, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", keyFor,
+		"standard", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -531,7 +586,7 @@ func TestBasicsTutorialDirectionalHintNamesKey(t *testing.T) {
 		nil, nil, &capturingNotis{}, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", keyFor,
+		"standard", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -605,7 +660,7 @@ func TestBasicsTutorialEmacsSplitHintNamesKey(t *testing.T) {
 		"basics", basicsTutorial,
 		overlay, nil, &capturingNotis{}, nil,
 		term.Attributes{}, nil, nil,
-		term.KeyComb{Ch: ':'}, "emacs", keyFor,
+		term.KeyComb{Ch: ':'}, "emacs", "", keyFor,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -651,7 +706,7 @@ func TestBasicsTutorialDirectionalCommandFlow(t *testing.T) {
 		nil, nil, notis, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -772,7 +827,7 @@ func TestBasicsTutorialEmacsWindowFlow(t *testing.T) {
 		nil, nil, notis, nil,
 		term.Attributes{}, nil, nil,
 		term.KeyComb{Ch: ':'},
-		"emacs", nil,
+		"emacs", "", nil,
 		nil, nil, nil,
 	)
 	require.NoError(t, err)
@@ -850,7 +905,7 @@ func TestAgentTutorialInstallAndHelpFlow(t *testing.T) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil, nil,
 	)
@@ -942,7 +997,7 @@ func TestNavigationTutorialFlow(t *testing.T) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", keyFor,
+		"standard", "", keyFor,
 		nil,
 		alwaysTrue, // workspace_open()
 		alwaysTrue, // is_lsp_server_running()
@@ -1134,7 +1189,7 @@ tutorial(entry=run)
 				"navigation-prefill-keys", modeSrc,
 				nil, nil, nil, nil,
 				term.Attributes{}, nil, nil,
-				term.KeyComb{Ch: ':'}, tt.mode,
+				term.KeyComb{Ch: ':'}, tt.mode, "",
 				nil, nil, nil, nil,
 			)
 			require.NoError(t, err)
@@ -1182,7 +1237,7 @@ tutorial(entry=run)
 					"navigation-picker-keys", modeSrc,
 					nil, nil, nil, nil,
 					term.Attributes{}, nil, nil,
-					term.KeyComb{Ch: ':'}, tt.mode,
+					term.KeyComb{Ch: ':'}, tt.mode, "",
 					nil, nil, nil, nil,
 				)
 				require.NoError(t, err)
@@ -1224,7 +1279,7 @@ func TestNavigationTutorialInstallsFuzzySearchFirst(t *testing.T) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil, lookup,
+		"standard", "", nil, lookup,
 		alwaysTrue, // workspace_open()
 		alwaysTrue, // is_lsp_server_running()
 	)
@@ -1402,7 +1457,7 @@ func advanceToDefinitionWindow(t *testing.T, mode string) *starlarktutorial.Tuto
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		mode, keyFor,
+		mode, "", keyFor,
 		nil,
 		alwaysTrue, alwaysTrue,
 	)
@@ -1517,7 +1572,7 @@ func TestNavigationTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"standard",
+		"standard", "",
 		nil,
 		nil,
 		nil,
@@ -1541,7 +1596,7 @@ func TestAgentTutorialParses(t *testing.T) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil, nil,
 	)
@@ -1586,7 +1641,7 @@ func TestNavigationTutorialParsesModalMode(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"modal",
+		"modal", "",
 		nil,
 		nil,
 		nil,
@@ -1612,7 +1667,7 @@ func TestNavigationTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"emacs",
+		"emacs", "",
 		nil,
 		nil,
 		nil,
@@ -1640,7 +1695,7 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"emacs",
+		"emacs", "",
 		nil,
 		nil,
 		nil,
@@ -1648,5 +1703,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "57", tut.Version())
+	assert.Equal(t, "58", tut.Version())
 }

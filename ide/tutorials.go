@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -219,6 +220,7 @@ type tutorialsConfig struct {
 	scheduleNextTick func(func()) bool
 	commandKey       term.KeyComb
 	editorMode       string
+	os               string
 	keyForCommand    func(cmd string, args []string) string
 	manualLookup     starlarktutorial.CommandManualLookup
 	workspaceOpen    func() bool
@@ -241,6 +243,7 @@ func newTutorialsConfig(i *IDE) tutorialsConfig {
 		scheduleNextTick: i.options.scheduleFn,
 		commandKey:       i.ideConfig.commandKey(),
 		editorMode:       i.ideConfig.pkgEditorMode(),
+		os:               runtime.GOOS,
 		keyForCommand: func(cmd string, args []string) string {
 			return starlarktutorial.PrettyKeySpec(rawKeyFor(cmd, args))
 		},
@@ -276,7 +279,7 @@ func (c tutorialsConfig) build(
 		c.overlay, c.ed, c.notifications, c.parser,
 		c.defaultAttr,
 		c.scheduleNextTick, c.partition, c.commandKey,
-		c.editorMode, c.keyForCommand, c.manualLookup,
+		c.editorMode, c.os, c.keyForCommand, c.manualLookup,
 		c.workspaceOpen,
 		c.lspServerRunning,
 	)

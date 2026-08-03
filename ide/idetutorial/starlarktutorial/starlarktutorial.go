@@ -106,6 +106,10 @@ type Tutorial struct {
 	// "standard", or "emacs"), exposed to the DSL via editor_mode(). exo is
 	// resolved to its fallback by the host before New.
 	editorMode string
+	// os is the host operating system (runtime.GOOS), exposed to the
+	// DSL via os(). Tutorials branch on it to teach OS-specific flows
+	// such as the native macOS menu bar on "darwin".
+	os string
 	// keyForCommand resolves a command (and optional args) to the
 	// user's configured key spec, or "" when unbound. nil disables
 	// key_for() lookups (they return ""). Used by key_for().
@@ -184,6 +188,7 @@ func New(
 	storage storageapi.Service,
 	commandKey term.KeyComb,
 	editorMode string,
+	os string,
 	keyForCommand func(cmd string, args []string) string,
 	commandManualLookup CommandManualLookup,
 	workspaceOpen func() bool,
@@ -203,6 +208,7 @@ func New(
 		storage:             storage,
 		commandKeyDisplay:   PrettyKeySpec(commandKey.String()),
 		editorMode:          editorMode,
+		os:                  os,
 		keyForCommand:       keyForCommand,
 		commandManualLookup: commandManualLookup,
 		workspaceOpen:       workspaceOpen,

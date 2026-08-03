@@ -48,7 +48,7 @@ func newFuzzySearchTutorial(t *testing.T) (*Tutorial, *fakeNotis) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,

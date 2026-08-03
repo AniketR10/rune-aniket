@@ -234,6 +234,30 @@ The pattern is Alt plus the target: IJKL affects windows, brackets affect tabs,
 and adding `<shift>` moves content instead of focus.
 """
 
+# The workspace-open step branches on the host OS. On macOS the File
+# menu's Open Project… item drives the native open panel, so the copy
+# points there first; the command prompt stays documented as the
+# keyboard alternative. wait_command("workspaceopen") advances on
+# either path, so only the wording changes.
+if os() == "darwin":
+    open_workspace_section = """\
+## Opening a project
+
+1. Open the **File** menu in the macOS menu bar and choose
+   **Open Project…**.
+2. Pick a project directory in the panel and click **Open**.
+
+Prefer the keyboard? Press `""" + ck + """`, type `workspaceopen`, and use
+the auto-completer to pick a workspace or type the path yourself."""
+else:
+    open_workspace_section = """\
+## Opening a workspace
+
+1. Press `""" + ck + """` to open the command prompt.
+2. Type `workspaceopen` and use the auto-completer
+   to **pick a workspace** from the list, or type the path yourself.
+3. Press Enter to open it."""
+
 welcome_md = """\
 This is the **home workspace**: a scratch workspace rooted at `~/` that
 Rune shows when no project workspace is open at the current slot.
@@ -258,12 +282,7 @@ from the command prompt. Bindings like """ + keylabel("workspacefocus", "1") + "
 are bound to those commands through your user configuration under
 `command.key_bindings`, so every binding shown here is rebindable.
 
-## Opening a workspace
-
-1. Press `""" + ck + """` to open the command prompt.
-2. Type `workspaceopen` and use the auto-completer
-   to **pick a workspace** from the list, or type the path yourself.
-3. Press Enter to open it.
+""" + open_workspace_section + """
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -967,4 +986,4 @@ def run():
     teach_cheatsheet()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "57", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "58", entry = run)

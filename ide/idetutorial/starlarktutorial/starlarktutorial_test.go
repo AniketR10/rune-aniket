@@ -156,7 +156,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -302,7 +302,7 @@ func TestEntryRequired(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -320,7 +320,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -338,7 +338,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -360,7 +360,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -377,7 +377,7 @@ func TestEmptySourceRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -882,7 +882,7 @@ tutorial(entry=run)
 			nil, nil, notis, nil,
 			term.Attributes{},
 			nil, nil, term.KeyComb{Ch: ':'},
-			"standard", nil,
+			"standard", "", nil,
 			nil,
 			nil,
 			nil,
@@ -904,7 +904,7 @@ tutorial(entry=run)
 		nil, nil, notis, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -1281,7 +1281,7 @@ tutorial(entry=run)
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -1632,7 +1632,7 @@ func newTutorialWith(
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		mode, keyFor,
+		mode, "", keyFor,
 		nil,
 		nil,
 		nil,
@@ -1657,6 +1657,36 @@ tutorial(entry=run)
 	waitFinished(t, tut, time.Second)
 	assert.True(t, notis.containsSubstring("mode=modal"),
 		"editor_mode() must expand to the injected mode, got %v",
+		notis.renderedCalls())
+}
+
+// TestOSBuiltin asserts that os() returns the injected host OS string.
+func TestOSBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="os=" + os())
+tutorial(entry=run)
+`
+	notis := &fakeNotis{}
+	tut, err := New(
+		"tutorial-under-test", src,
+		nil, nil, notis, nil,
+		term.Attributes{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", "darwin", nil,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	tut.Resize(80, 24)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("os=darwin"),
+		"os() must expand to the injected OS, got %v",
 		notis.renderedCalls())
 }
 
@@ -1725,7 +1755,7 @@ func newTutorialWorkspace(
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		workspaceOpen,
 		nil,
@@ -1780,7 +1810,7 @@ func newTutorialLSP(
 		term.Attributes{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		lspServerRunning,
@@ -1849,7 +1879,7 @@ func TestStopUnblocksWhileFinalizingOnTUI(t *testing.T) {
 		term.Attributes{},
 		sched, nil,
 		term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
@@ -2003,7 +2033,7 @@ func TestLoadIsRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"standard", nil,
+		"standard", "", nil,
 		nil,
 		nil,
 		nil,
