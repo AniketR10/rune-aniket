@@ -895,3 +895,206 @@ func (tm *mockTabManager) SetTabName(uri workspaceapi.URI, name string, attr ter
 func (tm *mockTabManager) bell() {
 	tm.belled = true
 }
+
+func newInputParserHandler(t *testing.T, alt bool) *parserHandler {
+	t.Helper()
+	testURI, err := workspaceapi.ParseURI("memory:///radical")
+	require.NoError(t, err)
+	mockPtyFile := workspacetest.File{}
+	tm := mockTabManager{}
+	attrs := DefaultConfig().NeedsAttentionAttributes
+	pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
+	ph := newParserHandler(new(sync.Mutex), pty, &tm,
+		clipboard.NewInMemory(), tm.bell, testURI, attrs, false, 10000, 0)
+	ph.sync.primBuf.SetDefaultChar(' ')
+	ph.sync.altBuf.SetDefaultChar(' ')
+	if alt {
+		ph.SetPrivateMode(vteparser.PrivateModeSwapScreenAndSetRestoreCursor)
+	} else {
+		ph.UnsetPrivateMode(vteparser.PrivateModeSwapScreenAndSetRestoreCursor)
+	}
+	return ph
+}
+
+func firstRowCells(p *parserHandler) []term.Cell {
+	if prim, ok := p.sync.buf.(*vtescreen.PrimaryBuffer); ok {
+		return prim.Cells.RawCells()[0]
+	}
+	return p.sync.buf.(*vtescreen.AltBuffer).Cells.RawCells()[0]
+}
+
+// TestInputWideRuneSurvivesNextInput reproduces a wide (width-2) glyph
+// being clobbered when the following glyph was printed: the cursor
+// advanced by one column, landing on the wide glyph's second half, so the
+// next write overwrote it. Both screen buffers must keep the wide glyph
+// and place the next glyph after it.
+func TestInputWideRuneSurvivesNextInput(t *testing.T) {
+	for _, alt := range []bool{false, true} {
+		name := "primary"
+		if alt {
+			name = "alt"
+		}
+		t.Run(name+"/wide then narrow", func(t *testing.T) {
+			p := newInputParserHandler(t, alt)
+			p.Resize(8, 2)
+			p.Input('世')
+			p.Input('a')
+			cells := firstRowCells(p)
+			require.GreaterOrEqual(t, len(cells), 2)
+			assert.Equal(t, '世', cells[0].Ch)
+			assert.Equal(t, uint8(2), cells[0].Width)
+			assert.Equal(t, 'a', cells[1].Ch)
+			assert.Equal(t, uint8(1), cells[1].Width)
+		})
+		t.Run(name+"/two wide", func(t *testing.T) {
+			p := newInputParserHandler(t, alt)
+			p.Resize(8, 2)
+			p.Input('世')
+			p.Input('界')
+			cells := firstRowCells(p)
+			require.GreaterOrEqual(t, len(cells), 2)
+			assert.Equal(t, '世', cells[0].Ch)
+			assert.Equal(t, uint8(2), cells[0].Width)
+			assert.Equal(t, '界', cells[1].Ch)
+			assert.Equal(t, uint8(2), cells[1].Width)
+		})
+		t.Run(name+"/narrow then wide then narrow", func(t *testing.T) {
+			p := newInputParserHandler(t, alt)
+			p.Resize(8, 2)
+			p.Input('x')
+			p.Input('世')
+			p.Input('y')
+			cells := firstRowCells(p)
+			require.GreaterOrEqual(t, len(cells), 3)
+			assert.Equal(t, 'x', cells[0].Ch)
+			assert.Equal(t, '世', cells[1].Ch)
+			assert.Equal(t, uint8(2), cells[1].Width)
+			assert.Equal(t, 'y', cells[2].Ch)
+		})
+	}
+}
+
+// TestInputWideRuneWrapsAtRightMargin asserts a double-width glyph that
+// cannot fit in the last column wraps to the next row whole rather than
+// straddling the margin.
+func TestInputWideRuneWrapsAtRightMargin(t *testing.T) {
+	p := newInputParserHandler(t, false)
+	p.Resize(5, 3)
+	p.Input('世')
+	p.Input('界')
+	p.Input('中')
+	assertEqualBuf(t, p, "世 界  \n中    \n     ")
+}
+
+// TestInputClustersCombiningSequences asserts codepoints that continue a
+// grapheme cluster (ZWJ-joined emoji, skin-tone modifiers, variation
+// selectors, combining marks) merge into the preceding cell instead of
+// each consuming their own cell, while sequences that are genuinely
+// separate graphemes stay in separate cells.
+func TestInputClustersCombiningSequences(t *testing.T) {
+	cases := []struct {
+		name     string
+		runes    []rune
+		wantCh   rune
+		wantComb []rune
+		wantSep  bool // true: expect distinct cells, not a merge
+	}{
+		{
+			name:     "zwj family",
+			runes:    []rune{'\U0001F468', '\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+			wantCh:   '\U0001F468',
+			wantComb: []rune{'\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+		},
+		{
+			name:     "skin tone modifier",
+			runes:    []rune{'\U0001F91F', '\U0001F3FC'},
+			wantCh:   '\U0001F91F',
+			wantComb: []rune{'\U0001F3FC'},
+		},
+		{
+			name:     "variation selector",
+			runes:    []rune{'\u2764', '\uFE0F'},
+			wantCh:   '\u2764',
+			wantComb: []rune{'\uFE0F'},
+		},
+		{
+			name:     "combining mark",
+			runes:    []rune{'e', '\u0301'},
+			wantCh:   'e',
+			wantComb: []rune{'\u0301'},
+		},
+		{name: "ascii pair stays separate", runes: []rune{'a', 'b'}, wantSep: true},
+		{name: "wide pair stays separate", runes: []rune{'世', '界'}, wantSep: true},
+	}
+	for _, tc := range cases {
+		for _, alt := range []bool{false, true} {
+			bufName := "primary"
+			if alt {
+				bufName = "alt"
+			}
+			t.Run(tc.name+"/"+bufName, func(t *testing.T) {
+				p := newInputParserHandler(t, alt)
+				p.Resize(12, 2)
+				for _, r := range tc.runes {
+					p.Input(r)
+				}
+				cells := firstRowCells(p)
+				require.NotEmpty(t, cells)
+				if tc.wantSep {
+					require.GreaterOrEqual(t, len(cells), 2)
+					assert.Equal(t, tc.runes[0], cells[0].Ch)
+					assert.Equal(t, tc.runes[1], cells[1].Ch)
+					return
+				}
+				assert.Equal(t, tc.wantCh, cells[0].Ch)
+				assert.Equal(t, tc.wantComb, cells[0].CombiningRunes())
+			})
+		}
+	}
+}
+
+// TestInputClustersCombiningSequencesInsertMode asserts the clustering
+// merge also holds when the terminal is in insert mode.
+func TestInputClustersCombiningSequencesInsertMode(t *testing.T) {
+	p := newInputParserHandler(t, false)
+	p.Resize(12, 2)
+	p.SetMode(vteparser.ModeInsert)
+	for _, r := range []rune{'\U0001F468', '\u200D', '\U0001F469'} {
+		p.Input(r)
+	}
+	cells := firstRowCells(p)
+	require.NotEmpty(t, cells)
+	assert.Equal(t, '\U0001F468', cells[0].Ch)
+	assert.Equal(t, []rune{'\u200D', '\U0001F469'}, cells[0].CombiningRunes())
+}
+
+// TestInputClustersZWJFamilyThroughFullParser drives the byte-level parser
+// stack (utf8parser -> scanner -> driver -> Input) with the raw UTF-8 a
+// shell echoes for a ZWJ family emoji, guarding the live PTY decode path
+// rather than direct Input calls. Each codepoint arrives on its own
+// Input, so the cluster must still collapse into a single cell.
+func TestInputClustersZWJFamilyThroughFullParser(t *testing.T) {
+	p := newInputParserHandler(t, false)
+	p.Resize(20, 3)
+
+	// echo <space> 👨 ZWJ 👩 ZWJ 👧
+	data := []byte("echo ")
+	data = append(data, 0xf0, 0x9f, 0x91, 0xa8) // 👨 U+1F468
+	data = append(data, 0xe2, 0x80, 0x8d)       // ZWJ U+200D
+	data = append(data, 0xf0, 0x9f, 0x91, 0xa9) // 👩 U+1F469
+	data = append(data, 0xe2, 0x80, 0x8d)       // ZWJ U+200D
+	data = append(data, 0xf0, 0x9f, 0x91, 0xa7) // 👧 U+1F467
+
+	parser := vteparser.NewParser(p, new(vteparser.StdTimeout))
+	for _, b := range data {
+		parser.Advance(b)
+	}
+
+	cells := firstRowCells(p)
+	require.GreaterOrEqual(t, len(cells), 6)
+	assert.Equal(t, '\U0001F468', cells[5].Ch)
+	assert.Equal(t, uint8(2), cells[5].Width)
+	assert.Equal(t,
+		[]rune{'\u200D', '\U0001F469', '\u200D', '\U0001F467'},
+		cells[5].CombiningRunes())
+}

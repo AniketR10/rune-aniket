@@ -468,6 +468,25 @@ func (b *PrimaryBuffer) Write(c rune, width int, charset vteparser.CharsetIndex)
 	b.AltBuffer.WriteAt(pos, c, width, charset)
 }
 
+// PrevCellAtCursor returns the cell immediately left of the cursor in
+// scroll coordinates, or nil at the start of a line, so a grapheme
+// continuation merges into the cell holding the base of its cluster.
+func (b *PrimaryBuffer) PrevCellAtCursor() *term.Cell {
+	pos := b.CursorAtScroll()
+	if pos.X == 0 {
+		return nil
+	}
+	pos.X--
+	return b.AltBuffer.CellAt(pos)
+}
+
+// AdvanceColumns returns the glyph's display width (at least one): the
+// primary buffer's cursor tracks visual columns, so a wide glyph advances
+// past both of the columns it occupies.
+func (b *PrimaryBuffer) AdvanceColumns(width int) int {
+	return max(1, width)
+}
+
 // Delete deletes the the given number of cells, shifting left
 // all the cells to the right of the cursor.
 func (b *PrimaryBuffer) Delete(count int) {

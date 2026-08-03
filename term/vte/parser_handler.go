@@ -114,6 +114,12 @@ type screenBuffer interface {
 	Columns(line int) int
 	Rows() int
 	CellAt(pos term.Coordinates) *term.Cell
+	PrevCellAtCursor() *term.Cell
+	// AdvanceColumns reports how far the cursor moves after writing a
+	// glyph of the given display width. The primary buffer tracks visual
+	// columns and advances by the full width; the alternate buffer stores
+	// one cell per grapheme and advances by one.
+	AdvanceColumns(width int) int
 	CursorAttributes() term.Attributes
 	SetCursorAttributes(attr term.Attributes)
 	SetHiddenCursor(hidden bool)
@@ -250,11 +256,29 @@ func (t *parserHandler) Input(c rune) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
+	// The decoder emits one codepoint at a time, so a grapheme continuation
+	// (combining mark, VS, skin tone, ZWJ-joined emoji) must fold back into
+	// its base cell. The 0x0300 gate skips this for ASCII; every
+	// continuation codepoint sorts above it.
+	if c >= 0x0300 && !t.shouldWrap && t.mergeContinuation(c) {
+		return
+	}
+
 	if t.shouldWrap {
 		t.wrapLine()
 	}
 
 	width := graphemecluster.StringWidth(string(c))
+
+	advance := t.sync.buf.AdvanceColumns(width)
+
+	// A wide glyph must not straddle the right margin: wrap first so it
+	// lands whole on the next row. Only the primary buffer advances >1.
+	if advance > 1 && !t.modeInsert &&
+		t.sync.buf.CursorAtScreen().X+advance > t.width {
+		t.wrapLine()
+	}
+
 	if t.modeInsert {
 		t.sync.buf.Insert(c, width, t.currentCharset)
 	} else {
@@ -262,7 +286,7 @@ func (t *parserHandler) Input(c rune) {
 	}
 
 	pos := t.sync.buf.CursorAtScreen()
-	pos.X++
+	pos.X += advance
 
 	if pos.X < t.width {
 		t.setCursorAtScreen(pos, t.modeOrigin)
@@ -273,6 +297,23 @@ func (t *parserHandler) Input(c rune) {
 		// call to Input if program wanted to manage the wrap around process manually.
 		t.shouldWrap = true
 	}
+}
+
+// mergeContinuation folds c into the preceding cell when c extends that
+// cell's grapheme cluster (base+c still steps as a single cluster),
+// leaving the cursor in place. It reports whether the merge happened;
+// callers fall back to a normal write when it did not.
+func (t *parserHandler) mergeContinuation(c rune) bool {
+	prev := t.sync.buf.PrevCellAtCursor()
+	if prev == nil || prev.Ch == 0 || prev.Ch == '\n' {
+		return false
+	}
+	base := append([]rune{prev.Ch}, prev.CombiningRunes()...)
+	if _, rest, _, _ := graphemecluster.StepString(string(base)+string(c), -1); rest != "" {
+		return false
+	}
+	prev.SetCombining(append(base[1:], c))
+	return true
 }
 
 // Set cursor to position.

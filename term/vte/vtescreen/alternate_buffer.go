@@ -375,6 +375,25 @@ func (b *AltBuffer) CellAt(pos term.Coordinates) *term.Cell {
 	return &cells[pos.Y][pos.X]
 }
 
+// PrevCellAtCursor returns the cell immediately left of the cursor, or nil
+// at the start of a line, so a grapheme continuation can be merged into
+// the cell that holds the base of its cluster.
+func (b *AltBuffer) PrevCellAtCursor() *term.Cell {
+	pos := b.cursor.position
+	if pos.X == 0 {
+		return nil
+	}
+	pos.X--
+	return b.CellAt(pos)
+}
+
+// AdvanceColumns returns 1: the alternate buffer stores one cell per
+// grapheme and its cursor is a cell index, so a wide glyph still advances
+// the cursor by a single cell and the renderer expands its width.
+func (b *AltBuffer) AdvanceColumns(int) int {
+	return 1
+}
+
 // SaveCursor saves the current cursor state to be restored
 // later by RestoreCursor.
 func (b *AltBuffer) SaveCursor() {
