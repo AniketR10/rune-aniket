@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -984,6 +985,132 @@ func TestInputWideRuneWrapsAtRightMargin(t *testing.T) {
 	p.Input('界')
 	p.Input('中')
 	assertEqualBuf(t, p, "世 界  \n中    \n     ")
+}
+
+// TestInputWideRuneKeepsRowWithinWidth reproduces the primary buffer
+// growing one visual column past the terminal width: erase operations
+// (EL/ED) pad a row with width-1 cells, and a wide glyph printed over
+// one of them used to be overwritten in place, leaving the row summing
+// to width+1 columns. Scroll.MaxOffset then allowed a spurious one-cell
+// horizontal scroll of the vte view. A wide glyph must instead consume
+// the cell(s) whose columns it covers.
+func TestInputWideRuneKeepsRowWithinWidth(t *testing.T) {
+	// mirrors how Component.Init/Resize wire the live view scroll.
+	newViewScroll := func(p *parserHandler, width, height int) *component.Scroll {
+		s := new(component.Scroll)
+		s.InitPerformance(&p.sync.primBuf.Cells)
+		s.InvertOffset = true
+		s.SetTabspaces(1)
+		s.Resize(width, height)
+		return s
+	}
+
+	t.Run("wide glyph over erased cells", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(10, 3)
+		p.ClearLine(vteparser.LineClearModeAll)
+		p.Input('世')
+
+		scroll := newViewScroll(p, 10, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X,
+			"row overwritten by a wide glyph must not exceed the terminal width")
+		assert.False(t, scroll.CanSeekRight())
+	})
+
+	t.Run("wide glyph over narrow glyphs consumes covered cell", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(4, 3)
+		for _, r := range "abcd" {
+			p.Input(r)
+		}
+		p.CarriageReturn()
+		p.Input('世')
+
+		// 世 now covers the columns previously held by 'a' and 'b'.
+		cells := firstRowCells(p)
+		require.GreaterOrEqual(t, len(cells), 2)
+		assert.Equal(t, '世', cells[0].Ch)
+		assert.Equal(t, 'c', cells[1].Ch)
+		scroll := newViewScroll(p, 4, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X)
+		assert.False(t, scroll.CanSeekRight())
+	})
+
+	t.Run("wide glyph redrawn in place is stable", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(10, 3)
+		p.ClearLine(vteparser.LineClearModeAll)
+		p.Input('世')
+		p.CarriageReturn()
+		p.Input('世')
+
+		cells := firstRowCells(p)
+		require.NotEmpty(t, cells)
+		assert.Equal(t, '世', cells[0].Ch)
+		scroll := newViewScroll(p, 10, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X)
+	})
+
+	t.Run("wide glyph over another wide glyph's first column", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(6, 3)
+		p.Input('a')
+		p.Input('世')
+		p.Input('x')
+		p.CarriageReturn()
+		p.Input('中')
+
+		// 中 covers 'a' and the first column of 世; the leftover 世
+		// column becomes blank and 'x' keeps its column.
+		assertEqualBuf(t, p, "中  x  \n      \n      ")
+		scroll := newViewScroll(p, 6, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X)
+	})
+}
+
+// TestResizeShrinkKeepsRowsWithinWidth reproduces the vte view allowing
+// a spurious one-cell horizontal scroll after the terminal shrinks:
+// shrinkColumns/growColumns iterated rows with `y > 0` and only handed
+// the cursor row to wrapTopLines when the loop reached it, so with the
+// cursor sitting on row 0 (a fresh shell), that row was never re-wrapped
+// nor trimmed and kept its old width. Erase ops pad rows with width-1
+// cells to the full terminal width, so a plain ASCII prompt row was
+// enough to exceed the new width.
+func TestResizeShrinkKeepsRowsWithinWidth(t *testing.T) {
+	newViewScroll := func(p *parserHandler, width, height int) *component.Scroll {
+		s := new(component.Scroll)
+		s.InitPerformance(&p.sync.primBuf.Cells)
+		s.InvertOffset = true
+		s.SetTabspaces(1)
+		s.Resize(width, height)
+		return s
+	}
+
+	t.Run("erased row with cursor on first row", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(10, 3)
+		p.ClearLine(vteparser.LineClearModeAll)
+		p.Input('a')
+		p.Resize(9, 3)
+
+		scroll := newViewScroll(p, 9, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X,
+			"shrinking must trim the cursor row to the new width")
+		assert.False(t, scroll.CanSeekRight())
+	})
+
+	t.Run("grow rewraps line wrapped at the old width", func(t *testing.T) {
+		p := newInputParserHandler(t, false)
+		p.Resize(4, 3)
+		for _, r := range "abcde" {
+			p.Input(r)
+		}
+		p.Resize(6, 3)
+
+		assertEqualBuf(t, p, "abcde \n      \n      ")
+		scroll := newViewScroll(p, 6, 3)
+		assert.Equal(t, 0, scroll.MaxOffset().X)
+	})
 }
 
 // TestInputClustersCombiningSequences asserts codepoints that continue a

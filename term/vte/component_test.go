@@ -205,7 +205,7 @@ func TestIntegrationComponent(t *testing.T) {
 				p.Input('\x00')
 
 				comp.Select(term.Coordinates{})
-				comp.SelectEnd(term.Coordinates{X: 4})
+				comp.SelectEnd(term.Coordinates{X: 3})
 				data, ok := comp.Selection()
 				assert.True(t, ok)
 				assert.Equal(t, "abc", data)

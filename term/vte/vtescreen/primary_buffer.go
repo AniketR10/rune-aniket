@@ -151,8 +151,7 @@ func (b *PrimaryBuffer) growColumns(width, _ int) (wraps int) {
 		return
 	}
 	pos := b.CursorAtScroll()
-	var y int
-	for y = max(0, b.Cells.Rows()-1); y > 0; y-- {
+	for y := max(0, b.Cells.Rows()-1); y >= 0; y-- {
 		if y == pos.Y {
 			wraps = b.wrapTopLines(y, width)
 			break
@@ -166,7 +165,7 @@ func (b *PrimaryBuffer) growColumns(width, _ int) (wraps int) {
 func (b *PrimaryBuffer) shrinkColumns(width int) (wraps int) {
 	pos := b.CursorAtScroll()
 	var y int
-	for y = max(0, b.Cells.Rows()-1); y > 0; y-- {
+	for y = max(0, b.Cells.Rows()-1); y >= 0; y-- {
 		if y == pos.Y {
 			wraps = b.wrapTopLines(y, width)
 			break
@@ -465,7 +464,38 @@ func (b *PrimaryBuffer) Insert(c rune, width int, charset vteparser.CharsetIndex
 // at the current cursor position.
 func (b *PrimaryBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
 	pos := b.CursorAtScroll()
+	overwritten := 0
+	if cell := b.AltBuffer.CellAt(pos); cell != nil {
+		overwritten = b.AdvanceColumns(int(cell.Width))
+	}
 	b.AltBuffer.WriteAt(pos, c, width, charset)
+	if overwritten != 0 {
+		b.consumeCoveredCells(pos, b.AdvanceColumns(width)-overwritten)
+	}
+}
+
+// consumeCoveredCells removes the cells whose columns a glyph
+// overwrite at pos now covers. The primary buffer stores one cell per
+// glyph and rows must sum to at most the terminal width in visual
+// columns; overwriting a cell in place with a wider glyph would
+// otherwise leave the covered neighbor cell(s) behind, growing the row
+// past the screen and allowing a spurious horizontal scroll.
+func (b *PrimaryBuffer) consumeCoveredCells(pos term.Coordinates, delta int) {
+	next := term.Coordinates{Y: pos.Y, X: pos.X + 1}
+	for delta > 0 {
+		cell := b.AltBuffer.CellAt(next)
+		if cell == nil {
+			return
+		}
+		delta -= b.AdvanceColumns(int(cell.Width))
+		b.Cells.DeleteContext(b.AltBuffer.ctx,
+			next, term.Coordinates{Y: next.Y, X: next.X + 1})
+	}
+	// a consumed glyph was wider than the columns claimed: keep the
+	// leftover column blank so following glyphs stay in place.
+	for ; delta < 0; delta++ {
+		b.Cells.InsertContext(b.AltBuffer.ctx, next, b.defaultChar)
+	}
 }
 
 // PrevCellAtCursor returns the cell immediately left of the cursor in
