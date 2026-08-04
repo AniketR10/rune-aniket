@@ -46,6 +46,7 @@ func TestSpecForFile(t *testing.T) {
 		{"a.py", symbolresolve.Python},
 		{"a.pyi", symbolresolve.Python},
 		{"a.rs", symbolresolve.Rust},
+		{"a.zig", symbolresolve.Zig},
 		{"a.txt", nil},
 		{"go", nil},
 	} {
@@ -268,6 +269,62 @@ func TestExtractFileRust(t *testing.T) {
 			{"geometry.Shape.new", symbolresolve.SymbolMethodDef},
 		} {
 			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+	})
+}
+
+func TestExtractFileZig(t *testing.T) {
+	t.Parallel()
+
+	env := setupZigEnv(t)
+
+	t.Run("field refs and imports from main.zig", func(t *testing.T) {
+		ext, occs := extractFileT(t, env, symbolresolve.Zig, "main.zig")
+
+		// The @import bindings resolve aliases to their import paths.
+		assert.Equal(t, map[string]string{
+			"geometry": "geometry.zig",
+			"requests": "requests.zig",
+			"service":  "app/service.zig",
+			"text":     "utils/text.zig",
+		}, ext.Imports)
+
+		for _, want := range []occurrence{
+			{"geometry.area", symbolresolve.SymbolRef},
+			{"geometry.Shape", symbolresolve.SymbolRef},
+			{"requests.get", symbolresolve.SymbolRef},
+			{"service.Service", symbolresolve.SymbolRef},
+			{"text.slugify", symbolresolve.SymbolRef},
+		} {
+			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+	})
+
+	t.Run("defs and methods from geometry.zig", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Zig, "geometry.zig")
+
+		// Zig cannot observe pub visibility from tree-sitter captures,
+		// so private items are kept. The module qualifier is the file
+		// stem.
+		for _, want := range []occurrence{
+			{"geometry.area", symbolresolve.SymbolDef},
+			{"geometry.perimeter", symbolresolve.SymbolDef},
+			{"geometry.Shape", symbolresolve.SymbolDef},
+			{"geometry.Internal", symbolresolve.SymbolDef},
+			{"geometry.Shape.init", symbolresolve.SymbolMethodDef},
+		} {
+			assert.NotZerof(t, occs[want], "missing %+v", want)
+		}
+	})
+
+	t.Run("member access on locals is dropped without import", func(t *testing.T) {
+		_, occs := extractFileT(t, env, symbolresolve.Zig, "geometry.zig")
+
+		// geometry.zig imports nothing, so its field expressions (e.g.
+		// struct-literal member reads) never pass RequireImport.
+		for o := range occs {
+			assert.NotEqualf(t, symbolresolve.SymbolRef, o.kind,
+				"unexpected reference %+v", o)
 		}
 	})
 }

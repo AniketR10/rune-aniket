@@ -432,6 +432,37 @@ func TestRustE2E(t *testing.T) {
 	})
 }
 
+func TestZigE2E(t *testing.T) {
+	t.Parallel()
+	env := setupE2E(t, zigTestdata, zigFixtures)
+
+	t.Run("resolve matches the backing parser for referenced symbols", func(t *testing.T) {
+		for _, name := range []string{
+			"geometry.area", "geometry.Shape", "requests.get",
+			"service.Service", "text.slugify",
+		} {
+			assertResolveMatchesBacking(t, env, name)
+		}
+	})
+
+	t.Run("definition-only symbols resolve from the index", func(t *testing.T) {
+		assert.Equal(t, []string{env.uri(t, "geometry.zig")},
+			resolveURIs(t, env.p, "geometry.perimeter"))
+		assert.Equal(t, []string{env.uri(t, "app/service.zig")},
+			resolveURIs(t, env.p, "service.boot"))
+	})
+
+	t.Run("listed symbols include qualified references", func(t *testing.T) {
+		got := listSet(t, env.p)
+		for _, name := range []string{
+			"geometry.area", "geometry.Shape", "requests.get",
+			"service.Service", "text.slugify",
+		} {
+			assert.Truef(t, got[name], "expected %q to be listed", name)
+		}
+	})
+}
+
 // Paths to the committed testdata modules and tree-sitter fixtures,
 // relative to this package's directory.
 const (
@@ -439,10 +470,12 @@ const (
 	pyTestdata    = "../../idelsp/symbolresolve/testdata_py"
 	pyPkgTestdata = "../../idelsp/symbolresolve/testdata_py_pkg"
 	rsTestdata    = "../../idelsp/symbolresolve/testdata_rs"
+	zigTestdata   = "../../idelsp/symbolresolve/testdata_zig"
 
-	goFixtures = "../../idelsp/symbolresolve/go"
-	pyFixtures = "../syntaxtest/python"
-	rsFixtures = "../syntaxtest/rust"
+	goFixtures  = "../../idelsp/symbolresolve/go"
+	pyFixtures  = "../syntaxtest/python"
+	rsFixtures  = "../syntaxtest/rust"
+	zigFixtures = "../syntaxtest/zig"
 )
 
 // benchWorkspace generates a workspace of Go files whose shared-name

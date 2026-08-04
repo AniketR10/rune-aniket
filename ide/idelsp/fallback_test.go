@@ -47,7 +47,10 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-const fallbackTestURI = "file:///ws/main.zig"
+// fallbackTestURI must use a language that has no LSP server
+// configured in langConfigs, so Manager requests take the
+// ErrLanguageNotSupported path that triggers the tree-sitter fallback.
+const fallbackTestURI = "file:///ws/main.lua"
 
 // errIter is a canned iterator with an optional terminal error.
 type errIter[T any] struct {

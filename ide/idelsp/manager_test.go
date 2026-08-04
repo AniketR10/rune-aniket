@@ -464,6 +464,33 @@ func TestTransientOpenForUnopenedFile(t *testing.T) {
 	assert.False(t, cached, "transient open must not cache the file in m.files")
 }
 
+// TestLocationRequestDecodesSingleLocation asserts that a location
+// request tolerates a server answering with a bare Location object
+// rather than an array — zls does this for single results, and the
+// LSP spec allows Location | Location[] | LocationLink[]. The decoded
+// single location must be returned without a stale decode error.
+func TestLocationRequestDecodesSingleLocation(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+
+	m, srv := newTransientTestManager(t, tmpDir)
+	srv.callResult = json.RawMessage(`{"uri":"` + fileURI + `",` +
+		`"range":{"start":{"line":3,"character":7},` +
+		`"end":{"line":3,"character":10}}}`)
+
+	res, err := m.Definition(context.Background(), semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res.Location)
+	assert.Equal(t, fileURI, res.Location.URI)
+	assert.Equal(t, uint32(3), res.Location.Range.Start.Line)
+	assert.Equal(t, uint32(7), res.Location.Range.Start.Character)
+}
+
 // TestNoTransientOpenForOpenFile asserts a file already open in the
 // editor (present in m.files) is queried directly, with no extra
 // didOpen/didClose.

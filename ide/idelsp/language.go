@@ -84,6 +84,11 @@ var langConfigs = map[string]langConfig{
 		command: "clangd",
 		args:    nil,
 	},
+	"zig": {
+		id:      "zig",
+		command: "zls",
+		args:    nil,
+	},
 }
 
 func languageForFile(filename workspaceapi.URI) (langConfig, error) {

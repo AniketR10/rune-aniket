@@ -1489,10 +1489,12 @@ func (m *Manager) locationRequest(
 		return semanticapi.LocationResult{Locations: locs}, nil
 	}
 
+	// zls (and the LSP spec) allow a bare Location object when there
+	// is a single result.
 	var single semanticapi.Location
-	err2 := json.Unmarshal(raw, &single)
-	if err2 == nil {
-		return semanticapi.LocationResult{Location: &single}, err
+	if err2 := json.Unmarshal(raw, &single); err2 == nil &&
+		single != (semanticapi.Location{}) {
+		return semanticapi.LocationResult{Location: &single}, nil
 	}
 
 	var links []semanticapi.LocationLink

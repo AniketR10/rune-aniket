@@ -1078,6 +1078,9 @@ func autoInitParams(rootURI string) semanticapi.InitializeParams {
 			"references":     map[string]any{},
 			"documentSymbol": map[string]any{},
 			"formatting":     map[string]any{},
+			// Servers like zls only push diagnostics when the client
+			// advertises publishDiagnostics support.
+			"publishDiagnostics": map[string]any{},
 			"rename": map[string]any{
 				"prepareSupport": true,
 			},

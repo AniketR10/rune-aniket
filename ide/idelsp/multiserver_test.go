@@ -25,6 +25,7 @@ package idelsp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -50,17 +51,26 @@ type fakeChild struct {
 	closed  bool
 	alive   bool
 
+	// callResult, when set, is written into the raw result of call so
+	// response-shape decoding can be exercised without a real server.
+	callResult json.RawMessage
+
 	// diagReport and diagErr are returned by pullDiagnostics so the
 	// multi-server merge can be exercised without a real server.
 	diagReport semanticapi.DocumentDiagnosticReport
 	diagErr    error
 }
 
-func (f *fakeChild) call(_ context.Context, method string, _, _ any) error {
+func (f *fakeChild) call(_ context.Context, method string, _, result any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
 	f.events = append(f.events, "call:"+method)
+	if f.callResult != nil {
+		if raw, ok := result.(*json.RawMessage); ok {
+			*raw = f.callResult
+		}
+	}
 	return nil
 }
 
