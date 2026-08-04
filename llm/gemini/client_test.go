@@ -326,6 +326,35 @@ func TestCreateCompletionAlwaysSendsThinkingConfigForGemini3(t *testing.T) {
 	})
 }
 
+// TestCreateCompletionEffortWarningProvenance pins the rule that only an
+// explicit per-request effort produces a warning; the workspace config value
+// is a standing preference and is dropped silently on models that cannot
+// honor it.
+func TestCreateCompletionEffortWarningProvenance(t *testing.T) {
+	doneChunk := `{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP"}]}`
+	model := llmapi.ModelEntry{Name: Gemini_2_5_Flash, Provider: LLMProvider}
+
+	t.Run("request effort warns", func(t *testing.T) {
+		_, cfg := sseServer(t, []string{doneChunk})
+		events := drain(t, NewClient("k", cfg), model, llmapi.Request{
+			Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+			ReasoningEffort: llmapi.ReasoningEffort("xhigh"),
+		})
+		assert.Equal(t, llmapi.EventRateLimitWarning, events[0].Type)
+	})
+
+	t.Run("config effort is silent", func(t *testing.T) {
+		_, cfg := sseServer(t, []string{doneChunk})
+		cfg.ReasoningEffort = "xhigh"
+		events := drain(t, NewClient("k", cfg), model, llmapi.Request{
+			Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+		})
+		for _, ev := range events {
+			assert.NotEqual(t, llmapi.EventRateLimitWarning, ev.Type)
+		}
+	})
+}
+
 func TestCreateCompletionMaxOutputTokens(t *testing.T) {
 	doneChunk := `{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP"}]}`
 	model := llmapi.ModelEntry{Name: Gemini_3_6_Flash, Provider: LLMProvider}

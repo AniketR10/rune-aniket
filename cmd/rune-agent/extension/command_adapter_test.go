@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
@@ -109,6 +110,40 @@ func TestCommandAdapterMaxTokensValidatesCurrentGeminiFlashModels(t *testing.T) 
 			assert.Equal(t, 65536, a.agent.MaxOutputTokens())
 		})
 	}
+}
+
+// A chat agent carries no injected effort default, so /effort with no
+// argument must report that the model default applies rather than claiming
+// a level the user never set.
+func TestCommandAdapterEffortReportsModelDefault(t *testing.T) {
+	model := llmapi.ModelEntry{
+		Provider: anthropic.LLMProvider, Name: anthropic.ClaudeFable5, ContextWindow: 1_000_000,
+	}
+	a := newMaxTokensAdapter(t, model)
+	require.Empty(t, a.agent.Effort(), "fresh agent must not carry an injected effort")
+
+	res, err := a.handleEffort(nil)
+	require.NoError(t, err)
+	assert.Contains(t, renderDisplay(t, res.Display), "model default")
+
+	_, err = a.handleEffort([]string{"low"})
+	require.NoError(t, err)
+	assert.Equal(t, llmapi.ReasoningEffortLow, a.agent.Effort())
+}
+
+func renderDisplay(t *testing.T, it iterator.Iterator[component.Responsive]) string {
+	t.Helper()
+	w := term.NewStringWriter(60, 4)
+	for {
+		comp, ok := it.Next(t.Context())
+		if !ok {
+			break
+		}
+		comp.Resize(60, comp.Height(60))
+		comp.Draw(w)
+	}
+	require.NoError(t, w.Flush())
+	return w.String()
 }
 
 // captureCommandHandler records the last repl.Command it received and

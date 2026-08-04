@@ -140,6 +140,58 @@ func TestMaxOutputTokensOverridesConfig(t *testing.T) {
 	assert.Equal(t, int64(8192), captured.MaxTokens)
 }
 
+// TestEffortWarningProvenance pins the rule that only an explicit per-request
+// effort produces a warning; the workspace config value is a standing
+// preference and is dropped silently on models that cannot honor it.
+func TestEffortWarningProvenance(t *testing.T) {
+	// Claude 3 models do not support the effort parameter at all.
+	model := llmapi.ModelEntry{Name: "claude-3-5-haiku-20241022"}
+
+	newServer := func(t *testing.T) string {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, minimalSSEResponse("ok"))
+		}))
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	drain := func(t *testing.T, cfg Config, req llmapi.Request) []llmapi.Event {
+		t.Helper()
+		cfg.BaseURL = newServer(t)
+		it, err := NewClient("test-key", cfg).CreateCompletion(context.Background(), model, req)
+		require.NoError(t, err)
+		defer func() { _ = it.Close() }()
+		var events []llmapi.Event
+		for {
+			ev, ok := it.Next(context.Background())
+			if !ok {
+				break
+			}
+			events = append(events, ev)
+		}
+		return events
+	}
+
+	t.Run("request effort warns", func(t *testing.T) {
+		events := drain(t, Config{}, llmapi.Request{
+			Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+			ReasoningEffort: llmapi.ReasoningEffortHigh,
+		})
+		require.NotEmpty(t, events)
+		assert.Equal(t, llmapi.EventRateLimitWarning, events[0].Type)
+	})
+
+	t.Run("config effort is silent", func(t *testing.T) {
+		events := drain(t, Config{ReasoningEffort: "high"}, llmapi.Request{
+			Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+		})
+		for _, ev := range events {
+			assert.NotEqual(t, llmapi.EventRateLimitWarning, ev.Type)
+		}
+	})
+}
+
 func TestNewClientOAuthBearerAuth(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -1179,7 +1179,7 @@ func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Respons
 	if len(args) == 0 {
 		current := s.getEffort()
 		if current == "" {
-			current = llmapi.ReasoningEffortHigh
+			return markdownOutput("Current effort level: **model default**"), nil
 		}
 		return markdownOutput(fmt.Sprintf("Current effort level: **%s**", current)), nil
 	}

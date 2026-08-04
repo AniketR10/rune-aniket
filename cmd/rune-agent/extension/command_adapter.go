@@ -376,7 +376,10 @@ var validEffortLevels = []llmapi.ReasoningEffort{
 // handleEffort shows the current effort level or sets a new one.
 func (a *commandAdapter) handleEffort(args []string) (dialoguetui.CommandResult, error) {
 	if len(args) == 0 {
-		current := a.agent.Effort()
+		current := string(a.agent.Effort())
+		if current == "" {
+			current = "model default"
+		}
 		md, err := markdown.New(fmt.Sprintf("Current effort level: **%s**", current))
 		if err != nil {
 			return dialoguetui.CommandResult{}, err

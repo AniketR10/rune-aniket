@@ -933,6 +933,60 @@ func TestResponsesStorefalseAndDisabledParallel(t *testing.T) {
 	assert.Equal(t, "install-1", metadata["x-codex-installation-id"])
 }
 
+// TestEffortWarningProvenance pins the rule that only an explicit per-request
+// effort produces a warning; the workspace config value is a standing
+// preference and is dropped silently on models that cannot honor it.
+func TestEffortWarningProvenance(t *testing.T) {
+	// GPT-5.4-pro accepts medium/high/xhigh only, so "low" is unsupported.
+	model := llmapi.ModelEntry{Name: GPT5Dot4Pro, ContextWindow: 200000}
+
+	t.Run("request effort warns", func(t *testing.T) {
+		events := captureCompletionEvents(t, Config{}, model, llmapi.Request{
+			Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+			ReasoningEffort: llmapi.ReasoningEffort("low"),
+		})
+		require.NotEmpty(t, events)
+		assert.Equal(t, llmapi.EventRateLimitWarning, events[0].Type)
+	})
+
+	t.Run("config effort is silent", func(t *testing.T) {
+		events := captureCompletionEvents(t, Config{ReasoningEffort: "low"}, model, llmapi.Request{
+			Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+		})
+		for _, ev := range events {
+			assert.NotEqual(t, llmapi.EventRateLimitWarning, ev.Type)
+		}
+	})
+}
+
+func captureCompletionEvents(
+	t *testing.T, cfg Config, model llmapi.ModelEntry, req llmapi.Request,
+) []llmapi.Event {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}, \"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg.BaseURL = srv.URL
+	ctx := context.Background()
+	it, err := NewClient("test-key", cfg).CreateCompletion(ctx, model, req)
+	require.NoError(t, err)
+	defer func() { _ = it.Close() }()
+	var events []llmapi.Event
+	for {
+		ev, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		events = append(events, ev)
+	}
+	return events
+}
+
 // TestForceResponsesAPIRouting is the regression guard for the original 400
 // (function tools + reasoning_effort require /v1/responses). With
 // ForceResponsesAPI enabled, a tool + reasoning-effort request must hit

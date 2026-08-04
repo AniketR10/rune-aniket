@@ -123,8 +123,12 @@ func (c *client) CreateCompletion(
 	}
 
 	// Resolve effective effort: request-level takes precedence over config-level.
+	// Only an explicit per-request effort warrants a warning when the model
+	// cannot honor it; the config value is a standing cross-model preference
+	// and is dropped silently.
 	effort := string(request.ReasoningEffort)
-	if effort == "" {
+	explicitEffort := effort != ""
+	if !explicitEffort {
 		effort = c.config.ReasoningEffort
 	}
 
@@ -133,7 +137,7 @@ func (c *client) CreateCompletion(
 	var effortWarnings []llmapi.Event
 	normalized, effortWarn := NormalizeEffort(model.Name, effort)
 	request.ReasoningEffort = llmapi.ReasoningEffort(normalized)
-	if effortWarn != "" {
+	if explicitEffort && effortWarn != "" {
 		effortWarnings = append(effortWarnings, llmapi.Event{
 			Type: llmapi.EventRateLimitWarning,
 			RateLimit: &llmapi.RateLimitInfo{

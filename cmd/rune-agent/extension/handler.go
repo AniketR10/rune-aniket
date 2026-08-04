@@ -306,7 +306,6 @@ func newCommandEventHandler(
 	tools = append(tools, agentools.ConversationTools(dialogueStore, fs, sessionsDir)...)
 
 	ret = new(aiEditorHandler)
-	ret.defaultEffort = llmapi.ReasoningEffortHigh
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
 	ret.config = cfg
