@@ -749,6 +749,9 @@ func (i *IDE) init(
 		i.workspaceHandler.events.globalInterrupter(), i.onTutorialCompleted,
 		i.workspaceHandler.exitRequested)
 	commandObserver.subscribe(&i.tutorial)
+	if op.commandDispatchHook != nil {
+		commandObserver.subscribe(funcCommandObserver(op.commandDispatchHook))
+	}
 	_ = i.workspaceHandler.SubscribeEvents(
 		textapi.AllEvents(),
 		tutorialEventObserver(i.options.scheduleFn, i.tutorial.observeEvent),

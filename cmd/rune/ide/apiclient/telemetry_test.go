@@ -200,6 +200,50 @@ func TestRecordWatchedFilesChangeDisabled(t *testing.T) {
 	assert.NotPanics(t, func() { client.RecordWatchedFilesChange(3) })
 }
 
+// TestRecordCommandFlushed verifies dispatched editor commands are reported
+// as a usage counter and that the posted count is cleared afterwards.
+func TestRecordCommandFlushed(t *testing.T) {
+	usage := make(chan telemetryUsagePayload, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p telemetryUsagePayload
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		if p.Type == "ClientUsage" {
+			usage <- p
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", "modal",
+		storagestub.NewInMemoryService(), t.TempDir())
+	client := &Client{telemetry: tel}
+
+	client.RecordCommand()
+	client.RecordCommand()
+
+	require.NoError(t, tel.Close())
+
+	select {
+	case p := <-usage:
+		assert.Equal(t, 2, p.Commands)
+		tel.resetUsage(p)
+		assert.Equal(t, 0, tel.getUsage().Commands)
+	case <-time.After(time.Second):
+		t.Fatal("Close did not flush a final ClientUsage event")
+	}
+}
+
+// TestRecordCommandDisabled verifies the counter is a safe no-op when
+// telemetry is disabled, so the hook can be wired unconditionally.
+func TestRecordCommandDisabled(t *testing.T) {
+	client := &Client{}
+	assert.False(t, client.TelemetryEnabled())
+	assert.NotPanics(t, client.RecordCommand)
+}
+
 // captureSystemPayload starts telemetry against a test server and returns the
 // first ClientSystem payload it posts. The system event is emitted eagerly on
 // start, so a long period keeps any usage post from racing the assertion.

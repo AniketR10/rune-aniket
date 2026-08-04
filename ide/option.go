@@ -135,6 +135,15 @@ func WithWatchedFilesChangeHook(hook func(int)) Option {
 	}
 }
 
+// WithCommandDispatchHook installs a hook invoked once for every editor
+// command that is dispatched, whether it came from the command prompt or a
+// key binding. Aliases report each expanded step.
+func WithCommandDispatchHook(hook func()) Option {
+	return func(opts *options) {
+		opts.commandDispatchHook = hook
+	}
+}
+
 // WithExtension adds Extension to the IDE's built-in extensions.
 func WithExtension(p Extension) Option {
 	return func(opts *options) {
@@ -506,6 +515,8 @@ type options struct {
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
 	watchedFilesChangeHook func(int)
+
+	commandDispatchHook func()
 
 	nagPrompt NagPromptConfig
 

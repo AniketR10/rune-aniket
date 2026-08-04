@@ -778,6 +778,21 @@ func TestCommandObserverRegistryLateSubscribe(t *testing.T) {
 	assert.Len(t, reg.subscribers, 1)
 }
 
+// TestFuncCommandObserver asserts the callback adapter fires once per
+// dispatched command regardless of the command's name, args or outcome.
+func TestFuncCommandObserver(t *testing.T) {
+	t.Parallel()
+	reg := newCommandObserverRegistry()
+
+	var calls int
+	reg.subscribe(funcCommandObserver(func() { calls++ }))
+
+	reg.observeCommand("wopen", "wopen", []string{"~/proj"}, nil)
+	reg.observeCommand("bogus", "bogus", nil, errors.New("no such command"))
+
+	assert.Equal(t, 2, calls, "failed commands still count as dispatched")
+}
+
 type recordingObserver struct {
 	calls []string
 }

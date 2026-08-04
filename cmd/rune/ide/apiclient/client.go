@@ -152,6 +152,15 @@ func (a *Client) RecordWatchedFilesChange(n int) {
 	a.telemetry.recordWatchedFilesChange(n)
 }
 
+// RecordCommand counts one dispatched editor command. It is a no-op when
+// telemetry is disabled.
+func (a *Client) RecordCommand() {
+	if a.telemetry == nil {
+		return
+	}
+	a.telemetry.recordCommand()
+}
+
 // InstallTampered reports whether install-ID resolution found a wiped
 // data directory with a surviving backup identifier — the signal of
 // an attempt to reset local state. Detection runs only when telemetry

@@ -599,6 +599,7 @@ func runTUI(
 		ide.WithReleaseManager(releaseManager),
 		nagPromptOption(client),
 		ide.WithWatchedFilesChangeHook(client.RecordWatchedFilesChange),
+		ide.WithCommandDispatchHook(client.RecordCommand),
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,

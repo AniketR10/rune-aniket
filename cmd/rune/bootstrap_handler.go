@@ -244,6 +244,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		ide.WithReleaseManager(releaseManager),
 		nagPromptOption(client),
 		ide.WithWatchedFilesChangeHook(client.RecordWatchedFilesChange),
+		ide.WithCommandDispatchHook(client.RecordCommand),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
 		b.trust, b.storage, opts...)

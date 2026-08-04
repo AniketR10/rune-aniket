@@ -23,6 +23,14 @@
 
 package ide
 
+// funcCommandObserver adapts a plain callback to commandObserver for
+// subscribers that only care that a command ran, not which one.
+type funcCommandObserver func()
+
+func (f funcCommandObserver) observeCommand(_, _ string, _ []string, _ error) {
+	f()
+}
+
 type commandObserverRegistry struct {
 	subscribers []commandObserver
 }
