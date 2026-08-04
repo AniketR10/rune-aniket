@@ -177,6 +177,72 @@ func TestComputeDirtyRowsVerticalOffsetNeighbours(t *testing.T) {
 	assert.True(t, r.dirtyRows[5], "row below the offset row repaints")
 }
 
+// TestComputeDirtyRowsNeighbourRepaintSpillsUp asserts that an
+// unchanged row carrying a negative vertical render offset, repainted
+// only because its neighbour changed, dirties the row above it: its
+// cells paint half a cell up into that row's strip, and without a
+// clear the spill re-composites there on every repaint.
+func TestComputeDirtyRowsNeighbourRepaintSpillsUp(t *testing.T) {
+	r, cols, rows := newTestRenderer(t, 12, 8)
+	grid := filledGrid(rows, cols, 'x')
+	for x := range grid[4] {
+		grid[4][x].Attrs = term.AttrNegativeVerticalRenderOffset
+	}
+	r.snapshot(grid, cursorState{})
+
+	next := cloneGrid(grid)
+	next[5][0].Ch = 'q'
+	require.False(t, r.computeDirtyRows(next, cursorState{}))
+	assert.True(t, r.dirtyRows[3], "spill target of the repainted offset row")
+	assert.True(t, r.dirtyRows[4])
+	assert.True(t, r.dirtyRows[5])
+	assert.True(t, r.dirtyRows[6])
+	assert.False(t, r.dirtyRows[2], "no spill beyond the offset row's reach")
+}
+
+// TestComputeDirtyRowsNeighbourRepaintSpillsDown mirrors the spill-up
+// case for the positive vertical render offset, which paints half a
+// cell down into the row below.
+func TestComputeDirtyRowsNeighbourRepaintSpillsDown(t *testing.T) {
+	r, cols, rows := newTestRenderer(t, 12, 8)
+	grid := filledGrid(rows, cols, 'x')
+	for x := range grid[4] {
+		grid[4][x].Attrs = term.AttrVerticalRenderOffset
+	}
+	r.snapshot(grid, cursorState{})
+
+	next := cloneGrid(grid)
+	next[3][0].Ch = 'q'
+	require.False(t, r.computeDirtyRows(next, cursorState{}))
+	assert.True(t, r.dirtyRows[2])
+	assert.True(t, r.dirtyRows[3])
+	assert.True(t, r.dirtyRows[4])
+	assert.True(t, r.dirtyRows[5], "spill target of the repainted offset row")
+	assert.False(t, r.dirtyRows[6], "no spill beyond the offset row's reach")
+}
+
+// TestComputeDirtyRowsOffsetSpillCascades asserts the spill closure
+// iterates: a spill-target row that itself carries an offset spills
+// onward into its own neighbour.
+func TestComputeDirtyRowsOffsetSpillCascades(t *testing.T) {
+	r, cols, rows := newTestRenderer(t, 12, 8)
+	grid := filledGrid(rows, cols, 'x')
+	for x := range grid[4] {
+		grid[4][x].Attrs = term.AttrNegativeVerticalRenderOffset
+	}
+	for x := range grid[3] {
+		grid[3][x].Attrs = term.AttrNegativeVerticalRenderOffset
+	}
+	r.snapshot(grid, cursorState{})
+
+	next := cloneGrid(grid)
+	next[5][0].Ch = 'q'
+	require.False(t, r.computeDirtyRows(next, cursorState{}))
+	assert.True(t, r.dirtyRows[3], "first spill target")
+	assert.True(t, r.dirtyRows[2], "cascaded spill target")
+	assert.False(t, r.dirtyRows[1], "cascade stops at a row without offsets")
+}
+
 // TestDrawPartialRepaintAfterFull drives the renderer through the real
 // Draw path (headless via benchdraw semantics is not needed here since
 // DrawTriangles/DrawImage only enqueue) and asserts the counters

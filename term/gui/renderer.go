@@ -223,9 +223,12 @@ func (r *renderer) Draw(
 // repainted (full). A full repaint is required on the first paint
 // after an invalidation and whenever the grid dimensions change.
 // Otherwise a row is dirty when its cells differ from the previous
-// frame, when it is the old or new cursor row, or when it neighbours a
-// row carrying a vertical render offset (those cells paint half a cell
-// outside their own row).
+// frame, when it is the old or new cursor row, or when a repainted row
+// carries a vertical render offset that paints into it (those cells
+// paint half a cell outside their own row, so the spill target must be
+// cleared and repainted too or the spill re-composites there on every
+// repaint). The spill rule is closed transitively: a spill target that
+// itself carries an offset spills onward.
 func (r *renderer) computeDirtyRows(cells [][]term.Cell, cursor cursorState) (full bool) {
 	height := len(cells)
 	if r.forceFullRepaint || !r.prevValid || len(r.prevCells) != height {
@@ -256,7 +259,40 @@ func (r *renderer) computeDirtyRows(cells [][]term.Cell, cursor cursorState) (fu
 	if cursor.show {
 		r.markDirty(cursor.pos.Y, height)
 	}
+
+	for changed := true; changed; {
+		changed = false
+		for y := range height {
+			if !r.dirtyRows[y] {
+				continue
+			}
+			up, down := rowSpill(cells[y])
+			if up && y > 0 && !r.dirtyRows[y-1] {
+				r.dirtyRows[y-1] = true
+				changed = true
+			}
+			if down && y+1 < height && !r.dirtyRows[y+1] {
+				r.dirtyRows[y+1] = true
+				changed = true
+			}
+		}
+	}
 	return false
+}
+
+// rowSpill reports whether repainting the row paints outside its own
+// strip: up when any cell carries the negative vertical render offset,
+// down when any cell carries the positive one.
+func rowSpill(row []term.Cell) (up, down bool) {
+	for i := range row {
+		a := row[i].Attrs
+		up = up || a&term.AttrNegativeVerticalRenderOffset != 0
+		down = down || a&term.AttrVerticalRenderOffset != 0
+		if up && down {
+			return
+		}
+	}
+	return
 }
 
 // markDirty flags row y and, because vertical-offset cells paint into
