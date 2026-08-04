@@ -125,6 +125,16 @@ func WithExtensionsRunner(p ExtensionsRunner) Option {
 	}
 }
 
+// WithWatchedFilesChangeHook installs a hook invoked with the number of
+// changed files each time the agent-facing LSP receives a
+// workspace/didChangeWatchedFiles notification. Filesystem watcher events
+// do not travel this path and are therefore not reported.
+func WithWatchedFilesChangeHook(hook func(int)) Option {
+	return func(opts *options) {
+		opts.watchedFilesChangeHook = hook
+	}
+}
+
 // WithExtension adds Extension to the IDE's built-in extensions.
 func WithExtension(p Extension) Option {
 	return func(opts *options) {
@@ -494,6 +504,8 @@ type options struct {
 	startingTutorial       string
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
+
+	watchedFilesChangeHook func(int)
 
 	nagPrompt NagPromptConfig
 

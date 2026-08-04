@@ -598,6 +598,7 @@ func runTUI(
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		nagPromptOption(client),
+		ide.WithWatchedFilesChangeHook(client.RecordWatchedFilesChange),
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,

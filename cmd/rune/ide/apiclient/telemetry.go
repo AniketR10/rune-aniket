@@ -73,10 +73,11 @@ type telemetry struct {
 	version    string
 	editorMode string
 
-	opened  atomic.Int32
-	closed  atomic.Int32
-	flushed atomic.Int32
-	edited  atomic.Int32
+	opened         atomic.Int32
+	closed         atomic.Int32
+	flushed        atomic.Int32
+	edited         atomic.Int32
+	watchedChanges atomic.Int32
 }
 
 func newTelemetry(
@@ -156,6 +157,7 @@ func (t *telemetry) getUsage() telemetryUsagePayload {
 	data.Closed = int(t.closed.Load())
 	data.Flushed = int(t.flushed.Load())
 	data.Edited = int(t.edited.Load())
+	data.WatchedChanges = int(t.watchedChanges.Load())
 	data.SID = t.sessionID
 	data.Type = "ClientUsage"
 	data.EditorMode = t.editorMode
@@ -185,6 +187,7 @@ func (t *telemetry) resetUsage(data telemetryUsagePayload) {
 	t.closed.Add(-int32(data.Closed))
 	t.flushed.Add(-int32(data.Flushed))
 	t.edited.Add(-int32(data.Edited))
+	t.watchedChanges.Add(-int32(data.WatchedChanges))
 }
 
 func (t *telemetry) postData(buf *bytes.Buffer, period time.Duration, data any) error {
@@ -234,6 +237,10 @@ func (t *telemetry) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
+func (t *telemetry) recordWatchedFilesChange(n int) {
+	t.watchedChanges.Add(int32(n))
+}
+
 func (t *telemetry) Close() error {
 	t.flushFinalUsage()
 	t.cancelCtx()
@@ -248,13 +255,14 @@ func (t *telemetry) flushFinalUsage() {
 }
 
 type telemetryUsagePayload struct {
-	Type       string
-	SID        string
-	EditorMode string
-	Opened     int
-	Closed     int
-	Edited     int
-	Flushed    int
+	Type           string
+	SID            string
+	EditorMode     string
+	Opened         int
+	Closed         int
+	Edited         int
+	Flushed        int
+	WatchedChanges int
 }
 
 type telemetrySystemPayload struct {

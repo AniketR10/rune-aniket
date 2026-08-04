@@ -142,6 +142,16 @@ func (a *Client) TelemetryEnabled() bool {
 	return a.telemetry != nil
 }
 
+// RecordWatchedFilesChange counts n files reported as changed through the
+// agent-facing LSP workspace/didChangeWatchedFiles path. It is a no-op when
+// telemetry is disabled.
+func (a *Client) RecordWatchedFilesChange(n int) {
+	if a.telemetry == nil {
+		return
+	}
+	a.telemetry.recordWatchedFilesChange(n)
+}
+
 // InstallTampered reports whether install-ID resolution found a wiped
 // data directory with a surviving backup identifier — the signal of
 // an attempt to reset local state. Detection runs only when telemetry

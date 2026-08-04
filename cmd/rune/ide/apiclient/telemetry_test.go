@@ -155,6 +155,51 @@ func TestCloseFlushBoundedWhenOffline(t *testing.T) {
 	}
 }
 
+// TestRecordWatchedFilesChangeFlushed verifies agent-driven
+// workspace/didChangeWatchedFiles calls are reported as a usage counter and
+// that the posted count is cleared afterwards.
+func TestRecordWatchedFilesChangeFlushed(t *testing.T) {
+	usage := make(chan telemetryUsagePayload, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p telemetryUsagePayload
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		if p.Type == "ClientUsage" {
+			usage <- p
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", "modal",
+		storagestub.NewInMemoryService(), t.TempDir())
+	client := &Client{telemetry: tel}
+
+	client.RecordWatchedFilesChange(2)
+	client.RecordWatchedFilesChange(1)
+
+	require.NoError(t, tel.Close())
+
+	select {
+	case p := <-usage:
+		assert.Equal(t, 3, p.WatchedChanges)
+		tel.resetUsage(p)
+		assert.Equal(t, 0, tel.getUsage().WatchedChanges)
+	case <-time.After(time.Second):
+		t.Fatal("Close did not flush a final ClientUsage event")
+	}
+}
+
+// TestRecordWatchedFilesChangeDisabled verifies the counter is a safe no-op
+// when telemetry is disabled, so the hook can be wired unconditionally.
+func TestRecordWatchedFilesChangeDisabled(t *testing.T) {
+	client := &Client{}
+	assert.False(t, client.TelemetryEnabled())
+	assert.NotPanics(t, func() { client.RecordWatchedFilesChange(3) })
+}
+
 // captureSystemPayload starts telemetry against a test server and returns the
 // first ClientSystem payload it posts. The system event is emitted eagerly on
 // start, so a long period keeps any usage post from racing the assertion.

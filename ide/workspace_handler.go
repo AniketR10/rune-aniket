@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -179,6 +180,8 @@ type workspaceManagerHandler struct {
 	startupWorkspace bool
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
+
+	watchedFilesChangeHook func(int)
 
 	// tutorialsInstalled is a required dependency wired by the IDE at
 	// construction; afterPackageConfigMerge calls it unconditionally and a nil
@@ -2130,6 +2133,13 @@ func (h *workspaceManagerHandler) buildExtensions(
 	lsp := idelsp.New(rootURI, cwd,
 		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
+	var lspifc semanticapi.LSP = lsp
+	if h.watchedFilesChangeHook != nil {
+		lspifc = watchedFilesTelemetryLSP{
+			LSP:      lsp,
+			onChange: h.watchedFilesChangeHook,
+		}
+	}
 	dapCfg := idedebug.Config{
 		MaxRetries: 5,
 		Adapters:   cfg.debuggerConfigs(),
@@ -2183,7 +2193,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	cmdcfg := lspCommandsConfig(uri, cfg, notifications,
 		h.events.newInterrupter(uri), parser, callbacks)
 	apiHandler, err := lspcmd.AllHandler(
-		lsp, apieditor, apibrowser, apibrowser, apibrowser,
+		lspifc, apieditor, apibrowser, apibrowser, apibrowser,
 		ex.workspace, parser, cmdcfg)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new lsp command handler: %v", err)
@@ -2197,7 +2207,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
 	}
-	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
+	res = extension.MergeResourceMap(res, extension.SemanticResources(lspifc))
 	res = extension.MergeResourceMap(res, extension.DebugResources(dap))
 	res = extension.MergeResourceMap(res, extension.LLMResources(h.llmRouter))
 

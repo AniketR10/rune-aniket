@@ -670,6 +670,7 @@ func (i *IDE) init(
 	i.workspaceHandler = new(workspaceManagerHandler)
 	commandObserver := newCommandObserverRegistry()
 	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
+	i.workspaceHandler.watchedFilesChangeHook = op.watchedFilesChangeHook
 	i.workspaceHandler.tutorialsInstalled = i.onTutorialsInstalled
 	i.workspaceHandler.onboardingActive = func() bool {
 		return op.startingTutorial != ""
