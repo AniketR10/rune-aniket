@@ -548,6 +548,7 @@ config = {
         "aliases":      {
             "e":              {"command": "edit", "completer": "files"},
             "w":              "write",
+            "save":           "write",
             "sed":            "!! gsed -i $1 $FILE",
             "gitnextchange":  "jumptolocation next gitchange",
             "gitprevchange":  "jumptolocation previous gitchange",
