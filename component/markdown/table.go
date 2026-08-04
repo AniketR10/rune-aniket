@@ -25,6 +25,8 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 type tableAlignment int
@@ -193,14 +195,14 @@ func (t *tableBlock) Dimensions() (width, height int) {
 	colWidths := make([]int, numCols)
 
 	for i, h := range t.header {
-		if h.Len() > colWidths[i] {
-			colWidths[i] = h.Len()
+		if h.Width() > colWidths[i] {
+			colWidths[i] = h.Width()
 		}
 	}
 	for _, row := range t.rows {
 		for i, cell := range row {
-			if i < numCols && cell.Len() > colWidths[i] {
-				colWidths[i] = cell.Len()
+			if i < numCols && cell.Width() > colWidths[i] {
+				colWidths[i] = cell.Width()
 			}
 		}
 	}
@@ -443,43 +445,24 @@ func (t *tableBlock) renderCell(
 	w term.Writer, x, y, width int, content textRun,
 	align tableAlignment, isHeader bool,
 ) {
-	text := content.String()
-	textLen := len(text)
-	if textLen > width {
-		text = text[:width]
-		textLen = width
-	}
+	contentWidth := min(content.Width(), width)
 
 	var padding int
 	switch align {
 	case alignCenter:
-		padding = (width - textLen) / 2
+		padding = (width - contentWidth) / 2
 	case alignRight:
-		padding = width - textLen
+		padding = width - contentWidth
 	}
 
-	attr := t.cfg.Paragraph
-	if isHeader {
-		attr = t.cfg.Bold
-	}
-
-	spIdx := 0
-	runeIdx := 0
-	for i, r := range text {
-		cellX := x + padding + i
-		cellAttr := attr
-		if spIdx < len(content) {
-			sp := content[spIdx]
-			if !isHeader {
-				cellAttr = resolveStyle(sp.style, t.cfg)
-			}
-			runeIdx++
-			if runeIdx >= len(sp.text) {
-				spIdx++
-				runeIdx = 0
-			}
+	headerAttr := t.cfg.Bold
+	cellX := x + padding
+	for _, sp := range content {
+		attr := headerAttr
+		if !isHeader {
+			attr = resolveStyle(sp.style, t.cfg)
 		}
-		w.SetCell(term.Coordinates{X: cellX, Y: y}, term.NewCell(r, 1, cellAttr))
+		cellX = component.WriteText(w, cellX, y, x+width, sp.text, attr)
 	}
 }
 

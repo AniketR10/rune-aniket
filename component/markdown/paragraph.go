@@ -25,6 +25,8 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 type paragraphBlock struct {
@@ -70,19 +72,13 @@ func (p *paragraphBlock) Draw(w term.Writer) {
 		x := 0
 		for _, sp := range line {
 			attr := resolveStyle(sp.style, p.cfg)
-			for _, r := range sp.text {
-				if x >= p.w {
-					break
-				}
-				w.SetCell(term.Coordinates{X: x, Y: i}, term.NewCell(r, 1, attr))
-				x++
-			}
+			x = component.WriteText(w, x, i, p.w, sp.text, attr)
 		}
 	}
 }
 
 func (p *paragraphBlock) Dimensions() (width, height int) {
-	return p.content.Len(), 2
+	return p.content.Width(), 2
 }
 
 func (p *paragraphBlock) SpanAt(x, y int) (text, url string, ok bool) {

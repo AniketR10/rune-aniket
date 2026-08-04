@@ -27,6 +27,8 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 const listIndent = 2
@@ -131,23 +133,14 @@ func (l *listBlock) drawAtIndent(w term.Writer, y, indent int) int {
 
 	for i, item := range l.items {
 		bullet := l.getBullet(i, item)
-
-		for j, r := range bullet {
-			w.SetCell(term.Coordinates{X: indent + j, Y: y}, term.NewCell(r, 1, l.cfg.Paragraph))
-		}
+		component.WriteText(w, indent, y, l.w, bullet, l.cfg.Paragraph)
 
 		lines := wrapTextRun(item.content, effectiveWidth)
 		for lineIdx, line := range lines {
 			x := indent + listIndent
 			for _, sp := range line {
 				attr := resolveStyle(sp.style, l.cfg)
-				for _, r := range sp.text {
-					if x >= l.w {
-						break
-					}
-					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.NewCell(r, 1, attr))
-					x++
-				}
+				x = component.WriteText(w, x, y+lineIdx, l.w, sp.text, attr)
 			}
 		}
 		y += len(lines)
@@ -173,7 +166,7 @@ func (l *listBlock) dimensionsAtIndent(indent int) (width, height int) {
 	totalHeight := 0
 
 	for _, item := range l.items {
-		itemWidth := indent + listIndent + item.content.Len()
+		itemWidth := indent + listIndent + item.content.Width()
 		if itemWidth > maxWidth {
 			maxWidth = itemWidth
 		}

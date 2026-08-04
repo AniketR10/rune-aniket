@@ -25,6 +25,8 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 const blockquoteIndent = 2
@@ -121,13 +123,7 @@ func (b *blockquoteBlock) drawAtIndent(w term.Writer, y, indent int) int {
 			for _, sp := range line {
 				attr := resolveStyle(sp.style, b.cfg)
 				attr = term.AttributesUnion(attr, b.cfg.Blockquote)
-				for _, r := range sp.text {
-					if x >= b.w {
-						break
-					}
-					w.SetCell(term.Coordinates{X: x, Y: y + lineIdx}, term.NewCell(r, 1, attr))
-					x++
-				}
+				x = component.WriteText(w, x, y+lineIdx, b.w, sp.text, attr)
 			}
 		}
 		y += len(lines)
@@ -153,7 +149,7 @@ func (b *blockquoteBlock) dimensionsAtIndent(indent int) (width, height int) {
 	totalHeight := 0
 
 	for _, content := range b.content {
-		contentWidth := indent + blockquoteIndent + content.Len()
+		contentWidth := indent + blockquoteIndent + content.Width()
 		if contentWidth > maxWidth {
 			maxWidth = contentWidth
 		}

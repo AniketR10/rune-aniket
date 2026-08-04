@@ -134,9 +134,10 @@ func (p *PlanProgress) Draw(w term.Writer) {
 		}
 		y++
 
-		// Render description lines below the subject, indented 2 spaces.
-		if task.Description != "" && p.width > 2 {
-			for _, line := range wrapText(task.Description, p.width, 2) {
+		// Indent descriptions to the subject column so both stay aligned
+		// regardless of how many columns the status icon occupies.
+		if task.Description != "" && p.width > x {
+			for _, line := range wrapText(task.Description, p.width, x) {
 				if y >= p.height {
 					break
 				}

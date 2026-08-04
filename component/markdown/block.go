@@ -25,8 +25,10 @@ package markdown
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 )
 
 // LinkInfo contains information about a link at a given position.
@@ -71,10 +73,34 @@ func (tr textRun) String() string {
 	return b.String()
 }
 
-func (tr textRun) Len() int {
+// Width returns the display width of the run in terminal columns.
+func (tr textRun) Width() int {
 	var n int
 	for _, sp := range tr {
-		n += len(sp.text)
+		n += textWidth(sp.text)
+	}
+	return n
+}
+
+// textWidth returns the number of columns text occupies when drawn.
+// Zero-width clusters still take a cell, so they are counted as one to keep
+// measurement, wrapping, drawing and hit-testing in agreement.
+func textWidth(text string) int {
+	var n int
+	state := -1
+	var width uint8
+	for len(text) > 0 {
+		// An ASCII byte whose successor is also ASCII (or end of string) is a
+		// complete width-1 cluster: combining marks are never ASCII.
+		if text[0] < utf8.RuneSelf &&
+			(len(text) == 1 || text[1] < utf8.RuneSelf) {
+			n++
+			text = text[1:]
+			state = -1
+			continue
+		}
+		_, text, width, state = graphemecluster.StepString(text, state)
+		n += max(1, int(width))
 	}
 	return n
 }
@@ -84,11 +110,11 @@ func spanAtInLine(
 ) (text, url string, ok bool) {
 	pos := 0
 	for _, sp := range line {
-		spLen := len(sp.text)
-		if x >= pos && x < pos+spLen {
+		spWidth := textWidth(sp.text)
+		if x >= pos && x < pos+spWidth {
 			return sp.text, sp.url, true
 		}
-		pos += spLen
+		pos += spWidth
 	}
 	return
 }
@@ -96,11 +122,20 @@ func spanAtInLine(
 func charAtInLine(line textRun, x int) (rune, bool) {
 	pos := 0
 	for _, sp := range line {
-		for _, r := range sp.text {
-			if pos == x {
-				return r, true
+		text := sp.text
+		state := -1
+		var cluster string
+		var width uint8
+		for len(text) > 0 {
+			cluster, text, width, state = graphemecluster.StepString(text, state)
+			cols := max(1, int(width))
+			if x >= pos && x < pos+cols {
+				for _, r := range cluster {
+					return r, true
+				}
+				return 0, false
 			}
-			pos++
+			pos += cols
 		}
 	}
 	return 0, false

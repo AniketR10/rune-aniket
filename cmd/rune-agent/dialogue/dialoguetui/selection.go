@@ -29,6 +29,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	tcomponent "unstable.build/go-tui/component"
 )
 
 var _ component.Responsive = (*Selection)(nil)
@@ -243,14 +244,7 @@ func (s *Selection) Draw(w term.Writer) {
 func drawText(
 	w term.Writer, x, y int, text string, attr term.Attributes, maxWidth int,
 ) {
-	col := 0
-	for _, ch := range text {
-		if col >= maxWidth {
-			break
-		}
-		w.SetCell(term.Coordinates{X: x + col, Y: y}, term.NewCell(ch, 0, attr))
-		col++
-	}
+	tcomponent.WriteText(w, x, y, x+maxWidth, text, attr)
 }
 
 // MoveUp moves the cursor up, wrapping to the bottom.

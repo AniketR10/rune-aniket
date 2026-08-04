@@ -123,3 +123,75 @@ func TestPromptCursor(t *testing.T) {
 	assert.True(t, show)
 	assert.Equal(t, term.Coordinates{X: 3, Y: 5}, pos)
 }
+
+func TestPromptWideClusters(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []rune
+		wantQuery   string
+		wantCursorX int
+		wantCells   map[int]term.Cell
+	}{
+		{
+			name:        "emoji query occupies two columns",
+			input:       []rune{'🚀', 'x'},
+			wantQuery:   "🚀x",
+			wantCursorX: 4,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '/', Width: 1},
+				1: {Ch: '🚀', Width: 2},
+				2: {Ch: ' ', Width: 1}, // background fill under the wide cell
+				3: {Ch: 'x', Width: 1},
+			},
+		},
+		{
+			name:        "cjk query",
+			input:       []rune{'中', '文'},
+			wantQuery:   "中文",
+			wantCursorX: 5,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '/', Width: 1},
+				1: {Ch: '中', Width: 2},
+				2: {Ch: ' ', Width: 1}, // background fill under the wide cell
+				3: {Ch: '文', Width: 2},
+				4: {Ch: ' ', Width: 1}, // background fill under the wide cell
+			},
+		},
+		{
+			name:        "accented query stays narrow",
+			input:       []rune{'é', 'a'},
+			wantQuery:   "éa",
+			wantCursorX: 3,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '/', Width: 1},
+				1: {Ch: 'é', Width: 1},
+				2: {Ch: 'a', Width: 1},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var p searchPrompt
+			p.open()
+			for _, r := range tt.input {
+				assert.Equal(t, searchConsumed, p.handleKey(promptKey(r)))
+			}
+			assert.Equal(t, tt.wantQuery, p.query())
+
+			pos, _, show := p.cursor(0)
+			assert.True(t, show)
+			assert.Equal(t, tt.wantCursorX, pos.X,
+				"cursor must sit after the last display column")
+
+			w := term.NewStringWriter(10, 1)
+			_ = w.Clear(term.Attributes{})
+			p.draw(w, 0, 10)
+			cells := w.Cells()
+			for x, want := range tt.wantCells {
+				assert.Equal(t, want.Ch, cells[x].Ch, "cell %d rune", x)
+				assert.Equal(t, want.Width, cells[x].Width, "cell %d width", x)
+			}
+		})
+	}
+}

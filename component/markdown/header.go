@@ -25,6 +25,8 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 type headerBlock struct {
@@ -69,7 +71,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 	if attr.Bg != term.ColorDefault {
 		maxContentWidth := 0
 		for i, line := range lines {
-			lineWidth := line.Len()
+			lineWidth := line.Width()
 			if i == 0 {
 				lineWidth += prefixLen
 			} else {
@@ -116,13 +118,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 		}
 
 		for _, sp := range line {
-			for _, r := range sp.text {
-				if x >= hb.w {
-					break
-				}
-				w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(r, 1, attr))
-				x++
-			}
+			x = component.WriteText(w, x, y, hb.w, sp.text, attr)
 		}
 	}
 }
@@ -130,7 +126,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 func (h *headerBlock) Dimensions() (width, height int) {
 	prefixLen := h.prefixLen()
 	// 1 (above) + 1 (content line) + 1 (standard spacing)
-	return prefixLen + h.content.Len(), 3
+	return prefixLen + h.content.Width(), 3
 }
 
 func (hb *headerBlock) SpanAt(x, y int) (text, url string, ok bool) {

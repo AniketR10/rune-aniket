@@ -214,3 +214,77 @@ func TestSelectionTitleWrapsRender(t *testing.T) {
 		},
 	})
 }
+
+func TestDrawText(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		x         int
+		maxWidth  int
+		wantCells map[int]term.Cell
+	}{
+		{
+			name:     "ascii",
+			text:     "ab",
+			maxWidth: 10,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {Ch: 'b', Width: 1},
+			},
+		},
+		{
+			name:     "emoji advances two columns",
+			text:     "a🚀b",
+			maxWidth: 10,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {Ch: '🚀', Width: 2},
+				2: {},
+				3: {Ch: 'b', Width: 1},
+			},
+		},
+		{
+			name:     "cjk label",
+			text:     "中x",
+			maxWidth: 10,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '中', Width: 2},
+				1: {},
+				2: {Ch: 'x', Width: 1},
+			},
+		},
+		{
+			name:     "maxWidth is relative to the starting column",
+			text:     "abc",
+			x:        3,
+			maxWidth: 2,
+			wantCells: map[int]term.Cell{
+				3: {Ch: 'a', Width: 1},
+				4: {Ch: 'b', Width: 1},
+				5: {},
+			},
+		},
+		{
+			name:     "wide cluster does not straddle the clip",
+			text:     "a🚀",
+			maxWidth: 2,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := term.NewStringWriter(10, 1)
+			require.NoError(t, w.Clear(term.Attributes{}))
+			drawText(w, tt.x, 0, tt.text, term.Attributes{}, tt.maxWidth)
+			cells := w.Cells()
+			for col, want := range tt.wantCells {
+				assert.Equal(t, want.Ch, cells[col].Ch, "cell %d rune", col)
+				assert.Equal(t, want.Width, cells[col].Width, "cell %d width", col)
+			}
+		})
+	}
+}

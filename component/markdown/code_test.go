@@ -262,6 +262,49 @@ func TestCodeBlockDrawTableDriven(t *testing.T) {
 	}
 }
 
+func TestCodeBlockDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	cb := newCodeBlock("", "a🚀b\n", &cfg)
+	cb.w = 10
+
+	w := term.NewStringWriter(10, 2)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	cb.Draw(w)
+
+	cells := w.Cells()
+	assert.Equal(t, 'a', cells[0].Ch)
+	assert.Equal(t, '🚀', cells[1].Ch)
+	assert.Equal(t, uint8(2), cells[1].Width)
+	assert.Equal(t, rune(0), cells[2].Ch, "continuation column must stay empty")
+	assert.Equal(t, 'b', cells[3].Ch,
+		"the emoji must not swallow the following character")
+}
+
+func TestCodeBlockWideClusterWrapsWithItsLine(t *testing.T) {
+	cfg := DefaultConfig()
+	cb := newCodeBlock("", "ab🚀\n", &cfg)
+	cb.w = 3
+
+	assert.Equal(t, 3, cb.Height(3), "2 visual lines plus spacing")
+
+	w := term.NewStringWriter(3, 3)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	cb.Draw(w)
+
+	cells := w.Cells()
+	assert.Equal(t, 'a', cells[0].Ch)
+	assert.Equal(t, 'b', cells[1].Ch)
+	assert.Equal(t, rune(0), cells[2].Ch, "wide cell must not straddle the wrap")
+	assert.Equal(t, '🚀', cells[3].Ch, "wide cell wraps to the next line")
+
+	ch, ok := cb.CharAt(0, 1)
+	require.True(t, ok)
+	assert.Equal(t, '🚀', ch)
+	ch, ok = cb.CharAt(1, 1)
+	require.True(t, ok)
+	assert.Equal(t, '🚀', ch, "both columns of a wide cell resolve to it")
+}
+
 func TestCodeBlockDrawEmptyLanguage(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Parser = &mockParser{}
@@ -491,7 +534,7 @@ func TestCodeBlockHeightTableDriven(t *testing.T) {
 	}
 }
 
-func TestCodeBlockWrappedLineCountTableDriven(t *testing.T) {
+func TestSplitRowTableDriven(t *testing.T) {
 	tests := []struct {
 		name     string
 		row      string
@@ -504,6 +547,15 @@ func TestCodeBlockWrappedLineCountTableDriven(t *testing.T) {
 		{name: "exact fit", row: "abc", width: 3, expected: 1},
 		{name: "one overflow chunk", row: "abcd", width: 3, expected: 2},
 		{name: "multiple chunks", row: "abcdefg", width: 3, expected: 3},
+		{name: "wide cell does not straddle", row: "ab🚀", width: 3, expected: 2},
+		{name: "wide cells pack by width", row: "🚀🚀", width: 3, expected: 2},
+		{name: "cell wider than width gets its own line", row: "🚀", width: 1, expected: 1},
+		{name: "tab cell counts one column", row: "a\tb", width: 3, expected: 1},
+		{name: "nul cell counts one column", row: "a\x00b", width: 2, expected: 2},
+		{name: "family emoji is one wide cell", row: "a👨‍👩‍👧b", width: 2, expected: 3},
+		{name: "flags pack one per line at width two", row: "🇺🇸🇺🇸", width: 2, expected: 2},
+		{name: "cjk exact fit single line", row: "中文", width: 4, expected: 1},
+		{name: "combining cluster is one narrow cell", row: "e\u0301x", width: 2, expected: 1},
 	}
 
 	for _, tt := range tests {
@@ -514,7 +566,7 @@ func TestCodeBlockWrappedLineCountTableDriven(t *testing.T) {
 			if len(cb.cells) > 0 {
 				row = cb.cells[0]
 			}
-			assert.Equal(t, tt.expected, cb.wrappedLineCount(row, tt.width))
+			assert.Len(t, splitRow(row, tt.width), tt.expected)
 		})
 	}
 }
@@ -568,6 +620,96 @@ func TestCodeBlockDimensionsTableDriven(t *testing.T) {
 			assert.Equal(t, tt.expectedHeight, h)
 		})
 	}
+}
+
+func TestCodeBlockDimensionsWideClusters(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedWidth  int
+		expectedHeight int
+	}{
+		{
+			name:           "cjk counts display columns",
+			code:           "中文\n",
+			expectedWidth:  4,
+			expectedHeight: 2,
+		},
+		{
+			name:           "family emoji is one double cell",
+			code:           "a👨‍👩‍👧b\n",
+			expectedWidth:  4,
+			expectedHeight: 2,
+		},
+		{
+			name:           "tab and nul count one column each",
+			code:           "a\tb\x00c\n",
+			expectedWidth:  5,
+			expectedHeight: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+			w, h := cb.Dimensions()
+			assert.Equal(t, tt.expectedWidth, w)
+			assert.Equal(t, tt.expectedHeight, h)
+		})
+	}
+}
+
+func TestCodeBlockCharAtWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	cb := newCodeBlock("", "中文\na🚀b\n", &cfg)
+	cb.w = 2 // 中(2) | 文(2) | a + no room | 🚀 | b
+
+	tests := []struct {
+		name   string
+		x, y   int
+		want   rune
+		wantOK bool
+	}{
+		{name: "first wide cell", x: 0, y: 0, want: '中', wantOK: true},
+		{name: "continuation of first wide cell", x: 1, y: 0,
+			want: '中', wantOK: true},
+		{name: "second wide cell wrapped", x: 0, y: 1, want: '文', wantOK: true},
+		{name: "ascii before unfit emoji", x: 0, y: 2, want: 'a', wantOK: true},
+		{name: "column after ascii is empty", x: 1, y: 2},
+		{name: "emoji wrapped alone", x: 0, y: 3, want: '🚀', wantOK: true},
+		{name: "emoji continuation", x: 1, y: 3, want: '🚀', wantOK: true},
+		{name: "trailing ascii", x: 0, y: 4, want: 'b', wantOK: true},
+		{name: "past content", x: 0, y: 5},
+		{name: "x out of range", x: 2, y: 0},
+		{name: "negative x", x: -1, y: 0},
+		{name: "negative y", x: 0, y: -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := cb.CharAt(tt.x, tt.y)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestCodeBlockDrawControlCells(t *testing.T) {
+	cfg := DefaultConfig()
+	cb := newCodeBlock("", "a\tb\x00c\n", &cfg)
+	cb.w = 10
+
+	w := term.NewStringWriter(10, 2)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	cb.Draw(w)
+
+	cells := w.Cells()
+	assert.Equal(t, 'a', cells[0].Ch)
+	assert.Equal(t, '\t', cells[1].Ch, "zero-width tab cell still occupies a column")
+	assert.Equal(t, 'b', cells[2].Ch)
+	assert.Equal(t, 'c', cells[4].Ch,
+		"nul cell must occupy exactly one column before c")
 }
 
 func TestCodeBlockHighlightsAsync(t *testing.T) {

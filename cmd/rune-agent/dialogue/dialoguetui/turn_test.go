@@ -131,6 +131,125 @@ func TestTurnHeight(t *testing.T) {
 	assert.Greater(t, h, 0)
 }
 
+func TestWriteRuneLineAttr(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		x         int
+		maxWidth  int
+		wantNextX int
+		wantCells map[int]term.Cell
+	}{
+		{
+			name:      "ascii",
+			text:      "ab",
+			maxWidth:  10,
+			wantNextX: 2,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {Ch: 'b', Width: 1},
+			},
+		},
+		{
+			name:      "empty string",
+			text:      "",
+			maxWidth:  10,
+			wantNextX: 0,
+			wantCells: map[int]term.Cell{0: {}},
+		},
+		{
+			name:      "emoji advances two columns",
+			text:      "a🚀b",
+			maxWidth:  10,
+			wantNextX: 4,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {Ch: '🚀', Width: 2},
+				2: {},
+				3: {Ch: 'b', Width: 1},
+			},
+		},
+		{
+			name:      "nerd icon prefix advances two columns",
+			text:      "󰗠 x",
+			maxWidth:  10,
+			wantNextX: 4,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '󰗠', Width: 2},
+				1: {},
+				2: {Ch: ' ', Width: 1},
+				3: {Ch: 'x', Width: 1},
+			},
+		},
+		{
+			name:      "cjk in tool title",
+			text:      "中x",
+			maxWidth:  10,
+			wantNextX: 3,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '中', Width: 2},
+				1: {},
+				2: {Ch: 'x', Width: 1},
+			},
+		},
+		{
+			name:      "family emoji stays one cell",
+			text:      "👨‍👩‍👧",
+			maxWidth:  10,
+			wantNextX: 2,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '👨', Width: 2},
+				1: {},
+			},
+		},
+		{
+			name:      "tab occupies one cell",
+			text:      "\ta",
+			maxWidth:  10,
+			wantNextX: 2,
+			wantCells: map[int]term.Cell{
+				0: {Ch: '\t', Width: 1},
+				1: {Ch: 'a', Width: 1},
+			},
+		},
+		{
+			name:      "wide cluster does not straddle maxWidth",
+			text:      "a🚀",
+			maxWidth:  2,
+			wantNextX: 1,
+			wantCells: map[int]term.Cell{
+				0: {Ch: 'a', Width: 1},
+				1: {},
+			},
+		},
+		{
+			name:      "maxWidth is an absolute column",
+			text:      "abc",
+			x:         4,
+			maxWidth:  5,
+			wantNextX: 5,
+			wantCells: map[int]term.Cell{
+				4: {Ch: 'a', Width: 1},
+				5: {},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := term.NewStringWriter(10, 1)
+			x := writeRuneLineAttr(w, tt.x, 0, tt.text, tt.maxWidth,
+				term.Attributes{})
+			assert.Equal(t, tt.wantNextX, x)
+			cells := w.Cells()
+			for col, want := range tt.wantCells {
+				assert.Equal(t, want.Ch, cells[col].Ch, "cell %d rune", col)
+				assert.Equal(t, want.Width, cells[col].Width, "cell %d width", col)
+			}
+		})
+	}
+}
+
 func TestTurnDrawRunningAndComplete(t *testing.T) {
 	comp := NewComponent(ComponentConfig{})
 	comp.Resize(30, 10)

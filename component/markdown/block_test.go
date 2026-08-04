@@ -26,6 +26,7 @@ package markdown
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -293,6 +294,204 @@ func TestTableBlockHeight(t *testing.T) {
 	}
 }
 
+func TestTableDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	const tableWidth = 8 // 1 column of 6 plus both separators
+
+	tests := []struct {
+		name      string
+		align     tableAlignment
+		cell      string
+		wantX     int
+		wantCh    rune
+		wantWidth uint8
+	}{
+		{
+			name:      "left aligned emoji",
+			align:     alignLeft,
+			cell:      "🚀",
+			wantX:     1,
+			wantCh:    '🚀',
+			wantWidth: 2,
+		},
+		{
+			name:      "center aligned emoji",
+			align:     alignCenter,
+			cell:      "🚀",
+			wantX:     3,
+			wantCh:    '🚀',
+			wantWidth: 2,
+		},
+		{
+			name:      "right aligned emoji",
+			align:     alignRight,
+			cell:      "🚀",
+			wantX:     5,
+			wantCh:    '🚀',
+			wantWidth: 2,
+		},
+		{
+			name:      "right aligned cjk",
+			align:     alignRight,
+			cell:      "日本",
+			wantX:     3,
+			wantCh:    '日',
+			wantWidth: 2,
+		},
+		{
+			name:      "left aligned combining cluster",
+			align:     alignLeft,
+			cell:      "e\u0301",
+			wantX:     1,
+			wantCh:    'e',
+			wantWidth: 1,
+		},
+		{
+			name:      "center aligned flag",
+			align:     alignCenter,
+			cell:      "🇺🇸",
+			wantX:     3,
+			wantCh:    '🇺',
+			wantWidth: 2,
+		},
+		{
+			name:      "right aligned nerd icon",
+			align:     alignRight,
+			cell:      "󰗠",
+			wantX:     5,
+			wantCh:    '󰗠',
+			wantWidth: 2,
+		},
+		{
+			name:      "right aligned fullwidth latin",
+			align:     alignRight,
+			cell:      "ｗ",
+			wantX:     5,
+			wantCh:    'ｗ',
+			wantWidth: 2,
+		},
+		{
+			name:      "center aligned skin tone emoji",
+			align:     alignCenter,
+			cell:      "👍🏽",
+			wantX:     3,
+			wantCh:    '👍',
+			wantWidth: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := newTableBlock(
+				[]textRun{{{text: "H"}}},
+				[][]textRun{{{{text: tt.cell}}}},
+				[]tableAlignment{tt.align},
+				&cfg,
+			)
+			block.Resize(tableWidth, block.Height(tableWidth))
+
+			w := term.NewStringWriter(tableWidth, 6)
+			require.NoError(t, w.Clear(term.Attributes{}))
+			block.Draw(w)
+
+			const dataRow = 3
+			cells := w.Cells()[dataRow*tableWidth:]
+			assert.Equal(t, tt.wantCh, cells[tt.wantX].Ch)
+			assert.Equal(t, tt.wantWidth, cells[tt.wantX].Width)
+			assert.Equal(t, rune(0), cells[tt.wantX+1].Ch,
+				"continuation column must stay empty")
+			assert.Equal(t, cfg.TableCharSet.ColumnSeparator,
+				cells[tableWidth-1].Ch, "right separator overwritten")
+		})
+	}
+}
+
+func TestTableDrawWideHeaderAndMultiColumn(t *testing.T) {
+	cfg := DefaultConfig()
+	// 2 columns: width 11 leaves 8 columns of content, 4 per column.
+	// Layout: │....│....│ with column content at x 1-4 and 6-9.
+	const tableWidth = 11
+	block := newTableBlock(
+		[]textRun{{{text: "🚀"}}, {{text: "B"}}},
+		[][]textRun{{{{text: "x"}}, {{text: "中"}}}},
+		nil,
+		&cfg,
+	)
+	block.Resize(tableWidth, block.Height(tableWidth))
+
+	w := term.NewStringWriter(tableWidth, 6)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	block.Draw(w)
+
+	cells := w.Cells()
+	const headerRow, dataRow = 1, 3
+
+	header := cells[headerRow*tableWidth:]
+	assert.Equal(t, '🚀', header[1].Ch)
+	assert.Equal(t, uint8(2), header[1].Width)
+	assert.Equal(t, rune(0), header[2].Ch, "continuation column")
+	assert.NotZero(t, header[1].Attrs&term.AttrBold, "header must be bold")
+	assert.Equal(t, 'B', header[6].Ch)
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, header[0].Ch)
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, header[5].Ch)
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, header[10].Ch)
+
+	data := cells[dataRow*tableWidth:]
+	assert.Equal(t, 'x', data[1].Ch)
+	assert.Equal(t, '中', data[6].Ch)
+	assert.Equal(t, uint8(2), data[6].Width)
+	assert.Equal(t, rune(0), data[7].Ch, "continuation column")
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, data[10].Ch)
+}
+
+func TestTableDrawCellExactFill(t *testing.T) {
+	cfg := DefaultConfig()
+	const tableWidth = 8 // one column, 6 columns of content
+	block := newTableBlock(
+		[]textRun{{{text: "H"}}},
+		[][]textRun{{{{text: "中文字"}}}},
+		nil,
+		&cfg,
+	)
+	block.Resize(tableWidth, block.Height(tableWidth))
+
+	w := term.NewStringWriter(tableWidth, 6)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	block.Draw(w)
+
+	const dataRow = 3
+	cells := w.Cells()[dataRow*tableWidth:]
+	assert.Equal(t, '中', cells[1].Ch)
+	assert.Equal(t, '文', cells[3].Ch)
+	assert.Equal(t, '字', cells[5].Ch)
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, cells[7].Ch,
+		"separator survives an exactly-filled cell")
+}
+
+func TestTableDrawTruncatesAtClusterBoundary(t *testing.T) {
+	cfg := DefaultConfig()
+	const tableWidth = 3 // a single 1-column-wide cell
+
+	block := newTableBlock(
+		[]textRun{{{text: "H"}}},
+		[][]textRun{{{{text: "🚀"}}}},
+		nil,
+		&cfg,
+	)
+	block.Resize(tableWidth, block.Height(tableWidth))
+
+	w := term.NewStringWriter(tableWidth, 6)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	block.Draw(w)
+
+	const dataRow = 3
+	cells := w.Cells()[dataRow*tableWidth:]
+	assert.Equal(t, rune(0), cells[1].Ch,
+		"a cluster wider than the column must not be drawn")
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, cells[0].Ch)
+	assert.Equal(t, cfg.TableCharSet.ColumnSeparator, cells[2].Ch)
+}
+
 func TestBlockDraw(t *testing.T) {
 	cfg := DefaultConfig()
 	w := term.NewStringWriter(20, 10)
@@ -385,7 +584,7 @@ func TestTextRunString(t *testing.T) {
 	}
 }
 
-func TestTextRunLen(t *testing.T) {
+func TestTextRunWidth(t *testing.T) {
 	tests := []struct {
 		name     string
 		run      textRun
@@ -406,11 +605,130 @@ func TestTextRunLen(t *testing.T) {
 			run:      textRun{{text: "hello"}, {text: "world"}},
 			expected: 10,
 		},
+		{
+			name:     "accented rune counts as one column",
+			run:      textRun{{text: "héllo"}},
+			expected: 5,
+		},
+		{
+			name:     "combining mark after ascii merges into one column",
+			run:      textRun{{text: "e\u0301e\u0301"}},
+			expected: 2,
+		},
+		{
+			name:     "emoji counts as two columns",
+			run:      textRun{{text: "🚀"}},
+			expected: 2,
+		},
+		{
+			name:     "cjk counts as two columns each",
+			run:      textRun{{text: "日本"}},
+			expected: 4,
+		},
+		{
+			name:     "zwj family is a single wide cluster",
+			run:      textRun{{text: "👨‍👩‍👧"}},
+			expected: 2,
+		},
+		{
+			name:     "nul byte counts as one column",
+			run:      textRun{{text: "a\x00b"}},
+			expected: 3,
+		},
+		{
+			name:     "tab counts as one column",
+			run:      textRun{{text: "a\tb"}},
+			expected: 3,
+		},
+		{
+			name:     "bell control counts as one column",
+			run:      textRun{{text: "\a"}},
+			expected: 1,
+		},
+		{
+			name:     "lone combining mark counts as one column",
+			run:      textRun{{text: "\u0301"}},
+			expected: 1,
+		},
+		{
+			name:     "lone zwj counts as one column",
+			run:      textRun{{text: "\u200d"}},
+			expected: 1,
+		},
+		{
+			name:     "zero width space counts as one column",
+			run:      textRun{{text: "a\u200bb"}},
+			expected: 3,
+		},
+		{
+			name:     "zwj attaches to preceding ascii",
+			run:      textRun{{text: "a\u200db"}},
+			expected: 2,
+		},
+		{
+			name:     "regional indicator flag counts as two columns",
+			run:      textRun{{text: "🇺🇸"}},
+			expected: 2,
+		},
+		{
+			name:     "skin tone emoji counts as two columns",
+			run:      textRun{{text: "👍🏽"}},
+			expected: 2,
+		},
+		{
+			name:     "vs16 promotes heart to two columns",
+			run:      textRun{{text: "❤️"}},
+			expected: 2,
+		},
+		{
+			name:     "heart without vs16 is one column",
+			run:      textRun{{text: "❤"}},
+			expected: 1,
+		},
+		{
+			name:     "nerd font icon counts as two columns",
+			run:      textRun{{text: "󰗠"}},
+			expected: 2,
+		},
+		{
+			name:     "fullwidth latin counts as two columns",
+			run:      textRun{{text: "ｗ"}},
+			expected: 2,
+		},
+		{
+			name:     "halfwidth katakana counts as one column",
+			run:      textRun{{text: "ﾜ"}},
+			expected: 1,
+		},
+		{
+			name:     "astral narrow rune counts as one column",
+			run:      textRun{{text: "𝄞"}},
+			expected: 1,
+		},
+		{
+			name:     "circled digit narrow circled number wide",
+			run:      textRun{{text: "①㉑"}},
+			expected: 3,
+		},
+		{
+			name:     "empty span contributes nothing",
+			run:      textRun{{text: ""}, {text: "ab"}, {text: ""}},
+			expected: 2,
+		},
+		{
+			name: "mixed styled spans sum display columns",
+			run: textRun{
+				{text: "héllo ", style: styleBold},
+				{text: "世界", style: styleCode},
+				{text: " 🚀", style: styleLink, url: "u"},
+			},
+			expected: 13,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.run.Len())
+			assert.Equal(t, tt.expected, tt.run.Width())
 		})
 	}
 }
@@ -452,6 +770,339 @@ func TestWrapTextRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lines := wrapTextRun(tt.run, tt.width)
 			assert.Len(t, lines, tt.expectedLines)
+		})
+	}
+}
+
+func TestWrapTextRunWideClusters(t *testing.T) {
+	tests := []struct {
+		name     string
+		run      textRun
+		width    int
+		expected []string
+	}{
+		{
+			name:     "emoji does not straddle the wrap boundary",
+			run:      textRun{{text: "ab🚀"}},
+			width:    3,
+			expected: []string{"ab", "🚀"},
+		},
+		{
+			name:     "cjk word breaks at cluster boundaries",
+			run:      textRun{{text: "日本語"}},
+			width:    4,
+			expected: []string{"日本", "語"},
+		},
+		{
+			name:     "zwj family stays whole",
+			run:      textRun{{text: "🚀👨‍👩‍👧🚀"}},
+			width:    4,
+			expected: []string{"🚀👨‍👩‍👧", "🚀"},
+		},
+		{
+			name:     "wide word wraps as a unit at word boundary",
+			run:      textRun{{text: "日本語 hi"}},
+			width:    6,
+			expected: []string{"日本語", "hi"},
+		},
+		{
+			name:     "cluster wider than the line is force placed",
+			run:      textRun{{text: "🚀🚀"}},
+			width:    1,
+			expected: []string{"🚀", "🚀"},
+		},
+		{
+			name:     "multibyte word measured in columns not bytes",
+			run:      textRun{{text: "héllo wörld"}},
+			width:    11,
+			expected: []string{"héllo wörld"},
+		},
+		{
+			name:     "empty run",
+			run:      textRun{},
+			width:    5,
+			expected: []string{},
+		},
+		{
+			name:     "zero width yields no lines",
+			run:      textRun{{text: "hello"}},
+			width:    0,
+			expected: []string{},
+		},
+		{
+			name:     "negative width yields no lines",
+			run:      textRun{{text: "hello"}},
+			width:    -1,
+			expected: []string{},
+		},
+		{
+			name:     "spaces only yields no lines",
+			run:      textRun{{text: "   "}},
+			width:    5,
+			expected: []string{},
+		},
+		{
+			name:     "tab acts as a word separator",
+			run:      textRun{{text: "a\tb"}},
+			width:    10,
+			expected: []string{"a b"},
+		},
+		{
+			name:     "non breaking space acts as a word separator",
+			run:      textRun{{text: "a\u00a0b"}},
+			width:    10,
+			expected: []string{"a b"},
+		},
+		{
+			name:     "consecutive spaces collapse",
+			run:      textRun{{text: "a   b"}},
+			width:    10,
+			expected: []string{"a b"},
+		},
+		{
+			name:     "nul stays inside its word",
+			run:      textRun{{text: "a\x00b"}},
+			width:    10,
+			expected: []string{"a\x00b"},
+		},
+		{
+			name:     "nul word chunks by columns",
+			run:      textRun{{text: "a\x00b"}},
+			width:    2,
+			expected: []string{"a\x00", "b"},
+		},
+		{
+			name:     "combining clusters chunk whole",
+			run:      textRun{{text: "e\u0301e\u0301"}},
+			width:    1,
+			expected: []string{"e\u0301", "e\u0301"},
+		},
+		{
+			name:     "flags wrap at cluster boundaries",
+			run:      textRun{{text: "🇺🇸🇺🇸"}},
+			width:    2,
+			expected: []string{"🇺🇸", "🇺🇸"},
+		},
+		{
+			name:     "skin tone emoji wraps whole",
+			run:      textRun{{text: "👍🏽👍🏽"}},
+			width:    3,
+			expected: []string{"👍🏽", "👍🏽"},
+		},
+		{
+			name:     "wide word after narrow word wraps at boundary",
+			run:      textRun{{text: "ab 中文"}},
+			width:    4,
+			expected: []string{"ab", "中文"},
+		},
+		{
+			name:     "zero width space is not a separator",
+			run:      textRun{{text: "a\u200bb"}},
+			width:    10,
+			expected: []string{"a\u200bb"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := wrapTextRun(tt.run, tt.width)
+			got := make([]string, len(lines))
+			for i, line := range lines {
+				got[i] = line.String()
+				assert.True(t, utf8.ValidString(got[i]),
+					"line %d split mid-rune: %q", i, got[i])
+			}
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestClusterChunk(t *testing.T) {
+	tests := []struct {
+		name      string
+		word      string
+		maxWidth  int
+		wantChunk string
+		wantWidth int
+	}{
+		{name: "empty word", word: "", maxWidth: 5},
+		{name: "zero max width", word: "abc", maxWidth: 0},
+		{name: "ascii fits whole", word: "hello", maxWidth: 10,
+			wantChunk: "hello", wantWidth: 5},
+		{name: "ascii exact fit", word: "hello", maxWidth: 5,
+			wantChunk: "hello", wantWidth: 5},
+		{name: "ascii truncated", word: "hello", maxWidth: 3,
+			wantChunk: "hel", wantWidth: 3},
+		{name: "accented truncated at cluster boundary", word: "héllo",
+			maxWidth: 3, wantChunk: "hél", wantWidth: 3},
+		{name: "cjk exact fit", word: "中文", maxWidth: 4,
+			wantChunk: "中文", wantWidth: 4},
+		{name: "cjk cannot split a cluster", word: "中文", maxWidth: 3,
+			wantChunk: "中", wantWidth: 2},
+		{name: "leading cluster too wide yields empty", word: "中文",
+			maxWidth: 1},
+		{name: "emoji too wide yields empty", word: "🚀", maxWidth: 1},
+		{name: "combining cluster kept whole", word: "e\u0301x", maxWidth: 1,
+			wantChunk: "e\u0301", wantWidth: 1},
+		{name: "zwj attached to ascii kept whole", word: "a\u200db",
+			maxWidth: 1, wantChunk: "a\u200d", wantWidth: 1},
+		{name: "family cluster kept whole", word: "👨‍👩‍👧x", maxWidth: 2,
+			wantChunk: "👨‍👩‍👧", wantWidth: 2},
+		{name: "nul counts one column", word: "\x00\x00", maxWidth: 1,
+			wantChunk: "\x00", wantWidth: 1},
+		{name: "lone combining mark counts one column", word: "\u0301x",
+			maxWidth: 1, wantChunk: "\u0301", wantWidth: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chunk, width := clusterChunk(tt.word, tt.maxWidth)
+			assert.Equal(t, tt.wantChunk, chunk)
+			assert.Equal(t, tt.wantWidth, width)
+			assert.True(t, utf8.ValidString(chunk))
+		})
+	}
+}
+
+func TestWrapPreservesStyleAcrossChunks(t *testing.T) {
+	run := textRun{{text: "日本語のリンク", style: styleLink, url: "u"}}
+	lines := wrapTextRun(run, 4)
+	require.NotEmpty(t, lines)
+	for i, line := range lines {
+		require.NotEmpty(t, line, "line %d", i)
+		for _, sp := range line {
+			assert.Equal(t, styleLink, sp.style, "line %d span %q", i, sp.text)
+			assert.Equal(t, "u", sp.url, "line %d span %q", i, sp.text)
+		}
+	}
+}
+
+func TestCountWrappedLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		run      textRun
+		width    int
+		expected int
+	}{
+		{name: "zero width", run: textRun{{text: "ab"}}, width: 0, expected: 0},
+		{name: "empty run counts one line", run: textRun{}, width: 5, expected: 1},
+		{name: "spaces only counts one line", run: textRun{{text: "  "}},
+			width: 5, expected: 1},
+		{name: "fits in one line", run: textRun{{text: "ab"}}, width: 5,
+			expected: 1},
+		{name: "cjk wraps by columns", run: textRun{{text: "中文字"}},
+			width: 4, expected: 2},
+		{name: "family emoji stays on one line",
+			run: textRun{{text: "👨‍👩‍👧"}}, width: 2, expected: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, countWrappedLines(tt.run, tt.width))
+		})
+	}
+}
+
+func TestSpanAtInLine(t *testing.T) {
+	linkLine := textRun{
+		{text: "a"},
+		{text: "🚀", url: "u1", style: styleLink},
+		{text: "b", url: "u2", style: styleLink},
+	}
+	cjkLine := textRun{{text: "中文"}, {text: "x", url: "u"}}
+	zeroWidthLine := textRun{{text: "\u200d"}, {text: "a"}}
+	controlLine := textRun{{text: "\x00\tb"}}
+
+	tests := []struct {
+		name     string
+		line     textRun
+		x        int
+		wantText string
+		wantURL  string
+		wantOK   bool
+	}{
+		{name: "empty line", line: textRun{}, x: 0},
+		{name: "nil line", line: nil, x: 0},
+		{name: "negative x", line: linkLine, x: -1},
+		{name: "ascii span", line: linkLine, x: 0, wantText: "a", wantOK: true},
+		{name: "first column of wide cluster", line: linkLine, x: 1,
+			wantText: "🚀", wantURL: "u1", wantOK: true},
+		{name: "continuation column of wide cluster", line: linkLine, x: 2,
+			wantText: "🚀", wantURL: "u1", wantOK: true},
+		{name: "span after wide cluster", line: linkLine, x: 3,
+			wantText: "b", wantURL: "u2", wantOK: true},
+		{name: "past end", line: linkLine, x: 4},
+		{name: "cjk first cluster", line: cjkLine, x: 0,
+			wantText: "中文", wantOK: true},
+		{name: "cjk second cluster continuation", line: cjkLine, x: 3,
+			wantText: "中文", wantOK: true},
+		{name: "span after cjk", line: cjkLine, x: 4,
+			wantText: "x", wantURL: "u", wantOK: true},
+		{name: "zero width cluster occupies its column", line: zeroWidthLine,
+			x: 0, wantText: "\u200d", wantOK: true},
+		{name: "span after zero width cluster", line: zeroWidthLine, x: 1,
+			wantText: "a", wantOK: true},
+		{name: "control characters count one column each", line: controlLine,
+			x: 2, wantText: "\x00\tb", wantOK: true},
+		{name: "past controls end", line: controlLine, x: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			text, url, ok := spanAtInLine(tt.line, tt.x)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantText, text)
+			assert.Equal(t, tt.wantURL, url)
+		})
+	}
+}
+
+func TestCharAtInLine(t *testing.T) {
+	emojiLine := textRun{{text: "a"}, {text: "🚀"}, {text: "b"}}
+	combiningLine := textRun{{text: "e\u0301x"}}
+	familyLine := textRun{{text: "👨‍👩‍👧"}}
+	controlLine := textRun{{text: "\x00\tb"}}
+	flagLine := textRun{{text: "🇺🇸x"}}
+
+	tests := []struct {
+		name   string
+		line   textRun
+		x      int
+		want   rune
+		wantOK bool
+	}{
+		{name: "empty line", line: textRun{}, x: 0},
+		{name: "negative x", line: emojiLine, x: -1},
+		{name: "ascii", line: emojiLine, x: 0, want: 'a', wantOK: true},
+		{name: "first column of wide cluster", line: emojiLine, x: 1,
+			want: '🚀', wantOK: true},
+		{name: "continuation column of wide cluster", line: emojiLine, x: 2,
+			want: '🚀', wantOK: true},
+		{name: "after wide cluster", line: emojiLine, x: 3,
+			want: 'b', wantOK: true},
+		{name: "past end", line: emojiLine, x: 4},
+		{name: "combining cluster resolves to base rune", line: combiningLine,
+			x: 0, want: 'e', wantOK: true},
+		{name: "after combining cluster", line: combiningLine, x: 1,
+			want: 'x', wantOK: true},
+		{name: "family resolves to base rune", line: familyLine, x: 0,
+			want: '👨', wantOK: true},
+		{name: "family continuation resolves to base rune", line: familyLine,
+			x: 1, want: '👨', wantOK: true},
+		{name: "nul resolves with ok", line: controlLine, x: 0,
+			want: 0, wantOK: true},
+		{name: "tab resolves", line: controlLine, x: 1,
+			want: '\t', wantOK: true},
+		{name: "flag resolves to first regional indicator", line: flagLine,
+			x: 1, want: '🇺', wantOK: true},
+		{name: "after flag", line: flagLine, x: 2, want: 'x', wantOK: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := charAtInLine(tt.line, tt.x)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -589,6 +1240,344 @@ func TestHeaderPrefixRendering(t *testing.T) {
 			assert.Equal(t, tt.expected, contentLine)
 		})
 	}
+}
+
+// drawBlockLines renders b at width and returns the flushed rows with
+// trailing spaces trimmed. StringWriter renders the untouched continuation
+// column of a wide cell as a space and drops combining runes, so a wide
+// cluster appears as "<base rune><space>" in the returned strings.
+func drawBlockLines(t *testing.T, b block, width, height int) []string {
+	t.Helper()
+	w := term.NewStringWriter(width, height)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	b.Resize(width, b.Height(width))
+	b.Draw(w)
+	require.NoError(t, w.Flush())
+	lines := strings.Split(w.String(), "\n")
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], " ")
+	}
+	return lines
+}
+
+// assertDrawnLines compares the leading rows against expected and requires
+// every remaining row to be blank.
+func assertDrawnLines(t *testing.T, got, expected []string) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(got), len(expected))
+	assert.Equal(t, expected, got[:len(expected)])
+	for i := len(expected); i < len(got); i++ {
+		assert.Empty(t, got[i], "row %d should be blank", i)
+	}
+}
+
+func TestParagraphDrawEdgeCases(t *testing.T) {
+	cfg := DefaultConfig()
+	tests := []struct {
+		name     string
+		content  textRun
+		width    int
+		expected []string
+	}{
+		{
+			name:     "accented ascii",
+			content:  textRun{{text: "héllo"}},
+			width:    10,
+			expected: []string{"héllo"},
+		},
+		{
+			name:     "cjk wraps by columns",
+			content:  textRun{{text: "中文字"}},
+			width:    4,
+			expected: []string{"中 文", "字"},
+		},
+		{
+			name:     "emoji inside a word",
+			content:  textRun{{text: "a🚀b c"}},
+			width:    10,
+			expected: []string{"a🚀 b c"},
+		},
+		{
+			name:     "emoji word wraps whole",
+			content:  textRun{{text: "ab 🚀🚀"}},
+			width:    4,
+			expected: []string{"ab", "🚀 🚀"},
+		},
+		{
+			name:     "nul renders as one blank cell",
+			content:  textRun{{text: "a\x00b"}},
+			width:    10,
+			expected: []string{"a b"},
+		},
+		{
+			name:     "tab separates words",
+			content:  textRun{{text: "a\tb"}},
+			width:    10,
+			expected: []string{"a b"},
+		},
+		{
+			name:     "family emoji renders as one cell",
+			content:  textRun{{text: "👨‍👩‍👧"}},
+			width:    10,
+			expected: []string{"👨"},
+		},
+		{
+			name:     "vs16 heart wide plain heart narrow",
+			content:  textRun{{text: "❤ ❤️"}},
+			width:    10,
+			expected: []string{"❤ ❤"},
+		},
+		{
+			name: "styled spans keep column positions",
+			content: textRun{
+				{text: "中", style: styleBold},
+				{text: "x", style: styleCode},
+			},
+			width:    10,
+			expected: []string{"中 x"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := newParagraphBlock(tt.content, &cfg)
+			got := drawBlockLines(t, block, tt.width, len(tt.expected)+2)
+			assertDrawnLines(t, got, tt.expected)
+		})
+	}
+}
+
+func TestParagraphHitTestingWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	block := newParagraphBlock(textRun{
+		{text: "中文 "},
+		{text: "link", style: styleLink, url: "u"},
+	}, &cfg)
+	block.Resize(10, block.Height(10))
+
+	spanTests := []struct {
+		x, y     int
+		wantText string
+		wantURL  string
+		wantOK   bool
+	}{
+		{x: 0, y: 0, wantText: "中文", wantOK: true},
+		{x: 3, y: 0, wantText: "中文", wantOK: true},
+		{x: 4, y: 0, wantText: " ", wantOK: true},
+		{x: 5, y: 0, wantText: "link", wantURL: "u", wantOK: true},
+		{x: 8, y: 0, wantText: "link", wantURL: "u", wantOK: true},
+		{x: 9, y: 0},
+		{x: 0, y: 1},
+		{x: 0, y: -1},
+	}
+	for _, tt := range spanTests {
+		text, url, ok := block.SpanAt(tt.x, tt.y)
+		assert.Equal(t, tt.wantOK, ok, "SpanAt(%d,%d)", tt.x, tt.y)
+		assert.Equal(t, tt.wantText, text, "SpanAt(%d,%d)", tt.x, tt.y)
+		assert.Equal(t, tt.wantURL, url, "SpanAt(%d,%d)", tt.x, tt.y)
+	}
+
+	charTests := []struct {
+		x, y   int
+		want   rune
+		wantOK bool
+	}{
+		{x: 0, y: 0, want: '中', wantOK: true},
+		{x: 1, y: 0, want: '中', wantOK: true},
+		{x: 2, y: 0, want: '文', wantOK: true},
+		{x: 5, y: 0, want: 'l', wantOK: true},
+		{x: 9, y: 0},
+	}
+	for _, tt := range charTests {
+		got, ok := block.CharAt(tt.x, tt.y)
+		assert.Equal(t, tt.wantOK, ok, "CharAt(%d,%d)", tt.x, tt.y)
+		assert.Equal(t, tt.want, got, "CharAt(%d,%d)", tt.x, tt.y)
+	}
+}
+
+func TestHeaderDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	tests := []struct {
+		name     string
+		level    int
+		content  textRun
+		width    int
+		expected []string
+	}{
+		{
+			name:    "h2 with emoji",
+			level:   2,
+			content: textRun{{text: "🚀 Go"}},
+			width:   20,
+			// row 0 is header spacing; the emoji occupies two columns.
+			expected: []string{"", "## 🚀  Go"},
+		},
+		{
+			name:     "h3 with cjk",
+			level:    3,
+			content:  textRun{{text: "中文"}},
+			width:    20,
+			expected: []string{"", "### 中 文"},
+		},
+		{
+			name:     "h1 with emoji keeps background offset",
+			level:    1,
+			content:  textRun{{text: "🚀"}},
+			width:    12,
+			expected: []string{"", " # 🚀"},
+		},
+		{
+			name:     "wide content wraps with prefix indent",
+			level:    2,
+			content:  textRun{{text: "中文字词"}},
+			width:    7,
+			expected: []string{"", "## 中 文", "   字 词"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := newHeaderBlock(tt.level, tt.content, &cfg)
+			got := drawBlockLines(t, block, tt.width, len(tt.expected)+2)
+			assertDrawnLines(t, got, tt.expected)
+		})
+	}
+}
+
+func TestListDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	tests := []struct {
+		name     string
+		ordered  bool
+		start    int
+		items    []listItem
+		width    int
+		expected []string
+	}{
+		{
+			name:     "bullet item with emoji",
+			items:    []listItem{{content: textRun{{text: "🚀 go"}}}},
+			width:    10,
+			expected: []string{"• 🚀  go"},
+		},
+		{
+			name:     "ordered item with cjk",
+			ordered:  true,
+			start:    3,
+			items:    []listItem{{content: textRun{{text: "中"}}}},
+			width:    10,
+			expected: []string{"3.中"},
+		},
+		{
+			name: "task items",
+			items: []listItem{
+				{content: textRun{{text: "done"}}, isTask: true, checked: true},
+				{content: textRun{{text: "todo"}}, isTask: true},
+			},
+			width:    10,
+			expected: []string{"☑ done", "☐ todo"},
+		},
+		{
+			name:     "cjk content wraps at the content column",
+			items:    []listItem{{content: textRun{{text: "中文字"}}}},
+			width:    6,
+			expected: []string{"• 中 文", "  字"},
+		},
+		{
+			name: "nested list indents wide content",
+			items: []listItem{{
+				content: textRun{{text: "a"}},
+				nested: newListBlock(false, 1, []listItem{
+					{content: textRun{{text: "中"}}},
+				}, &cfg),
+			}},
+			width:    10,
+			expected: []string{"• a", "  • 中"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := newListBlock(tt.ordered, max(1, tt.start), tt.items, &cfg)
+			got := drawBlockLines(t, block, tt.width, len(tt.expected)+2)
+			assertDrawnLines(t, got, tt.expected)
+		})
+	}
+}
+
+func TestBlockquoteDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	tests := []struct {
+		name     string
+		content  []textRun
+		nested   *blockquoteBlock
+		width    int
+		expected []string
+	}{
+		{
+			name:     "emoji content",
+			content:  []textRun{{{text: "🚀 go"}}},
+			width:    10,
+			expected: []string{"│ 🚀  go"},
+		},
+		{
+			name:     "cjk content wraps at the content column",
+			content:  []textRun{{{text: "中文字"}}},
+			width:    6,
+			expected: []string{"│ 中 文", "│ 字"},
+		},
+		{
+			name:     "multiple runs with mixed width",
+			content:  []textRun{{{text: "a"}}, {{text: "中"}}},
+			width:    10,
+			expected: []string{"│ a", "│ 中"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := newBlockquoteBlock(tt.content, tt.nested, &cfg)
+			got := drawBlockLines(t, block, tt.width, len(tt.expected)+2)
+			assertDrawnLines(t, got, tt.expected)
+		})
+	}
+}
+
+func TestParagraphDrawWideClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	block := newParagraphBlock(textRun{{text: "a 🚀 b"}}, &cfg)
+	block.Resize(10, block.Height(10))
+
+	w := term.NewStringWriter(10, 3)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	block.Draw(w)
+
+	cells := w.Cells()
+	assert.Equal(t, 'a', cells[0].Ch)
+	assert.Equal(t, uint8(1), cells[0].Width)
+	assert.Equal(t, '🚀', cells[2].Ch)
+	assert.Equal(t, uint8(2), cells[2].Width)
+	assert.Equal(t, rune(0), cells[3].Ch, "continuation column must stay empty")
+	assert.Equal(t, 'b', cells[5].Ch)
+	assert.Equal(t, uint8(1), cells[5].Width)
+}
+
+func TestParagraphDrawCombiningClusters(t *testing.T) {
+	cfg := DefaultConfig()
+	block := newParagraphBlock(textRun{{text: "👨‍👩‍👧❤️"}}, &cfg)
+	block.Resize(10, block.Height(10))
+
+	w := term.NewStringWriter(10, 3)
+	require.NoError(t, w.Clear(term.Attributes{}))
+	block.Draw(w)
+
+	cells := w.Cells()
+	assert.Equal(t, '👨', cells[0].Ch)
+	assert.Equal(t, uint8(2), cells[0].Width)
+	assert.Equal(t, []rune{'\u200d', '👩', '\u200d', '👧'}, cells[0].CombiningRunes())
+	assert.Equal(t, '❤', cells[2].Ch)
+	assert.Equal(t, uint8(2), cells[2].Width)
+	assert.Equal(t, []rune{'\ufe0f'}, cells[2].CombiningRunes())
 }
 
 func TestNestedListSpacing(t *testing.T) {

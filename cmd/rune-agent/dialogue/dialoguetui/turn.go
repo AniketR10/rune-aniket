@@ -31,6 +31,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	tcomponent "unstable.build/go-tui/component"
 )
 
 // collapseMode controls how a Turn renders its tool calls.
@@ -730,14 +731,7 @@ func (t *Turn) writeCollapsedStatus(w term.Writer, x, y int, tn *toolNode, frame
 // writeRuneLineAttr writes s at (x, y) with the given attributes,
 // stopping at maxWidth. Returns the new x position.
 func writeRuneLineAttr(w term.Writer, x, y int, s string, maxWidth int, attr term.Attributes) int {
-	for _, ch := range s {
-		if x >= maxWidth {
-			break
-		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.NewCell(ch, 1, attr))
-		x++
-	}
-	return x
+	return tcomponent.WriteText(w, x, y, maxWidth, s, attr)
 }
 
 // formatDuration formats a duration for display in the tool call tree.

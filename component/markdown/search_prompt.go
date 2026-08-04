@@ -25,6 +25,8 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/component"
 )
 
 type searchResult int
@@ -88,20 +90,13 @@ func (p *searchPrompt) draw(w term.Writer, y, width int) {
 
 	w.SetCell(term.Coordinates{X: 0, Y: y}, term.NewCell('/', 1, term.Attributes{Attrs: term.AttrBold}))
 
-	for i, r := range p.buf {
-		x := i + 1
-		if x >= width {
-			break
-		}
-		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-			Ch: r, Width: 1,
-		})
-	}
+	component.WriteText(w, 1, y, width, string(p.buf), term.Attributes{})
 }
 
 func (p *searchPrompt) cursor(y int) (term.Coordinates, term.CursorStyle, bool) {
 	if !p.active {
 		return term.Coordinates{}, term.CursorStyleDefault, false
 	}
-	return term.Coordinates{X: len(p.buf) + 1, Y: y}, term.CursorStyleDefault, true
+	return term.Coordinates{X: textWidth(string(p.buf)) + 1, Y: y},
+		term.CursorStyleDefault, true
 }

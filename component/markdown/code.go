@@ -144,7 +144,7 @@ func (c *codeBlock) Height(width int) int {
 	}
 	lines := 0
 	for _, row := range c.cells {
-		lines += c.wrappedLineCount(row, width)
+		lines += len(splitRow(row, width))
 	}
 	return lines + 1
 }
@@ -169,18 +169,17 @@ func (c *codeBlock) Draw(w term.Writer) {
 
 	drawY := 0
 	for _, row := range c.cells {
-		for start := 0; start < len(row) || (len(row) == 0 && start == 0); start += c.w {
-			for x := 0; x < c.w; x++ {
-				srcX := start + x
-				if srcX >= len(row) {
+		for _, line := range splitRow(row, c.w) {
+			x := 0
+			for _, cell := range line {
+				width := max(1, int(cell.Width))
+				if x+width > c.w {
 					break
 				}
-				w.SetCell(term.Coordinates{X: x, Y: drawY}, row[srcX])
+				w.SetCell(term.Coordinates{X: x, Y: drawY}, cell)
+				x += width
 			}
 			drawY++
-			if len(row) == 0 {
-				break
-			}
 		}
 	}
 }
@@ -214,21 +213,40 @@ func (c *codeBlock) CharAt(x, y int) (rune, bool) {
 func (c *codeBlock) maxLineWidth() int {
 	maxWidth := 0
 	for _, row := range c.cells {
-		if len(row) > maxWidth {
-			maxWidth = len(row)
+		rowWidth := 0
+		for _, cell := range row {
+			rowWidth += max(1, int(cell.Width))
+		}
+		if rowWidth > maxWidth {
+			maxWidth = rowWidth
 		}
 	}
 	return maxWidth
 }
 
-func (c *codeBlock) wrappedLineCount(row []term.Cell, width int) int {
+// splitRow slices a source row into the visual lines it occupies at the given
+// width. The slices share the row's storage. A cell wider than the remaining
+// columns starts the next line instead of straddling the boundary; one wider
+// than the whole width gets a line of its own and is clipped when drawn.
+func splitRow(row []term.Cell, width int) [][]term.Cell {
 	if width <= 0 {
-		return 0
+		return nil
 	}
 	if len(row) == 0 {
-		return 1
+		return [][]term.Cell{nil}
 	}
-	return (len(row)-1)/width + 1
+
+	var lines [][]term.Cell
+	start, cols := 0, 0
+	for i, cell := range row {
+		cellWidth := max(1, int(cell.Width))
+		if i > start && cols+cellWidth > width {
+			lines = append(lines, row[start:i])
+			start, cols = i, 0
+		}
+		cols += cellWidth
+	}
+	return append(lines, row[start:])
 }
 
 func (c *codeBlock) cellAt(x, y int) ([]term.Cell, term.Cell, bool) {
@@ -238,15 +256,19 @@ func (c *codeBlock) cellAt(x, y int) ([]term.Cell, term.Cell, bool) {
 
 	rowY := 0
 	for _, row := range c.cells {
-		wrapped := c.wrappedLineCount(row, c.w)
-		if y < rowY+wrapped {
-			srcX := (y-rowY)*c.w + x
-			if srcX < 0 || srcX >= len(row) {
-				return nil, term.Cell{}, false
+		lines := splitRow(row, c.w)
+		if y < rowY+len(lines) {
+			col := 0
+			for _, cell := range lines[y-rowY] {
+				cellWidth := max(1, int(cell.Width))
+				if x >= col && x < col+cellWidth {
+					return row, cell, true
+				}
+				col += cellWidth
 			}
-			return row, row[srcX], true
+			return nil, term.Cell{}, false
 		}
-		rowY += wrapped
+		rowY += len(lines)
 	}
 
 	return nil, term.Cell{}, false

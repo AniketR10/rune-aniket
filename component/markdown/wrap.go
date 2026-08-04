@@ -26,6 +26,9 @@ package markdown
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
+
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 )
 
 // wrapTextRun wraps a textRun to fit within the given width.
@@ -55,17 +58,17 @@ func wrapTextRun(run textRun, width int) []textRun {
 				currentLine = append(currentLine, span{text: " ", style: styleNone})
 				currentWidth++
 			}
-			wordLen := len(word)
+			wordWidth := textWidth(word)
 
-			if currentWidth > 0 && currentWidth+wordLen > width {
+			if currentWidth > 0 && currentWidth+wordWidth > width {
 				lines = append(lines, currentLine)
 				currentLine = nil
 				currentWidth = 0
 				word = strings.TrimLeft(word, " ")
-				wordLen = len(word)
+				wordWidth = textWidth(word)
 			}
 
-			if wordLen > width {
+			if wordWidth > width {
 				for len(word) > 0 {
 					remaining := width - currentWidth
 					if remaining <= 0 {
@@ -76,25 +79,35 @@ func wrapTextRun(run textRun, width int) []textRun {
 						currentWidth = 0
 						remaining = width
 					}
-					chunk := word
-					if len(chunk) > remaining {
-						chunk = word[:remaining]
+					chunk, chunkWidth := clusterChunk(word, remaining)
+					if chunk == "" && currentWidth > 0 {
+						// The next cluster is wider than what is left of this
+						// line; restart it on the next one.
+						lines = append(lines, currentLine)
+						currentLine = nil
+						currentWidth = 0
+						continue
+					}
+					if chunk == "" {
+						// Wider than the whole line: place it anyway so
+						// wrapping always makes progress. Draw clips it.
+						chunk, chunkWidth = firstCluster(word)
 					}
 					currentLine = append(currentLine, span{
 						text:  chunk,
 						style: sp.style,
 						url:   sp.url,
 					})
-					currentWidth += len(chunk)
+					currentWidth += chunkWidth
 					word = word[len(chunk):]
 				}
-			} else if wordLen > 0 {
+			} else if wordWidth > 0 {
 				currentLine = append(currentLine, span{
 					text:  word,
 					style: sp.style,
 					url:   sp.url,
 				})
-				currentWidth += wordLen
+				currentWidth += wordWidth
 			}
 			needSpace = false
 		}
@@ -108,6 +121,43 @@ func wrapTextRun(run textRun, width int) []textRun {
 	}
 
 	return lines
+}
+
+// clusterChunk returns the longest prefix of word that fits in maxWidth
+// columns without splitting a grapheme cluster. It returns an empty chunk
+// when the leading cluster alone is wider than maxWidth.
+func clusterChunk(word string, maxWidth int) (chunk string, chunkWidth int) {
+	rest := word
+	state := -1
+	var width uint8
+	for len(rest) > 0 {
+		// An ASCII byte whose successor is also ASCII (or end of string) is a
+		// complete width-1 cluster: combining marks are never ASCII.
+		if rest[0] < utf8.RuneSelf &&
+			(len(rest) == 1 || rest[1] < utf8.RuneSelf) {
+			if chunkWidth >= maxWidth {
+				break
+			}
+			rest = rest[1:]
+			chunk = word[:len(word)-len(rest)]
+			chunkWidth++
+			state = -1
+			continue
+		}
+		_, rest, width, state = graphemecluster.StepString(rest, state)
+		cols := max(1, int(width))
+		if chunkWidth+cols > maxWidth {
+			break
+		}
+		chunk = word[:len(word)-len(rest)]
+		chunkWidth += cols
+	}
+	return
+}
+
+func firstCluster(text string) (cluster string, width int) {
+	c, _, w, _ := graphemecluster.StepString(text, -1)
+	return c, max(1, int(w))
 }
 
 // splitIntoWordsWithSpaces splits text into words, preserving spaces as part

@@ -294,8 +294,8 @@ func TestDialogueLayout(t *testing.T) {
 				{Type: MessageEventText, Text: "你好世界，這是一個比較長的回覆"},
 			},
 			steps: []handlertest.SequenceTestCase{{
-				Expected: "你好世界，這是一                \n" +
-					"個比較長的回覆                 \n" +
+				Expected: "你 好 世 界 ， 這 是 一 個 比 較 長 \n" +
+					"的 回 覆                   \n" +
 					"                        \n" +
 					"                        \n" +
 					"                        \n" +
