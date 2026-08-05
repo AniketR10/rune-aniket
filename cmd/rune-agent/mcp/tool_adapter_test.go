@@ -284,8 +284,7 @@ func TestToolStatsLastCallZeroBeforeUse(t *testing.T) {
 func TestServerInfoToolStats(t *testing.T) {
 	_, factory := testServer(t, "tool_a", "tool_b")
 
-	m := NewManager()
-	m.transportFactory = factory
+	m := NewManagerWithTransport(factory)
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{

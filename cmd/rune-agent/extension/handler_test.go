@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
@@ -29,6 +30,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
+	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
 // TestOpenChatTabUsesDialogueIDAsLabel verifies that the visible tab name is
@@ -1010,4 +1012,107 @@ func TestE2ESearchContentSkipsSwapFiles(t *testing.T) {
 		"search_content must skip editor swap files")
 	assert.NotContains(t, searchResult, "SWAPSENTINEL",
 		"search_content must not leak swap file contents to the model")
+}
+
+// MCP servers connect in the background, so the base tool set grows
+// after initialization while chats are already reading it.
+func TestHandlerAddToolsIsConcurrentWithReaders(t *testing.T) {
+	t.Parallel()
+
+	h := &aiEditorHandler{
+		baseTools:    []agent.Tool{stubTool{}},
+		toolRegistry: agent.NewRegistry(),
+	}
+	snapshot := h.tools()
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.addTools(stubTool{})
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = h.tools()
+		}()
+	}
+	wg.Wait()
+
+	assert.Len(t, h.tools(), 9)
+	assert.Len(t, snapshot, 1,
+		"an earlier snapshot must not observe later MCP tools")
+}
+
+// stubTool is a minimal agent.Tool for registry bookkeeping tests.
+type stubTool struct{ name string }
+
+func (t stubTool) Definition() llmapi.Tool {
+	return llmapi.Tool{Function: llmapi.FunctionDefinition{Name: t.name}}
+}
+func (stubTool) Execute(context.Context, string) agent.ToolResult {
+	return agent.ToolResult{}
+}
+func (stubTool) Summary(string) string         { return "" }
+func (stubTool) NeedsDeterministicOrder() bool { return false }
+
+func TestSubscribedChatReceivesLateMCPTools(t *testing.T) {
+	t.Parallel()
+
+	h := &aiEditorHandler{toolRegistry: agent.NewRegistry()}
+	h.addTools(stubTool{name: "early"})
+
+	snapshot := h.tools()
+	chatReg := agent.NewRegistry(snapshot...)
+
+	h.addTools(stubTool{name: "mid"})
+	h.subscribeTools("chat-1", len(snapshot), chatReg)
+	_, ok := chatReg.Get("mid", "")
+	assert.True(t, ok, "delta between snapshot and subscription must be applied")
+
+	h.addTools(stubTool{name: "late"})
+	_, ok = chatReg.Get("late", "")
+	assert.True(t, ok, "subscribed chats must receive late tools")
+	_, ok = h.toolRegistry.Get("late", "")
+	assert.True(t, ok, "the persistent registry must receive late tools")
+
+	h.unsubscribeTools("chat-1")
+	h.addTools(stubTool{name: "after-close"})
+	_, ok = chatReg.Get("after-close", "")
+	assert.False(t, ok, "closed chats must not be updated")
+}
+
+func TestWarnPendingMCPServersReportsConnecting(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	m := runemcp.NewManagerWithTransport(
+		func(string, runemcp.ServerConfig) (gomcp.Transport, error) {
+			<-release
+			return nil, errors.New("halted")
+		})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = m.ConnectServer(
+			context.Background(), "slow-srv", runemcp.ServerConfig{Command: "x"})
+	}()
+	t.Cleanup(func() { close(release); <-done })
+	require.Eventually(t, func() bool {
+		servers := m.Servers()
+		return len(servers) == 1 && servers[0].Status == runemcp.StatusConnecting
+	}, 5*time.Second, 10*time.Millisecond)
+
+	h := &aiEditorHandler{mcpManager: m}
+	tx := make(chan dialoguetui.MessageEvent, 1)
+	h.warnPendingMCPServers(tx)
+
+	select {
+	case ev := <-tx:
+		assert.Equal(t, dialoguetui.MessageEventWarning, ev.Type)
+		assert.Contains(t, ev.Text, "slow-srv")
+	default:
+		t.Fatal("expected a pending-MCP warning event")
+	}
 }

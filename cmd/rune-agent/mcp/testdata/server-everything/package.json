@@ -1,0 +1,7 @@
+{
+  "name": "rune-mcp-server-everything-e2e",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/server-everything": "2026.7.4"
+  }
+}

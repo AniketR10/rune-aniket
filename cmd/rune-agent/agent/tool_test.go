@@ -24,7 +24,9 @@
 package agent
 
 import (
+	"fmt"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -192,8 +194,8 @@ func TestRegistryOverrides(t *testing.T) {
 
 }
 
-func TestRegistryCopyOverridesFrom(t *testing.T) {
-	t.Run("copies overrides and exclusions", func(t *testing.T) {
+func TestRegistryAddOverrides(t *testing.T) {
+	t.Run("merges overrides and exclusions", func(t *testing.T) {
 		src := NewRegistry(&mockTool{name: "search"})
 		override := &mockTool{name: "search", result: ToolResult{Content: "openai-search"}}
 		src.RegisterOverrides("openai", override)
@@ -203,7 +205,7 @@ func TestRegistryCopyOverridesFrom(t *testing.T) {
 			&mockTool{name: "search"},
 			&mockTool{name: "bash"},
 		)
-		dst.CopyOverridesFrom(src)
+		dst.AddOverrides(src.Overrides())
 
 		got, ok := dst.Get("search", "openai")
 		require.True(t, ok)
@@ -220,7 +222,7 @@ func TestRegistryCopyOverridesFrom(t *testing.T) {
 		dst := NewRegistry(&mockTool{name: "a"})
 		existing := &mockTool{name: "a", result: ToolResult{Content: "openai-a"}}
 		dst.RegisterOverrides("openai", existing)
-		dst.CopyOverridesFrom(src)
+		dst.AddOverrides(src.Overrides())
 
 		got, ok := dst.Get("a", "openai")
 		require.True(t, ok)
@@ -260,12 +262,12 @@ func TestRegistryRegisterReplacement(t *testing.T) {
 		assert.Empty(t, r.ReplacementFor("search_content", "openai"))
 	})
 
-	t.Run("replacements survive CopyOverridesFrom", func(t *testing.T) {
+	t.Run("replacements survive AddOverrides", func(t *testing.T) {
 		src := NewRegistry(&mockTool{name: "bash"})
 		src.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
 
 		dst := NewRegistry(&mockTool{name: "bash"})
-		dst.CopyOverridesFrom(src)
+		dst.AddOverrides(src.Overrides())
 
 		_, ok := dst.Get("bash", "openai")
 		assert.False(t, ok, "bash should be excluded after copy")
@@ -290,4 +292,34 @@ func TestRegistryRegisterReplacement(t *testing.T) {
 		kept := r.WithFilteredTools([]string{"read_file", "exec_command"})
 		assert.Equal(t, "exec_command", kept.ReplacementFor("bash", "openai"))
 	})
+}
+
+// MCP servers Add tools to a registry while agents may be reading it
+// concurrently; new tools must be visible to subsequent lookups.
+func TestRegistryAddConcurrentWithReads(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry(&mockTool{name: "base"})
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(2)
+		name := fmt.Sprintf("late-%d", i)
+		go func() {
+			defer wg.Done()
+			r.Add(&mockTool{name: name})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = r.Tools("")
+			_, _ = r.Get("base", "")
+		}()
+	}
+	wg.Wait()
+
+	assert.Len(t, r.Tools(""), 9)
+	for i := range 8 {
+		_, ok := r.Get(fmt.Sprintf("late-%d", i), "")
+		assert.True(t, ok)
+	}
 }

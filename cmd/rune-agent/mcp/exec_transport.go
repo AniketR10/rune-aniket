@@ -1,0 +1,302 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package mcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+
+	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
+)
+
+// terminateGrace is how long a stdio server is given to exit after its
+// stdin is closed before it is signalled.
+const terminateGrace = 5 * time.Second
+
+// stderrTailCap bounds how much of the server's most recent stderr is
+// retained for diagnostics.
+const stderrTailCap = 4096
+
+// ExitFunc is called when a server process exits without the client
+// asking it to. detail describes the cause and carries the last stderr
+// output.
+type ExitFunc func(name, detail string)
+
+// credentialEnvKeys are the variables through which the IDE hands an
+// extension its RPC socket and authentication material. A `.mcp.json`
+// server is workspace-declared and must never inherit them.
+//
+// They are neutralized with empty overrides rather than omitted because
+// workspaceapi.Cmd.Env is appended to the execution host's environment
+// instead of replacing it, and the last assignment wins.
+var credentialEnvKeys = []string{
+	"RUNE_CERT",
+	"RUNE_TOKEN",
+	"RUNE_SOCKET",
+	"IDE_CERT",
+	"IDE_TOKEN",
+}
+
+// serverEnv builds the environment overrides for a stdio MCP server:
+// the config-declared env first, then the credential blanks so a
+// workspace cannot re-inject them.
+func serverEnv(cfg ServerConfig) []string {
+	env := make([]string, 0, len(cfg.Env)+len(credentialEnvKeys))
+	for _, k := range slices.Sorted(maps.Keys(cfg.Env)) {
+		env = append(env, k+"="+cfg.Env[k])
+	}
+	for _, k := range credentialEnvKeys {
+		env = append(env, k+"=")
+	}
+	return env
+}
+
+// ExecutorTransport returns a TransportFactory that starts stdio MCP
+// servers through the workspace executor, so each launch is subject to
+// the IDE's StartCommand authorization instead of being spawned
+// directly by this process. onExit, if non-nil, observes unexpected
+// server death.
+func ExecutorTransport(
+	exec workspaceapi.Executor, dir string, onExit ExitFunc,
+) TransportFactory {
+	return func(name string, cfg ServerConfig) (gomcp.Transport, error) {
+		if cfg.URL != "" {
+			return nil, fmt.Errorf("unsupported server type %q: remote MCP servers are not supported", cfg.Type)
+		}
+		if cfg.Command == "" {
+			return nil, errors.New("server config has no command")
+		}
+		return startServer(exec, dir, name, cfg, onExit)
+	}
+}
+
+// startServer launches the server and returns a transport over its stdio
+// pipes.
+//
+// The process is started here, in the transport factory, rather than in
+// Connect: starting it requires StartCommand authorization, which blocks
+// until the user answers a prompt. Connect runs under the MCP handshake
+// deadline, so starting there would charge the user's reaction time
+// against that deadline and fail the connection.
+func startServer(
+	exec workspaceapi.Executor, dir, name string, cfg ServerConfig,
+	onExit ExitFunc,
+) (*executorTransport, error) {
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("create stdin pipe: %w", err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		_, _ = inR.Close(), inW.Close()
+		return nil, fmt.Errorf("create stdout pipe: %w", err)
+	}
+
+	tail := &stderrTail{}
+	// The process outlives the connect deadline, so it must not be tied
+	// to the caller's context.
+	ctx, cancel := context.WithCancel(context.Background())
+	watcher := &processWatcher{ch: make(chan error, 1)}
+	pid, err := exec.Start(ctx, workspaceapi.Cmd{
+		Path:    cfg.Command,
+		Args:    cfg.Args,
+		Dir:     dir,
+		Env:     serverEnv(cfg),
+		Stdin:   inR,
+		Stdout:  outW,
+		Stderr:  tail,
+		Watcher: watcher,
+	})
+	if err != nil {
+		cancel()
+		_, _ = inR.Close(), inW.Close()
+		_, _ = outR.Close(), outW.Close()
+		return nil, fmt.Errorf("start command: %w", err)
+	}
+
+	conn, err := (&gomcp.IOTransport{Reader: outR, Writer: inW}).Connect(ctx)
+	if err != nil {
+		cancel()
+		_, _ = inR.Close(), inW.Close()
+		_, _ = outR.Close(), outW.Close()
+		return nil, err
+	}
+
+	econn := &executorConn{
+		Connection: conn,
+		exec:       exec,
+		pid:        pid,
+		cancel:     cancel,
+		childFiles: []*os.File{inR, outW},
+	}
+	exited := make(chan struct{})
+	econn.exited = exited
+	go debug.CapturePanicReport(func() {
+		procErr := <-watcher.WatchProcess()
+		detail := exitDetail(procErr, tail.String(), pid)
+		econn.death.Store(&detail)
+		close(exited)
+		if onExit != nil && !econn.closing.Load() {
+			onExit(name, detail)
+		}
+		if !econn.closing.Load() {
+			// Unblock a handshake still reading from the dead server.
+			for _, f := range econn.childFiles {
+				_ = f.Close()
+			}
+		}
+	})
+
+	return &executorTransport{conn: econn}, nil
+}
+
+// exitDetail composes a human-readable cause for an unexpected server
+// exit, including the retained stderr and a pointer to the process
+// console.
+func exitDetail(err error, stderr string, pid workspaceapi.Pid) string {
+	var b strings.Builder
+	if err != nil {
+		fmt.Fprintf(&b, "exited: %v", err)
+	} else {
+		b.WriteString("exited unexpectedly")
+	}
+	fmt.Fprintf(&b, " (pid %d, see `process info %d` in the rune shell)", pid, pid)
+	if stderr != "" {
+		b.WriteString("\nlast stderr output:\n")
+		b.WriteString(stderr)
+	}
+	return b.String()
+}
+
+// stderrTail retains the most recent stderr output of a server process.
+type stderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *stderrTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > stderrTailCap {
+		t.buf = t.buf[len(t.buf)-stderrTailCap:]
+	}
+	return len(p), nil
+}
+
+func (t *stderrTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.buf))
+}
+
+// executorTransport hands out the connection to the already-running
+// server process.
+type executorTransport struct {
+	conn *executorConn
+}
+
+func (t *executorTransport) Connect(context.Context) (gomcp.Connection, error) {
+	return t.conn, nil
+}
+
+// Close tears the server down when the session never got established.
+func (t *executorTransport) Close() error { return t.conn.Close() }
+
+// ExitDetail reports why the server process died, or empty while it is
+// still running.
+func (t *executorTransport) ExitDetail() string {
+	if d := t.conn.death.Load(); d != nil {
+		return *d
+	}
+	return ""
+}
+
+// executorConn shuts the server process down when the MCP connection
+// closes: stdin first, then SIGTERM and SIGKILL as backstops.
+type executorConn struct {
+	gomcp.Connection
+
+	exec       workspaceapi.Executor
+	pid        workspaceapi.Pid
+	cancel     context.CancelFunc
+	exited     <-chan struct{}
+	childFiles []*os.File
+
+	// closing distinguishes a deliberate shutdown from the server
+	// dying on its own.
+	closing atomic.Bool
+	// death carries the exit cause once the process is gone.
+	death atomic.Pointer[string]
+	once  sync.Once
+	err   error
+}
+
+func (c *executorConn) Close() error {
+	c.once.Do(func() {
+		c.closing.Store(true)
+		// Closing the connection closes stdin, which is how a
+		// well-behaved stdio server is asked to exit.
+		c.err = c.Connection.Close()
+		for _, f := range c.childFiles {
+			_ = f.Close()
+		}
+		if !c.waitExit(terminateGrace) {
+			_ = c.exec.Signal(c.pid, syscall.SIGTERM)
+			if !c.waitExit(terminateGrace) {
+				_ = c.exec.Signal(c.pid, syscall.SIGKILL)
+			}
+		}
+		c.cancel()
+	})
+	return c.err
+}
+
+func (c *executorConn) waitExit(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-c.exited:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+type processWatcher struct {
+	ch chan error
+}
+
+func (w *processWatcher) WatchProcess() chan error { return w.ch }

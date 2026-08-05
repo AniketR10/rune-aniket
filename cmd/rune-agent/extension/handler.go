@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math/rand"
 	"net/url"
 	"os"
@@ -238,6 +239,24 @@ func defaultMarkdownConfig() *markdown.Config {
 	return &cfg
 }
 
+// loadMCPConfig reads the workspace .mcp.json. A missing or malformed
+// file simply means no MCP servers.
+func loadMCPConfig(fs workspaceapi.FileSystem, root string) (runemcp.Config, bool) {
+	data, err := readWorkspaceFile(fs, filepath.Join(root, ".mcp.json"))
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("mcp: failed to read .mcp.json", "error", err)
+		}
+		return runemcp.Config{}, false
+	}
+	cfg, err := runemcp.LoadConfig(data)
+	if err != nil {
+		slog.Warn("mcp: failed to parse .mcp.json", "error", err)
+		return runemcp.Config{}, false
+	}
+	return cfg, len(cfg.MCPServers) > 0
+}
+
 func newCommandEventHandler(
 	ctx context.Context, ed textapi.Editor, w *extensionapi.Workspace,
 	pconfig config.Config,
@@ -268,19 +287,8 @@ func newCommandEventHandler(
 	tools = append(tools, agentools.LSPTools(lsp, fs, parser, cwd, tracker)...)
 	tools = append(tools, agentools.SyntaxTools(parser, fs, cwd, tracker)...)
 
-	mcpManager := runemcp.NewManager()
-	mcpData, mcpReadErr := readWorkspaceFile(fs, filepath.Join(cwd.Path(), ".mcp.json"))
-	if mcpReadErr == nil {
-		mcpCfg, mcpParseErr := runemcp.LoadConfig(mcpData)
-		if mcpParseErr != nil {
-			slog.Warn("mcp: failed to parse .mcp.json", "error", mcpParseErr)
-		} else {
-			mcpTools := mcpManager.Connect(ctx, mcpCfg)
-			tools = append(tools, mcpTools...)
-		}
-	} else if !errors.Is(mcpReadErr, os.ErrNotExist) {
-		slog.Warn("mcp: failed to read .mcp.json", "error", mcpReadErr)
-	}
+	mcpManager := runemcp.NewManager(executor, cwd.Path())
+	mcpCfg, hasMCP := loadMCPConfig(fs, cwd.Path())
 
 	// Discover skills from config dirs.
 	var skillDirs []string
@@ -629,6 +637,19 @@ func newCommandEventHandler(
 		},
 	)
 
+	// Starting an MCP server needs StartCommand authorization, which
+	// blocks until the user answers a prompt. Connect in the background
+	// so the agent registers its commands immediately.
+	if hasMCP {
+		mcpManager.OnServerExit = func(name, detail string) {
+			_, _ = ret.n.Notify(browserapi.LevelError,
+				"MCP server %q %s", name, detail)
+		}
+		go debug.CapturePanicReport(func() {
+			ret.connectMCPServers(mcpCfg)
+		})
+	}
+
 	return ret, nil
 }
 
@@ -648,7 +669,9 @@ type aiEditorHandler struct {
 	systemPrompt        string
 	projectInstructions string
 	agentsConfig        *agent.Cfg
+	baseToolsMu         sync.RWMutex
 	baseTools           []agent.Tool
+	chatRegistries      map[string][]*agent.Registry
 	mcpManager          *runemcp.Manager
 	sessionMgr          *agentools.SessionManager
 
@@ -700,6 +723,110 @@ type aiEditorHandler struct {
 	// hookRunner dispatches Claude-Code-style hooks. nil when no
 	// hooks are configured.
 	hookRunner *hooks.Runner
+}
+
+// tools returns the current base tool set. MCP servers connect in the
+// background, so the set grows after initialization.
+func (h *aiEditorHandler) tools() []agent.Tool {
+	h.baseToolsMu.RLock()
+	defer h.baseToolsMu.RUnlock()
+	return slices.Clone(h.baseTools)
+}
+
+// addTools appends late-arriving tools to the base set and forwards
+// them to every subscribed conversation, so tools from MCP servers that
+// finish connecting mid-session reach chats that are already open.
+func (h *aiEditorHandler) addTools(tools ...agent.Tool) {
+	if len(tools) == 0 {
+		return
+	}
+	h.baseToolsMu.Lock()
+	defer h.baseToolsMu.Unlock()
+	h.baseTools = append(h.baseTools, tools...)
+	h.toolRegistry.Add(tools...)
+	for _, regs := range h.chatRegistries {
+		for _, r := range regs {
+			r.Add(tools...)
+		}
+	}
+}
+
+// subscribeTools registers a conversation's registries to receive tools
+// that arrive after its snapshot was taken. The delta between the
+// snapshot and the current base set is applied immediately, under the
+// same lock addTools uses, so no tool can fall between snapshot and
+// subscription.
+func (h *aiEditorHandler) subscribeTools(
+	id string, snapshotLen int, regs ...*agent.Registry,
+) {
+	h.baseToolsMu.Lock()
+	defer h.baseToolsMu.Unlock()
+	if delta := h.baseTools[snapshotLen:]; len(delta) > 0 {
+		for _, r := range regs {
+			r.Add(delta...)
+		}
+	}
+	if h.chatRegistries == nil {
+		h.chatRegistries = make(map[string][]*agent.Registry)
+	}
+	h.chatRegistries[id] = regs
+}
+
+func (h *aiEditorHandler) unsubscribeTools(id string) {
+	h.baseToolsMu.Lock()
+	defer h.baseToolsMu.Unlock()
+	delete(h.chatRegistries, id)
+}
+
+// warnPendingMCPServers tells a freshly opened conversation which MCP
+// servers are still starting, so missing tools are explained rather
+// than silently absent.
+func (h *aiEditorHandler) warnPendingMCPServers(tx chan<- dialoguetui.MessageEvent) {
+	if h.mcpManager == nil {
+		return
+	}
+	var pending []string
+	for _, srv := range h.mcpManager.Servers() {
+		if srv.Status == runemcp.StatusConnecting {
+			pending = append(pending, srv.Name)
+		}
+	}
+	if len(pending) == 0 {
+		return
+	}
+	tx <- dialoguetui.MessageEvent{
+		Type: dialoguetui.MessageEventWarning,
+		Text: fmt.Sprintf(
+			"MCP server(s) still starting: %s. Their tools will join this conversation once connected.",
+			strings.Join(pending, ", ")),
+	}
+}
+
+// connectMCPServers brings up every configured MCP server, keeping the
+// user informed: a progress notification stays open while a server
+// starts (authorization may hold it for a while), and resolves into a
+// success or error notification. Tools reach the base set and every
+// open conversation as each server comes up.
+func (h *aiEditorHandler) connectMCPServers(cfg runemcp.Config) {
+	for _, name := range slices.Sorted(maps.Keys(cfg.MCPServers)) {
+		id, nerr := h.n.Notify(browserapi.LevelInfo,
+			"Starting MCP server %q…", name)
+		if nerr == nil {
+			_ = h.n.UpdateNotificationProgress(id, "", 0, 1)
+		}
+		tools, err := h.mcpManager.ConnectServer(h.ctx, name, cfg.MCPServers[name])
+		if nerr == nil {
+			_ = h.n.UpdateNotificationProgress(id, "", 1, 1)
+		}
+		if err != nil {
+			_, _ = h.n.Notify(browserapi.LevelError,
+				"MCP server %q failed to start: %v", name, err)
+			continue
+		}
+		h.addTools(tools...)
+		_, _ = h.n.Notify(browserapi.LevelSuccess,
+			"MCP server %q is up: %d tools available", name, len(tools))
+	}
 }
 
 // modelService resolves a model entry from the host-provided LLM
@@ -1035,7 +1162,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	}
 	// Build a separate agentshell for the command adapter. It only needs
 	// the base tools for display (e.g. /tools); it carries no mutable state.
-	cmdRegistry := agent.NewRegistry(h.baseTools...)
+	baseTools := h.tools()
+	cmdRegistry := agent.NewRegistry(baseTools...)
 	cmdShellOpts := []agentshell.Option{
 		agentshell.WithMCPInfo(h.mcpManager),
 	}
@@ -1114,8 +1242,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	taskStore := taskstore.New()
 	progressUpdater := &tuiProgressUpdater{tx: tx}
 	taskTools := agentools.NewTaskTools(taskStore, progressUpdater)
-	allTools := make([]agent.Tool, 0, len(h.baseTools)+len(sessionTools)+len(taskTools)+4)
-	allTools = append(allTools, h.baseTools...)
+	allTools := make([]agent.Tool, 0, len(baseTools)+len(sessionTools)+len(taskTools)+4)
+	allTools = append(allTools, baseTools...)
 	allTools = append(allTools, sessionTools...)
 	allTools = append(allTools, askUser)
 	allTools = append(allTools, requestSkill)
@@ -1123,7 +1251,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	allTools = append(allTools, skillTool) // overrides nil-spawner skill tool from baseTools
 	allTools = append(allTools, taskTools...)
 	chatRegistry := agent.NewRegistry(allTools...)
-	chatRegistry.CopyOverridesFrom(h.toolRegistry)
+	chatRegistry.AddOverrides(h.toolRegistry.Overrides())
 	chatRegistry.RegisterOverrides("openai",
 		agentools.NewUpdatePlan(progressUpdater),
 		agentools.NewRequestUserInput(prompter),
@@ -1169,6 +1297,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	adapter.agent = chatAgent
 	h.openChatAgents.Store(d.ID, chatAgent)
 	h.openChatTx.Store(d.ID, tx)
+	h.subscribeTools(d.ID, len(baseTools), chatRegistry, cmdRegistry)
+	h.warnPendingMCPServers(tx)
 
 	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
 	go debug.CapturePanicReport(func() {
@@ -1179,6 +1309,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 
 	bhandler := browserapi.FuncHandler(handler, func() error {
 		cancel()
+		h.unsubscribeTools(d.ID)
 		h.openChatAgents.Delete(d.ID)
 		h.openChatTx.Delete(d.ID)
 		h.openChats.Delete(d.ID)
@@ -1292,7 +1423,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 		queryID, "query", h.cwd,
 		prompter,
 	)
-	spawner.SetRegistry(agent.NewRegistry(h.baseTools...))
+	spawner.SetRegistry(agent.NewRegistry(h.tools()...))
 	spawner.GenerateDialogueID = h.generateDialogueID
 	childEvents := make(chan agent.ChildEvent, 64)
 

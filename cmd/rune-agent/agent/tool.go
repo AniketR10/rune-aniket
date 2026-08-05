@@ -25,8 +25,10 @@ package agent
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
@@ -67,7 +69,13 @@ type Tool interface {
 // Registry holds available tools and provides lookup.
 // It supports provider-specific overrides: tools can be replaced or
 // excluded for a given provider (e.g. "openai", "anthropic").
+//
+// A Registry may grow after creation: MCP servers connect in the
+// background and Add their tools while agents are already reading the
+// registry, so all access is guarded. Tools added mid-conversation are
+// picked up at the start of the next Run.
 type Registry struct {
+	mu        sync.RWMutex
 	tools     map[string]Tool
 	overrides map[string]map[string]Tool // provider -> name -> Tool (nil = exclude)
 	// replacements maps provider -> excluded base name -> replacement name.
@@ -89,10 +97,26 @@ func NewRegistry(tools ...Tool) *Registry {
 	return r
 }
 
+// Add registers additional base tools. An existing tool with the same
+// name is replaced.
+func (r *Registry) Add(tools ...Tool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, t := range tools {
+		r.tools[t.Definition().Function.Name] = t
+	}
+}
+
 // RegisterOverrides adds provider-specific tool entries. If the tool
 // name matches a base tool it replaces it for that provider; otherwise
 // the tool is added only for that provider.
 func (r *Registry) RegisterOverrides(provider string, tools ...Tool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.registerOverridesLocked(provider, tools...)
+}
+
+func (r *Registry) registerOverridesLocked(provider string, tools ...Tool) {
 	m := r.overrides[provider]
 	if m == nil {
 		m = make(map[string]Tool, len(tools))
@@ -105,6 +129,12 @@ func (r *Registry) RegisterOverrides(provider string, tools ...Tool) {
 
 // RegisterExclusions marks base tools as excluded for the given provider.
 func (r *Registry) RegisterExclusions(provider string, names ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.registerExclusionsLocked(provider, names...)
+}
+
+func (r *Registry) registerExclusionsLocked(provider string, names ...string) {
 	m := r.overrides[provider]
 	if m == nil {
 		m = make(map[string]Tool, len(names))
@@ -120,8 +150,10 @@ func (r *Registry) RegisterExclusions(provider string, names ...string) {
 // provider override, excludes baseName, and records the pairing so
 // ReplacementFor can later hint a caller that invokes the excluded base tool.
 func (r *Registry) RegisterReplacement(provider, baseName string, replacement Tool) {
-	r.RegisterOverrides(provider, replacement)
-	r.RegisterExclusions(provider, baseName)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.registerOverridesLocked(provider, replacement)
+	r.registerExclusionsLocked(provider, baseName)
 	m := r.replacements[provider]
 	if m == nil {
 		m = make(map[string]string)
@@ -134,19 +166,19 @@ func (r *Registry) RegisterReplacement(provider, baseName string, replacement To
 // tool for the given provider, or an empty string if there is no recorded
 // replacement.
 func (r *Registry) ReplacementFor(name, provider string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.replacements[provider][name]
 }
 
 // resolvedTools returns the merged tool map for the given provider.
-// Empty provider returns base tools only.
+// Empty provider returns base tools only. The returned map is a copy
+// owned by the caller.
 func (r *Registry) resolvedTools(provider string) map[string]Tool {
-	if provider == "" || len(r.overrides[provider]) == 0 {
-		return r.tools
-	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	merged := make(map[string]Tool, len(r.tools))
-	for k, v := range r.tools {
-		merged[k] = v
-	}
+	maps.Copy(merged, r.tools)
 	for name, tool := range r.overrides[provider] {
 		if tool == nil {
 			delete(merged, name)
@@ -157,29 +189,51 @@ func (r *Registry) resolvedTools(provider string) map[string]Tool {
 	return merged
 }
 
-// CopyOverridesFrom copies all provider overrides (including exclusions)
-// from src into r. Existing entries in r for the same provider+name are
-// replaced.
-func (r *Registry) CopyOverridesFrom(src *Registry) {
-	for provider, srcTools := range src.overrides {
+// Overrides is a snapshot of a Registry's provider overrides
+// (including exclusions) and replacement pairings. It is produced by
+// Registry.Overrides and consumed by Registry.AddOverrides.
+type Overrides struct {
+	tools        map[string]map[string]Tool
+	replacements map[string]map[string]string
+}
+
+// Overrides returns a snapshot of r's provider overrides.
+func (r *Registry) Overrides() Overrides {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	o := Overrides{
+		tools:        make(map[string]map[string]Tool, len(r.overrides)),
+		replacements: make(map[string]map[string]string, len(r.replacements)),
+	}
+	for provider, tools := range r.overrides {
+		o.tools[provider] = maps.Clone(tools)
+	}
+	for provider, repl := range r.replacements {
+		o.replacements[provider] = maps.Clone(repl)
+	}
+	return o
+}
+
+// AddOverrides merges a snapshot of provider overrides into r. Existing
+// entries for the same provider+name are replaced.
+func (r *Registry) AddOverrides(o Overrides) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for provider, tools := range o.tools {
 		m := r.overrides[provider]
 		if m == nil {
-			m = make(map[string]Tool, len(srcTools))
+			m = make(map[string]Tool, len(tools))
 			r.overrides[provider] = m
 		}
-		for name, tool := range srcTools {
-			m[name] = tool
-		}
+		maps.Copy(m, tools)
 	}
-	for provider, srcRepl := range src.replacements {
+	for provider, repl := range o.replacements {
 		m := r.replacements[provider]
 		if m == nil {
-			m = make(map[string]string, len(srcRepl))
+			m = make(map[string]string, len(repl))
 			r.replacements[provider] = m
 		}
-		for name, repl := range srcRepl {
-			m[name] = repl
-		}
+		maps.Copy(m, repl)
 	}
 }
 
@@ -195,6 +249,8 @@ func (r *Registry) Get(name, provider string) (Tool, bool) {
 // names appear in allowedNames. Unknown names are silently ignored.
 // Provider overrides are preserved and filtered to matching names.
 func (r *Registry) WithFilteredTools(allowedNames []string) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	allowed := make(map[string]bool, len(allowedNames))
 	for _, name := range allowedNames {
 		allowed[name] = true
@@ -257,6 +313,8 @@ func (r *Registry) Tools(provider string) []llmapi.Tool {
 // AllTools returns llmapi.Tool definitions for all base tools,
 // ignoring provider overrides, sorted by name.
 func (r *Registry) AllTools() []llmapi.Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	ret := make([]llmapi.Tool, 0, len(r.tools))
 	for _, t := range r.tools {
 		ret = append(ret, t.Definition())

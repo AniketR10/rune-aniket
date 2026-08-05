@@ -84,8 +84,7 @@ func testServer(t *testing.T, toolNames ...string) (*gomcp.Server, TransportFact
 func TestManagerConnect(t *testing.T) {
 	_, factory := testServer(t, "tool_a", "tool_b")
 
-	m := NewManager()
-	m.transportFactory = factory
+	m := NewManagerWithTransport(factory)
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -116,10 +115,9 @@ func TestManagerConnectMultipleServers(t *testing.T) {
 		"b": factoryB,
 	}
 
-	m := NewManager()
-	m.transportFactory = func(name string, cfg ServerConfig) (gomcp.Transport, error) {
+	m := NewManagerWithTransport(func(name string, cfg ServerConfig) (gomcp.Transport, error) {
 		return factories[name](name, cfg)
-	}
+	})
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -144,13 +142,12 @@ func TestManagerConnectMultipleServers(t *testing.T) {
 func TestManagerConnectSkipsFailedTransport(t *testing.T) {
 	_, goodFactory := testServer(t, "ok_tool")
 
-	m := NewManager()
-	m.transportFactory = func(name string, cfg ServerConfig) (gomcp.Transport, error) {
+	m := NewManagerWithTransport(func(name string, cfg ServerConfig) (gomcp.Transport, error) {
 		if name == "bad" {
 			return nil, errors.New("transport creation failed")
 		}
 		return goodFactory(name, cfg)
-	}
+	})
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -168,22 +165,21 @@ func TestManagerConnectSkipsFailedTransport(t *testing.T) {
 }
 
 func TestManagerConnectEmptyConfig(t *testing.T) {
-	m := NewManager()
+	m := NewManagerWithTransport(nil)
 	tools := m.Connect(context.Background(), Config{})
 	assert.Empty(t, tools)
 	require.NoError(t, m.Close())
 }
 
 func TestManagerCloseWithoutConnect(t *testing.T) {
-	m := NewManager()
+	m := NewManagerWithTransport(nil)
 	require.NoError(t, m.Close())
 }
 
 func TestManagerServersConnected(t *testing.T) {
 	_, factory := testServer(t, "tool_a", "tool_b")
 
-	m := NewManager()
-	m.transportFactory = factory
+	m := NewManagerWithTransport(factory)
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -205,10 +201,9 @@ func TestManagerServersConnected(t *testing.T) {
 }
 
 func TestManagerServersError(t *testing.T) {
-	m := NewManager()
-	m.transportFactory = func(_ string, _ ServerConfig) (gomcp.Transport, error) {
+	m := NewManagerWithTransport(func(_ string, _ ServerConfig) (gomcp.Transport, error) {
 		return nil, errors.New("bad transport")
-	}
+	})
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -232,10 +227,9 @@ func TestManagerServersSortedByName(t *testing.T) {
 	_, factoryB := testServer(t, "b1")
 
 	factories := map[string]TransportFactory{"z": factoryA, "a": factoryB}
-	m := NewManager()
-	m.transportFactory = func(name string, cfg ServerConfig) (gomcp.Transport, error) {
+	m := NewManagerWithTransport(func(name string, cfg ServerConfig) (gomcp.Transport, error) {
 		return factories[name](name, cfg)
-	}
+	})
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -256,8 +250,7 @@ func TestManagerServersSortedByName(t *testing.T) {
 func TestManagerCloseDisconnectsServers(t *testing.T) {
 	_, factory := testServer(t, "tool_a")
 
-	m := NewManager()
-	m.transportFactory = factory
+	m := NewManagerWithTransport(factory)
 
 	cfg := Config{
 		MCPServers: map[string]ServerConfig{
@@ -270,13 +263,14 @@ func TestManagerCloseDisconnectsServers(t *testing.T) {
 	require.Len(t, servers, 1)
 	assert.Equal(t, StatusConnected, servers[0].Status)
 
-	// Keep a reference to the info before Close clears m.servers.
-	info := servers[0]
 	require.NoError(t, m.Close())
-	assert.Equal(t, StatusDisconnected, info.Status)
+
+	servers = m.Servers()
+	require.Len(t, servers, 1)
+	assert.Equal(t, StatusDisconnected, servers[0].Status)
 }
 
 func TestManagerServersEmpty(t *testing.T) {
-	m := NewManager()
+	m := NewManagerWithTransport(nil)
 	assert.Empty(t, m.Servers())
 }
