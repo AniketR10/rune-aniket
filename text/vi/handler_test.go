@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -12229,4 +12230,76 @@ func TestGjGk(t *testing.T) {
 		}
 		assert.Equal(t, pos, vi.cursor.CursorAtScroll())
 	})
+}
+
+// TestHandleMouseWindowCoordinates verifies vi accepts mouse events
+// in every mode (vim's mouse=a): drags enter visual mode and select,
+// an insert-mode click repositions the caret and stays in insert.
+func TestHandleMouseWindowCoordinates(t *testing.T) {
+	newVi := func() *Vi {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader("alpha bravo charlie"))
+		v := NewWithIndent(buf, workspaceapi.RandomURI("memory"),
+			text.IndentRuneTab, 0, WithWrap(false))
+		v.Resize(8, 1)
+		return v
+	}
+	drag := func(v *Vi, x1, x2 int) {
+		v.Handle(mouseEventAt(term.MouseLeft, x1, 0))
+		v.Handle(mouseEventAt(term.MouseLeft, x2, 0))
+		v.Handle(mouseEventAt(term.MouseRelease, x2, 0))
+	}
+
+	t.Run("normal mode drag enters visual and selects", func(t *testing.T) {
+		v := newVi()
+		drag(v, 6, 11)
+
+		assert.Equal(t, term.Coordinates{X: 11}, v.CursorAtScroll())
+		assert.Equal(t, visualMode, v.handler.mode())
+		sel, ok := v.Selection()
+		require.True(t, ok)
+		// vi's visual selection is inclusive of the cursor cell.
+		assert.Equal(t, "bravo ", sel)
+
+		from, to, bok := v.SelectionBounds()
+		require.True(t, bok)
+		assert.Equal(t, term.Coordinates{X: 6}, from)
+		assert.Equal(t, term.Coordinates{X: 12}, to,
+			"host-facing bounds are half-open, one past the inclusive cursor cell")
+	})
+
+	t.Run("insert mode click repositions caret and stays insert", func(t *testing.T) {
+		v := newVi()
+		v.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+		require.Equal(t, insertMode, v.handler.mode())
+
+		_, handled := v.Handle(mouseEventAt(term.MouseLeft, 6, 0))
+		require.True(t, handled)
+		v.Handle(mouseEventAt(term.MouseRelease, 6, 0))
+
+		assert.Equal(t, term.Coordinates{X: 6}, v.CursorAtScroll())
+		assert.Equal(t, insertMode, v.handler.mode())
+		_, ok := v.Selection()
+		assert.False(t, ok, "a plain click must not leave a selection")
+
+		// arrows snap back to the insert anchor; the click must move it.
+		v.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+		assert.Equal(t, term.Coordinates{X: 7}, v.CursorAtScroll())
+	})
+
+	t.Run("insert mode drag enters visual and selects", func(t *testing.T) {
+		v := newVi()
+		v.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+
+		drag(v, 6, 11)
+
+		assert.Equal(t, visualMode, v.handler.mode())
+		sel, ok := v.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "bravo ", sel)
+	})
+}
+
+func mouseEventAt(key term.Key, x, y int) term.Event {
+	return term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y}
 }

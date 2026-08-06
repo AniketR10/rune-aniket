@@ -2488,3 +2488,61 @@ func TestStandardNullCellEditing(t *testing.T) {
 	assertCursorInBounds(t, h, "after deleting null cell")
 	assert.Equal(t, "ab\x00", buf.String())
 }
+
+// TestHandleMouseWindowCoordinates verifies mouse events are
+// interpreted in window coordinates: positions follow the horizontal
+// scroll offset and resolve past the viewport edge with wrap off.
+func TestHandleMouseWindowCoordinates(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("test:///")
+	require.NoError(t, err)
+	newEditor := func() text.Handler {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader("alpha bravo charlie"))
+		h := NewHandler(buf, uri, text.IndentRuneTab, 0,
+			WithCommandBar(false), WithWrap(false))
+		h.Resize(8, 1)
+		return h
+	}
+
+	t.Run("drag past the viewport edge selects the mapped columns", func(t *testing.T) {
+		h := newEditor()
+		h.Handle(mouseEvent(term.MouseLeft, 6, 0))
+		h.Handle(mouseEvent(term.MouseLeft, 11, 0))
+		h.Handle(mouseEvent(term.MouseRelease, 11, 0))
+
+		assert.Equal(t, term.Coordinates{X: 11}, h.CursorAtScroll())
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "bravo", sel)
+	})
+
+	t.Run("leftward drag reports sorted half-open bounds", func(t *testing.T) {
+		h := newEditor()
+		h.Handle(mouseEvent(term.MouseLeft, 7, 0))
+		h.Handle(mouseEvent(term.MouseLeft, 2, 0))
+		h.Handle(mouseEvent(term.MouseRelease, 2, 0))
+
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "pha b", sel)
+		from, to, bok := selectionBounds(t, h)
+		require.True(t, bok)
+		assert.Equal(t, term.Coordinates{X: 2}, from)
+		assert.Equal(t, term.Coordinates{X: 7}, to,
+			"the anchor cell sits one past the exclusive selection")
+	})
+
+	t.Run("click on a horizontally scrolled viewport follows the offset", func(t *testing.T) {
+		h := newEditor()
+		h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnd})
+		win, _, ok := h.Cursor()
+		require.True(t, ok)
+		offset := h.CursorAtScroll().X - win.X
+		require.Positive(t, offset, "the viewport must be scrolled right")
+
+		h.Handle(mouseEvent(term.MouseLeft, 2, 0))
+		h.Handle(mouseEvent(term.MouseRelease, 2, 0))
+
+		assert.Equal(t, term.Coordinates{X: offset + 2}, h.CursorAtScroll())
+	})
+}

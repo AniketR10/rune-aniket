@@ -1370,9 +1370,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 			strings.Repeat("1", 25)+"<shift-esc>")
 		require.NotNil(t, captured)
 
-		// Stage a selection that crosses the wrap boundary: from
-		// row 0 col 15 through row 0 col 19 (5 cells, indices 15..19).
-		// In wrapped geometry that maps to:
+		// The half-open range [15, 20) crosses the wrap boundary:
 		//   buf 15 -> visual (15, 0)
 		//   buf 16 -> visual (16, 0)
 		//   buf 17 -> visual (0, 1)
@@ -1380,7 +1378,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 		//   buf 19 -> visual (2, 1)
 		captured.hasSelection = true
 		captured.selectionFrom = term.Coordinates{X: 15}
-		captured.selectionTo = term.Coordinates{X: 19}
+		captured.selectionTo = term.Coordinates{X: 20}
 
 		const width, height = 20, 5
 		b.Resize(width, height)

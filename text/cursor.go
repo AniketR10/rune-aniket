@@ -2851,20 +2851,11 @@ func (c *Cursor) DeleteHorizontalSpaceContext(ctx context.Context) (ok bool) {
 }
 
 func (c *Cursor) setSelection() (ok bool) {
-	from, to, ok := c.selectionBounds()
+	from, to, ok := c.SelectionRange()
 	if !ok {
 		c.selection.cells = nil
 		c.SetLocationList(internalLocationListPriority, selectionLocationListID, nil)
 		return false
-	}
-
-	if c.selection.mode == BlockSelection {
-		from, to = term.CoordinatesBlockSort(from, to)
-	} else {
-		from, to = term.CoordinatesSort(from, to)
-	}
-	if !c.selection.explicit && c.RightInclusiveSemantics {
-		to.X++
 	}
 
 	var sels []cell.Selection
@@ -2901,6 +2892,33 @@ func (c *Cursor) setSelection() (ok bool) {
 // selection.
 func (c *Cursor) SelectionBounds() (from, to term.Coordinates, ok bool) {
 	return c.selectionBounds()
+}
+
+// SelectionRange returns the sorted, half-open [from, to) range the
+// selection highlight covers, with RightInclusiveSemantics and line
+// expansion folded in. Unlike SelectionBounds, the raw (anchor,
+// cursor) pair, it matches exactly what setSelection highlights.
+func (c *Cursor) SelectionRange() (from, to term.Coordinates, ok bool) {
+	from, to, ok = c.selectionBounds()
+	if !ok {
+		return
+	}
+	if c.selection.mode == BlockSelection {
+		from, to = term.CoordinatesBlockSort(from, to)
+	} else {
+		from, to = term.CoordinatesSort(from, to)
+	}
+	if !c.selection.explicit && c.RightInclusiveSemantics {
+		to.X++
+	}
+	if c.selection.mode == LineSelection {
+		from.X = 0
+		to.X = 0
+		if to.Y < c.rows() {
+			to.X = c.view().Columns(to.Y)
+		}
+	}
+	return
 }
 
 func (c *Cursor) selectionBounds() (from, to term.Coordinates, ok bool) {

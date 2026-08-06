@@ -40,13 +40,33 @@ func newDelegate(vi *viHandlerImpl) mouse.Delegate {
 }
 
 func (d mouseDelegate) SetSelectionStart(pos term.Coordinates) {
+	if d.vi.mode() == insertMode {
+		// vim's mouse=a: reposition and stay in insert. The anchor
+		// must follow because insert-mode arrows snap back to it.
+		d.vi.cursor.MoveToScroll(d.vi.cursor.ScrollCoordinates(pos))
+		d.vi.anchor = d.vi.cursorAtScroll()
+		return
+	}
 	d.Delegate.SetSelectionStart(pos)
 	d.vi.setVisualMode()
 	d.vi.anchor = d.vi.cursorAtScroll()
 	d.vi.markMatchingBrace()
 }
 
+func (d mouseDelegate) SetSelectionEnd(pos term.Coordinates) {
+	if !isSelectMode(d.vi.mode()) {
+		// Drag from insert: the cursor still sits on the pressed
+		// cell, so setVisualMode anchors the selection there.
+		d.vi.setVisualMode()
+		d.vi.anchor = d.vi.cursorAtScroll()
+		d.vi.markMatchingBrace()
+	}
+	d.Delegate.SetSelectionEnd(pos)
+}
+
 func (d mouseDelegate) ClearSelection() {
-	d.vi.setNormalMode()
+	if isSelectMode(d.vi.mode()) {
+		d.vi.setNormalMode()
+	}
 	d.Delegate.ClearSelection()
 }

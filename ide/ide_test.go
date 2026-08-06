@@ -79,8 +79,10 @@ import (
 	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -3866,4 +3868,303 @@ func TestCommandPromptKeyBindingHintsIntegration(t *testing.T) {
 	handlertest.TestHandlerSequence(t, h, 40, 20, cases)
 
 	require.NoError(t, m.Close())
+}
+
+// The console mouse-selection tests below run in both prompt-editor
+// modes ("modeless" standard, "modal" vi in insert mode). Mouse
+// events are injected directly because handlertest input sequences
+// cannot carry mouse coordinates.
+
+// consoleSelBaseFrame is the console tab after running `lines`.
+const consoleSelBaseFrame = "┌━━━━━━━━━─────────┐\n" +
+	"│\ue691 console         │\n" +
+	"├──────────────────┤\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│> lines           │\n" +
+	"│alpha bravo charli│\n" +
+	"│e                 │\n" +
+	"│> ▐               │\n" +
+	"└──────────────────┘"
+
+// consoleSelTypedFrame is consoleSelBaseFrame after typing 40 digits.
+const consoleSelTypedFrame = "┌━━━━━━━━━─────────┐\n" +
+	"│\ue691 console         │\n" +
+	"├──────────────────┤\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│                  │\n" +
+	"│> lines           │\n" +
+	"│> 0123456789012345│\n" +
+	"│678901234567890123│\n" +
+	"│456789▐           │\n" +
+	"└──────────────────┘"
+
+// consoleSelRecalledFrame is the console after submitting
+// `lines 0123...` and recalling it with <up>.
+const consoleSelRecalledFrame = "┌━━━━━━━━━─────────┐\n" +
+	"│\ue691 console         │\n" +
+	"├──────────────────┤\n" +
+	"│alpha bravo charli│\n" +
+	"│e                 │\n" +
+	"│> lines 0123456789│\n" +
+	"│012345678901234567│\n" +
+	"│890123456789      │\n" +
+	"│> lines 0123456789│\n" +
+	"│012345678901234567│\n" +
+	"│890123456789▐     │\n" +
+	"└──────────────────┘"
+
+// consoleSelRecalledDragFrame is consoleSelRecalledFrame after
+// dragging (2,9)->(10,9).
+const consoleSelRecalledDragFrame = "┌━━━━━━━━━─────────┐\n" +
+	"│\ue691 console         │\n" +
+	"├──────────────────┤\n" +
+	"│alpha bravo charli│\n" +
+	"│e                 │\n" +
+	"│> lines 0123456789│\n" +
+	"│012345678901234567│\n" +
+	"│890123456789      │\n" +
+	"│> lines 0123456789│\n" +
+	"│012345678▐01234567│\n" +
+	"│890123456789      │\n" +
+	"└──────────────────┘"
+
+const consoleSelNoReverseRow = "...................."
+
+// consoleLinesREPL emits fixed output lines.
+type consoleLinesREPL struct{ lines []string }
+
+func (c *consoleLinesREPL) HandleCommand(
+	_ context.Context, _ repl.Command, _ repl.ProgressWriter,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	out := make([]component.Responsive, len(c.lines))
+	for i, l := range c.lines {
+		out[i] = component.NewResponsiveString(l, component.StringResponsiveConfig{})
+	}
+	return sdkiterator.FromSlice(out), nil
+}
+
+func (*consoleLinesREPL) Complete(
+	context.Context, string, []string,
+) (sdkiterator.Iterator[string], error) {
+	return sdkiterator.Empty[string](), nil
+}
+
+func (*consoleLinesREPL) Help(
+	context.Context, []string,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+// newConsoleSelectionEx opens the companion console and runs `lines`.
+func newConsoleSelectionEx(t *testing.T, modal bool) (testEx, *term.StringWriter) {
+	t.Helper()
+	workspaceURI, err := workspaceapi.ParseURI("file://" + t.TempDir())
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	b := newExForTestingWithWorkspace(t, w, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	t.Cleanup(func() { _ = b.Close() })
+
+	if modal {
+		b.ex.promptEditor = viPromptEditor{
+			tabspaces:        4,
+			scheduleNextTick: cfg.ScheduleNextTick,
+			clipboard:        clipboard.NewInMemory(),
+		}
+		b.ex.consoleCfg = consoleConfig{modal: true, modalStartInsert: true}
+	}
+
+	require.NoError(t, b.comp.RegisterREPLCommand(
+		textapi.CommandManual{Name: "lines", Summary: "emit lines"},
+		&consoleLinesREPL{lines: []string{"alpha bravo charlie"}},
+	))
+
+	writer := term.NewStringWriter(20, 12)
+	writer.BackgroundCh = '#'
+	handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+		[]handlertest.SequenceTestCase{{
+			InputSequence: "<c-\\\\>console<enter>lines<enter>",
+			Expected:      consoleSelBaseFrame,
+		}})
+	return b, writer
+}
+
+func consoleMouse(b testEx, key term.Key, x, y int) {
+	b.Handle(term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y})
+}
+
+// consoleDrag presses at (x1,y1), drags to (x2,y2) and releases.
+func consoleDrag(b testEx, x1, y1, x2, y2 int) {
+	consoleMouse(b, term.MouseLeft, x1, y1)
+	consoleMouse(b, term.MouseLeft, x2, y2)
+	consoleMouse(b, term.MouseRelease, x2, y2)
+}
+
+// reverseVideoMap projects AttrReverse cells into a '#' map, since
+// StringWriter substitution only visualizes Bg/Fg colors.
+func reverseVideoMap(writer *term.StringWriter, width, height int) string {
+	cells := writer.Cells()
+	rows := make([]string, height)
+	for y := range height {
+		var sb strings.Builder
+		for x := range width {
+			if cells[y*width+x].Attrs&term.AttrReverse != 0 {
+				sb.WriteByte('#')
+			} else {
+				sb.WriteByte('.')
+			}
+		}
+		rows[y] = sb.String()
+	}
+	return strings.Join(rows, "\n")
+}
+
+func consoleSelReverseMap(rows map[int]string) string {
+	out := make([]string, 12)
+	for y := range out {
+		if r, ok := rows[y]; ok {
+			out[y] = r
+		} else {
+			out[y] = consoleSelNoReverseRow
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+var consoleSelModes = []struct {
+	name  string
+	modal bool
+}{{"modeless", false}, {"modal", true}}
+
+// TestConsoleMouseSelectionOutputEmptyPrompt: dragging over command
+// output with an empty prompt selects and highlights the text.
+func TestConsoleMouseSelectionOutputEmptyPrompt(t *testing.T) {
+	for _, tc := range consoleSelModes {
+		t.Run(tc.name, func(t *testing.T) {
+			b, writer := newConsoleSelectionEx(t, tc.modal)
+
+			consoleDrag(b, 1, 8, 11, 8)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: "",
+					Expected:      consoleSelBaseFrame,
+				}})
+			assert.Equal(t,
+				consoleSelReverseMap(map[int]string{8: ".###########........"}),
+				reverseVideoMap(writer, 20, 12))
+			sel, ok := b.Selection()
+			require.True(t, ok, "output drag must produce a selection")
+			assert.Equal(t, "alpha bravo", sel)
+		})
+	}
+}
+
+// TestConsoleMouseSelectionOutputWithWrappedInput: dragging over
+// output with a wrapped un-submitted command still selects it.
+func TestConsoleMouseSelectionOutputWithWrappedInput(t *testing.T) {
+	for _, tc := range consoleSelModes {
+		t.Run(tc.name, func(t *testing.T) {
+			b, writer := newConsoleSelectionEx(t, tc.modal)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: strings.Repeat("0123456789", 4),
+					Expected:      consoleSelTypedFrame,
+				}})
+
+			consoleDrag(b, 3, 7, 7, 7)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: "",
+					Expected:      consoleSelTypedFrame,
+				}})
+			assert.Equal(t,
+				consoleSelReverseMap(map[int]string{7: "...#####............"}),
+				reverseVideoMap(writer, 20, 12))
+			sel, ok := b.Selection()
+			require.True(t, ok, "output drag must produce a selection")
+			assert.Equal(t, "lines", sel)
+		})
+	}
+}
+
+// TestConsoleMouseSelectionInputBandText: dragging over the prompt
+// band selects and highlights the dragged range. The editors differ
+// by one cell: standard is end-exclusive, vi includes the cursor cell.
+func TestConsoleMouseSelectionInputBandText(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		modal   bool
+		wantSel string
+		wantRev string
+	}{
+		{"modeless", false, "12345678", "..########.........."},
+		{"modal", true, "123456789", "..#########........."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, writer := newConsoleSelectionEx(t, tc.modal)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: "lines<space>" + strings.Repeat("0123456789", 4) +
+						"<enter><up>",
+					Expected: consoleSelRecalledFrame,
+				}})
+
+			// (2,9)->(10,9) spans buffer columns 17..25.
+			consoleDrag(b, 2, 9, 10, 9)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: "",
+					Expected:      consoleSelRecalledDragFrame,
+				}})
+			assert.Equal(t,
+				consoleSelReverseMap(map[int]string{9: tc.wantRev}),
+				reverseVideoMap(writer, 20, 12))
+			sel, _ := b.Selection()
+			assert.Equal(t, tc.wantSel, sel,
+				"input-band drag must select the dragged command text")
+		})
+	}
+}
+
+// TestConsoleMouseSelectionOutputAfterInputBandClick: an input-band
+// click must not latch mouse routing away from the output band.
+func TestConsoleMouseSelectionOutputAfterInputBandClick(t *testing.T) {
+	for _, tc := range consoleSelModes {
+		t.Run(tc.name, func(t *testing.T) {
+			b, writer := newConsoleSelectionEx(t, tc.modal)
+
+			consoleMouse(b, term.MouseLeft, 3, 10)
+			consoleMouse(b, term.MouseRelease, 3, 10)
+			consoleDrag(b, 1, 8, 11, 8)
+
+			handlertest.RunHandlerSequenceWriter(t, writer, b, 20, 12,
+				[]handlertest.SequenceTestCase{{
+					InputSequence: "",
+					Expected:      consoleSelBaseFrame,
+				}})
+			assert.Equal(t,
+				consoleSelReverseMap(map[int]string{8: ".###########........"}),
+				reverseVideoMap(writer, 20, 12))
+			sel, ok := b.Selection()
+			require.True(t, ok, "output drag after an input-band click must select")
+			assert.Equal(t, "alpha bravo", sel)
+		})
+	}
 }

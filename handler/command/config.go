@@ -51,14 +51,10 @@ type EditHandler interface {
 	CursorAtScroll() term.Coordinates
 }
 
-// SelectionBoundsHandler is implemented by EditHandlers that can
-// report their active selection range in buffer (scroll)
-// coordinates. Hosts that re-render the editor's buffer through
-// their own layout (e.g. the command Prompt's responsive view) use
-// this optional capability to paint a selection highlight in their
-// own coordinate system, since the editor's selection rendering is
-// otherwise tied to its own Draw pipeline (DrawLocations) and would
-// not survive an external responsive draw.
+// SelectionBoundsHandler reports the sorted, half-open [from, to)
+// buffer range covered by the editor's selection highlight, with the
+// editor's inclusivity rule already folded in. Hosts that render the
+// buffer through their own layout paint this range verbatim.
 type SelectionBoundsHandler interface {
 	SelectionBounds() (from, to term.Coordinates, ok bool)
 }

@@ -7668,3 +7668,96 @@ func TestCursorSelectionUndoRedo(t *testing.T) {
 		assert.False(t, c.RedoSelection())
 	})
 }
+
+// TestCursorSelectionRange verifies the half-open range hosts paint
+// matches the native highlight for both selection semantics.
+func TestCursorSelectionRange(t *testing.T) {
+	tests := []struct {
+		name           string
+		rightInclusive bool
+		setup          func(t *testing.T, c *Cursor)
+		wantFrom       term.Coordinates
+		wantTo         term.Coordinates
+	}{
+		{
+			name: "exclusive rightward drops the cursor cell",
+			setup: func(t *testing.T, c *Cursor) {
+				c.MoveToScroll(term.Coordinates{X: 2})
+				require.True(t, c.Select())
+				c.MoveToScroll(term.Coordinates{X: 5})
+			},
+			wantFrom: term.Coordinates{X: 2},
+			wantTo:   term.Coordinates{X: 5},
+		},
+		{
+			name: "exclusive leftward drops the anchor cell",
+			setup: func(t *testing.T, c *Cursor) {
+				c.MoveToScroll(term.Coordinates{X: 5})
+				require.True(t, c.Select())
+				c.MoveToScroll(term.Coordinates{X: 2})
+			},
+			wantFrom: term.Coordinates{X: 2},
+			wantTo:   term.Coordinates{X: 5},
+		},
+		{
+			name:           "right-inclusive rightward covers the cursor cell",
+			rightInclusive: true,
+			setup: func(t *testing.T, c *Cursor) {
+				c.MoveToScroll(term.Coordinates{X: 2})
+				require.True(t, c.Select())
+				c.MoveToScroll(term.Coordinates{X: 5})
+			},
+			wantFrom: term.Coordinates{X: 2},
+			wantTo:   term.Coordinates{X: 6},
+		},
+		{
+			name:           "right-inclusive leftward covers the anchor cell",
+			rightInclusive: true,
+			setup: func(t *testing.T, c *Cursor) {
+				c.MoveToScroll(term.Coordinates{X: 5})
+				require.True(t, c.Select())
+				c.MoveToScroll(term.Coordinates{X: 2})
+			},
+			wantFrom: term.Coordinates{X: 2},
+			wantTo:   term.Coordinates{X: 6},
+		},
+		{
+			name:           "explicit selection is used verbatim",
+			rightInclusive: true,
+			setup: func(t *testing.T, c *Cursor) {
+				require.True(t, c.SelectRange(
+					term.Coordinates{X: 2}, term.Coordinates{X: 5}))
+			},
+			wantFrom: term.Coordinates{X: 2},
+			wantTo:   term.Coordinates{X: 5},
+		},
+		{
+			name: "line selection expands to whole rows",
+			setup: func(t *testing.T, c *Cursor) {
+				c.MoveToScroll(term.Coordinates{X: 3})
+				require.True(t, c.SelectLine())
+				c.MoveToScroll(term.Coordinates{X: 3, Y: 1})
+			},
+			wantFrom: term.Coordinates{},
+			wantTo:   term.Coordinates{X: 11, Y: 1},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := setupCursorContent(t, 20, 5, "hello world\nsecond line", false)
+			c.RightInclusiveSemantics = tt.rightInclusive
+			tt.setup(t, c)
+
+			from, to, ok := c.SelectionRange()
+			require.True(t, ok)
+			assert.Equal(t, tt.wantFrom, from)
+			assert.Equal(t, tt.wantTo, to)
+		})
+	}
+
+	t.Run("no selection", func(t *testing.T) {
+		c := setupCursorContent(t, 20, 5, "hello", false)
+		_, _, ok := c.SelectionRange()
+		assert.False(t, ok)
+	})
+}

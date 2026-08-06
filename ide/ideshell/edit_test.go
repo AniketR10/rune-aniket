@@ -25,12 +25,14 @@ package ideshell
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -1022,4 +1024,196 @@ func (e echoCmd) Help(
 	context.Context, []string,
 ) (iterator.Iterator[component.Responsive], error) {
 	return iterator.Empty[component.Responsive](), nil
+}
+
+// promptStandardEditor mirrors the production prompt editor wired by
+// ide.standardPromptEditor: bare, unwrapped, horizontally scrolled.
+type promptStandardEditor struct{}
+
+func (promptStandardEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	return standard.NewHandler(buf, workspaceapi.RandomURI("memory"),
+		text.IndentRuneTab, 4,
+		standard.WithCommandBar(false),
+		standard.WithWrap(false),
+	)
+}
+
+// newPromptEditorHandler builds a shell handler backed by
+// promptStandardEditor and seeded with history items.
+func newPromptEditorHandler(t *testing.T, items []string) *Handler {
+	t.Helper()
+	svc := storagestub.NewInMemoryService()
+	require.NoError(t, svc.Create(
+		context.Background(), testDocID,
+		&historyDoc{Items: items, Version: 1},
+	))
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		promptStandardEditor{},
+		Config{
+			Storage:           svc,
+			HistoryDocumentID: testDocID,
+			MaxHistory:        100,
+		},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+	return h
+}
+
+// longHistoryItem is 100 cells wide: with the 2-cell prompt it wraps
+// over four rows at testWidthH (30/30/30/12).
+var longHistoryItem = strings.Repeat("0123456789", 10)
+
+// TestInputBandMouseMapsToBufferCoordinates reproduces RUNE-315:
+// forwarding raw screen coordinates let the editor re-interpret them
+// through its own unwrapped, horizontally scrolled geometry.
+func TestInputBandMouseMapsToBufferCoordinates(t *testing.T) {
+	tests := []struct {
+		name    string
+		click   term.Coordinates
+		want    term.Coordinates
+		wantCur term.Coordinates
+	}{
+		{
+			name:    "end of text on last wrapped row",
+			click:   term.Coordinates{X: 12, Y: 11},
+			want:    term.Coordinates{X: 100},
+			wantCur: term.Coordinates{X: 12, Y: 11},
+		},
+		{
+			name:    "middle of an interior wrapped row",
+			click:   term.Coordinates{X: 5, Y: 10},
+			want:    term.Coordinates{X: 63},
+			wantCur: term.Coordinates{X: 5, Y: 10},
+		},
+		{
+			name:    "prompt prefix clamps to line start",
+			click:   term.Coordinates{X: 1, Y: 8},
+			want:    term.Coordinates{},
+			wantCur: term.Coordinates{X: 2, Y: 8},
+		},
+		{
+			name:    "past end of text clamps to line end",
+			click:   term.Coordinates{X: 20, Y: 11},
+			want:    term.Coordinates{X: 100},
+			wantCur: term.Coordinates{X: 12, Y: 11},
+		},
+		{
+			name:    "below all content rows clamps to last line end",
+			click:   term.Coordinates{X: 4, Y: 50},
+			want:    term.Coordinates{X: 100},
+			wantCur: term.Coordinates{X: 12, Y: 11},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newPromptEditorHandler(t, []string{longHistoryItem})
+			h.Handle(arrowUp)
+			require.Equal(t, longHistoryItem, h.editBuf.String())
+
+			bandH := h.editEditorH()
+			require.Equal(t, 4, bandH, "the recalled line must wrap over 4 rows")
+			before := renderFrame(t, h)
+
+			h.Handle(mouseEv(tt.click.X, tt.click.Y, term.MouseLeft))
+			h.Handle(mouseEv(tt.click.X, tt.click.Y, term.MouseRelease))
+
+			assert.Equal(t, tt.want, h.editHandler.CursorAtScroll(),
+				"click must land on the buffer position under the pointer")
+			cur, _, ok := h.Cursor()
+			require.True(t, ok)
+			assert.Equal(t, tt.wantCur, cur)
+			assert.Equal(t, bandH, h.editEditorH(),
+				"the input band must not grow because of a click")
+			assert.Equal(t, before, renderFrame(t, h),
+				"a click must not shift the rendered content")
+		})
+	}
+}
+
+// TestInputBandMouseOnSecondLogicalLine verifies the visual->buffer
+// mapping walks logical lines: only line 0 carries the prompt prefix.
+func TestInputBandMouseOnSecondLogicalLine(t *testing.T) {
+	h := newPromptEditorHandler(t, []string{"unused"})
+
+	feedRunes(h, "abc")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift})
+	feedRunes(h, "defghij")
+	require.Equal(t, "abc\ndefghij", h.editBuf.String())
+	require.Equal(t, 2, h.editEditorH())
+
+	h.Handle(mouseEv(2, 11, term.MouseLeft))
+	h.Handle(mouseEv(2, 11, term.MouseRelease))
+
+	assert.Equal(t, term.Coordinates{X: 2, Y: 1}, h.editHandler.CursorAtScroll())
+}
+
+// TestInputBandMouseDragSelectsAcrossWrappedRows verifies an
+// input-band drag selects across wrapped rows and highlights exactly
+// the selected cells, excluding the caret cell.
+func TestInputBandMouseDragSelectsAcrossWrappedRows(t *testing.T) {
+	h := newPromptEditorHandler(t, []string{longHistoryItem})
+	h.Handle(arrowUp)
+	require.Equal(t, longHistoryItem, h.editBuf.String())
+
+	// (2,8) is buffer column 0; (5,9) is buffer column 33.
+	for _, ev := range clickDrag(2, 8, 5, 9) {
+		h.Handle(ev)
+	}
+
+	sel, ok := h.Selection()
+	require.True(t, ok)
+	assert.Equal(t, longHistoryItem[:33], sel)
+
+	w := term.NewStringWriter(testWidthH, testHeight)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	cells := w.Cells()
+	reversed := func(x, y int) bool {
+		return cells[y*testWidthH+x].Attrs&term.AttrReverse != 0
+	}
+	// buffer cols 0..32 map to band cells (2,8)..(29,8) and
+	// (0,9)..(4,9); col 33 is the caret.
+	for x := 2; x < testWidthH; x++ {
+		assert.True(t, reversed(x, 8), "cell (%d,8) must be highlighted", x)
+	}
+	for x := range 5 {
+		assert.True(t, reversed(x, 9), "cell (%d,9) must be highlighted", x)
+	}
+	assert.False(t, reversed(1, 8), "the prompt prefix must not be highlighted")
+	assert.False(t, reversed(5, 9),
+		"the caret cell past the exclusive selection must not be highlighted")
+	assert.False(t, reversed(6, 9), "cells past the selection must not be highlighted")
+}
+
+// TestInputBandLeftwardSelectionExcludesAnchorCell reproduces the
+// overlay painting the vi-style inclusive range for a modeless
+// editor: a one-char leftward selection also highlighted the anchor.
+func TestInputBandLeftwardSelectionExcludesAnchorCell(t *testing.T) {
+	h := newPromptEditorHandler(t, []string{longHistoryItem})
+	h.Handle(arrowUp)
+	require.Equal(t, longHistoryItem, h.editBuf.String())
+
+	// (11,11) is buffer column 99; (10,11) is column 98.
+	for _, ev := range clickDrag(11, 11, 10, 11) {
+		h.Handle(ev)
+	}
+
+	sel, ok := h.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "8", sel)
+
+	w := term.NewStringWriter(testWidthH, testHeight)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	cells := w.Cells()
+	reversed := func(x, y int) bool {
+		return cells[y*testWidthH+x].Attrs&term.AttrReverse != 0
+	}
+	assert.True(t, reversed(10, 11), "the selected cell must be highlighted")
+	assert.False(t, reversed(11, 11),
+		"the anchor cell is not part of the exclusive selection")
+	assert.False(t, reversed(9, 11), "cells before the selection must not be highlighted")
 }

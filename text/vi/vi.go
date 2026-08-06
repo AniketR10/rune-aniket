@@ -165,14 +165,10 @@ func (vi *Vi) Selection() (string, bool) {
 	return vi.handler.Selection()
 }
 
-// SelectionBounds returns the unsorted (anchor, cursor) buffer
-// coordinates of the active visual-mode selection, if any. ok is
-// false when no selection is active. Hosts that render the buffer
-// through their own pipeline (rather than calling Vi.Draw) can use
-// this to paint the selection highlight themselves in their own
-// coordinate system.
+// SelectionBounds returns the sorted, half-open [from, to) buffer
+// range highlighted by the active visual-mode selection, if any.
 func (vi *Vi) SelectionBounds() (from, to term.Coordinates, ok bool) {
-	return vi.cursor.SelectionBounds()
+	return vi.cursor.SelectionRange()
 }
 
 // Cursor satisfies tui.Handler
@@ -310,7 +306,7 @@ func (vi *Vi) Copy(registerID string, data clipboard.Data) error {
 func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	mode := vi.handler.mode()
 
-	if ev.Type == term.EventMouse && mode != insertMode {
+	if ev.Type == term.EventMouse {
 		return vi.mouse.Handle(ev)
 	}
 

@@ -1029,13 +1029,10 @@ func (h *standardHandler) Selection() (string, bool) {
 	return text, text != ""
 }
 
-// SelectionBounds returns the unsorted (anchor, cursor) buffer
-// coordinates of the active selection, if any. ok is false when no
-// selection is active. Hosts that render the buffer outside the
-// editor's Draw pipeline use this to paint the selection highlight
-// in their own coordinate system.
+// SelectionBounds returns the sorted, half-open [from, to) buffer
+// range covered by the active selection highlight, if any.
 func (h *standardHandler) SelectionBounds() (from, to term.Coordinates, ok bool) {
-	return h.cursor.SelectionBounds()
+	return h.cursor.SelectionRange()
 }
 
 // Close satisfies editor.Handler.

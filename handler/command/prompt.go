@@ -1252,10 +1252,6 @@ func (h *Prompt) drawSelectionOverlay(w term.Writer, wrapWidth, visibleHeight in
 		return
 	}
 	from, to = term.CoordinatesSort(from, to)
-	// vi visual mode is right-inclusive; treat `to` as inclusive
-	// of the cell at to.X. modeless selections are exclusive but
-	// the cursor sits past the last selected char so this still
-	// matches what the editor would highlight via DrawLocations.
 	rows := h.buf.RawCells()
 	attr := term.Attributes{Attrs: term.AttrReverse}
 	for y := from.Y; y <= to.Y && y < len(rows); y++ {
@@ -1266,7 +1262,7 @@ func (h *Prompt) drawSelectionOverlay(w term.Writer, wrapWidth, visibleHeight in
 			startX = from.X
 		}
 		if y == to.Y {
-			endX = min(to.X+1, len(row))
+			endX = min(to.X, len(row))
 		}
 		for x := startX; x < endX; x++ {
 			pos := visualCursorAtBufferPos(rows,

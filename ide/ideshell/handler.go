@@ -145,6 +145,9 @@ type Handler struct {
 	// the pointer crosses into the input band, so the selection does
 	// not see a missed release.
 	mouseDragInOutput bool
+	// mouseDragInInput is the same latch for a drag that began in the
+	// input band, which the editor owns.
+	mouseDragInInput bool
 
 	// sigHint is the signature-help label currently shown as a
 	// transient hint above the input band; empty when no hint is
@@ -414,15 +417,17 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 }
 
 // editCursorVisual converts the editor's buffer-relative cursor into
-// the wrapped on-screen position within the editor band, accounting
-// for the prompt folded into the rendered content. The input may span
-// multiple buffer lines (<shift-enter> inserts a newline), so each
-// preceding line contributes its own wrapped rows, and only the first
-// line carries the prompt prefix (the hanging indent of editContent).
+// the wrapped on-screen position within the editor band.
 func (h *Handler) editCursorVisual() term.Coordinates {
+	return h.editVisualPos(h.editHandler.CursorAtScroll())
+}
+
+// editVisualPos converts a buffer position into the wrapped on-screen
+// position within the editor band. Only logical line 0 carries the
+// prompt prefix (the hanging indent of editContent).
+func (h *Handler) editVisualPos(pos term.Coordinates) term.Coordinates {
 	width := max(1, h.width)
-	cur := h.editHandler.CursorAtScroll()
-	lastLine := min(cur.Y, h.editBuf.Rows())
+	lastLine := min(pos.Y, h.editBuf.Rows())
 	row := 0
 	for line := range lastLine {
 		cols := h.editBuf.Columns(line)
@@ -431,11 +436,39 @@ func (h *Handler) editCursorVisual() term.Coordinates {
 		}
 		row += cols/width + 1
 	}
-	col := cur.X
-	if cur.Y == 0 {
+	col := pos.X
+	if pos.Y == 0 {
 		col += len(h.prompt)
 	}
 	return term.Coordinates{X: col % width, Y: row + col/width}
+}
+
+// editBufferPosAtVisual is the inverse of editVisualPos, clamping
+// out-of-range positions to the nearest valid buffer cell.
+func (h *Handler) editBufferPosAtVisual(pos term.Coordinates) term.Coordinates {
+	rows := h.editBuf.Rows()
+	if rows == 0 {
+		return term.Coordinates{}
+	}
+	width := max(1, h.width)
+	row := max(0, pos.Y-h.editInnerH())
+	for line := range rows {
+		cols := h.editBuf.Columns(line)
+		lineRows := cols/width + 1
+		if line == 0 {
+			lineRows = (cols+len(h.prompt))/width + 1
+		}
+		if row < lineRows {
+			col := row*width + pos.X
+			if line == 0 {
+				col -= len(h.prompt)
+			}
+			return term.Coordinates{X: min(max(col, 0), cols), Y: line}
+		}
+		row -= lineRows
+	}
+	last := rows - 1
+	return term.Coordinates{X: h.editBuf.Columns(last), Y: last}
 }
 
 // Selection satisfies tui.Handler.
@@ -459,8 +492,7 @@ func (h *Handler) Selection() (string, bool) {
 // runes into the editor buffer so the prompt and overlay stay in sync.
 func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventMouse && !h.searching {
-		_, outH := h.inner.LayoutHeights()
-		return h.handleMouse(ev, outH)
+		return h.handleMouse(ev, h.editInnerH())
 	}
 	if ev.Type != term.EventKey {
 		return h.editHandler.Handle(ev)
@@ -609,11 +641,9 @@ func (h *Handler) cycleHistory(up bool) {
 // output band; rows [0, outH) belong to the output, [outH, height) to
 // the inputbox.
 //
-// A left-button drag that begins in the output band keeps receiving
-// drag and release events until MouseRelease, even if the pointer
-// crosses into the input band. Routing purely by the current MouseY
-// would let the output selection miss its release and leave a stale
-// in-progress drag.
+// Drags are latched to the band they started in until MouseRelease,
+// so a selection never misses its release when the pointer crosses
+// bands.
 func (h *Handler) handleMouse(ev term.Event, outH int) (exit, handled bool) {
 	if h.mouseDragInOutput {
 		if ev.Key == term.MouseRelease {
@@ -621,16 +651,38 @@ func (h *Handler) handleMouse(ev term.Event, outH int) (exit, handled bool) {
 		}
 		return h.mouse.Handle(ev)
 	}
+	if h.mouseDragInInput {
+		if ev.Key == term.MouseRelease {
+			h.mouseDragInInput = false
+		}
+		return h.handleEditMouse(ev)
+	}
 	if ev.MouseY >= outH {
-		// Input band: the editor owns it; clear any active output
-		// selection and forward as-is.
 		h.mouseDelegate.ClearSelection()
-		return h.editHandler.Handle(ev)
+		if ev.Key == term.MouseLeft {
+			h.mouseDragInInput = true
+		}
+		return h.handleEditMouse(ev)
 	}
 	if ev.Key == term.MouseLeft {
 		h.mouseDragInOutput = true
 	}
 	return h.mouse.Handle(ev)
+}
+
+// handleEditMouse translates a band screen position into the editor's
+// window coordinates: invert the band wrap geometry to a buffer
+// position, then subtract the editor's scroll offset
+// (CursorAtScroll − Cursor).
+func (h *Handler) handleEditMouse(ev term.Event) (exit, handled bool) {
+	pos := h.editBufferPosAtVisual(
+		term.Coordinates{X: ev.MouseX, Y: ev.MouseY})
+	if win, _, ok := h.editHandler.Cursor(); ok {
+		scroll := h.editHandler.CursorAtScroll()
+		pos = term.CoordinatesDiff(pos, term.CoordinatesDiff(scroll, win))
+	}
+	ev.MouseX, ev.MouseY = pos.X, pos.Y
+	return h.editHandler.Handle(ev)
 }
 
 // historyDoc mirrors the on-disk shape that repl.Handler persists via
@@ -1360,6 +1412,36 @@ func (h *Handler) drawEdit(w term.Writer) {
 		Height: editorH,
 	}
 	view.Draw(editorW)
+	h.drawEditSelection(editorW)
+}
+
+// drawEditSelection overlays the editor's selection highlight, which
+// the host bypasses by rendering editContent's attribute-less buffer.
+// The bounds are half-open (see command.SelectionBoundsHandler).
+func (h *Handler) drawEditSelection(w term.Writer) {
+	sb, ok := h.editHandler.(command.SelectionBoundsHandler)
+	if !ok {
+		return
+	}
+	from, to, ok := sb.SelectionBounds()
+	if !ok {
+		return
+	}
+	from, to = term.CoordinatesSort(from, to)
+	attr := term.Attributes{Attrs: term.AttrReverse}
+	for y := from.Y; y <= to.Y && y < h.editBuf.Rows(); y++ {
+		startX := 0
+		endX := h.editBuf.Columns(y)
+		if y == from.Y {
+			startX = from.X
+		}
+		if y == to.Y {
+			endX = min(to.X, endX)
+		}
+		for x := startX; x < endX; x++ {
+			w.UnionAttributes(h.editVisualPos(term.Coordinates{X: x, Y: y}), attr)
+		}
+	}
 }
 
 // editContent returns a responsive view over a transient buffer
