@@ -104,6 +104,8 @@ func WithIconsBar(
 	ret.config = cfg
 	ret.iconColumns = 0
 	ret.iconsByID = make(map[string][]iconsBarLineIcon)
+	ret.locationBufByID = make(map[string]locationListBuffers)
+	ret.iconBufByID = make(map[string][]iconsBarLineIcon)
 
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
@@ -167,17 +169,24 @@ type iconsBar struct {
 	delAttr term.Attributes
 	addAttr term.Attributes
 
-	dirty       bool
-	cancelBuild func()
-	closed      bool
-	vhandler    handler.Virtual[Handler]
-	bar         *component.Scroll
-	addLocAttr  term.Attributes
-	delLocAttr  term.Attributes
-	width       int
-	height      int
-	iconColumns int
-	iconsByID   map[string][]iconsBarLineIcon
+	dirty           bool
+	cancelBuild     func()
+	closed          bool
+	vhandler        handler.Virtual[Handler]
+	bar             *component.Scroll
+	addLocAttr      term.Attributes
+	delLocAttr      term.Attributes
+	width           int
+	height          int
+	iconColumns     int
+	iconsByID       map[string][]iconsBarLineIcon
+	locationBufByID map[string]locationListBuffers
+	iconBufByID     map[string][]iconsBarLineIcon
+}
+
+type locationListBuffers struct {
+	published []textapi.Location
+	spare     []textapi.Location
 }
 
 func (b *iconsBar) Selection() (string, bool) {
@@ -331,13 +340,16 @@ func (b *iconsBar) SetLocationList(pri textapi.LocationPriority, ID string, loc 
 }
 
 func (b *iconsBar) setLocationList(pri textapi.LocationPriority, ID string, loc LocationList) {
-	locations := materializeLocationList(loc)
+	buffers := b.locationBufByID[ID]
+	locations := materializeLocationList(buffers.spare, loc)
 	var forward LocationList
-	if locations != nil {
+	if len(locations) > 0 {
 		forward = LocationSlice(locations)
 	}
-	b.storeLocationListIcons(pri, ID, locations)
+	b.storeLocationListIcons(ID, b.locationListIcons(b.iconBufByID[ID], locations, pri, ID))
 	b.Handler.SetLocationList(pri, ID, forward)
+	buffers.published, buffers.spare = locations, buffers.published
+	b.locationBufByID[ID] = buffers
 }
 
 func (b *iconsBar) renderIcons() {
@@ -374,22 +386,21 @@ func (b *iconsBar) mergeLocationIcons() (map[int][]iconsBarLineIcon, int) {
 	return lineIcons, iconColumns
 }
 
-func materializeLocationList(loc LocationList) []textapi.Location {
+func materializeLocationList(dst []textapi.Location, loc LocationList) []textapi.Location {
 	if loc == nil {
 		return nil
 	}
 	scrollStartList(loc)
-	var ret []textapi.Location
+	clear(dst)
+	ret := dst[:0]
 	for curr, ok := loc.Current(); ok; curr, ok = loc.Next() {
 		ret = append(ret, curr)
 	}
 	return ret
 }
 
-func (b *iconsBar) storeLocationListIcons(
-	pri textapi.LocationPriority, ID string, locations []textapi.Location,
-) {
-	icons := b.locationListIcons(locations, pri, ID)
+func (b *iconsBar) storeLocationListIcons(ID string, icons []iconsBarLineIcon) {
+	b.iconBufByID[ID] = icons
 	if len(icons) == 0 {
 		delete(b.iconsByID, ID)
 		return
@@ -398,12 +409,13 @@ func (b *iconsBar) storeLocationListIcons(
 }
 
 func (b *iconsBar) locationListIcons(
-	locations []textapi.Location, pri textapi.LocationPriority, ID string,
+	dst []iconsBarLineIcon, locations []textapi.Location, pri textapi.LocationPriority, ID string,
 ) []iconsBarLineIcon {
 	if locations == nil {
 		return nil
 	}
-	var ret []iconsBarLineIcon
+	clear(dst)
+	ret := dst[:0]
 	for _, curr := range locations {
 		if curr.Icon == "" {
 			continue

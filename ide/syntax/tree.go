@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -149,21 +150,28 @@ type Tree struct {
 	buf         *cell.Buffer
 	cview       cell.View
 
-	ready      bool
-	closed     bool
-	lib        uintptr
-	mu         sync.Mutex
-	cellBytes  cell.ByteCounts
-	content    []byte
-	contentBuf bytes.Buffer
-	parser     *tree_sitter.Parser
-	tree       *tree_sitter.Tree
-	highlights *tree_sitter.Query
-	indents    *tree_sitter.Query
-	folds      *tree_sitter.Query
-	locals     *tree_sitter.Query
-	statesubs  map[chan State]struct{}
-	currState  State
+	ready             bool
+	closed            bool
+	lib               uintptr
+	mu                sync.Mutex
+	cellBytes         cell.ByteCounts
+	content           []byte
+	contentBuf        bytes.Buffer
+	parser            *tree_sitter.Parser
+	tree              *tree_sitter.Tree
+	highlights        *tree_sitter.Query
+	highlightBuf      []textapi.Location
+	highlightSpareBuf []textapi.Location
+	locations         []highlightLocation
+	locationsBuf      []highlightLocation
+	locationsMergeBuf []highlightLocation
+	updatedLocations  []highlightLocation
+	lineStarts        []int
+	indents           *tree_sitter.Query
+	folds             *tree_sitter.Query
+	locals            *tree_sitter.Query
+	statesubs         map[chan State]struct{}
+	currState         State
 
 	onWillEditStart term.Coordinates
 	onWillEditEnd   term.Coordinates
@@ -317,6 +325,13 @@ func (t *Tree) Close() (ret error) {
 	t.cellBytes = nil
 	t.content = nil
 	t.contentBuf = bytes.Buffer{}
+	t.highlightBuf = nil
+	t.highlightSpareBuf = nil
+	t.locations = nil
+	t.locationsBuf = nil
+	t.locationsMergeBuf = nil
+	t.updatedLocations = nil
+	t.lineStarts = nil
 	t.currState.Closed = true
 	return
 }
@@ -691,6 +706,8 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	t.log(log.TraceLevel, "converted edit(start=%v,end=%v,from=%v,to=%v)  "+
 		"into tree sitter edit: %+v", start, end, from, to, edit)
 
+	changedTree := t.tree.Clone()
+	changedTree.Edit(&edit)
 	t.tree.Edit(&edit)
 
 	// get new cells to re-parse
@@ -698,6 +715,7 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	t.parseTree(t.tree, "incremental parse error")
 	t.streamState()
 	if t.tree == nil {
+		changedTree.Close()
 		t.log(log.DebugLevel, "incremental parsing failed: "+
 			"nil tree, re-parse on errors: %t", t.config.ReparseOnErrors)
 		if t.config.ReparseOnErrors {
@@ -709,12 +727,15 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 		t.log(log.DebugLevel, "%s, re-parse on errors: %t",
 			t.currState.ParserError, t.config.ReparseOnErrors)
 		if t.config.ReparseOnErrors {
+			changedTree.Close()
 			t.doReparse()
 			return
 		}
 		// best effort continue
 	}
-	if err := t.highlight(); err != nil {
+	changed := changedTree.ChangedRanges(t.tree)
+	changedTree.Close()
+	if err := t.highlightIncremental(edit, changed, end, to); err != nil {
 		t.log(log.ErrorLevel, "highlight: %v", err)
 	}
 }
@@ -731,13 +752,313 @@ func (t *Tree) highlight() error {
 	if t.highlights == nil {
 		return nil
 	}
+	t.lineStarts = lineStarts(t.lineStarts, t.content)
 	highlights := t.getHighlights(t.cellBytes, t.content)
-	ll := textapi.LocationSlice(highlights)
-	t.loc.SetLocationList(ll)
+	clear(t.locations)
+	t.locations = t.locations[:0]
+	var ok bool
+	t.locations, ok = highlightsToByteLocations(
+		t.locations, highlights, t.cellBytes, t.lineStarts)
+	if !ok {
+		return errors.New("convert full highlight locations to byte ranges")
+	}
+	t.publishHighlights(highlights)
 
 	t.log(log.TraceLevel, "set %d highlights", len(highlights))
 
 	return nil
+}
+
+type highlightLocation struct {
+	location textapi.Location
+	start    uint
+	end      uint
+}
+
+type highlightRange struct {
+	from  term.Coordinates
+	to    term.Coordinates
+	start uint
+	end   uint
+}
+
+func (t *Tree) highlightIncremental(
+	edit tree_sitter.InputEdit, changed []tree_sitter.Range,
+	oldEnd, newEnd term.Coordinates,
+) error {
+	if t.highlights == nil {
+		return nil
+	}
+	if t.tree.RootNode().HasError() {
+		return t.highlight()
+	}
+	t.lineStarts = lineStarts(t.lineStarts, t.content)
+
+	window, ok := highlightWindow(edit, changed, t.content)
+	if !ok || len(t.locations) == 0 || highlightWindowTooLarge(window, len(t.content)) {
+		return t.highlight()
+	}
+	windowRange, err := highlightRangeFromBytes(window, t.cellBytes, t.lineStarts)
+	if err != nil {
+		return t.highlight()
+	}
+
+	updated, ok := t.expandHighlightWindow(&windowRange)
+	if !ok || !highlightLocationsOrdered(t.locations) || !highlightLocationsOrdered(updated) {
+		return t.highlight()
+	}
+
+	clear(t.locationsBuf)
+	t.locationsBuf = t.locationsBuf[:0]
+	for _, location := range t.locations {
+		location, keep := shiftHighlightLocation(location, edit, oldEnd, newEnd)
+		if keep && !byteRangesIntersect(location.byteRange(), windowRange.byteRange()) {
+			t.locationsBuf = append(t.locationsBuf, location)
+		}
+	}
+
+	clear(t.locationsMergeBuf)
+	t.locationsMergeBuf = t.locationsMergeBuf[:0]
+	if !mergeHighlightLocations(&t.locationsMergeBuf, t.locationsBuf, updated) {
+		return t.highlight()
+	}
+
+	t.locations, t.locationsMergeBuf = t.locationsMergeBuf, t.locations
+	clear(t.highlightBuf)
+	t.highlightBuf = t.highlightBuf[:0]
+	for _, location := range t.locations {
+		t.highlightBuf = append(t.highlightBuf, location.location)
+	}
+	t.publishHighlights(t.highlightBuf)
+	t.log(log.TraceLevel, "incrementally set %d highlights", len(t.highlightBuf))
+	return nil
+}
+
+func (t *Tree) publishHighlights(highlights []textapi.Location) {
+	t.loc.SetLocationList(textapi.LocationSlice(highlights))
+	t.highlightBuf, t.highlightSpareBuf = t.highlightSpareBuf, highlights
+}
+
+func (t *Tree) expandHighlightWindow(window *highlightRange) ([]highlightLocation, bool) {
+	for range 3 {
+		updated, ok := t.getHighlightsInRange(window.byteRange())
+		if !ok {
+			return nil, false
+		}
+		if !expandHighlightRange(window, updated) {
+			return updated, true
+		}
+		if highlightWindowTooLarge(window.byteRange(), len(t.content)) {
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+func (t *Tree) getHighlightsInRange(byteRange tree_sitter.Range) ([]highlightLocation, bool) {
+	clear(t.highlightBuf)
+	t.highlightBuf = t.highlightBuf[:0]
+	t.highlightBuf = appendHighlights(t.highlightBuf, t.cellBytes, t.content, t.tree,
+		t.highlights, t.config.CaptureNamesAttributes, &byteRange)
+	clear(t.updatedLocations)
+	t.updatedLocations = t.updatedLocations[:0]
+	var ok bool
+	t.updatedLocations, ok = highlightsToByteLocations(
+		t.updatedLocations, t.highlightBuf, t.cellBytes, t.lineStarts)
+	if !ok {
+		return nil, false
+	}
+	return t.updatedLocations, true
+}
+
+func highlightWindow(edit tree_sitter.InputEdit, changed []tree_sitter.Range, content []byte) (
+	tree_sitter.Range, bool,
+) {
+	contentLen := len(content)
+	if edit.StartByte > uint(contentLen) || edit.NewEndByte > uint(contentLen) {
+		return tree_sitter.Range{}, false
+	}
+	window := tree_sitter.Range{StartByte: edit.StartByte, EndByte: edit.NewEndByte}
+	if window.StartByte == window.EndByte {
+		if window.EndByte < uint(contentLen) {
+			window.EndByte++
+		} else if window.StartByte > 0 {
+			window.StartByte--
+		}
+	}
+	for _, changedRange := range changed {
+		if changedRange.StartByte > uint(contentLen) || changedRange.EndByte > uint(contentLen) {
+			return tree_sitter.Range{}, false
+		}
+		if changedRange.StartByte < window.StartByte {
+			window.StartByte = changedRange.StartByte
+		}
+		if changedRange.EndByte > window.EndByte {
+			window.EndByte = changedRange.EndByte
+		}
+	}
+	window.StartByte = uint(bytes.LastIndexByte(content[:window.StartByte], '\n') + 1)
+	if window.EndByte < uint(contentLen) {
+		if nextLine := bytes.IndexByte(content[window.EndByte:], '\n'); nextLine >= 0 {
+			window.EndByte += uint(nextLine + 1)
+		} else {
+			window.EndByte = uint(contentLen)
+		}
+	}
+	return window, window.StartByte <= window.EndByte
+}
+
+func highlightWindowTooLarge(window tree_sitter.Range, contentLen int) bool {
+	const largestIncrementalFraction = 4
+	return contentLen == 0 || int(window.EndByte-window.StartByte) > contentLen/largestIncrementalFraction
+}
+
+func highlightsToByteLocations(
+	dst []highlightLocation, locations []textapi.Location, counts cell.ByteCounts, starts []int,
+) ([]highlightLocation, bool) {
+	for _, location := range locations {
+		start, startOK := coordinatesToSourceByteOffset(counts, starts, location.From)
+		end, endOK := coordinatesToSourceByteOffset(counts, starts, location.To)
+		if !startOK || !endOK || start > end {
+			return nil, false
+		}
+		dst = append(dst, highlightLocation{
+			location: location,
+			start:    uint(start),
+			end:      uint(end),
+		})
+	}
+	return dst, true
+}
+
+func (l highlightLocation) byteRange() tree_sitter.Range {
+	return tree_sitter.Range{StartByte: l.start, EndByte: l.end}
+}
+
+func (r highlightRange) byteRange() tree_sitter.Range {
+	return tree_sitter.Range{StartByte: r.start, EndByte: r.end}
+}
+
+func shiftHighlightLocation(
+	location highlightLocation, edit tree_sitter.InputEdit,
+	oldEnd, newEnd term.Coordinates,
+) (highlightLocation, bool) {
+	if location.end <= edit.StartByte {
+		return location, true
+	}
+	if location.start < edit.OldEndByte {
+		return highlightLocation{}, false
+	}
+	delta := int64(edit.NewEndByte) - int64(edit.OldEndByte)
+	location.start = uint(int64(location.start) + delta)
+	location.end = uint(int64(location.end) + delta)
+	location.location.From = shiftHighlightCoordinates(location.location.From, oldEnd, newEnd)
+	location.location.To = shiftHighlightCoordinates(location.location.To, oldEnd, newEnd)
+	return location, true
+}
+
+func shiftHighlightCoordinates(
+	position, oldEnd, newEnd term.Coordinates,
+) term.Coordinates {
+	if position.Y == oldEnd.Y {
+		position.X += newEnd.X - oldEnd.X
+		position.Y = newEnd.Y
+		return position
+	}
+	position.Y += newEnd.Y - oldEnd.Y
+	return position
+}
+
+func expandHighlightRange(window *highlightRange, locations []highlightLocation) bool {
+	expanded := false
+	for _, location := range locations {
+		if location.start < window.start {
+			window.start = location.start
+			window.from = location.location.From
+			expanded = true
+		}
+		if location.end > window.end {
+			window.end = location.end
+			window.to = location.location.To
+			expanded = true
+		}
+	}
+	return expanded
+}
+
+func highlightRangeFromBytes(
+	window tree_sitter.Range, counts cell.ByteCounts, starts []int,
+) (highlightRange, error) {
+	from, err := sourceByteOffsetToCoordinates(counts, starts, window.StartByte)
+	if err != nil {
+		return highlightRange{}, err
+	}
+	to, err := sourceByteOffsetToCoordinates(counts, starts, window.EndByte)
+	if err != nil {
+		return highlightRange{}, err
+	}
+	return highlightRange{from: from, to: to, start: window.StartByte, end: window.EndByte}, nil
+}
+
+func coordinatesToSourceByteOffset(
+	counts cell.ByteCounts, starts []int, position term.Coordinates,
+) (uint, bool) {
+	if position.Y < 0 || position.Y >= len(starts) || position.X < 0 {
+		return 0, false
+	}
+	if position.Y >= len(counts) {
+		return 0, false
+	}
+	lineOffset, ok := cell.ByteCounts{counts[position.Y]}.CoordinatesToByteOffset(
+		term.Coordinates{X: position.X})
+	if !ok {
+		return 0, false
+	}
+	return uint(starts[position.Y] + lineOffset), true
+}
+
+func sourceByteOffsetToCoordinates(
+	counts cell.ByteCounts, starts []int, offset uint,
+) (term.Coordinates, error) {
+	if len(starts) == 0 {
+		return term.Coordinates{}, errors.New("no source lines")
+	}
+	row, found := slices.BinarySearch(starts, int(offset))
+	if !found {
+		row--
+	}
+	if row < 0 || row >= len(counts) {
+		return term.Coordinates{}, fmt.Errorf("byte offset %d exceeds source length", offset)
+	}
+	position, ok := cell.ByteCounts{counts[row]}.ByteOffsetToCoordinates(int(offset) - starts[row])
+	if !ok {
+		return term.Coordinates{}, fmt.Errorf("convert byte offset %d on source row %d", offset, row)
+	}
+	position.Y = row
+	return position, nil
+}
+
+func mergeHighlightLocations(dst *[]highlightLocation, previous, updated []highlightLocation) bool {
+	i, j := 0, 0
+	for i < len(previous) || j < len(updated) {
+		if j == len(updated) || (i < len(previous) && previous[i].start <= updated[j].start) {
+			*dst = append(*dst, previous[i])
+			i++
+			continue
+		}
+		*dst = append(*dst, updated[j])
+		j++
+	}
+	return true
+}
+
+func highlightLocationsOrdered(locations []highlightLocation) bool {
+	for i := 1; i < len(locations); i++ {
+		if locations[i-1].start > locations[i].start {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *Tree) query(queryFile string, captureNames ...string) (iterator.Iterator[Match], error) {
@@ -765,13 +1086,24 @@ func (t *Tree) query(queryFile string, captureNames ...string) (iterator.Iterato
 }
 
 func (t *Tree) getHighlights(counts cell.ByteCounts, content []byte) []textapi.Location {
-	return getHighlights(counts, content, t.tree,
-		t.highlights, t.config.CaptureNamesAttributes)
+	clear(t.highlightBuf)
+	t.highlightBuf = t.highlightBuf[:0]
+	t.highlightBuf = appendHighlights(t.highlightBuf, counts, content, t.tree,
+		t.highlights, t.config.CaptureNamesAttributes, nil)
+	return t.highlightBuf
 }
 
 func getHighlights(
 	counts cell.ByteCounts, content []byte, tree *tree_sitter.Tree, highlights *tree_sitter.Query,
 	captureNamesAttributes map[string]term.Attributes,
+) []textapi.Location {
+	return appendHighlights(nil, counts, content, tree, highlights, captureNamesAttributes, nil)
+}
+
+func appendHighlights(
+	locations []textapi.Location,
+	counts cell.ByteCounts, content []byte, tree *tree_sitter.Tree, highlights *tree_sitter.Query,
+	captureNamesAttributes map[string]term.Attributes, byteRange *tree_sitter.Range,
 ) []textapi.Location {
 	root := tree.RootNode()
 
@@ -780,7 +1112,9 @@ func getHighlights(
 
 	captureNames := highlights.CaptureNames()
 	matches := cur.Matches(highlights, root, content)
-	var locations []textapi.Location
+	if byteRange != nil {
+		matches.SetByteRange(byteRange.StartByte, byteRange.EndByte)
+	}
 	for {
 		m, ok := matches.Next()
 		if !ok {
@@ -807,6 +1141,16 @@ func getHighlights(
 		}
 	}
 	return locations
+}
+
+func byteRangesIntersect(a, b tree_sitter.Range) bool {
+	if a.StartByte == a.EndByte {
+		return a.StartByte >= b.StartByte && a.StartByte < b.EndByte
+	}
+	if b.StartByte == b.EndByte {
+		return b.StartByte >= a.StartByte && b.StartByte < a.EndByte
+	}
+	return a.StartByte < b.EndByte && b.StartByte < a.EndByte
 }
 
 func (t *Tree) streamState() {

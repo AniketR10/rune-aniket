@@ -61,7 +61,9 @@ type PkgManager interface {
 	LibDir(ctx context.Context, pkgID string) (iterator.Iterator[string], error)
 }
 
-// LocationSetter abstracts the ability to visualize locations.
+// LocationSetter abstracts the ability to visualize locations. Implementations
+// must replace a list during SetLocationList and must not retain its backing
+// storage after a subsequent call returns.
 type LocationSetter interface {
 	SetLocationList(textapi.LocationList)
 }

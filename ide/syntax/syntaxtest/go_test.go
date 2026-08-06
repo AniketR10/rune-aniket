@@ -25,10 +25,12 @@ package syntaxtest
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -37,6 +39,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -1785,6 +1788,173 @@ func TestTreeIncrementalParseReleasesPreviousTree(t *testing.T) {
 	cleanup()
 }
 
+func TestTreeIncrementalHighlightsMatchFullReparse(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		edits   []bufferEdit
+	}{
+		{
+			name: "typing and newlines",
+			content: "package main\n\nfunc main() {\n\tvalue := 1\n\tprintln(value)\n}\n" +
+				strings.Repeat("// padding\n", 20),
+			edits: []bufferEdit{
+				{start: term.Coordinates{Y: 3, X: 6}, content: "Name"},
+				{start: term.Coordinates{Y: 4}, content: "\t/* prefix */\n"},
+				{start: term.Coordinates{Y: 5, X: 9}, end: term.Coordinates{Y: 5, X: 14}, content: `"value"`},
+			},
+		},
+		{
+			name:    "comment string and brace boundaries",
+			content: "package main\n\nfunc main() {\n\tprintln(\"text\")\n\tvalue := 2\n}\n",
+			edits: []bufferEdit{
+				{start: term.Coordinates{Y: 3, X: 1}, content: "/*"},
+				{start: term.Coordinates{Y: 4, X: 11}, content: "*/"},
+				{start: term.Coordinates{Y: 5}, end: term.Coordinates{Y: 5, X: 1}},
+				{start: term.Coordinates{Y: 5}, content: "}"},
+			},
+		},
+		{
+			name: "UTF-8 and multiline replacements",
+			content: "package main\n// alpha\n\nfunc main() {\n\tprintln(\"界\")\n}\n" +
+				strings.Repeat("// padding\n", 20),
+			edits: []bufferEdit{
+				{start: term.Coordinates{Y: 1, X: 3}, end: term.Coordinates{Y: 1, X: 8}, content: "世界"},
+				{start: term.Coordinates{Y: 1, X: 3}, end: term.Coordinates{Y: 1, X: 5}, content: "first\n// second"},
+				{start: term.Coordinates{Y: 1, X: 8}, end: term.Coordinates{Y: 2, X: 3}, content: " "},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			buffer, handler, tree, _, cleanup := newTreeWithPkgManagerContentHandler(
+				t, newInstalledPkgManager(t), test.content)
+			defer func() {
+				require.NoError(t, tree.Close())
+				cleanup()
+			}()
+
+			for i, edit := range test.edits {
+				end := edit.end
+				if end == (term.Coordinates{}) {
+					end = edit.start
+				}
+				buffer.Edit(context.Background(), edit.start, end, edit.content)
+				assertHighlightsEqualFullReparse(t, handler, tree, i)
+			}
+		})
+	}
+}
+
+func TestTreeIncrementalHighlightsMatchFullReparseRandomEdits(t *testing.T) {
+	const seed int64 = 317
+	rng := rand.New(rand.NewSource(seed))
+	buffer, handler, tree, _, cleanup := newTreeWithPkgManagerContentHandler(
+		t, newInstalledPkgManager(t), benchmarkGoContent(120))
+	defer func() {
+		require.NoError(t, tree.Close())
+		cleanup()
+	}()
+
+	insertions := []string{"x", "0", `"s"`, "// note", "/*", "*/", "\n\t", "{"}
+	for i := range 80 {
+		row := rng.Intn(buffer.Rows())
+		columns := buffer.Columns(row)
+		start := term.Coordinates{Y: row, X: rng.Intn(columns + 1)}
+		end := start
+		content := insertions[rng.Intn(len(insertions))]
+		if columns > start.X && rng.Intn(3) == 0 {
+			end.X += 1 + rng.Intn(columns-start.X)
+			if rng.Intn(2) == 0 {
+				content = ""
+			}
+		}
+		buffer.Edit(context.Background(), start, end, content)
+		assertHighlightsEqualFullReparse(t, handler, tree, i)
+	}
+}
+
+type bufferEdit struct {
+	start   term.Coordinates
+	end     term.Coordinates
+	content string
+}
+
+func assertHighlightsEqualFullReparse(
+	t *testing.T, handler text.Handler, tree *syntax.Tree, edit int,
+) {
+	t.Helper()
+	incremental := syntaxLocations(handler.LocationLists())
+	full := forceFullHighlights(t, handler, tree)
+	if len(full) != len(incremental) {
+		t.Errorf("highlight count mismatch after edit %d: full=%d incremental=%d; first diff: %s",
+			edit, len(full), len(incremental), firstHighlightDiff(full, incremental))
+		return
+	}
+	if diff := firstHighlightDiff(full, incremental); diff != "" {
+		t.Errorf("highlight mismatch after edit %d: %s", edit, diff)
+	}
+}
+
+func firstHighlightDiff(full, incremental []textapi.Location) string {
+	for i := 0; i < min(len(full), len(incremental)); i++ {
+		if full[i] != incremental[i] {
+			return fmt.Sprintf("index=%d full=%+v incremental=%+v", i, full[i], incremental[i])
+		}
+	}
+	if len(full) > len(incremental) {
+		return fmt.Sprintf("index=%d full=%+v incremental=<missing>",
+			len(incremental), full[len(incremental)])
+	}
+	if len(incremental) > len(full) {
+		return fmt.Sprintf("index=%d full=<missing> incremental=%+v",
+			len(full), incremental[len(full)])
+	}
+	return ""
+}
+
+func forceFullHighlights(t *testing.T, handler text.Handler, tree *syntax.Tree) []textapi.Location {
+	t.Helper()
+	ch, err := tree.Flush(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, <-ch)
+	return syntaxLocations(handler.LocationLists())
+}
+
+func syntaxLocations(lists []text.LocationSet) []textapi.Location {
+	for _, list := range lists {
+		if list.ID == "syntax" {
+			return append([]textapi.Location(nil), list.Locations...)
+		}
+	}
+	return nil
+}
+
+func BenchmarkKeystrokeInsert(b *testing.B) {
+	content := benchmarkGoContent(3_000)
+	pkgs := newInstalledPkgManager(b)
+	buffer, _, tree, cleanup := newTreeWithPkgManagerContent(b, pkgs, content)
+	defer func() {
+		require.NoError(b, tree.Close())
+		cleanup()
+	}()
+
+	pos := term.Coordinates{Y: 1, X: len("// benchmark")}
+	inserted := false
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if inserted {
+			buffer.Edit(context.Background(), pos,
+				term.Coordinates{Y: pos.Y, X: pos.X + 1}, "")
+		} else {
+			buffer.InsertContext(context.Background(), pos, 'x')
+		}
+		inserted = !inserted
+	}
+}
+
 func TestTreeQueryIntegration(t *testing.T) {
 	t.Run("if locals.scm file is not found and tree is ready Query returns error", func(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
@@ -1981,7 +2151,7 @@ func TestTreeCommentCoverageIntegration(t *testing.T) {
 	})
 }
 
-func newInstalledPkgManager(t *testing.T) *mockPkgManager {
+func newInstalledPkgManager(t testing.TB) *mockPkgManager {
 	return newInstalledPkgManagerWithFiles(t,
 		"go/tree-sitter.so",
 		"go/highlights.scm",
@@ -1991,7 +2161,7 @@ func newInstalledPkgManager(t *testing.T) *mockPkgManager {
 	)
 }
 
-func newInstalledPkgManagerWithFiles(t *testing.T, files ...string) *mockPkgManager {
+func newInstalledPkgManagerWithFiles(t testing.TB, files ...string) *mockPkgManager {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	var fullPathFiles []string
@@ -2021,7 +2191,7 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 
 var i atomic.Int32
 
-func newEditFile(t *testing.T, mu sync.Locker, comp *text.Component, content string) (
+func newEditFile(t testing.TB, mu sync.Locker, comp *text.Component, content string) (
 	cell.Editor, text.Handler,
 ) {
 	i := i.Add(1)
@@ -2029,7 +2199,7 @@ func newEditFile(t *testing.T, mu sync.Locker, comp *text.Component, content str
 }
 
 func newEditFileName(
-	t *testing.T, mu sync.Locker, comp *text.Component,
+	t testing.TB, mu sync.Locker, comp *text.Component,
 	content string, filename string,
 ) (
 	cell.Editor, text.Handler,
@@ -2074,7 +2244,7 @@ func newWriter(width, height int) *term.StringWriter {
 }
 
 func newTestCase(
-	t *testing.T,
+	t testing.TB,
 	pkgs syntax.PkgManager, width, height int,
 	interrupt func(context.Context) error,
 ) (*sync.Mutex, *text.Component, func()) {
@@ -2149,21 +2319,28 @@ func (n nopNotifications) UpdateNotificationProgress(
 	return nil
 }
 
-func newTree(t *testing.T) (*syntax.Tree, func()) {
+func newTree(t testing.TB) (*syntax.Tree, func()) {
 	pkgs := newInstalledPkgManager(t)
 	_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 	return tree, cleanup
 }
 
-func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
+func newTreeWithPkgManager(t testing.TB, pkgs syntax.PkgManager) (
 	*cell.Buffer, *text.Component, *syntax.Tree, func(),
 ) {
 	return newTreeWithPkgManagerContent(t, pkgs, fileContent)
 }
 
 func newTreeWithPkgManagerContent(
-	t *testing.T, pkgs syntax.PkgManager, content string,
+	t testing.TB, pkgs syntax.PkgManager, content string,
 ) (*cell.Buffer, *text.Component, *syntax.Tree, func()) {
+	buffer, _, tree, comp, cleanup := newTreeWithPkgManagerContentHandler(t, pkgs, content)
+	return buffer, comp, tree, cleanup
+}
+
+func newTreeWithPkgManagerContentHandler(
+	t testing.TB, pkgs syntax.PkgManager, content string,
+) (*cell.Buffer, text.Handler, *syntax.Tree, *text.Component, func()) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
@@ -2183,7 +2360,18 @@ func newTreeWithPkgManagerContent(
 	tree, ok := cref.Buffer().View().(*syntax.Tree)
 	require.True(t, ok)
 
-	return cref.Buffer(), comp, tree, cleanup
+	return cref.Buffer(), h, tree, comp, cleanup
+}
+
+func benchmarkGoContent(lines int) string {
+	var content strings.Builder
+	content.Grow(lines * 48)
+	content.WriteString("package main\n// benchmark\n\nfunc main() {\n")
+	for i := range lines {
+		fmt.Fprintf(&content, "\tvalue%d := %d\n", i, i)
+	}
+	content.WriteString("}\n")
+	return content.String()
 }
 
 const fileContent = `package main

@@ -156,6 +156,35 @@ func TestIconsBarDrawsAllIconsWhenWrappedHandlerConsumesList(t *testing.T) {
 	assert.Equal(t, 3, h.consumed)
 }
 
+func TestIconsBarReusesMaterializedLocationBufferWithoutAliasingForwardedList(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString("a\nb\nc")
+	scroll := component.NewScroll(buf)
+	h := &recordingLocationListsHandler{testHandler: newTestHandler(scroll)}
+
+	bar := text.WithIconsBar(vctrl.NopService(), false, h, buf, scroll, text.IconsBarConfig{
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	})
+
+	bar.SetLocationList(textapi.LocationPriorityInfo, "syntax", text.LocationSlice([]textapi.Location{{
+		From: term.Coordinates{Y: 0}, To: term.Coordinates{Y: 1}, Icon: "1",
+	}}))
+	bar.SetLocationList(textapi.LocationPriorityInfo, "syntax", text.LocationSlice([]textapi.Location{{
+		From: term.Coordinates{Y: 1}, To: term.Coordinates{Y: 2}, Icon: "2",
+	}}))
+
+	require.Len(t, h.replaced, 1)
+	assert.Equal(t, []textapi.Location{{
+		From: term.Coordinates{Y: 0}, To: term.Coordinates{Y: 1}, Icon: "1",
+	}}, h.replaced[0])
+	assert.Equal(t, []textapi.Location{{
+		From: term.Coordinates{Y: 1}, To: term.Coordinates{Y: 2}, Icon: "2",
+	}}, materializeLocations(h.current))
+}
+
 func TestIconsBarRendersOneIconForMultilineLocation(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString("a\nb\nc\nd")
@@ -319,6 +348,29 @@ func (h *consumeLocationListsHandler) SetLocationList(
 
 func (*consumeLocationListsHandler) LocationLists() []text.LocationSet {
 	panic("icons bar should not read back LocationLists")
+}
+
+type recordingLocationListsHandler struct {
+	*testHandler
+	current  text.LocationList
+	replaced [][]textapi.Location
+}
+
+func (h *recordingLocationListsHandler) SetLocationList(
+	_ textapi.LocationPriority, _ string, loc text.LocationList,
+) {
+	if h.current != nil {
+		h.replaced = append(h.replaced, materializeLocations(h.current))
+	}
+	h.current = loc
+}
+
+func materializeLocations(loc text.LocationList) []textapi.Location {
+	var locations []textapi.Location
+	for curr, ok := loc.Current(); ok; curr, ok = loc.Next() {
+		locations = append(locations, curr)
+	}
+	return locations
 }
 
 type noDiffDiffer struct{}
