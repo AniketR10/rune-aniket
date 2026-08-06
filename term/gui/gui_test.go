@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestUpdate(t *testing.T) {
@@ -412,6 +413,27 @@ func TestSetFontUnknownFamilyDoesNotPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
 		gui.resize(1200, 900, gui.fontManager.DeviceScale())
 	})
+}
+
+func TestCloseRestoresColorValues(t *testing.T) {
+	original := tcell.GetColorValues()
+	t.Cleanup(func() { tcell.SetColorValues(original) })
+
+	theme := Theme{
+		Foreground: tcell.ColorWhite,
+		Background: tcell.ColorBlack,
+		Cursor:     tcell.ColorRed,
+		Colors: map[tcell.Color]tcell.Color{
+			tcell.ColorRed: tcell.NewHexColor(0x123456),
+		},
+	}
+	g, err := New(&mockHandler{}, WithColorThemes("test", map[string]Theme{"test": theme}))
+	require.NoError(t, err)
+	require.NotEqual(t, original[tcell.ColorRed], tcell.GetColorValues()[tcell.ColorRed])
+
+	require.NoError(t, g.Close())
+	assert.Equal(t, original, tcell.GetColorValues())
+	require.NoError(t, g.Close(), "Close must be idempotent")
 }
 
 // stubWindowClosing installs a processWindowClosed that reports one

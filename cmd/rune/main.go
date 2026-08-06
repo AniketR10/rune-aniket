@@ -760,6 +760,7 @@ func runGUI(
 		log.Errorf("gui: %v", err)
 		return 1
 	}
+	defer func() { _ = g.Close() }()
 	defer func() { _ = root.Close() }()
 	root.attachGUI(g, transparentWindow)
 

@@ -27,6 +27,8 @@ import (
 	"crypto/sha256"
 	"testing"
 	"time"
+
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // differentialFrames is the number of scripted frames each scenario is
@@ -35,12 +37,37 @@ import (
 // (cursor moves, scroll direction reversals, theme cycling).
 const differentialFrames = 48
 
+func TestGUIBenchSettleWaitsForInterruptRenders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("GUI bench session is not short-mode friendly")
+	}
+	s := newGUIBenchSession(t, guiBenchConfig{
+		pixelsW:           benchHDWidth,
+		pixelsH:           benchHDHeight,
+		disableAnimations: true,
+	})
+	defer s.close()
+
+	const interruptFrames = 40
+	processed := 0
+	var schedule func()
+	schedule = func() {
+		processed++
+		if processed < interruptFrames {
+			s.publish(term.Event{Type: term.EventInterrupt, UserFunc: schedule})
+		}
+	}
+	s.publish(term.Event{Type: term.EventInterrupt, UserFunc: schedule})
+
+	s.settle(60 * time.Second)
+	if processed != interruptFrames {
+		t.Fatalf("settle returned after %d interrupt renders, want %d",
+			processed, interruptFrames)
+	}
+}
+
 // collectFrameHashes builds a session for cfg, settles it, runs the
-// scenario's setup, then drives differentialFrames scripted frames,
-// returning the SHA-256 of every rendered frame in order. Both the
-// reference (full-repaint) and optimized (damage-tracked) runs go
-// through this identical script, so any per-frame hash divergence is a
-// damage-tracking correctness bug rather than a scripting difference.
+// scenario's setup, then drives differentialFrames scripted frames.
 func collectFrameHashes(
 	t *testing.T, sc guiBenchScenario, cfg guiBenchConfig,
 ) [][sha256.Size]byte {
@@ -51,12 +78,7 @@ func collectFrameHashes(
 	s := newGUIBenchSession(t, cfg)
 	defer s.close()
 	s.settle(60 * time.Second)
-	if sc.openFile != "" {
-		s.openWorkspaceFile(sc.openFile)
-	}
-	if sc.setup != nil {
-		sc.setup(s)
-	}
+	s.prepareScenario(sc)
 	hashes := make([][sha256.Size]byte, 0, differentialFrames)
 	for i := range differentialFrames {
 		if sc.step != nil {
@@ -107,9 +129,10 @@ func TestGUIDamageDifferential(t *testing.T) {
 			}
 			t.Run(sc.name+"/"+variant, func(t *testing.T) {
 				base := guiBenchConfig{
-					pixelsW:     benchHDWidth,
-					pixelsH:     benchHDHeight,
-					transparent: transparent,
+					pixelsW:           benchHDWidth,
+					pixelsH:           benchHDHeight,
+					transparent:       transparent,
+					disableAnimations: true,
 				}
 
 				ref := base

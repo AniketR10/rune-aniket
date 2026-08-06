@@ -115,6 +115,7 @@ type GUI struct {
 	// defaults to a no-op, leaving ebiten's default behavior in place.
 	processWindowClosed func() []term.Event
 	closingHandled      bool
+	closeOnce           sync.Once
 }
 
 // New allocates storage for a new GUI and initializes it with the given
@@ -176,7 +177,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 
 // Run starts the main loop and runs the graphical TUI with the specified options.
 func (g *GUI) Run(title string) error {
-	defer g.cancelCtx()
+	defer func() { _ = g.Close() }()
 
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
@@ -209,6 +210,16 @@ func (g *GUI) Run(title string) error {
 
 	gameOpts := g.buildRunGameOptions()
 	return ebiten.RunGameWithOptions(g, &gameOpts)
+}
+
+// Close releases GUI-owned resources and restores process-global color state.
+// It is safe to call more than once.
+func (g *GUI) Close() error {
+	g.closeOnce.Do(func() {
+		g.cancelCtx()
+		tcell.SetColorValues(g.originalColorValues)
+	})
+	return nil
 }
 
 // x11WMClass is the ICCCM WM_CLASS instance/class reported by the window.

@@ -24,7 +24,9 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,10 +43,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/pkgtrust"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term/gui"
+	"unstable.build/go-tui/text"
 )
 
 // guiBenchConfig parametrizes a production GUI benchmark session.
@@ -71,6 +77,9 @@ type guiBenchConfig struct {
 	// runs each scenario once with it false and once true and asserts
 	// identical frame hashes.
 	forceFullRepaint bool
+	// disableAnimations removes wall-clock-driven shaders from correctness
+	// runs; performance benchmarks retain the production animation config.
+	disableAnimations bool
 }
 
 // guiBenchSession wires the full production GUI stack: a real
@@ -90,6 +99,9 @@ type guiBenchSession struct {
 }
 
 func (s *guiBenchSession) close() {
+	if s.g != nil {
+		_ = s.g.Close()
+	}
 	_ = s.root.Close()
 	for i := len(s.cleanups) - 1; i >= 0; i-- {
 		s.cleanups[i]()
@@ -100,12 +112,20 @@ func (s *guiBenchSession) close() {
 // builtin font is selected by omitting gui.font_family, the font size
 // is pinned so grids are identical across machines, and the upgrade
 // auto-check is disabled to keep the session off the network.
-func guiBenchConfigYAML(transparent bool) string {
+func guiBenchConfigYAML(transparent, disableAnimations bool) string {
 	cfg := `editor:
   mode: modal
 upgrade:
   auto_check_enabled: false
-gui:
+`
+	if disableAnimations {
+		cfg += `animations:
+  loading_workspace: false
+  open_workspace: false
+  command_prompt: false
+`
+	}
+	cfg += `gui:
   font_size: 15
 `
 	if transparent {
@@ -194,7 +214,7 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 
 	configPath := filepath.Join(s.dataDir, "config.yaml")
 	if err := os.WriteFile(configPath,
-		[]byte(guiBenchConfigYAML(cfg.transparent)), 0o644); err != nil {
+		[]byte(guiBenchConfigYAML(cfg.transparent, cfg.disableAnimations)), 0o644); err != nil {
 		tb.Fatalf("write config: %v", err)
 	}
 
@@ -289,13 +309,15 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 // frame runs one production frame: Update dispatches queued events and
 // redraws the handler, Draw renders, and benchdraw flushes the
 // enqueued GPU commands synchronously.
-func (s *guiBenchSession) frame() {
+func (s *guiBenchSession) frame() bool {
 	if err := s.g.Update(); err != nil {
 		s.tb.Fatalf("gui update: %v", err)
 	}
+	rendered := s.g.NeedsRender()
 	benchdraw.BeginFrame(s.tb)
 	s.g.Draw(s.screen)
 	benchdraw.EndFrame(s.tb)
+	return rendered
 }
 
 // frameHash runs one production frame and returns the SHA-256 of the
@@ -379,8 +401,7 @@ func (s *guiBenchSession) settle(timeout time.Duration) {
 			default:
 			}
 		}
-		rendered := s.g.NeedsRender()
-		s.frame()
+		rendered := s.frame()
 		if workspacesReady && !rendered {
 			quiet++
 			if quiet >= quietFrames {
@@ -390,6 +411,108 @@ func (s *guiBenchSession) settle(timeout time.Duration) {
 			quiet = 0
 		}
 		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+func (s *guiBenchSession) focusedSyntaxTree() (*syntax.Tree, error) {
+	win, err := s.root.browser().Focus()
+	if err != nil {
+		return nil, fmt.Errorf("focused window: %w", err)
+	}
+	content, err := win.Content()
+	if err != nil {
+		return nil, fmt.Errorf("focused window content: %w", err)
+	}
+	tab, ok := content.(*browser.Tab)
+	if !ok {
+		return nil, fmt.Errorf("focused content is %T, want *browser.Tab", content)
+	}
+	h, ok := tab.Handler().(text.Handler)
+	if !ok {
+		return nil, fmt.Errorf("focused tab handler is %T, want text.Handler", tab.Handler())
+	}
+	tree, ok := h.CellView().(*syntax.Tree)
+	if !ok {
+		return nil, fmt.Errorf("focused editor view is %T, want *syntax.Tree", h.CellView())
+	}
+	return tree, nil
+}
+
+func (s *guiBenchSession) waitSyntaxReady(expectedLang string, timeout time.Duration) {
+	s.tb.Helper()
+	deadline := time.Now().Add(timeout)
+	var tree *syntax.Tree
+	var lastErr error
+	for time.Now().Before(deadline) {
+		tree, lastErr = s.focusedSyntaxTree()
+		if lastErr == nil {
+			break
+		}
+		s.frame()
+		time.Sleep(time.Millisecond)
+	}
+	if tree == nil {
+		s.tb.Fatalf("syntax tree was not installed within %v: %v", timeout, lastErr)
+	}
+
+	type result struct {
+		state syntax.State
+		ok    bool
+		err   error
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := make(chan result, 1)
+	go debug.CapturePanicReport(func() {
+		iter := tree.State()
+		defer func() { _ = iter.Close() }()
+		state, ok := iter.Next(ctx)
+		ready <- result{state: state, ok: ok, err: iter.Err()}
+	})
+
+	readyDeadline := time.NewTimer(time.Until(deadline))
+	defer readyDeadline.Stop()
+	for {
+		select {
+		case got := <-ready:
+			if got.err != nil {
+				s.tb.Fatalf("wait for syntax tree: %v", got.err)
+			}
+			if !got.ok {
+				s.tb.Fatal("syntax state stream closed before becoming ready")
+			}
+			if got.state.Closed || got.state.ParserError != "" ||
+				got.state.LangID != expectedLang || !got.state.Highlights {
+				s.tb.Fatalf("syntax tree not ready: %+v, want language %q with highlights",
+					got.state, expectedLang)
+			}
+			return
+		case <-readyDeadline.C:
+			s.tb.Fatalf("syntax tree did not become ready within %v", timeout)
+		default:
+			s.frame()
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func (s *guiBenchSession) prepareScenario(sc guiBenchScenario) {
+	s.tb.Helper()
+	if sc.openFile != "" {
+		s.openWorkspaceFile(sc.openFile)
+	}
+	if len(sc.syntaxLangs) > 0 {
+		lang, err := languages.LanguageForFile(sc.openFile)
+		if err != nil {
+			s.tb.Fatalf("language for %q: %v", sc.openFile, err)
+		}
+		s.waitSyntaxReady(lang, 60*time.Second)
+	}
+	if sc.setup != nil {
+		sc.setup(s)
+	}
+	if sc.openFile != "" || sc.setup != nil {
+		s.settle(60 * time.Second)
 	}
 }
 
@@ -422,12 +545,7 @@ func runGUIBenchScenario(b *testing.B, sc guiBenchScenario, cfg guiBenchConfig) 
 	s := newGUIBenchSession(b, cfg)
 	defer s.close()
 	s.settle(60 * time.Second)
-	if sc.openFile != "" {
-		s.openWorkspaceFile(sc.openFile)
-	}
-	if sc.setup != nil {
-		sc.setup(s)
-	}
+	s.prepareScenario(sc)
 
 	b.ReportAllocs()
 	b.ResetTimer()
