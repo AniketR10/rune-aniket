@@ -527,6 +527,9 @@ func (t *parserHandler) Linefeed() {
 
 // Ring the bell.
 func (t *parserHandler) Bell() {
+	t.sync.mu.Lock()
+	defer t.sync.mu.Unlock()
+
 	if !t.inFocus && t.modeUrgencyHints {
 		t.setNeedsAttention()
 	}

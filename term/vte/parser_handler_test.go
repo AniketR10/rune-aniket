@@ -917,6 +917,28 @@ func newInputParserHandler(t *testing.T, alt bool) *parserHandler {
 	return ph
 }
 
+// TestBellFocusChangeRace pins that Bell synchronizes with focus
+// changes: Bell runs on the parse goroutine while onFocusChange runs
+// under the component lock on the event-loop goroutine, so an unlocked
+// Bell races on inFocus/needsAttention (caught by -race).
+func TestBellFocusChangeRace(t *testing.T) {
+	ph := newInputParserHandler(t, false)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 1000 {
+			ph.Bell()
+		}
+	}()
+	for i := range 1000 {
+		ph.sync.mu.Lock()
+		ph.onFocusChange(i%2 == 0)
+		ph.sync.mu.Unlock()
+	}
+	<-done
+}
+
 func firstRowCells(p *parserHandler) []term.Cell {
 	if prim, ok := p.sync.buf.(*vtescreen.PrimaryBuffer); ok {
 		return prim.Cells.RawCells()[0]
