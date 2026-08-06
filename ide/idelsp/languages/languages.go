@@ -353,7 +353,7 @@ var extensionToLanguageID = map[string]string{
 	".markdown": "markdown",
 
 	// MATLAB/Octave
-	".m": "matlab",
+	// (.m is mapped to objc)
 
 	// Menhir
 	".mly": "menhir",
@@ -381,7 +381,7 @@ var extensionToLanguageID = map[string]string{
 	// (embedded)
 
 	// Objective-C
-	// ".m": "objc", // conflicts with matlab
+	".m": "objc",
 
 	// Objdump
 	// (no standard extension)
@@ -748,12 +748,12 @@ var languageIDToExtension = map[string]string{
 	"m68k":               ".m68k",
 	"make":               ".mk",
 	"markdown":           ".md",
-	"matlab":             ".m",
 	"menhir":             ".mly",
 	"mermaid":            ".mmd",
 	"muttrc":             ".neomuttrc",
 	"nickel":             ".ncl",
 	"nim":                ".nim",
+	"objc":               ".m",
 	"ocaml":              ".ml",
 	"ocaml_interface":    ".mli",
 	"ocamllex":           ".mll",
