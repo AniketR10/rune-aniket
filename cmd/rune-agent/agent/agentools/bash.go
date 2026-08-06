@@ -198,18 +198,26 @@ func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResu
 		output = fmt.Appendf(output[:cut], "\n\n(output truncated at %d bytes)", maxCommandOutput)
 	}
 
+	hints := bashHints(args.Command, workDir)
+
 	if procErr != nil {
 		return agent.ToolResult{
-			Content: utf8validate.Sanitize(fmt.Sprintf("%s\nerror: %v", string(output), procErr)),
+			Content: appendHints(
+				utf8validate.Sanitize(fmt.Sprintf("%s\nerror: %v", string(output), procErr)),
+				hints,
+			),
 			IsError: true,
 		}
 	}
 
-	content := utf8validate.Sanitize(string(output))
-	if hint := bashToolHint(args.Command); hint != "" {
+	return agent.ToolResult{Content: appendHints(utf8validate.Sanitize(string(output)), hints)}
+}
+
+func appendHints(content string, hints []string) string {
+	for _, hint := range hints {
 		content += "\n\nTIP: " + hint
 	}
-	return agent.ToolResult{Content: content}
+	return content
 }
 
 type processWatcher struct {

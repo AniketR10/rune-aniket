@@ -23,7 +23,83 @@
 
 package agentools
 
-import "regexp"
+import (
+	"fmt"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
+)
+
+// bashHints returns the hints to append to a bash tool result for a
+// command that ran in workDir.
+func bashHints(command, workDir string) []string {
+	var hints []string
+	if hint := redundantCDHint(command, workDir); hint != "" {
+		hints = append(hints, hint)
+	}
+	if hint := bashToolHint(command); hint != "" {
+		hints = append(hints, hint)
+	}
+	return hints
+}
+
+// redundantCDHint reports that a leading `cd` into the directory the
+// tool already runs in is unnecessary. Models routinely prefix every
+// command with `cd <workspace root> &&`, which burns tokens and hides
+// the fact that the tool is already anchored there.
+func redundantCDHint(command, workDir string) string {
+	target, ok := leadingCDTarget(command)
+	if !ok || workDir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(workDir, target)
+	}
+	if filepath.Clean(target) != filepath.Clean(workDir) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"This command already ran in %s, so the leading `cd` was redundant. "+
+			"The bash tool always starts in the workspace root; use the working_dir "+
+			"parameter when you need a different directory.",
+		filepath.Clean(workDir),
+	)
+}
+
+// leadingCDTarget extracts the literal argument of a `cd` that runs as
+// the first command of the script, including behind `&&`/`;`/`||`.
+// Returns ("", false) when the first command is not a statically
+// resolvable single-argument `cd`.
+func leadingCDTarget(script string) (string, bool) {
+	script = strings.TrimSpace(script)
+	if script == "" {
+		return "", false
+	}
+	file, err := syntax.NewParser().Parse(strings.NewReader(script), "")
+	if err != nil || file == nil || len(file.Stmts) == 0 {
+		return "", false
+	}
+	cmd := file.Stmts[0].Cmd
+	// `a && b && c` parses left-associatively, so the leading command
+	// is the leftmost leaf.
+	for {
+		bin, ok := cmd.(*syntax.BinaryCmd)
+		if !ok || bin.X == nil {
+			break
+		}
+		cmd = bin.X.Cmd
+	}
+	call, ok := cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) != 2 || len(call.Assigns) != 0 {
+		return "", false
+	}
+	if name, ok := literalProgramName(call.Args[0]); !ok || name != "cd" {
+		return "", false
+	}
+	return literalProgramName(call.Args[1])
+}
 
 // bashToolHint inspects a shell command string and returns a hint suggesting
 // a dedicated built-in tool when the command could be replaced by one.

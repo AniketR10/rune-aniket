@@ -83,3 +83,55 @@ func TestBashToolHint(t *testing.T) {
 		})
 	}
 }
+
+func TestRedundantCDHint(t *testing.T) {
+	const root = "/Users/me/src/rune"
+
+	tests := []struct {
+		name    string
+		command string
+		workDir string
+		want    bool
+	}{
+		{"cd root and command", "cd /Users/me/src/rune && make test", root, true},
+		{"cd root trailing slash", "cd /Users/me/src/rune/ && ls", root, true},
+		{"cd root quoted", `cd "/Users/me/src/rune" && ls`, root, true},
+		{"cd root single quoted", "cd '/Users/me/src/rune' && ls", root, true},
+		{"cd root semicolon", "cd /Users/me/src/rune; ls", root, true},
+		{"cd root only", "cd /Users/me/src/rune", root, true},
+		{"cd dot", "cd . && ls", root, true},
+		{"cd relative to root", "cd ./ && ls", root, true},
+		{"cd relative up and back", "cd ../rune && ls", root, true},
+		{"cd relative through subdirectory", "cd sub/.. && ls", root, true},
+		{"cd matches working_dir", "cd /Users/me/src/rune/sub && ls", "/Users/me/src/rune/sub", true},
+
+		{"cd subdirectory", "cd /Users/me/src/rune/sub && ls", root, false},
+		{"cd relative subdirectory", "cd sub && ls", root, false},
+		{"cd relative sibling", "cd ../blue && ls", root, false},
+		{"cd parent", "cd .. && ls", root, false},
+		{"no cd", "make test", root, false},
+		{"cd not leading", "make test && cd /Users/me/src/rune", root, false},
+		{"cd with expansion", "cd $ROOT && ls", root, false},
+		{"cd home", "cd && ls", root, false},
+		{"unparseable", "cd /Users/me/src/rune && (", root, false},
+		{"empty workDir", "cd /Users/me/src/rune && ls", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hint := redundantCDHint(tt.command, tt.workDir)
+			if tt.want {
+				assert.Contains(t, hint, "redundant", "expected hint for %q", tt.command)
+			} else {
+				assert.Empty(t, hint, "expected no hint for %q", tt.command)
+			}
+		})
+	}
+}
+
+func TestBashHintsIncludesBothHints(t *testing.T) {
+	hints := bashHints("cd /repo && cat main.go", "/repo")
+	assert.Len(t, hints, 2)
+	assert.Contains(t, hints[0], "redundant")
+	assert.Contains(t, hints[1], "read_file")
+}
