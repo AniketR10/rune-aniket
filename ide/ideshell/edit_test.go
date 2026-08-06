@@ -1217,3 +1217,31 @@ func TestInputBandLeftwardSelectionExcludesAnchorCell(t *testing.T) {
 		"the anchor cell is not part of the exclusive selection")
 	assert.False(t, reversed(9, 11), "cells before the selection must not be highlighted")
 }
+
+// TestInputBandDoubleClickSelectsWholeWord double-clicks near the end
+// of a recalled command that is wider than the editor viewport. The
+// word spans the whole line, so anchoring at its start scrolls the
+// editor horizontally mid-selection.
+func TestInputBandDoubleClickSelectsWholeWord(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		click term.Coordinates
+	}{
+		{"last wrapped row", term.Coordinates{X: 11, Y: 11}},
+		{"interior wrapped row", term.Coordinates{X: 5, Y: 10}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newPromptEditorHandler(t, []string{longHistoryItem})
+			h.Handle(arrowUp)
+			require.Equal(t, longHistoryItem, h.editBuf.String())
+
+			for _, ev := range doubleClick(tt.click.X, tt.click.Y) {
+				h.Handle(ev)
+			}
+
+			sel, ok := h.Selection()
+			require.True(t, ok)
+			assert.Equal(t, longHistoryItem, sel)
+		})
+	}
+}

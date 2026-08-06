@@ -90,3 +90,36 @@ func TestScrollWordAtOutOfBounds(t *testing.T) {
 		})
 	}
 }
+
+// TestMouseDelegateSelectWordAtWiderThanWindow double-clicks a word
+// longer than the viewport, so anchoring the selection at the word
+// start scrolls the window horizontally. The selection end must still
+// land on the word end rather than follow the shifted offset.
+func TestMouseDelegateSelectWordAtWiderThanWindow(t *testing.T) {
+	const content = "aa bbbbbbbbbbbbbbbbbb"
+	tests := []struct {
+		name    string
+		cursorX int
+		clickX  int
+	}{
+		{"viewport scrolled to end of line", len(content), 4},
+		{"viewport scrolled mid word", 15, 2},
+		{"viewport at start of line", 0, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scroll := component.NewScroll(cell.NewBuffer())
+			_, _ = scroll.Buffer().ReadFrom(strings.NewReader(content))
+			scroll.Resize(8, 1)
+
+			cur := NewCursor(scroll, nil)
+			delegate := CursorMouseDelegate(cur)
+			cur.MoveToScroll(term.Coordinates{X: tt.cursorX})
+
+			delegate.SelectWordAt(term.Coordinates{X: tt.clickX})
+
+			assert.Equal(t, "bbbbbbbbbbbbbbbbbb", cur.Selection())
+			assert.Equal(t, term.Coordinates{X: len(content)}, cur.CursorAtScroll())
+		})
+	}
+}

@@ -94,10 +94,14 @@ func (d mouseDelegate) SelectWordAt(pos term.Coordinates) {
 	if word == "" {
 		return
 	}
-	start, _ = d.cursor.WindowCoordinates(start)
-	end, _ = d.cursor.WindowCoordinates(end)
-	d.SetSelectionStart(start)
-	d.SetSelectionEnd(end)
+	// Anchoring at start may scroll the window to reveal it, which
+	// would invalidate a window-relative end captured beforehand.
+	if _, ok := d.cursor.SelectionMode(); ok {
+		d.cursor.Unselect()
+	}
+	d.cursor.MoveToScroll(start)
+	d.cursor.Select()
+	d.cursor.MoveToScroll(end)
 }
 
 func (d mouseDelegate) SelectLine(y int) {
