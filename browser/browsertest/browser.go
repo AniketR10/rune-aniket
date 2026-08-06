@@ -144,6 +144,16 @@ func (b toBrowser) PublishEvent(ev term.Event) error {
 	return fmt.Errorf("cannot publish event type: %v", ev.Type)
 }
 
+// DragHover satisfies browser.DragTarget. browserapi.Browser has no
+// drag surface, so the adapter reports no drop target.
+func (b toBrowser) DragHover(term.Coordinates) bool { return false }
+
+// DragCancel satisfies browser.DragTarget.
+func (b toBrowser) DragCancel() {}
+
+// DragDrop satisfies browser.DragTarget.
+func (b toBrowser) DragDrop(term.Coordinates, []string) bool { return false }
+
 func (b toBrowser) Close() error {
 	return b.b.Close()
 }

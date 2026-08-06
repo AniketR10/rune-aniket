@@ -506,6 +506,17 @@ func WithWallpaper(wallpaper browser.Wallpaper) Option {
 	}
 }
 
+// WithDropTarget styles the veil drawn over the window under the cursor
+// while files are dragged over the browser, and the messages centered in
+// it. Labels are keyed by the target tab's URI scheme; the empty key is
+// the fallback.
+func WithDropTarget(attr term.Attributes, labels map[string]string) Option {
+	return func(cfg *Config) {
+		cfg.Config.DropTargetAttr = attr
+		cfg.Config.DropTargetLabels = labels
+	}
+}
+
 // WithFrameUnion defines whether the frames should be unioned or not.
 // By default is true if the configuration given to WithWindowManagerConfig
 // sets Frame to true.

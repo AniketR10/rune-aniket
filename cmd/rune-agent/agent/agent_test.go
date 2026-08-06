@@ -3868,6 +3868,36 @@ func TestAgentRun_MultiContentInjectsSyntheticUserMessage(t *testing.T) {
 	assert.True(t, persistedImageMsg, "synthetic user message should be persisted")
 }
 
+func TestAgentRunWithAttachments(t *testing.T) {
+	parts := []llmapi.ContentPart{
+		{Type: llmapi.ContentPartTypeText, Text: "Attached image /tmp/photo.png:"},
+		{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+	}
+	svc := &mockService{responses: []mockResponse{stopResponse("seen")}}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{SystemPrompt: "test"})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "look",
+		WithAttachments(parts)))
+	assert.True(t, hasEventType(events, EventDone))
+
+	require.Equal(t, 1, svc.getCallCount())
+	last := svc.requests[0].Messages[len(svc.requests[0].Messages)-1]
+	assert.Equal(t, llmapi.RoleUser, last.Role)
+	assert.Equal(t, "look", last.Content)
+	require.Len(t, last.MultiContent, 3)
+	assert.Equal(t, llmapi.ContentPart{
+		Type: llmapi.ContentPartTypeText, Text: "look",
+	}, last.MultiContent[0])
+	assert.Equal(t, parts, last.MultiContent[1:])
+
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	persisted := d.Messages[len(d.Messages)-2]
+	assert.Equal(t, llmapi.RoleUser, persisted.Role)
+	assert.Len(t, persisted.MultiContent, 3)
+}
+
 // TestToolContextCarriesModelEntry verifies that the fully-qualified
 // ModelEntry (Provider set) is carried into a tool's context, so
 // sub-agents inheriting the model resolve to a single provider instead

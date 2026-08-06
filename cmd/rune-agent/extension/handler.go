@@ -25,6 +25,7 @@ package extension
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,6 +48,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/geminitools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
+	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -1448,8 +1450,14 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 				mu.Lock()
 				cancel = cancelFn
 				mu.Unlock()
+				parts := h.attachmentParts(msg.Attachments)
 				select {
-				case ret <- completionRequest{msg: msg.Text, skillName: msg.SkillName, ctx: reqCtx}:
+				case ret <- completionRequest{
+					msg:         msg.Text,
+					skillName:   msg.SkillName,
+					attachments: parts,
+					ctx:         reqCtx,
+				}:
 				case <-ctx.Done():
 					return
 				}
@@ -1478,6 +1486,65 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 		}
 		return dhandler.Handle(ev)
 	}), ret
+}
+
+// attachmentParts reads the files the user attached to the chat and
+// renders them as content parts for the next user message. A file that
+// cannot be read, or that exceeds the model's image caps, becomes an
+// explanatory text part so the rest of the message still goes through.
+func (h *aiEditorHandler) attachmentParts(
+	attachments []dialoguetui.Attachment,
+) []llmapi.ContentPart {
+	if len(attachments) == 0 {
+		return nil
+	}
+	maxOutput := h.maxToolOutputBytes
+	if maxOutput <= 0 {
+		maxOutput = agent.DefaultMaxToolOutputBytes
+	}
+	parts := make([]llmapi.ContentPart, 0, len(attachments)+1)
+	for _, a := range attachments {
+		text := func(format string, args ...any) llmapi.ContentPart {
+			return llmapi.ContentPart{
+				Type: llmapi.ContentPartTypeText,
+				Text: fmt.Sprintf(format, args...),
+			}
+		}
+		data, err := readWorkspaceFile(h.fs, a.Path)
+		if err != nil {
+			_, _ = h.n.Notify(browserapi.LevelError,
+				"attachment %s: %v", a.Name, err)
+			parts = append(parts, text(
+				"Attached file %s could not be read: %v", a.Path, err))
+			continue
+		}
+		if mime, isImage := agentools.ImageMediaType(a.Path); isImage {
+			uri, encErr := agentools.EncodeImageDataURI(a.Path, data, mime)
+			if encErr != nil {
+				_, _ = h.n.Notify(browserapi.LevelError,
+					"attachment %s: %v", a.Name, encErr)
+				parts = append(parts, text(
+					"Attached image %s could not be sent: %v",
+					a.Path, encErr))
+				continue
+			}
+			parts = append(parts,
+				text("Attached image %s:", a.Path),
+				llmapi.ContentPart{
+					Type:     llmapi.ContentPartTypeImageURL,
+					ImageURL: uri,
+				})
+			continue
+		}
+		if utf8validate.IsBinary(data) {
+			parts = append(parts, text("Attached file %s:\n%s", a.Path,
+				utf8validate.BinaryStub(a.Name, len(data), sha256.Sum256(data))))
+			continue
+		}
+		parts = append(parts, text("Attached file %s:\n%s", a.Path,
+			agent.TruncateMiddle(utf8validate.Sanitize(string(data)), maxOutput)))
+	}
+	return parts
 }
 
 // parseDialogueID extracts a user-provided dialogue ID from the
@@ -1633,6 +1700,9 @@ type completionRequest struct {
 	msg       string
 	skillName string
 	ctx       context.Context
+	// attachments are content parts for files the user attached to the
+	// chat, sent alongside msg in the same user message.
+	attachments []llmapi.ContentPart
 }
 
 const truncatedTurnHint = "At high and max/xhigh effort levels, models may think more extensively and can be more likely to exhaust the max_tokens budget. Consider increasing max_tokens to give the model more room (/max_tokens 64000), or lowering the effort level (/effort medium)."
@@ -1955,6 +2025,9 @@ func createAgentCompletions(
 			var runOpts []agent.RunOption
 			if req.skillName != "" {
 				runOpts = append(runOpts, agent.WithSkillName(req.skillName))
+			}
+			if len(req.attachments) > 0 {
+				runOpts = append(runOpts, agent.WithAttachments(req.attachments))
 			}
 			it = ag.Run(req.ctx, id, req.msg, runOpts...)
 		}

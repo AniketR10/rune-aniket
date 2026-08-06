@@ -111,6 +111,17 @@ func (wm *WindowManager) newNode(t component.Window) Window {
 	return Window{wm: wm, Window: t}
 }
 
+// WindowAt returns the window rendered at pos, which is relative to the
+// window manager's top-left corner, or false when pos falls outside
+// every window.
+func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
+	win, ok := wm.comp.WindowAt(pos)
+	if !ok {
+		return Window{}, false
+	}
+	return wm.newNode(win), true
+}
+
 // Init initializes this WindowManager with the given handler. If border is true, it will draw
 // a border around every tile.
 func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {

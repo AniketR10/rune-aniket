@@ -191,7 +191,11 @@ func isFinite(f float64) bool {
 // clampedCoordinates returns the current cursor position in cell coordinates,
 // clamped to the bounds of the window.
 func (m *mouse) clampedCoordinates() term.Coordinates {
-	pos := m.calculateCoordinates()
+	return m.clamp(m.calculateCoordinates())
+}
+
+// clamp bounds a cell position to the window.
+func (m *mouse) clamp(pos term.Coordinates) term.Coordinates {
 	if pos.X >= m.width {
 		pos.X = m.width - 1
 	}
@@ -208,8 +212,13 @@ func (m *mouse) clampedCoordinates() term.Coordinates {
 }
 
 func (m *mouse) calculateCoordinates() (ret term.Coordinates) {
-	ret.X = int(m.fontManager.CellX(float64(m.state.x)))
-	ret.Y = int(m.fontManager.CellY(float64(m.state.y)))
+	return m.cellAt(float64(m.state.x), float64(m.state.y))
+}
+
+// cellAt converts a pixel position to unclamped cell coordinates.
+func (m *mouse) cellAt(x, y float64) (ret term.Coordinates) {
+	ret.X = int(m.fontManager.CellX(x))
+	ret.Y = int(m.fontManager.CellY(y))
 	return
 }
 

@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
@@ -68,6 +69,11 @@ type Component struct {
 	// according to cfg.InputRowColumns). See relayout.
 	msgArea component.Virtual[tui.Component]
 	boxArea component.Virtual[tui.Component]
+	// attachArea is a single-row strip between the two, shown only while
+	// there are pending attachments.
+	attachArea  component.Virtual[tui.Component]
+	attachTabs  tcomponent.Tabs
+	attachments []Attachment
 	// layoutBoxH and layoutMsgH are the compose box height and the total
 	// messages content height observed at the last relayout. A change in
 	// either means the regions must be resized again; this makes the layout
@@ -174,6 +180,10 @@ func (c *Component) Init(cfg ComponentConfig) {
 		c.box.FrameCharSet = cfg.InputBox.FrameCharSet
 	}
 	c.boxArea.C = c.box
+
+	c.attachTabs.Init()
+	c.attachTabs.SetBorder(false)
+	c.attachArea.C = &c.attachTabs
 }
 
 func (c *Component) newInputBackend(cfg ComponentConfig) Input {
@@ -223,6 +233,9 @@ func (c *Component) Draw(w term.Writer) {
 	}
 	vw := component.VirtualWriter{Writer: w, Height: c.height, Width: c.width}
 	c.msgArea.Draw(&vw)
+	if len(c.attachments) > 0 {
+		c.attachArea.Draw(&vw)
+	}
 	c.boxArea.Draw(&vw)
 }
 
@@ -255,11 +268,17 @@ func (c *Component) relayout() {
 	if boxX+boxW > width {
 		boxW = width - boxX
 	}
-	msgH := height - boxH
+	attachH := 0
+	if len(c.attachments) > 0 && height-boxH > 0 {
+		attachH = 1
+	}
+	msgH := height - boxH - attachH
 
 	c.msgArea.Move(term.Coordinates{})
 	c.msgArea.Resize(width, msgH)
-	c.boxArea.Move(term.Coordinates{X: boxX, Y: msgH})
+	c.attachArea.Move(term.Coordinates{X: boxX, Y: msgH})
+	c.attachArea.Resize(boxW, attachH)
+	c.boxArea.Move(term.Coordinates{X: boxX, Y: msgH + attachH})
 	c.boxArea.Resize(boxW, boxH)
 	c.layoutMsgH = c.messagesContentHeight()
 }
@@ -302,6 +321,69 @@ func (c *Component) InputPosition() term.Coordinates {
 func (c *Component) MessagesPosition() term.Coordinates {
 	c.layoutIfDirty()
 	return c.spanMessages.ContentOffset()
+}
+
+// AddAttachment appends a pending attachment to the strip above the
+// compose input.
+func (c *Component) AddAttachment(a Attachment) {
+	c.attachments = append(c.attachments, a)
+	c.attachTabs.Add(a.Icon, a.Name)
+	// The strip is a passive list: nothing in it is selected, so no tab
+	// should render with the focused attributes Tabs.Add assigns to the
+	// first entry.
+	c.attachTabs.ResetFocus()
+	c.relayout()
+}
+
+// Attachments returns the pending attachments, oldest first.
+func (c *Component) Attachments() []Attachment {
+	return c.attachments
+}
+
+// TakeAttachments returns the pending attachments and clears the strip.
+func (c *Component) TakeAttachments() []Attachment {
+	if len(c.attachments) == 0 {
+		return nil
+	}
+	ret := c.attachments
+	c.attachments = nil
+	c.attachTabs.RemoveAll()
+	c.relayout()
+	return ret
+}
+
+// RemoveAttachment drops the attachment at idx.
+func (c *Component) RemoveAttachment(idx int) {
+	if idx < 0 || idx >= len(c.attachments) {
+		return
+	}
+	c.attachments = append(c.attachments[:idx], c.attachments[idx+1:]...)
+	c.attachTabs.Remove(idx)
+	c.attachTabs.ResetFocus()
+	c.relayout()
+}
+
+// AttachmentsPosition returns the offset of the attachment strip and
+// whether the strip is currently displayed.
+func (c *Component) AttachmentsPosition() (term.Coordinates, bool) {
+	if len(c.attachments) == 0 {
+		return term.Coordinates{}, false
+	}
+	c.layoutIfDirty()
+	return c.attachArea.Position(), true
+}
+
+// AttachmentAt returns the index of the attachment rendered at pos,
+// which is relative to the attachment strip.
+func (c *Component) AttachmentAt(pos term.Coordinates) (int, bool) {
+	if len(c.attachments) == 0 {
+		return -1, false
+	}
+	idx, ok := c.attachTabs.TabAt(pos)
+	if !ok || idx < 0 || idx >= len(c.attachments) {
+		return -1, false
+	}
+	return idx, true
 }
 
 // InputSubmit submits the contents of the input buffer as a send message,

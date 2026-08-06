@@ -66,6 +66,7 @@ import (
 
 var _ tui.Component = (*Component)(nil)
 var _ browser.Browser = (*Component)(nil)
+var _ browser.DragTarget = (*Component)(nil)
 var _ Editor = (*Component)(nil)
 
 // Workspace abstracts the workspace functionality needed for a Component.
@@ -257,6 +258,7 @@ func (c *Component) Init(
 	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 
 	c.comp.Init(c.config.Config)
+	c.comp.SetInterrupter(browser.EventPublisherInterrupter(c))
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
 	c.fileRegistry = newFileCommandRegistryFromComponent(c)
 
@@ -1458,6 +1460,21 @@ func (c *Component) Draw(w term.Writer) {
 // Handle delegates events to the underlying browser.Component.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 	return c.comp.Handle(ev)
+}
+
+// DragHover satisfies browser.DragTarget.
+func (c *Component) DragHover(pos term.Coordinates) bool {
+	return c.comp.DragHover(pos)
+}
+
+// DragCancel satisfies browser.DragTarget.
+func (c *Component) DragCancel() {
+	c.comp.DragCancel()
+}
+
+// DragDrop satisfies browser.DragTarget.
+func (c *Component) DragDrop(pos term.Coordinates, paths []string) bool {
+	return c.comp.DragDrop(pos, paths)
 }
 
 // SetDim sets whether next call to draw should use

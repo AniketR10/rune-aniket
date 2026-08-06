@@ -52,7 +52,7 @@ const MaxToolResultBytes = 8 * 1024 * 1024
 // middle-out truncated to maxOutput regardless of success or error, and any
 // oversized image part is replaced with a short text placeholder.
 func capToolResult(r *ToolResult, maxOutput int) {
-	r.Content = truncateMiddle(r.Content, maxOutput)
+	r.Content = TruncateMiddle(r.Content, maxOutput)
 	for i := range r.MultiContent {
 		p := &r.MultiContent[i]
 		if len(p.ImageURL) > MaxToolResultBytes {
@@ -65,12 +65,12 @@ func capToolResult(r *ToolResult, maxOutput int) {
 	}
 }
 
-// truncateMiddle truncates s using a middle-out strategy if len(s) > maxBytes.
+// TruncateMiddle truncates s using a middle-out strategy if len(s) > maxBytes.
 // It preserves the first and last portions of the string, replacing the middle
 // with a marker indicating how many bytes were removed. The cuts are snapped to
 // UTF-8 character boundaries. When truncation occurs, a "Total output lines: N"
 // header is prepended.
-func truncateMiddle(s string, maxBytes int) string {
+func TruncateMiddle(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
 		return s
 	}

@@ -164,6 +164,24 @@ func (h *browserHost) Resource(uri workspaceapi.URI) (browserapi.Handler, bool) 
 
 func (h *browserHost) PublishEvent(term.Event) error { return nil }
 
+func (h *browserHost) DragHover(pos term.Coordinates) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.comp.DragHover(pos)
+}
+
+func (h *browserHost) DragCancel() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.comp.DragCancel()
+}
+
+func (h *browserHost) DragDrop(pos term.Coordinates, paths []string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.comp.DragDrop(pos, paths)
+}
+
 func (h *browserHost) Close() error { return h.comp.Close() }
 
 func (h *browserHost) Notify(

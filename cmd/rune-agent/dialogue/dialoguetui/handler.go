@@ -42,6 +42,9 @@ import (
 type SubmitMessage struct {
 	Text      string
 	SkillName string // non-empty when the message was triggered by a slash-command skill
+	// Attachments are the files pending in the chat when the message
+	// was submitted. They are sent alongside Text as content parts.
+	Attachments []Attachment
 }
 
 // CommandResult is the outcome of a handled /command.
@@ -152,6 +155,13 @@ type dialogueHandler struct {
 	// len(history) when not actively browsing; ArrowUp decrements it and
 	// ArrowDown increments it.
 	historyIdx int
+
+	// pasting is true between EventPasteStart and EventPasteEnd. While
+	// set, key events accumulate in pasteBuf instead of reaching the
+	// compose input, so a paste that turns out to be a list of file
+	// paths becomes attachments instead of text.
+	pasting  bool
+	pasteBuf []term.Event
 }
 
 func (h *dialogueHandler) publishInterrupt(ctx context.Context) {
@@ -214,6 +224,17 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		if ev.Key == term.MouseRelease {
 			s.messagesDragging = false
 		}
+		if apos, ok := s.comp.AttachmentsPosition(); ok &&
+			ev.MouseY == apos.Y && !dragging {
+			if ev.Key == term.MouseLeft {
+				idx, found := s.comp.AttachmentAt(
+					term.Coordinates{X: ev.MouseX - apos.X})
+				if found {
+					s.comp.RemoveAttachment(idx)
+				}
+			}
+			return false, true
+		}
 		if ev.MouseY >= pos.Y && !dragging {
 			if !s.inputFocused {
 				s.inputFocused = true
@@ -235,12 +256,20 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		return s.mouse.Handle(ev)
 	}
 
-	if ev.Type != term.EventKey {
+	if ev.Type != term.EventKey &&
+		ev.Type != term.EventPasteStart && ev.Type != term.EventPasteEnd {
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.handlePaste(ev) {
+		return false, true
+	}
+	if ev.Type != term.EventKey {
+		return
+	}
 
 	if s.comp.PromptInputMode() {
 		// Text input mode: route keys to the prompt inputbox.
@@ -386,7 +415,10 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 		s.comp.Input().Clear()
-		s.submitMessage(SubmitMessage{Text: text}, text, true)
+		s.submitMessage(SubmitMessage{
+			Text:        text,
+			Attachments: s.comp.TakeAttachments(),
+		}, text, true)
 		return
 	case ev.Mod == term.ModCtrl && ev.Ch == 'c':
 		// Ctrl-C clears the compose input. The editor backend consumes
@@ -455,6 +487,62 @@ func (s *dialogueHandler) Selection() (string, bool) {
 		return s.comp.Input().Selection()
 	}
 	return s.mouseDelegate.Selection()
+}
+
+// handlePaste buffers a bracketed paste so it can be classified as file
+// paths or ordinary text once complete. It reports whether the event was
+// consumed. Pastes into an active prompt are left alone: the prompt owns
+// every keystroke while it is up.
+func (s *dialogueHandler) handlePaste(ev term.Event) bool {
+	if s.comp.PromptInputMode() || s.comp.HasActivePrompt() ||
+		s.comp.HasFreeInputPrompt() {
+		s.pasting = false
+		s.pasteBuf = s.pasteBuf[:0]
+		return false
+	}
+	switch ev.Type {
+	case term.EventPasteStart:
+		s.pasting = true
+		s.pasteBuf = s.pasteBuf[:0]
+		return true
+	case term.EventPasteEnd:
+		if !s.pasting {
+			return false
+		}
+		s.pasting = false
+		s.finishPaste()
+		s.pasteBuf = s.pasteBuf[:0]
+		return true
+	}
+	if !s.pasting {
+		return false
+	}
+	// Editors ignore key events without a rune while pasting; mirror
+	// that so the replayed sequence matches what the input would have
+	// received.
+	if ev.Ch != 0 {
+		s.pasteBuf = append(s.pasteBuf, ev)
+	}
+	return true
+}
+
+// finishPaste turns the buffered paste into attachments when every line
+// names an existing file, and otherwise replays it into the compose
+// input verbatim.
+func (s *dialogueHandler) finishPaste() {
+	var sb strings.Builder
+	for _, ev := range s.pasteBuf {
+		sb.WriteRune(ev.Ch)
+	}
+	if paths, ok := pastedFilePaths(sb.String()); ok {
+		for _, p := range paths {
+			s.comp.AddAttachment(NewAttachment(p))
+		}
+		return
+	}
+	for _, ev := range s.pasteBuf {
+		s.comp.Input().Handle(ev)
+	}
 }
 
 func (s *dialogueHandler) Cursor() (

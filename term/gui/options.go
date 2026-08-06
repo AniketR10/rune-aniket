@@ -265,3 +265,16 @@ func WithColorThemes(initial string, themes map[string]Theme) Option {
 		return nil
 	}
 }
+
+// WithDragObserver installs a callback invoked when files are dragged over
+// or dropped on the window. It runs on the GUI loop goroutine, in the same
+// context as handler events. Hosts that do not report file drags never
+// invoke it. A nil observer is ignored.
+func WithDragObserver(observer func(DragEvent)) Option {
+	return func(g *GUI) error {
+		if observer != nil {
+			g.drag.observer = observer
+		}
+		return nil
+	}
+}

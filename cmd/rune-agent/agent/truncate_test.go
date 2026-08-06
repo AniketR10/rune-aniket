@@ -128,7 +128,7 @@ func TestTruncateMiddle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := truncateMiddle(tt.input, tt.maxBytes)
+			result := TruncateMiddle(tt.input, tt.maxBytes)
 			tt.check(t, result)
 		})
 	}

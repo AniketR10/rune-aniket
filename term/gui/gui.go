@@ -70,6 +70,7 @@ type GUI struct {
 	writer            *cell.BufferWriter
 	mouse             *mouse
 	input             *input
+	drag              *dragPoller
 	theme             string
 	bgOpacity         float64
 	fgOpacity         float64
@@ -144,6 +145,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 	}
 	ret.input = newInput(ret.fontManager)
 	ret.mouse = newMouse(ret.fontManager)
+	ret.drag = newDragPoller(ret.mouse)
 	ret.ctx = context.Background()
 	ret.ctx, ret.cancelCtx = context.WithCancel(ret.ctx)
 
@@ -284,6 +286,10 @@ loop:
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	// protect drag callback handler with mutex
+	// so it can safely update UI state
+	needsDraw = g.drag.poll() || needsDraw
 
 	for _, ev := range g.pendingEvents {
 		switch ev.Type {

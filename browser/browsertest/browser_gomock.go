@@ -1121,6 +1121,69 @@ func (mr *MockEventPublisherMockRecorder) PublishEvent(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEvent", reflect.TypeOf((*MockEventPublisher)(nil).PublishEvent), arg0)
 }
 
+// MockDragTarget is a mock of DragTarget interface.
+type MockDragTarget struct {
+	ctrl     *gomock.Controller
+	recorder *MockDragTargetMockRecorder
+}
+
+// MockDragTargetMockRecorder is the mock recorder for MockDragTarget.
+type MockDragTargetMockRecorder struct {
+	mock *MockDragTarget
+}
+
+// NewMockDragTarget creates a new mock instance.
+func NewMockDragTarget(ctrl *gomock.Controller) *MockDragTarget {
+	mock := &MockDragTarget{ctrl: ctrl}
+	mock.recorder = &MockDragTargetMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDragTarget) EXPECT() *MockDragTargetMockRecorder {
+	return m.recorder
+}
+
+// DragCancel mocks base method.
+func (m *MockDragTarget) DragCancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DragCancel")
+}
+
+// DragCancel indicates an expected call of DragCancel.
+func (mr *MockDragTargetMockRecorder) DragCancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragCancel", reflect.TypeOf((*MockDragTarget)(nil).DragCancel))
+}
+
+// DragDrop mocks base method.
+func (m *MockDragTarget) DragDrop(pos term.Coordinates, paths []string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DragDrop", pos, paths)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DragDrop indicates an expected call of DragDrop.
+func (mr *MockDragTargetMockRecorder) DragDrop(pos, paths any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragDrop", reflect.TypeOf((*MockDragTarget)(nil).DragDrop), pos, paths)
+}
+
+// DragHover mocks base method.
+func (m *MockDragTarget) DragHover(pos term.Coordinates) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DragHover", pos)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DragHover indicates an expected call of DragHover.
+func (mr *MockDragTargetMockRecorder) DragHover(pos any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragHover", reflect.TypeOf((*MockDragTarget)(nil).DragHover), pos)
+}
+
 // MockBrowser is a mock of Browser interface.
 type MockBrowser struct {
 	ctrl     *gomock.Controller
@@ -1170,6 +1233,46 @@ func (m *MockBrowser) Close() error {
 func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBrowser)(nil).Close))
+}
+
+// DragCancel mocks base method.
+func (m *MockBrowser) DragCancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DragCancel")
+}
+
+// DragCancel indicates an expected call of DragCancel.
+func (mr *MockBrowserMockRecorder) DragCancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragCancel", reflect.TypeOf((*MockBrowser)(nil).DragCancel))
+}
+
+// DragDrop mocks base method.
+func (m *MockBrowser) DragDrop(pos term.Coordinates, paths []string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DragDrop", pos, paths)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DragDrop indicates an expected call of DragDrop.
+func (mr *MockBrowserMockRecorder) DragDrop(pos, paths any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragDrop", reflect.TypeOf((*MockBrowser)(nil).DragDrop), pos, paths)
+}
+
+// DragHover mocks base method.
+func (m *MockBrowser) DragHover(pos term.Coordinates) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DragHover", pos)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DragHover indicates an expected call of DragHover.
+func (mr *MockBrowserMockRecorder) DragHover(pos any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DragHover", reflect.TypeOf((*MockBrowser)(nil).DragHover), pos)
 }
 
 // Floating mocks base method.

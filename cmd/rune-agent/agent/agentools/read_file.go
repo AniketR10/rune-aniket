@@ -245,37 +245,50 @@ func imageMediaType(path string) (string, bool) {
 	}
 }
 
-func (t *readFileTool) executeImage(ctx context.Context, path string, data []byte, mime string) agent.ToolResult {
-	if len(data) > maxImageBytes {
-		return agent.ToolResult{
-			Content: fmt.Sprintf(
-				"error: image file %s is too large to send to the model "+
-					"(%d bytes, max %d bytes / %d MiB). Reduce the image "+
-					"size (resize or recompress) and try again.",
-				filepath.Base(path), len(data), maxImageBytes,
-				maxImageBytes/(1024*1024)),
-			IsError: true,
-		}
-	}
+// ImageMediaType returns the MIME type for the image extensions that can
+// be sent to the model as visual content, and whether path is one of them.
+func ImageMediaType(path string) (string, bool) {
+	return imageMediaType(path)
+}
 
+// EncodeImageDataURI enforces the model image caps on data and returns a
+// base64 data URI suitable for an llmapi.ContentPartTypeImageURL part.
+// The returned error is user-facing: it explains which cap was exceeded
+// and how to get the image under it.
+func EncodeImageDataURI(path string, data []byte, mime string) (string, error) {
+	if len(data) > maxImageBytes {
+		return "", fmt.Errorf(
+			"image file %s is too large to send to the model "+
+				"(%d bytes, max %d bytes / %d MiB). Reduce the image "+
+				"size (resize or recompress) and try again",
+			filepath.Base(path), len(data), maxImageBytes,
+			maxImageBytes/(1024*1024))
+	}
 	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
 		if cfg.Width > maxImageEdge || cfg.Height > maxImageEdge {
-			return agent.ToolResult{
-				Content: fmt.Sprintf(
-					"error: image file %s dimensions are too large to send "+
-						"to the model (%dx%d px, max %dpx per dimension). "+
-						"Resize or crop the image so neither dimension "+
-						"exceeds %dpx and try again.",
-					filepath.Base(path), cfg.Width, cfg.Height,
-					maxImageEdge, maxImageEdge),
-				IsError: true,
-			}
+			return "", fmt.Errorf(
+				"image file %s dimensions are too large to send "+
+					"to the model (%dx%d px, max %dpx per dimension). "+
+					"Resize or crop the image so neither dimension "+
+					"exceeds %dpx and try again",
+				filepath.Base(path), cfg.Width, cfg.Height,
+				maxImageEdge, maxImageEdge)
+		}
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+func (t *readFileTool) executeImage(ctx context.Context, path string, data []byte, mime string) agent.ToolResult {
+	dataURI, err := EncodeImageDataURI(path, data, mime)
+	if err != nil {
+		return agent.ToolResult{
+			Content: "error: " + err.Error(),
+			IsError: true,
 		}
 	}
 
 	t.tracker.Record(path, data)
 
-	dataURI := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 	summary := fmt.Sprintf("Read image file: %s (%d bytes, %s)", filepath.Base(path), len(data), mime)
 
 	staleIDs := t.tracker.TrackRead(ctx, "read_file", path, "")

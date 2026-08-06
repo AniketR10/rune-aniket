@@ -181,6 +181,20 @@ type EventPublisher interface {
 	PublishEvent(term.Event) error
 }
 
+// DragTarget is the interface that groups the methods to preview and
+// receive a file drag from the host windowing system. Positions are
+// relative to the browser's top-left corner.
+type DragTarget interface {
+	// DragHover marks the window under pos as the pending drop target
+	// and reports whether a window was found.
+	DragHover(pos term.Coordinates) bool
+	// DragCancel clears the pending drop target.
+	DragCancel()
+	// DragDrop delivers paths to the window under pos and reports
+	// whether a window received them.
+	DragDrop(pos term.Coordinates, paths []string) bool
+}
+
 // Browser is an interface that groups methods to manipulate
 // the user interface of a browser.
 type Browser interface {
@@ -188,6 +202,7 @@ type Browser interface {
 	EventPublisher
 	ResourceOpener
 	Notifications
+	DragTarget
 	io.Closer
 }
 

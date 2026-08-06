@@ -102,6 +102,14 @@ type Config struct {
 	FrameUnion       bool
 	OnTabsClick      func(int) bool
 
+	// DropTargetAttr styles the veil drawn over the window under the
+	// cursor while files are dragged over this browser.
+	DropTargetAttr term.Attributes
+	// DropTargetLabels maps a tab URI scheme to the message centered in
+	// the drop-target veil. The empty key is the fallback for windows
+	// whose scheme has no entry.
+	DropTargetLabels map[string]string
+
 	PromptConfig
 
 	component.FrameUnionCharSet

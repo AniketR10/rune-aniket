@@ -624,6 +624,10 @@ func (b *fakeBrowser) SetTabName(
 func (b *fakeBrowser) PublishEvent(term.Event) error { return nil }
 func (b *fakeBrowser) Close() error                  { return nil }
 
+func (b *fakeBrowser) DragHover(term.Coordinates) bool          { return false }
+func (b *fakeBrowser) DragCancel()                              {}
+func (b *fakeBrowser) DragDrop(term.Coordinates, []string) bool { return false }
+
 var _ browser.Browser = (*fakeBrowser)(nil)
 
 func mustParseURI(t *testing.T, s string) workspaceapi.URI {

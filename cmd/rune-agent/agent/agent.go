@@ -283,6 +283,7 @@ type RunOption func(*runOptions)
 type runOptions struct {
 	skillName       string
 	toolCallResults []ToolCallResult
+	attachments     []llmapi.ContentPart
 }
 
 // ToolCallResult represents a pre-computed tool call result that is
@@ -338,6 +339,14 @@ func WithSkillName(name string) RunOption {
 func WithToolCallResults(results []ToolCallResult) RunOption {
 	return func(o *runOptions) {
 		o.toolCallResults = results
+	}
+}
+
+// WithAttachments sends the given content parts alongside the user
+// message, carrying files the user attached to the chat.
+func WithAttachments(parts []llmapi.ContentPart) RunOption {
+	return func(o *runOptions) {
+		o.attachments = parts
 	}
 }
 
@@ -456,6 +465,16 @@ func (a *Agent) run(
 
 	// Append user message
 	userMsg := llmapi.Message{Role: llmapi.RoleUser, Content: userMessage}
+	if len(opts.attachments) > 0 {
+		// Providers that support content parts read MultiContent and
+		// ignore Content, so the text has to be repeated as a part.
+		userMsg.MultiContent = append(
+			[]llmapi.ContentPart{{
+				Type: llmapi.ContentPartTypeText,
+				Text: userMessage,
+			}},
+			opts.attachments...)
+	}
 
 	// Build full message list
 	messages := make([]llmapi.Message, 0,
@@ -1474,7 +1493,7 @@ func (a *Agent) injectAutoDiagnostics(
 		)
 		diagDur := time.Since(diagStart)
 		if !diagResult.IsError {
-			diagResult.Content = truncateMiddle(diagResult.Content, maxOutput)
+			diagResult.Content = TruncateMiddle(diagResult.Content, maxOutput)
 		}
 
 		log.Debug("auto-diagnostics",

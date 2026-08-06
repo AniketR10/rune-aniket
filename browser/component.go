@@ -94,6 +94,9 @@ type Component struct {
 	buffers     []*Tab
 	windows     map[uint64]*browserWindow
 	prompts     map[string]Window
+	// drag holds the drop-target overlay state. See drag.go.
+	drag        dragState
+	interrupter term.Interrupter
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -742,6 +745,14 @@ func (c *Component) Draw(w term.Writer) {
 		c.dirtyTabs = false
 	}
 
+	if c.drawDragVeil(w) {
+		return
+	}
+	c.drawContent(w)
+}
+
+// drawContent renders the window manager and its frame decorations.
+func (c *Component) drawContent(w term.Writer) {
 	c.union.Draw(w)
 
 	// set correct attributes for focus window union charset

@@ -1384,6 +1384,12 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithFocusTabHighlightAttr(cfg.highlightTabAttr()),
 		text.WithFocusTabHighlightChar(cfg.highlightTabChar()),
 		text.WithWallpaper(cfg.wallpaper()),
+		text.WithDropTarget(
+			term.Attributes{Fg: term.ColorSilver, Bg: term.ColorBlack},
+			map[string]string{
+				"":           "Drop files here",
+				"rune-agent": "Drop files here to add to chat",
+			}),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithIconSet(cfg.icons()),
 		text.WithTabOverrideIcon(cfg.tabOverrideIcon()),

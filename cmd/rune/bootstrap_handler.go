@@ -296,6 +296,21 @@ func (b *bootstrapHandler) browser() browser.Browser {
 	return b.preIDE.Browser()
 }
 
+// dragObserver routes host file drags to the focused browser, so the
+// window under the cursor previews the drop and receives the dropped
+// paths regardless of which window holds the focus.
+func (b *bootstrapHandler) dragObserver(ev gui.DragEvent) {
+	target := b.browser()
+	switch ev.Kind {
+	case gui.DragHover:
+		target.DragHover(ev.Pos)
+	case gui.DragLeave:
+		target.DragCancel()
+	case gui.DragDrop:
+		target.DragDrop(ev.Pos, ev.Paths)
+	}
+}
+
 func (b *bootstrapHandler) notifications() browserapi.Notifications {
 	return bootstrapNotifications{b: b}
 }

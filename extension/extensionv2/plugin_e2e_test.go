@@ -295,6 +295,12 @@ func (e2eBrowser) Resource(workspaceapi.URI) (browserapi.Handler, bool) {
 
 func (e2eBrowser) PublishEvent(term.Event) error { return nil }
 
+func (e2eBrowser) DragHover(term.Coordinates) bool { return false }
+
+func (e2eBrowser) DragCancel() {}
+
+func (e2eBrowser) DragDrop(term.Coordinates, []string) bool { return false }
+
 func (e2eBrowser) Close() error { return nil }
 
 func (e2eBrowser) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
