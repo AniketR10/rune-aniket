@@ -64,6 +64,7 @@ type Executor struct {
 	history    map[workspaceapi.Pid]processInfo
 	stats      map[cmdKey]*cmdStats
 	extensions map[string]workspaceapi.Pid
+	stdio      *stdioStore
 	now        func() time.Time // for testing
 	stopGrace  time.Duration    // grace period for stop
 }
@@ -80,6 +81,7 @@ type processInfo struct {
 	parent  workspaceapi.Pid // 0 means no parent
 	done    chan struct{}    // closed when process exits
 	lastErr error            // set on exit for audit history
+	stdio   *stdioSink
 }
 
 // cmdKey identifies a command by its path and arguments,
@@ -107,6 +109,7 @@ func NewExecutor(underlying workspaceapi.Executor) *Executor {
 		history:    make(map[workspaceapi.Pid]processInfo),
 		stats:      make(map[cmdKey]*cmdStats),
 		extensions: make(map[string]workspaceapi.Pid),
+		stdio:      newStdioStore(),
 		now:        time.Now,
 		stopGrace:  defaultStopGrace,
 	}
@@ -128,8 +131,13 @@ func (e *Executor) Start(
 		cmd.Watcher = ours
 	}
 
+	sink := newStdioSink(e.stdio)
+	cmd.Stdout = sink.classify("stdout", cmd.Stdout)
+	cmd.Stderr = sink.classify("stderr", cmd.Stderr)
+
 	pid, err := e.underlying.Start(ctx, cmd)
 	if err != nil {
+		sink.close()
 		return pid, err
 	}
 
@@ -143,7 +151,9 @@ func (e *Executor) Start(
 		started: e.now(),
 		key:     key,
 		done:    make(chan struct{}),
+		stdio:   sink,
 	}
+	sink.identify(pid, info.started)
 
 	if parent, ok := ParentPidFromContext(ctx); ok {
 		info.parent = parent
@@ -165,6 +175,7 @@ func (e *Executor) Start(
 	go debug.CapturePanicReport(func() {
 
 		exitErr := <-ch
+		sink.close()
 		e.mu.Lock()
 		s := e.stats[key]
 		if s == nil {
@@ -200,9 +211,14 @@ func (e *Executor) Signal(
 	return e.underlying.Signal(pid, sig)
 }
 
-// Close delegates to the underlying executor.
+// Close discards captured process output and delegates to the
+// underlying executor.
 func (e *Executor) Close() error {
-	return e.underlying.Close()
+	rmErr := e.stdio.remove()
+	if err := e.underlying.Close(); err != nil {
+		return err
+	}
+	return rmErr
 }
 
 // StartCommand implements schemeapi.Executor by delegating to Start.
@@ -252,6 +268,8 @@ func (e *Executor) HandleCommand(
 		return e.handleSignal(cmd.Args[1:])
 	case "stop":
 		return e.handleStop(cmd.Args[1:])
+	case "stdio":
+		return e.handleStdio(cmd.Args[1:])
 	default:
 		return nil, fmt.Errorf("unknown process subcommand: %s", cmd.Args[0])
 	}
@@ -290,6 +308,7 @@ func (e *Executor) Help(
 		"  process signal <pid> [N]   Send signal N to a process (default: SIGTERM)",
 		"  process signal -N <pid>    Send signal N to a process",
 		"  process stop <pid>         Gracefully stop a process (SIGTERM, then SIGKILL)",
+		"  process stdio <pid>        Show captured process output",
 	), nil
 }
 
@@ -619,12 +638,14 @@ func (e *Executor) handleStop(
 }
 
 func processSubcommands() []string {
-	return []string{"status", "audit", "tree", "info", "signal", "stop"}
+	return []string{
+		"status", "audit", "tree", "info", "signal", "stop", "stdio",
+	}
 }
 
 func completesPID(subcommand string) bool {
 	return subcommand == "signal" || subcommand == "stop" ||
-		subcommand == "info"
+		subcommand == "info" || subcommand == "stdio"
 }
 
 func completeStrings(values []string, prefix string) iterator.Iterator[string] {

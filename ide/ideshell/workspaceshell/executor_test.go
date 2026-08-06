@@ -594,14 +594,16 @@ func TestCompleteSubcommands(t *testing.T) {
 	defer func() { _ = iter.Close() }()
 	got, err := iterator.ToSlice(ctx, iter)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"status", "audit", "tree", "info", "signal", "stop"}, got)
+	assert.Equal(t, []string{
+		"status", "audit", "tree", "info", "signal", "stop", "stdio",
+	}, got)
 
 	iter2, err := exec.Complete(ctx, "process", []string{"st"})
 	require.NoError(t, err)
 	defer func() { _ = iter2.Close() }()
 	got2, err := iterator.ToSlice(ctx, iter2)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"status", "stop"}, got2)
+	assert.Equal(t, []string{"status", "stop", "stdio"}, got2)
 }
 
 func TestHelp(t *testing.T) {
