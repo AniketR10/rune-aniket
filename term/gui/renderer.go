@@ -296,7 +296,8 @@ func rowSpill(row []term.Cell) (up, down bool) {
 }
 
 // markDirty flags row y and, because vertical-offset cells paint into
-// the adjacent row, its immediate neighbours.
+// the adjacent row and take the background of the strip they vacate
+// from it, its immediate neighbours.
 func (r *renderer) markDirty(y, height int) {
 	for dy := y - 1; dy <= y+1; dy++ {
 		if dy >= 0 && dy < height {
@@ -431,12 +432,16 @@ func (r *renderer) renderRow(
 	screen *ebiten.Image, cells [][]term.Cell, viewY int, pass renderPass,
 ) {
 	row := cells[viewY]
-	pixelY := r.fontManager.PixelY(viewY)
-	textPixelY := pixelY + r.font.OffsetY
+	rowPixelY := r.fontManager.PixelY(viewY)
+	rowTextPixelY := rowPixelY + r.font.OffsetY
 	halfCell := math.Floor(r.font.CellSize.Y/2) - 2
 
 	var useFace imagefont.Face
 	useFace = r.font.Regular
+
+	if pass == passRects {
+		r.fillOffsetGaps(cells, viewY, rowPixelY, halfCell)
+	}
 
 	var temp color.RGBA
 	var skipRunes int
@@ -457,16 +462,11 @@ func (r *renderer) renderRow(
 		}
 		bg := tcellToColor(cell.Bg, r.bgColor, r.bgOpacity)
 		pixelX := r.fontManager.PixelX(viewX)
-		pixelY := pixelY
-		textPixelY := textPixelY
-		verticalOffset := cell.Attrs&term.AttrVerticalRenderOffset != 0
-		negativeVerticalOffset := cell.Attrs&term.AttrNegativeVerticalRenderOffset != 0
-		if verticalOffset {
-			pixelY = math.Floor(pixelY + halfCell)
-			textPixelY = math.Floor(textPixelY + halfCell)
-		} else if negativeVerticalOffset {
-			pixelY = max(0, math.Ceil(pixelY-halfCell-1))
-			textPixelY = max(0, math.Ceil(textPixelY-halfCell-1))
+		pixelY := rowPixelY
+		textPixelY := rowTextPixelY
+		if cell.Attrs&verticalOffsetAttrs != 0 {
+			pixelY = offsetPixelY(cell.Attrs, pixelY, halfCell)
+			textPixelY = offsetPixelY(cell.Attrs, textPixelY, halfCell)
 		}
 
 		// reverse attr if AttrReverse
@@ -556,6 +556,89 @@ func (r *renderer) cellCluster(cell term.Cell) []rune {
 	r.emojiCluster = append(r.emojiCluster[:0], cell.Ch)
 	r.emojiCluster = append(r.emojiCluster, cell.CombiningRunes()...)
 	return r.emojiCluster
+}
+
+// verticalOffsetAttrs is the set of attributes that move a cell out of
+// its own row strip.
+const verticalOffsetAttrs = term.AttrVerticalRenderOffset |
+	term.AttrNegativeVerticalRenderOffset
+
+// offsetPixelY returns the y a cell with the given attributes renders
+// at, given the y it would render at in place.
+func offsetPixelY(attrs term.AttrMask, y, halfCell float64) float64 {
+	switch {
+	case attrs&term.AttrVerticalRenderOffset != 0:
+		return math.Floor(y + halfCell)
+	case attrs&term.AttrNegativeVerticalRenderOffset != 0:
+		return max(0, math.Ceil(y-halfCell-1))
+	}
+	return y
+}
+
+// offsetGapBackground returns the background that belongs in the strip
+// the cell at (x, viewY) vacates by rendering with a vertical offset.
+// The strip is contiguous with the row the cell moved away from, so it
+// is that row's band that shows behind the chrome there. Sampling the
+// same column rather than the same row matters under a shader, which
+// gives every cell its own colour. At the frame edge there is no such
+// row and the cell's own background extends into the strip instead.
+func offsetGapBackground(cells [][]term.Cell, viewY, x int) term.Color {
+	src := viewY + 1
+	if cells[viewY][x].Attrs&term.AttrVerticalRenderOffset != 0 {
+		src = viewY - 1
+	}
+	if src < 0 || src >= len(cells) || x >= len(cells[src]) {
+		return cells[viewY][x].Bg
+	}
+	return cells[src][x].Bg
+}
+
+// fillOffsetGaps repaints the parts of the row strip that vertically
+// offset cells leave uncovered. Without it the frame fill shows through
+// as a half-cell notch under (or over) every offset cell whenever the
+// surrounding background is not the default one, which is what a shader
+// tinting the screen produces. It runs as its own scan so the per-cell
+// draw loop, the hottest path in the renderer, is untouched.
+func (r *renderer) fillOffsetGaps(
+	cells [][]term.Cell, viewY int, rowPixelY, halfCell float64,
+) {
+	row := cells[viewY]
+	for x := range row {
+		attrs := row[x].Attrs
+		if attrs&verticalOffsetAttrs == 0 {
+			continue
+		}
+		r.fillOffsetGap(r.fontManager.PixelX(x),
+			math.Max(1, float64(row[x].Width)), rowPixelY,
+			offsetPixelY(attrs, rowPixelY, halfCell),
+			offsetGapBackground(cells, viewY, x))
+	}
+}
+
+func (r *renderer) fillOffsetGap(
+	pixelX, cellWidth, rowPixelY, cellPixelY float64, bg term.Color,
+) {
+	clr := tcellToColor(bg, r.bgColor, r.bgOpacity)
+	if clr == r.bgColor {
+		return
+	}
+	top, bottom := offsetGapStrip(rowPixelY, cellPixelY, r.font.CellSize.Y)
+	if bottom <= top {
+		return
+	}
+	r.rectBatch.AddRect(float32(pixelX), float32(top),
+		float32(r.font.CellSize.X*cellWidth), float32(bottom-top), clr)
+}
+
+// offsetGapStrip returns the vertical span of the cell's own row strip
+// that a cell drawn at cellPixelY instead of rowPixelY leaves uncovered:
+// the top of the strip when the cell moved down, the bottom when it
+// moved up. The span is empty when the offset was clamped away.
+func offsetGapStrip(rowPixelY, cellPixelY, cellHeight float64) (top, bottom float64) {
+	if cellPixelY < rowPixelY {
+		return cellPixelY + cellHeight, rowPixelY + cellHeight
+	}
+	return rowPixelY, cellPixelY
 }
 
 func (r *renderer) handleLigatures(
