@@ -49,3 +49,6 @@ var SymbolTTF []byte
 
 //go:embed NotoColorEmoji.ttf
 var EmojiTTF []byte
+
+//go:embed NotoSansCJK-Regular.ttc
+var CJKTTC []byte

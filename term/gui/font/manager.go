@@ -56,6 +56,7 @@ type Manager struct {
 	brailleFont  *sfnt.Font
 	fallbackFont *sfnt.Font
 	symbolFont   *sfnt.Font
+	cjkFont      *sfnt.Font
 	// acts as an IR to have all fonts preloaded upon
 	// size, DPI and device scale changes.
 	preloaded      []*sfnt.Font
@@ -120,6 +121,16 @@ func NewManager(overlapX, overlapY int) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse symbol font: %w", err)
 	}
+	cjk, err := sfnt.ParseCollection(builtinfont.CJKTTC)
+	if err != nil {
+		return nil, fmt.Errorf("parse cjk collection: %w", err)
+	}
+	cjkIndex := cjkFaceIndex()
+	ret.cjkFont, err = cjk.Font(cjkIndex)
+	if err != nil {
+		return nil, fmt.Errorf("select cjk face %d: %w", cjkIndex, err)
+	}
+	ret.log(log.DebugLevel, "selected cjk face index %d", cjkIndex)
 
 	// compensate default cell overlap
 	ret.setOffsetX(float64(overlapX))
@@ -737,9 +748,54 @@ func (m *Manager) createFace(f *sfnt.Font, bold bool) (font.Face, error) {
 	charSizeX, charSizeY, offsetY := m.calcFaceMetrics(face)
 	customFace := newCustomFace(charSizeX, charSizeY, offsetY,
 		face, bold, m.cellOverlapX, m.cellOverlapY)
-	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace, symbolFace)
+	faces := []font.Face{customFace, face, brailleFace, fallbackFace, symbolFace}
+	// CJK must come last: Noto Sans CJK also covers Latin, punctuation and
+	// box drawing, so any earlier position would steal those glyphs from
+	// Symbola and Meslo and change existing rendering.
+	cjkFace, err := m.createCJKFace(charSizeX)
+	if err != nil {
+		return nil, err
+	}
+	if cjkFace != nil {
+		faces = append(faces, cjkFace)
+	}
+	face = newMultiFace(1, faces...)
 	face = newCacheFace(face)
 	return face, nil
+}
+
+// createCJKFace builds the CJK fallback scaled so an ideograph advance
+// spans exactly two cells, the ic_width adjustment. Returns a nil face
+// when the scale cannot be derived, in which case the chain omits CJK.
+func (m *Manager) createCJKFace(charSizeX float64) (font.Face, error) {
+	if math.IsNaN(charSizeX) || math.IsInf(charSizeX, 0) || charSizeX <= 0 {
+		return nil, nil
+	}
+	probe, err := opentype.NewFace(m.cjkFont, &opentype.FaceOptions{
+		Size:    m.size,
+		DPI:     m.dpi(),
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("opentype new cjk probe face: %w", err)
+	}
+	icAdvance, ok := probe.GlyphAdvance('水')
+	if err := probe.Close(); err != nil {
+		return nil, fmt.Errorf("close cjk probe face: %w", err)
+	}
+	if !ok || icAdvance <= 0 {
+		return nil, nil
+	}
+	scale := (2 * charSizeX) / (float64(icAdvance) / (1 << 6))
+	cjkFace, err := opentype.NewFace(m.cjkFont, &opentype.FaceOptions{
+		Size:    m.size * scale,
+		DPI:     m.dpi(),
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("opentype new cjk face: %w", err)
+	}
+	return cjkFace, nil
 }
 
 func (m *Manager) setFaceMetrics() error {

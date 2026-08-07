@@ -30,6 +30,7 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/image/font/sfnt"
 )
 
 // TestEmojiTTFEmbeddedAndColor proves the bundled color emoji asset
@@ -52,4 +53,24 @@ func TestEmojiTTFEmbeddedAndColor(t *testing.T) {
 	assert.Positive(t, bm.Width)
 	assert.Positive(t, bm.Height)
 	assert.NotEmpty(t, bm.Data)
+}
+
+// TestCJKTTCEmbedded proves the bundled Noto Sans CJK collection shipped
+// and parses with x/image/font/sfnt, the stack the font Manager actually
+// consumes, exposing the ten expected faces with Han coverage.
+func TestCJKTTCEmbedded(t *testing.T) {
+	require.NotEmpty(t, CJKTTC, "NotoSansCJK-Regular.ttc must be embedded")
+
+	collection, err := sfnt.ParseCollection(CJKTTC)
+	require.NoError(t, err, "bundled CJK collection must parse with sfnt")
+	require.Equal(t, 10, collection.NumFonts(),
+		"collection ships Sans and Mono for JP, KR, SC, TC and HK")
+
+	f, err := collection.Font(7)
+	require.NoError(t, err, "Noto Sans Mono CJK SC must be selectable")
+
+	var buf sfnt.Buffer
+	gid, err := f.GlyphIndex(&buf, '中')
+	require.NoError(t, err)
+	assert.NotZero(t, gid, "U+4E2D must resolve to a glyph")
 }

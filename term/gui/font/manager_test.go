@@ -24,6 +24,7 @@
 package font
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -206,6 +207,51 @@ func TestSymbolFallbackResolvesGapGlyphs(t *testing.T) {
 	for name, r := range gaps {
 		_, ok := face.GlyphAdvance(r)
 		assert.True(t, ok, "glyph %s must resolve through the font fallback chain", name)
+	}
+}
+
+// TestCJKFallbackResolvesGlyphs verifies Han, Kana, Hangul and fullwidth
+// punctuation resolve through the chain instead of rasterizing .notdef,
+// which the atlas drops as an empty glyph and renders as tofu.
+func TestCJKFallbackResolvesGlyphs(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	face := m.RegularFontFace()
+	require.NotNil(t, face)
+
+	glyphs := map[string]rune{
+		"CJK_IDEOGRAPH_ZHONG (U+4E2D)":   '中',
+		"CJK_IDEOGRAPH_SHUI (U+6C34)":    '水',
+		"HIRAGANA_A (U+3042)":            'あ',
+		"KATAKANA_KA (U+30AB)":           'カ',
+		"HANGUL_HAN (U+D55C)":            '한',
+		"IDEOGRAPHIC_FULL_STOP (U+3002)": '。',
+		"FULLWIDTH_COMMA (U+FF0C)":       '，',
+		"HALFWIDTH_KATAKANA_A (U+FF71)":  'ｱ',
+	}
+	for name, r := range glyphs {
+		_, ok := face.GlyphAdvance(r)
+		assert.True(t, ok, "glyph %s must resolve through the font fallback chain", name)
+	}
+}
+
+// TestCJKIdeographAdvanceMatchesTwoCells guards the ic_width scaling: an
+// ideograph must advance exactly the two columns the cell model reserves
+// for it, otherwise glyphs overlap or leave a gap in the next cell.
+func TestCJKIdeographAdvanceMatchesTwoCells(t *testing.T) {
+	for _, size := range []float64{10, 14, 20} {
+		t.Run(fmt.Sprintf("size=%v", size), func(t *testing.T) {
+			m, err := NewManager(0, 0)
+			require.NoError(t, err)
+			require.NoError(t, m.SetSize(size))
+
+			advance, ok := m.RegularFontFace().GlyphAdvance('水')
+			require.True(t, ok)
+
+			want := 2 * m.CharSize().X
+			assert.InDelta(t, want, float64(advance)/(1<<6), 1.0,
+				"ideograph advance must span two cells")
+		})
 	}
 }
 
