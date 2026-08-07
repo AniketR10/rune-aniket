@@ -731,8 +731,12 @@ func TestHandlerCoalescesPtyOutputInterrupts(t *testing.T) {
 	assert.True(t, handled)
 	time.Sleep(defaultWaitForIdleVte)
 
-	assert.LessOrEqual(t, len(ch), 1,
-		"pty output must publish at most one EventInterrupt per update interval; got %d",
+	// The echo usually arrives as a single burst (one publish), but a
+	// loaded scheduler can smear the program's flush across pacing
+	// windows, each of which legitimately forwards its leading edge.
+	// Deterministic coalescing is pinned by TestForwardInterrupts.
+	assert.LessOrEqual(t, len(ch), 2,
+		"a keystroke echo must not publish one EventInterrupt per pty chunk; got %d",
 		len(ch))
 }
 

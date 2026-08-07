@@ -62,6 +62,12 @@ func (h loggingHandler) Input(c rune) {
 
 }
 
+func (h loggingHandler) InputRun(run []byte) {
+	h.log("InputRun %q", run)
+	h.h.InputRun(run)
+
+}
+
 func (h loggingHandler) Goto(line int, col int) {
 	h.log("Goto line=%d col=%d", line, col)
 	h.h.Goto(line, col)

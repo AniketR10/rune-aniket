@@ -369,6 +369,14 @@ func TestIntegrationComponent(t *testing.T) {
 				p.Linefeed()
 				p.Input('g')
 				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
+				// history transiently exceeds max scroll length by the
+				// slack before the amortized trim kicks in
+				assert.Equal(t, p.maxScrollLength+1, p.sync.buf.Rows())
+
+				p.CarriageReturn()
+				p.Linefeed()
+				p.Input('h')
+				assertDraw(t, comp, "d    \ne    \nf    \ng    \nh    ")
 				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
 			},
 		},
@@ -1186,4 +1194,74 @@ func TestComponentResizeIsSerialized(t *testing.T) {
 	}
 	close(stop)
 	<-done
+}
+
+// TestForwardInterrupts pins the interrupt pacing contract: the first
+// wake-up after an idle period forwards immediately (pacing must never
+// add keystroke echo latency), sustained wake-ups are withheld for the
+// pacing window (per-chunk forwarding during bulk output thrashes the
+// scheduler with cross-thread wake-ups), and a withheld wake-up is
+// still delivered once the window elapses so the final repaint of a
+// burst is never lost.
+func TestForwardInterrupts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("first wake-up forwards immediately, then paced", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		in := make(chan struct{}, 1)
+		out := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			forwardInterrupts(ctx, in, out, time.Hour)
+		}()
+
+		in <- struct{}{}
+		select {
+		case <-out:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first interrupt was not forwarded immediately")
+		}
+
+		in <- struct{}{}
+		select {
+		case <-out:
+			t.Fatal("interrupt forwarded within the pacing window")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		// cancellation must end the forwarder even mid-window
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("forwarder did not exit on context cancellation")
+		}
+	})
+
+	t.Run("withheld wake-up is delivered after the window", func(t *testing.T) {
+		t.Parallel()
+		in := make(chan struct{}, 1)
+		out := make(chan struct{})
+		const pacing = 20 * time.Millisecond
+		go forwardInterrupts(t.Context(), in, out, pacing)
+
+		in <- struct{}{}
+		select {
+		case <-out:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first interrupt was not forwarded")
+		}
+
+		start := time.Now()
+		in <- struct{}{}
+		select {
+		case <-out:
+		case <-time.After(5 * time.Second):
+			t.Fatal("trailing interrupt was not forwarded")
+		}
+		assert.GreaterOrEqual(t, time.Since(start), pacing)
+	})
 }

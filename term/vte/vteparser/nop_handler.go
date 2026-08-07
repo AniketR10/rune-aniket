@@ -46,6 +46,10 @@ func (h nopHandler) Input(c rune) {
 
 }
 
+func (h nopHandler) InputRun(run []byte) {
+
+}
+
 func (h nopHandler) Goto(line int, col int) {
 
 }

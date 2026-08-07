@@ -401,6 +401,28 @@ func (b *Buffer) TrimRowsFromEnd(count int) (removed int, ok bool) {
 	return b.cells.trimRowsFromEnd(count), true
 }
 
+// TrimRowsFromStart removes up to count leading rows from the buffer
+// without allocating intermediate strings, keeping at least one row.
+// Trimmed row storage is recycled for reuse by AppendBlankRows. Only
+// supported in performance mode. Returns the number of rows removed.
+func (b *Buffer) TrimRowsFromStart(count int) (removed int, ok bool) {
+	if b.undoer != nil {
+		panic("TrimRowsFromStart should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.trimRowsFromStart(count), true
+}
+
+// AppendBlankRows appends count rows of width cells filled with the
+// buffer's fill-in char after the last row, reusing storage recycled by
+// TrimRowsFromStart when available. Only supported in performance mode.
+func (b *Buffer) AppendBlankRows(count, width int) (ok bool) {
+	if b.undoer != nil {
+		panic("AppendBlankRows should not be used if not initialized via InitPerformance")
+	}
+	b.cells.appendBlankRows(count, width)
+	return true
+}
+
 // WrapRow is equivalent to calling WrapRowContext
 // with context.Background.
 func (b *Buffer) WrapRow(y, at int) (ok bool) {

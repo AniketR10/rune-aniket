@@ -185,6 +185,49 @@ func (b *AltBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
 	b.WriteAt(b.cursor.position, c, width, charset)
 }
 
+// WriteRun writes the leading bytes of run (each a printable ASCII
+// character occupying one cell) at the cursor position and reports how
+// many were written. Zero means the caller must fall back to
+// per-character writes: a non-identity charset mapping, a concealed
+// cursor, a short target row or an overwritten wide cell all need
+// WriteAt's handling.
+func (b *AltBuffer) WriteRun(run []byte, charset vteparser.CharsetIndex) int {
+	return b.writeRunAt(b.cursor.position, run, charset)
+}
+
+func (b *AltBuffer) writeRunAt(
+	pos term.Coordinates, run []byte, charset vteparser.CharsetIndex,
+) int {
+	if b.cursor.hidden {
+		return 0
+	}
+	if cs, ok := b.cursor.Charsets[charset]; ok && cs != vteparser.StandardCharsetASCII {
+		return 0
+	}
+	cells := b.Cells.RawCells()
+	if pos.Y < 0 || pos.Y >= len(cells) || pos.X < 0 {
+		return 0
+	}
+	row := cells[pos.Y]
+	end := pos.X + len(run)
+	if end > len(row) {
+		return 0
+	}
+	target := row[pos.X:end]
+	for i := range target {
+		if target[i].Width > 1 {
+			return 0
+		}
+	}
+	for i, c := range run {
+		cell := &target[i]
+		cell.Ch = rune(c)
+		cell.SetAttributes(b.cursor.attr)
+		cell.Width = 1
+	}
+	return len(run)
+}
+
 // WriteAt writes the given character with the given width to the cell
 // at the current cursor position.
 func (b *AltBuffer) WriteAt(

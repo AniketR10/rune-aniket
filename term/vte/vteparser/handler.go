@@ -41,6 +41,12 @@ type Handler interface {
 	// Input sets the character to be displayed at the current cell.
 	Input(c rune)
 
+	// InputRun displays a run of printable ASCII characters in a single
+	// call. Each byte carries the same semantics as Input(rune(b)); the
+	// batch avoids per-character dispatch and locking on bulk output
+	// streams.
+	InputRun(run []byte)
+
 	// Goto sets the cell cursor to the given position.
 	Goto(line int, col int)
 

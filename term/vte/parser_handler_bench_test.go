@@ -24,11 +24,13 @@
 package vte
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
 
@@ -63,6 +65,9 @@ func BenchmarkParserHandlerStream(b *testing.B) {
 		name    string
 		width   int
 		lineLen int
+		// prefillLines streams this many full-width lines before the
+		// timer starts, pinning the scrollback at its configured max.
+		prefillLines int
 	}{
 		// Logs / shell output: lines much shorter than the terminal,
 		// so each row carries lots of trailing capacity that is never
@@ -83,11 +88,17 @@ func BenchmarkParserHandlerStream(b *testing.B) {
 		// dominant allocator in the production heap snapshot.
 		{name: "wrap_w80_l160", width: 80, lineLen: 160},
 		{name: "wrap_w200_l400", width: 200, lineLen: 400},
+
+		// Scrollback pinned at max history: the regime a long
+		// `cat large_file` spends nearly all its time in, where every
+		// Linefeed scrolls a full-length row slice.
+		{name: "steady_w80", width: 80, lineLen: 80, prefillLines: 10_001},
 	}
 
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			payload := buildParserStreamPayload(totalChars, tc.lineLen)
+			prefill := buildParserStreamPayload(tc.prefillLines*tc.lineLen, tc.lineLen)
 
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -95,6 +106,7 @@ func BenchmarkParserHandlerStream(b *testing.B) {
 			for range b.N {
 				b.StopTimer()
 				ph := newBenchParserHandler(tc.width, height)
+				writeStreamToParserHandler(ph, prefill)
 				b.StartTimer()
 
 				writeStreamToParserHandler(ph, payload)
@@ -136,6 +148,53 @@ func writeStreamToParserHandler(ph *parserHandler, payload string) {
 			continue
 		}
 		ph.Input(c)
+	}
+}
+
+// BenchmarkParserStreamBytes measures the full parse stage the way the
+// pty pipeline drives it: raw bytes (lines terminated with \r\n as the
+// pty line discipline emits them) through vteparser.Parser. The bytes
+// variant exercises the batched printable-run path; the byte variant is
+// the per-byte dispatch baseline.
+func BenchmarkParserStreamBytes(b *testing.B) {
+	const (
+		totalChars = 600_000
+		height     = 24
+		width      = 80
+		lineLen    = 80
+	)
+	payload := []byte(strings.ReplaceAll(
+		buildParserStreamPayload(totalChars, lineLen), "\n", "\r\n"))
+	prefill := []byte(strings.ReplaceAll(
+		buildParserStreamPayload(10_001*lineLen, lineLen), "\n", "\r\n"))
+
+	feeds := []struct {
+		name string
+		feed func(*vteparser.Parser, []byte)
+	}{
+		{"per_byte", func(p *vteparser.Parser, buf []byte) {
+			for _, ch := range buf {
+				p.Advance(ch)
+			}
+		}},
+		{"batched", (*vteparser.Parser).AdvanceBytes},
+	}
+
+	for _, tc := range feeds {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(payload)))
+			b.ResetTimer()
+			for range b.N {
+				b.StopTimer()
+				ph := newBenchParserHandler(width, height)
+				parser := vteparser.NewParser(ph, new(vteparser.StdTimeout))
+				parser.AdvanceBytes(prefill)
+				b.StartTimer()
+
+				tc.feed(parser, payload)
+			}
+		})
 	}
 }
 

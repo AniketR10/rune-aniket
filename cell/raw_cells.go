@@ -46,6 +46,10 @@ const (
 	// slabs (at 24 bytes per cell).
 	readSlabInitCells int = 256
 	readSlabMaxCells  int = 16 * 1024
+	// maxFreeRows bounds the storage recycled from trimRowsFromStart for
+	// reuse by appendBlankRows, so unbalanced trim/append usage cannot
+	// retain unbounded memory.
+	maxFreeRows int = 4096
 )
 
 // rawCells is a matrix of term.Cell.
@@ -53,6 +57,7 @@ type rawCells struct {
 	columnCap  int
 	rowCap     int
 	cells      [][]term.Cell
+	free       [][]term.Cell
 	fillInChar rune
 	zwj        bool
 	zwjPos     term.Coordinates
@@ -84,6 +89,7 @@ func (c *rawCells) resetWithCap(rowCap, columnCap int) {
 	c.rowCap = rowCap
 	c.cells = make([][]term.Cell, 1, c.rowCap)
 	c.cells[0] = makeNewRow(0, c.columnCap)
+	c.free = nil
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
 }
@@ -106,6 +112,7 @@ func (c *rawCells) adoptCells(cells [][]term.Cell) {
 		panic("rawCells.adoptCells: cells must contain at least one row")
 	}
 	c.cells = cells
+	c.free = nil
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
 }
@@ -446,6 +453,68 @@ func (c *rawCells) trimRowsFromEnd(count int) (removed int) {
 	clear(c.cells[newLen:])
 	c.cells = c.cells[:newLen]
 	return removed
+}
+
+// trimRowsFromStart drops up to count rows from the start of c.cells,
+// keeping at least one row. Trimmed row storage is retained (bounded by
+// maxFreeRows) so appendBlankRows can reuse it instead of allocating.
+func (c *rawCells) trimRowsFromStart(count int) (removed int) {
+	if count <= 0 {
+		return 0
+	}
+	n := len(c.cells)
+	if n <= 1 {
+		return 0
+	}
+	removed = min(count, n-1)
+	if keep := min(removed, maxFreeRows-len(c.free)); keep > 0 {
+		c.free = append(c.free, c.cells[:keep]...)
+	}
+	copy(c.cells, c.cells[removed:])
+	newLen := n - removed
+	// Drop the trailing row pointers so the underlying []term.Cell
+	// allocations are not pinned by the unused tail of the backing array.
+	clear(c.cells[newLen:])
+	c.cells = c.cells[:newLen]
+	return removed
+}
+
+// appendBlankRows appends count rows of width cells filled with
+// c.fillInChar after the last row, producing the same cell shape as the
+// Edit insert path. Row storage recycled by trimRowsFromStart is reused
+// when available so sustained append/trim cycles do not allocate.
+func (c *rawCells) appendBlankRows(count, width int) {
+	if count <= 0 || width < 0 {
+		return
+	}
+	fillStr := string(c.fillInChar)
+	fill := term.Cell{
+		Ch:    c.fillInChar,
+		Width: uint8(graphemecluster.StringWidth(fillStr)),
+		Bytes: uint8(len(fillStr)),
+	}
+	for range count {
+		row := c.takeFreeRow(width)
+		if len(row) > 0 {
+			row[0] = fill
+			for filled := 1; filled < len(row); filled *= 2 {
+				copy(row[filled:], row[:filled])
+			}
+		}
+		c.cells = append(c.cells, row)
+	}
+}
+
+func (c *rawCells) takeFreeRow(width int) []term.Cell {
+	for n := len(c.free); n > 0; n = len(c.free) {
+		row := c.free[n-1]
+		c.free[n-1] = nil
+		c.free = c.free[:n-1]
+		if cap(row) >= width {
+			return row[:width]
+		}
+	}
+	return makeNewRow(width, c.columnCap)
 }
 
 func (c *rawCells) fillInCoords(pos term.Coordinates) (

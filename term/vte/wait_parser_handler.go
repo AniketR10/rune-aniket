@@ -55,6 +55,7 @@ func newWaitParserHandler(ctx context.Context, h vteparser.Handler) *waitParserH
 	})
 	return ret
 }
+
 func (w *waitParserHandler) useTrigger(trigger func()) {
 	w.trigger = trigger
 }

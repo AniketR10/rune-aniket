@@ -112,6 +112,28 @@ func (p *Parser) Advance(ch byte) {
 	}
 }
 
+// AdvanceBytes processes a batch of bytes from the PTY. Runs of
+// printable ASCII encountered while the scanner is in ground state are
+// delivered to the handler in one InputRun call instead of per-byte
+// dispatch, which dominates bulk output streams.
+func (p *Parser) AdvanceBytes(buf []byte) {
+	for len(buf) > 0 {
+		if p.state.syncState.timeout.PendingTimeout() {
+			p.advanceSync(buf[0])
+			buf = buf[1:]
+			continue
+		}
+		if n := p.scanner.GroundRun(buf); n > 0 {
+			p.handler.InputRun(buf[:n])
+			p.state.precedingChar = rune(buf[n-1])
+			buf = buf[n:]
+			continue
+		}
+		p.scanner.Advance(buf[0])
+		buf = buf[1:]
+	}
+}
+
 // StopSync ends a synchronized update.
 func (p *Parser) StopSync() {
 	// Process all synchronized bytes.

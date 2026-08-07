@@ -80,6 +80,23 @@ func (p *Scanner) Advance(ch byte) {
 	p.performStateChange(State(state), Action(action), ch)
 }
 
+// GroundRun reports how many leading bytes of buf the scanner would
+// print with no state change: bytes 0x20..0x7E processed in ground
+// state map to the Print action and remain in ground state. DEL (0x7F)
+// is excluded; although the table prints it, handlers treat it as a
+// zero-width control.
+func (p *Scanner) GroundRun(buf []byte) int {
+	if p.state != Ground {
+		return 0
+	}
+	for i, ch := range buf {
+		if ch < 0x20 || ch > 0x7E {
+			return i
+		}
+	}
+	return len(buf)
+}
+
 type utf8Receiver struct {
 	*Scanner
 	Driver

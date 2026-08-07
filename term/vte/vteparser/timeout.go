@@ -64,5 +64,7 @@ func (h *StdTimeout) ClearTimeout() {
 
 // PendingTimeout returns whether a timeout is currently active and has not yet expired.
 func (h *StdTimeout) PendingTimeout() bool {
-	return time.Now().Before(h.timeout)
+	// The zero check keeps the common no-sync-update path free of a
+	// clock read; PendingTimeout is polled once per parsed batch.
+	return !h.timeout.IsZero() && time.Now().Before(h.timeout)
 }

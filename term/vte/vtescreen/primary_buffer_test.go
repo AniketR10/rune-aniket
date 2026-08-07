@@ -83,6 +83,67 @@ func TestPrimaryReset(t *testing.T) {
 	})
 }
 
+func TestPrimaryScrollUpHistory(t *testing.T) {
+	t.Run("appends blank rows while under max history", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, 20)
+		b.SetDefaultChar(' ')
+		b.Resize(3, 3)
+		resetPrimaryBuffer(b, "0\n1\n2")
+		require.Equal(t, 3, b.Rows())
+
+		b.ScrollUpHistory(1)
+		assert.Equal(t, 4, b.Rows())
+		assert.Equal(t, "0  ", cellsRowString(b, 0))
+		assert.Equal(t, "   ", cellsRowString(b, 3))
+		assert.Equal(t, 3, b.Columns(3))
+	})
+
+	t.Run("trims oldest rows in amortized chunks past max history", func(t *testing.T) {
+		history := 5
+		b := NewPrimaryBuffer(0, history)
+		b.SetDefaultChar(' ')
+		b.Resize(3, 3)
+		resetPrimaryBuffer(b, "0\n1\n2")
+
+		slack := b.historySlack()
+		require.Equal(t, 1, slack)
+
+		for b.Rows() < history+slack {
+			b.ScrollUpHistory(1)
+		}
+		assert.Equal(t, history+slack, b.Rows())
+		assert.Equal(t, "0  ", cellsRowString(b, 0))
+
+		// next scroll exceeds the slack and trims back to max history
+		b.ScrollUpHistory(1)
+		assert.Equal(t, history, b.Rows())
+		assert.Equal(t, "2  ", cellsRowString(b, 0))
+	})
+
+	t.Run("rotates in place when history is disabled", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, 0)
+		b.SetDefaultChar(' ')
+		b.Resize(3, 3)
+		resetPrimaryBuffer(b, "0\n1\n2")
+		require.Equal(t, 3, b.Rows())
+
+		b.ScrollUpHistory(1)
+		assert.Equal(t, 3, b.Rows())
+		assert.Equal(t, "1  ", cellsRowString(b, 0))
+		assert.Equal(t, "2  ", cellsRowString(b, 1))
+		assert.Equal(t, "   ", cellsRowString(b, 2))
+	})
+}
+
+func cellsRowString(b *PrimaryBuffer, y int) string {
+	row := b.Cells.RawCells()[y]
+	runes := make([]rune, len(row))
+	for x, c := range row {
+		runes[x] = c.Ch
+	}
+	return string(runes)
+}
+
 func TestPrimaryCoordinates(t *testing.T) {
 	b := NewPrimaryBuffer(0, testHistory)
 	assert.Equal(t, term.Coordinates{}, b.CursorAtScreen())

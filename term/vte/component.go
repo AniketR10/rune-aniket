@@ -174,35 +174,10 @@ func (t *Component) triggerBell() {
 // Run must be called in a separate goroutine to start processing incoming
 // data from the pty master.
 func (t *Component) Run(updateChan chan struct{}) error {
-	// interrupt at most at a reasonable fps. This improves
-	// performance when program is dumping Kbs of content
-	// into the terminal scroll.
-	// buffer to 1, so we publish one last interrupt after
-	// maxInterruptPerSecond since last interrupt
 	ch := make(chan struct{}, 1)
 	go debug.CapturePanicReport(func() {
-		maxInterruptPerSecond := time.Duration(int(time.Second) / 30)
-		timer := time.NewTimer(maxInterruptPerSecond)
-		defer timer.Stop()
 		defer close(updateChan)
-		for {
-			select {
-			case <-ch:
-			case <-t.ctx.Done():
-				return
-			}
-			select {
-			case updateChan <- struct{}{}:
-			case <-t.ctx.Done():
-				return
-			}
-			timer.Reset(maxInterruptPerSecond)
-			select {
-			case <-timer.C:
-			case <-t.ctx.Done():
-				return
-			}
-		}
+		forwardInterrupts(t.ctx, ch, updateChan, interruptPacing)
 	})
 	go debug.CapturePanicReport(func() {
 		for {
@@ -221,6 +196,45 @@ func (t *Component) Run(updateChan chan struct{}) error {
 	})
 
 	return t.run(ch)
+}
+
+// interruptPacing bounds how often parse wake-ups are forwarded. The period must sit
+// between two rates: above any interactive echo rate (key repeat tops out well below
+// 120Hz, so keystroke echoes always arrive with the window already expired and forward
+// immediately) and far below the pty chunk rate of sustained output (cat-ing a large
+// file), where forwarding every chunk wakes two parked goroutines per chunk and melts the
+// host in cross-thread wake-ups for repaints the event loop would fold into one per tick
+// anyway.
+const interruptPacing = time.Second / 120
+
+// forwardInterrupts relays parse wake-ups to the consumer. The first
+// wake-up after an idle period is forwarded immediately; subsequent
+// ones are paced, with the cap-1 input channel holding one pending
+// wake-up so a trailing update is always delivered after the window.
+func forwardInterrupts(
+	ctx context.Context, in <-chan struct{}, out chan<- struct{},
+	pacing time.Duration,
+) {
+	timer := time.NewTimer(pacing)
+	defer timer.Stop()
+	for {
+		select {
+		case <-in:
+		case <-ctx.Done():
+			return
+		}
+		select {
+		case out <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		timer.Reset(pacing)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // Title returns the Title of this Component.
@@ -1145,25 +1159,45 @@ func (t *Component) run(updateChan chan struct{}) error {
 		t.mu.Unlock()
 	}()
 
+	if g, ok := newPtyGather(t.ctx, t.pty.Master); ok {
+		return t.runGather(g, updateChan)
+	}
+
 	buf := make([]byte, os.Getpagesize())
 	for {
 		n, err := t.pty.Master.Read(buf[:])
 		if err != nil {
 			return err
 		}
-		for i := range n {
-			t.parser.Advance(buf[i])
-		}
+		t.parser.AdvanceBytes(buf[:n])
 		t.version.Add(1)
 		select {
 		// Close was called, just return error
 		case <-t.ctx.Done():
 			return t.ctx.Err()
-		// no interrupts in the last maxInterruptPeriod
 		case updateChan <- struct{}{}:
-		// an interrupt was requested in the last maxInterruptPeriod
-		// don't request any further interrupts for now
+		// an interrupt is already pending; it covers this batch too
 		default:
 		}
 	}
+}
+
+// runGather is the parse stage of the local-pty pipeline: it consumes
+// gathered batches so the gather thread, not this loop, owns draining
+// the kernel pty queue.
+func (t *Component) runGather(g *ptyGather, updateChan chan struct{}) error {
+	for batch := range g.ready {
+		t.parser.AdvanceBytes(batch)
+		g.release(batch)
+		t.version.Add(1)
+		select {
+		// Close was called, just return error
+		case <-t.ctx.Done():
+			return t.ctx.Err()
+		case updateChan <- struct{}{}:
+		// an interrupt is already pending; it covers this batch too
+		default:
+		}
+	}
+	return g.err
 }

@@ -68,6 +68,33 @@ func (b *PrimaryBuffer) Restore(cells [][]term.Cell, cursor term.Coordinates, wi
 
 const wrapMarker uint8 = 1 << 7
 
+// maxHistorySlack caps how many rows history may exceed maxHistory
+// before ScrollUpHistory trims the oldest rows. Trimming compacts the
+// whole backing slice, so a larger slack amortizes that memmove over
+// more appended lines at the cost of transiently retaining more rows.
+const maxHistorySlack = 1024
+
+func (b *PrimaryBuffer) historySlack() int {
+	return max(1, min(b.maxHistory/10, maxHistorySlack))
+}
+
+// ScrollUpHistory scrolls the visible screen up by count lines by
+// appending blank rows after the last row, growing history. The oldest
+// rows are trimmed in amortized chunks once the buffer exceeds
+// maxHistory by the allowed slack, so sustained output streams avoid a
+// per-line memmove of the entire scrollback. When history is disabled
+// (maxHistory <= 0) the buffer is rotated in place instead.
+func (b *PrimaryBuffer) ScrollUpHistory(count int) {
+	if b.maxHistory <= 0 {
+		b.ScrollUp(0, b.Cells.Rows(), count)
+		return
+	}
+	b.Cells.AppendBlankRows(count, b.width)
+	if rows := b.Cells.Rows(); rows > b.maxHistory+b.historySlack() {
+		b.Cells.TrimRowsFromStart(rows - b.maxHistory)
+	}
+}
+
 // MarkWrapAtCursor marks the current line/column of the cursor
 // as a wrapped line, so it can later be un-wrapped upon Resize.
 func (b *PrimaryBuffer) MarkWrapAtCursor() {
@@ -472,6 +499,17 @@ func (b *PrimaryBuffer) Write(c rune, width int, charset vteparser.CharsetIndex)
 	if overwritten != 0 {
 		b.consumeCoveredCells(pos, b.AdvanceColumns(width)-overwritten)
 	}
+}
+
+// WriteRun writes the leading bytes of run (each a printable ASCII
+// character occupying one cell) at the cursor, converting the cursor
+// position to scroll coordinates once instead of per character.
+// Overwriting a Width<=1 cell with a single-width glyph never covers a
+// neighbor, so the consumeCoveredCells dance is not needed here; wide
+// target cells make WriteRun report 0 so the caller falls back to
+// Write. See AltBuffer.WriteRun for the full fallback contract.
+func (b *PrimaryBuffer) WriteRun(run []byte, charset vteparser.CharsetIndex) int {
+	return b.writeRunAt(b.CursorAtScroll(), run, charset)
 }
 
 // consumeCoveredCells removes the cells whose columns a glyph

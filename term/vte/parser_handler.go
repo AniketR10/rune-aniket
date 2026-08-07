@@ -106,6 +106,10 @@ type screenBuffer interface {
 	CursorAtScroll() term.Coordinates
 	Insert(c rune, width int, charset vteparser.CharsetIndex)
 	Write(c rune, width int, charset vteparser.CharsetIndex)
+	// WriteRun writes leading printable-ASCII bytes at the cursor in one
+	// pass and reports how many were written; 0 demands the per-character
+	// Write path. See AltBuffer.WriteRun.
+	WriteRun(run []byte, charset vteparser.CharsetIndex) int
 	Delete(count int)
 	ResetCells(start, end int)
 	ResetLines(start, end int)
@@ -256,6 +260,10 @@ func (t *parserHandler) Input(c rune) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
+	t.input(c)
+}
+
+func (t *parserHandler) input(c rune) {
 	// The decoder emits one codepoint at a time, so a grapheme continuation
 	// (combining mark, VS, skin tone, ZWJ-joined emoji) must fold back into
 	// its base cell. The 0x0300 gate skips this for ASCII; every
@@ -268,7 +276,13 @@ func (t *parserHandler) Input(c rune) {
 		t.wrapLine()
 	}
 
-	width := graphemecluster.StringWidth(string(c))
+	// Printable ASCII is always one cell wide; the grapheme machinery
+	// costs a string conversion and a state machine per rune, which
+	// dominates bulk output streams.
+	width := 1
+	if c >= 0x7F {
+		width = graphemecluster.StringWidth(string(c))
+	}
 
 	advance := t.sync.buf.AdvanceColumns(width)
 
@@ -296,6 +310,52 @@ func (t *parserHandler) Input(c rune) {
 		// carriageReturn or other commands that could be send before the next
 		// call to Input if program wanted to manage the wrap around process manually.
 		t.shouldWrap = true
+	}
+}
+
+// InputRun displays a run of printable ASCII characters. It preserves
+// Input's per-character semantics while acquiring the lock and
+// converting the cursor position once per row segment instead of once
+// per character, which dominates bulk output streams.
+func (t *parserHandler) InputRun(run []byte) {
+	t.sync.mu.Lock()
+	defer t.sync.mu.Unlock()
+
+	for len(run) > 0 {
+		if t.shouldWrap {
+			t.wrapLine()
+		}
+		if t.modeInsert {
+			t.input(rune(run[0]))
+			run = run[1:]
+			continue
+		}
+		buf := t.sync.buf
+		pos := buf.CursorAtScreen()
+		n := min(len(run), t.width-pos.X)
+		if n <= 0 {
+			t.input(rune(run[0]))
+			run = run[1:]
+			continue
+		}
+		w := buf.WriteRun(run[:n], t.currentCharset)
+		if w == 0 {
+			t.input(rune(run[0]))
+			run = run[1:]
+			continue
+		}
+		run = run[w:]
+		pos.X += w
+		if pos.X < t.width {
+			t.setCursorAtScreen(pos, t.modeOrigin)
+		} else {
+			// per-character writes advance the cursor up to the last
+			// column before flagging the wrap; wrapLine relies on the
+			// cursor sitting on the marked cell.
+			pos.X = t.width - 1
+			t.setCursorAtScreen(pos, t.modeOrigin)
+			t.shouldWrap = true
+		}
 	}
 }
 
@@ -1360,14 +1420,7 @@ func (t *parserHandler) scrollUp(count int) bool {
 	if count <= 0 {
 		return false
 	}
-	if buf.Rows() < t.maxScrollLength {
-		y := rows - 1
-		buf.InsertLines(count, term.Coordinates{Y: y, X: buf.Columns(y)})
-	} else {
-		// little optimization to avoid adding and removing rows due to
-		// reaching max lines.
-		buf.ScrollUp(0, buf.Rows(), count)
-	}
+	buf.ScrollUpHistory(count)
 	return true
 }
 

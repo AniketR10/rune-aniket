@@ -142,6 +142,87 @@ func TestTrimRowsFromEnd(t *testing.T) {
 	})
 }
 
+func TestTrimRowsFromStart(t *testing.T) {
+	t.Run("trims requested rows", func(t *testing.T) {
+		b := buildPerfBuffer("a", "b", "c", "d")
+		removed, ok := b.TrimRowsFromStart(2)
+		require.True(t, ok)
+		assert.Equal(t, 2, removed)
+		assert.Equal(t, []string{"c", "d"}, cellsRowsAsStrings(b))
+	})
+	t.Run("keeps at least one row", func(t *testing.T) {
+		b := buildPerfBuffer("a", "b")
+		removed, ok := b.TrimRowsFromStart(10)
+		require.True(t, ok)
+		assert.Equal(t, 1, removed)
+		assert.Equal(t, []string{"b"}, cellsRowsAsStrings(b))
+	})
+	t.Run("no-op on single row buffer", func(t *testing.T) {
+		b := buildPerfBuffer("a")
+		removed, ok := b.TrimRowsFromStart(1)
+		require.True(t, ok)
+		assert.Equal(t, 0, removed)
+	})
+	t.Run("rejects non-positive count", func(t *testing.T) {
+		b := buildPerfBuffer("a", "b")
+		removed, ok := b.TrimRowsFromStart(0)
+		require.True(t, ok)
+		assert.Equal(t, 0, removed)
+	})
+	t.Run("rejects non-performance mode", func(t *testing.T) {
+		b := NewBuffer()
+		assert.Panics(t, func() {
+			_, _ = b.TrimRowsFromStart(1)
+		})
+	})
+}
+
+func TestAppendBlankRows(t *testing.T) {
+	t.Run("appends rows filled with fillInChar", func(t *testing.T) {
+		b := buildPerfBuffer("ab")
+		ok := b.AppendBlankRows(2, 3)
+		require.True(t, ok)
+		assert.Equal(t, []string{"ab", "   ", "   "}, cellsRowsAsStrings(b))
+	})
+	t.Run("fill cells match the edit insert shape", func(t *testing.T) {
+		b := buildPerfBuffer("a")
+		require.True(t, b.AppendBlankRows(1, 2))
+		for _, c := range b.RawCells()[1] {
+			assert.Equal(t, term.Cell{Ch: ' ', Width: 1, Bytes: 1}, c)
+		}
+	})
+	t.Run("non-positive count is a no-op", func(t *testing.T) {
+		b := buildPerfBuffer("a")
+		require.True(t, b.AppendBlankRows(0, 3))
+		assert.Equal(t, []string{"a"}, cellsRowsAsStrings(b))
+	})
+	t.Run("reuses storage recycled by TrimRowsFromStart", func(t *testing.T) {
+		b := buildPerfBuffer("abc", "def", "g")
+		recycled := &b.RawCells()[0][0]
+		removed, ok := b.TrimRowsFromStart(1)
+		require.True(t, ok)
+		require.Equal(t, 1, removed)
+		require.True(t, b.AppendBlankRows(1, 3))
+		assert.Equal(t, []string{"def", "g", "   "}, cellsRowsAsStrings(b))
+		appended := &b.RawCells()[2][0]
+		assert.Same(t, recycled, appended)
+	})
+	t.Run("allocates when recycled rows are too narrow", func(t *testing.T) {
+		b := buildPerfBuffer("ab", "cd", "e")
+		recycled := &b.RawCells()[0][0]
+		_, _ = b.TrimRowsFromStart(1)
+		require.True(t, b.AppendBlankRows(1, 5))
+		assert.Equal(t, []string{"cd", "e", "     "}, cellsRowsAsStrings(b))
+		assert.NotSame(t, recycled, &b.RawCells()[2][0])
+	})
+	t.Run("rejects non-performance mode", func(t *testing.T) {
+		b := NewBuffer()
+		assert.Panics(t, func() {
+			_ = b.AppendBlankRows(1, 1)
+		})
+	})
+}
+
 func TestResetPerformanceCapacityDropsBackingStorage(t *testing.T) {
 	b := new(Buffer)
 	b.InitPerformance(2, 2, '.')
