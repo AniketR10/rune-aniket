@@ -1355,14 +1355,15 @@ func (s *Scroll) contractCoordinatesWidth(pos term.Coordinates) (ret term.Coordi
 	if pos.Y < 0 || pos.Y >= len(cells) {
 		return
 	}
-	for x, c := range cells[pos.Y] {
-		if x >= ret.X {
-			break
-		}
-		if c.Ch == '\t' {
+	// Indexed rather than ranged: this runs once per cursor conversion,
+	// i.e. several times per parsed codepoint, and copying each 24-byte
+	// cell dominated the loop.
+	row := cells[pos.Y]
+	for x := 0; x < len(row) && x < ret.X; x++ {
+		if row[x].Ch == '\t' {
 			ret.X -= s.tabspaces - 1
-		} else if c.Width > 1 {
-			ret.X -= int(c.Width) - 1
+		} else if row[x].Width > 1 {
+			ret.X -= int(row[x].Width) - 1
 		}
 	}
 	if ret.X < 0 {

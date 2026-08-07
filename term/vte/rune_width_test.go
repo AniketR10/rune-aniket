@@ -21,48 +21,32 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vtescanner
+package vte
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 )
 
-func TestGroundRun(t *testing.T) {
-	cases := []struct {
-		name  string
-		state State
-		buf   string
-		want  int
-	}{
-		{"full printable run", Ground, "hello world", 11},
-		{"stops at control byte", Ground, "abc\ndef", 3},
-		{"stops at escape", Ground, "abc\x1b[31m", 3},
-		{"stops at DEL", Ground, "abc\x7fdef", 3},
-		{"includes utf8 sequence", Ground, "abc\xc3\xa9", 5},
-		{"includes multi-byte utf8", Ground, "a漢字🙂", 11},
-		{"stops before truncated 2 byte", Ground, "abc\xc3", 3},
-		{"stops before truncated 3 byte", Ground, "abc\xe6\xbc", 3},
-		{"stops before truncated 4 byte", Ground, "abc\xf0\x9f\x98", 3},
-		{"stops at stray continuation", Ground, "abc\x80\xbf", 3},
-		{"stops at overlong", Ground, "abc\xc0\x80", 3},
-		{"stops at surrogate", Ground, "abc\xed\xa0\x80", 3},
-		{"stops at out of range lead", Ground, "abc\xf5\x80\x80\x80", 3},
-		{"keeps literal replacement char", Ground, "abc\ufffd", 6},
-		{"stops at control after utf8", Ground, "漢字\r", 6},
-		{"leading control", Ground, "\rabc", 0},
-		{"leading utf8", Ground, "漢abc", 6},
-		{"empty buffer", Ground, "", 0},
-		{"non-ground state", CsiParam, "hello", 0},
-		{"utf8 state", Utf8, "hello", 0},
-		{"space and tilde boundary", Ground, " ~", 2},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := NewScanner(&testDispatcher{})
-			s.state = tc.state
-			assert.Equal(t, tc.want, s.GroundRun([]byte(tc.buf)))
-		})
+// TestRuneWidthMatchesGraphemeCluster pins the memoized table to the
+// reference implementation it replaces, including the codepoints above
+// widthTableLimit that still fall through to it.
+func TestRuneWidthMatchesGraphemeCluster(t *testing.T) {
+	t.Parallel()
+
+	for c := rune(0); c <= 0x10FFFF; c++ {
+		if c >= 0xD800 && c <= 0xDFFF {
+			continue
+		}
+		want := graphemecluster.StringWidth(string(c))
+		if c < 0x7F {
+			// Printable ASCII short-circuits to one cell; the C0
+			// controls never reach runeWidth from the parser.
+			want = 1
+		}
+		if got := runeWidth(c); got != want {
+			t.Fatalf("runeWidth(%U) = %d, want %d", c, got, want)
+		}
 	}
 }

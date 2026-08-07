@@ -25,6 +25,7 @@ package cell
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -547,4 +548,14 @@ func TestCellsToBufferPerformance(t *testing.T) {
 		assert.Equal(t, 2, merged)
 		assert.Equal(t, []string{"abcdef"}, cellsRowsAsStrings(b))
 	})
+}
+
+// TestASCIIChars pins the hand-written constant that delete slices to
+// report a removed single-cell ASCII rune without allocating; a typo in
+// it would silently corrupt that removed text.
+func TestASCIIChars(t *testing.T) {
+	require.Len(t, asciiChars, utf8.RuneSelf)
+	for c := range utf8.RuneSelf {
+		assert.Equal(t, string(rune(c)), asciiChars[c:c+1], "index %d", c)
+	}
 }

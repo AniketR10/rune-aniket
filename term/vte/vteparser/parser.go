@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"math"
 	"time"
+	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/term/vte/vtescanner"
@@ -113,7 +114,7 @@ func (p *Parser) Advance(ch byte) {
 }
 
 // AdvanceBytes processes a batch of bytes from the PTY. Runs of
-// printable ASCII encountered while the scanner is in ground state are
+// printable text encountered while the scanner is in ground state are
 // delivered to the handler in one InputRun call instead of per-byte
 // dispatch, which dominates bulk output streams.
 func (p *Parser) AdvanceBytes(buf []byte) {
@@ -125,7 +126,7 @@ func (p *Parser) AdvanceBytes(buf []byte) {
 		}
 		if n := p.scanner.GroundRun(buf); n > 0 {
 			p.handler.InputRun(buf[:n])
-			p.state.precedingChar = rune(buf[n-1])
+			p.state.precedingChar, _ = utf8.DecodeLastRune(buf[:n])
 			buf = buf[n:]
 			continue
 		}

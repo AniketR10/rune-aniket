@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 )
 
@@ -47,6 +48,23 @@ func TestAdvanceBytesEquivalence(t *testing.T) {
 		{"wrap", strings.Repeat("abcdefgh", 12)},
 		{"sgr colors", "\x1b[31mred\x1b[42;1mgreen bg\x1b[0mplain tail after reset"},
 		{"utf8 mixed", "héllo wörld … 漢字 tail ascii run 12345"},
+		{"cjk only", "夜半钟声到客船月落乌啼霜满天江枫渔火对愁眠姑苏城外寒山寺"},
+		{"cjk wraps row", strings.Repeat("漢字", 40)},
+		{"combining marks", "e\u0301e\u0301 a\u0300b\u0327c\u030a tail"},
+		{"emoji zwj and skin tones", "👨\u200d👩\u200d👧 👍\U0001F3FD 🇺🇸🇯🇵 ❤\ufe0f"},
+		{"hangul jamo", "\u1100\u1161\u11A8 한글 tail"},
+		{"c1 controls as utf8", "a\u0085b\u009bc\u0090d"},
+		{"replacement char literal", "a\ufffdb\ufffd\ufffdc"},
+		{"stray continuation bytes", "ab\x80\xbfcd"},
+		{"overlong encoding", "ab\xc0\x80\xc1\xbfcd"},
+		{"surrogate encoding", "ab\xed\xa0\x80cd"},
+		{"out of range lead bytes", "ab\xf5\x80\x80\x80\xffcd"},
+		{"truncated sequence at end", "ab\xe6\xbc"},
+		{"truncated sequence mid stream", "ab\xe6\xbccd\xf0\x9f\x98"},
+		{"utf8 then del", "漢\x7f字\x7f"},
+		{"utf8 across escape", "漢\x1b[31m字\x1b[0m漢"},
+		{"utf8 in insert mode", "before\x1b[4h漢字\x1b[4lappend"},
+		{"rep after utf8", "漢\x1b[5b tail"},
 		{"linedraw charset", "\x1b(0lqqqk\x1b(Bascii after"},
 		{"insert mode", "before\x1b[4hINSERTED\x1b[4lappend"},
 		{"rep after run", "abc\x1b[5b tail"},
@@ -80,6 +98,30 @@ func TestAdvanceBytesEquivalence(t *testing.T) {
 	}
 }
 
+// TestASCIIRunLen exercises every offset at which the word-at-a-time
+// scan can meet a non-ASCII byte, including inside the first word,
+// exactly on a word boundary and in the byte-wise tail, so a build
+// where the eight-byte load behaves differently fails here.
+func TestASCIIRunLen(t *testing.T) {
+	t.Parallel()
+
+	for _, high := range []byte{0x80, 0xC3, 0xFF} {
+		for prefix := range 24 {
+			for suffix := range 3 {
+				run := append([]byte(strings.Repeat("a", prefix)), high)
+				run = append(run, strings.Repeat("b", suffix)...)
+				require.Equal(t, prefix, asciiRunLen(run),
+					"prefix=%d high=%#x suffix=%d", prefix, high, suffix)
+			}
+		}
+	}
+
+	for length := range 24 {
+		run := []byte(strings.Repeat("a", length))
+		require.Equal(t, length, asciiRunLen(run), "all ASCII, length=%d", length)
+	}
+}
+
 func parserStateDump(
 	t *testing.T, stream string,
 	feed func(*vteparser.Parser, []byte), chunk int,
@@ -97,10 +139,24 @@ func parserStateDump(
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "prim:%+v\n", ph.sync.primBuf.Cells.RawCells())
-	fmt.Fprintf(&sb, "alt:%+v\n", ph.sync.altBuf.Cells.RawCells())
+	dumpCells(&sb, "prim", ph.sync.primBuf.Cells.RawCells())
+	dumpCells(&sb, "alt", ph.sync.altBuf.Cells.RawCells())
 	fmt.Fprintf(&sb, "cursor:%+v shouldWrap:%t useAlt:%t title:%q attrs:%+v",
 		ph.sync.buf.CursorAtScroll(), ph.shouldWrap, ph.useAlt,
 		ph.title, ph.sync.buf.CursorAttributes())
 	return sb.String()
+}
+
+// dumpCells renders the grid by value. term.Cell holds its combining
+// runes behind a pointer, so the default %+v formatting embeds a heap
+// address and two runs that agree on content still compare unequal.
+func dumpCells(sb *strings.Builder, name string, cells [][]term.Cell) {
+	for y, row := range cells {
+		fmt.Fprintf(sb, "%s[%d]:", name, y)
+		for _, c := range row {
+			fmt.Fprintf(sb, " %U%U/w%d/fg%v/bg%v/a%d/b%d",
+				c.Ch, c.CombiningRunes(), c.Width, c.Fg, c.Bg, c.Attrs, c.Bytes)
+		}
+		sb.WriteByte('\n')
+	}
 }

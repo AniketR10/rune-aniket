@@ -1,0 +1,158 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+// Command runewidthgen emits term/vte/rune_width.gen.go, a static
+// lookup table for the monospace width of every codepoint below
+// widthTableLimit.
+//
+// graphemecluster.StringWidth costs two Unicode table binary searches
+// (grapheme break plus East Asian width) per call, and bulk non-ASCII
+// output calls it once per codepoint. A flat table would be 128KiB of
+// source, so codepoints are grouped into fixed-size blocks and
+// identical blocks are shared: scripts are contiguous enough that a few
+// hundred distinct blocks cover the whole range.
+package main
+
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
+)
+
+// Must match the constants in term/vte/rune_width.go.
+const (
+	widthTableLimit = 0x20000
+	widthBlockShift = 6
+	widthBlockSize  = 1 << widthBlockShift
+)
+
+const header = `// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.`
+
+func main() {
+	_, self, _, _ := runtime.Caller(0)
+	defaultOut := filepath.Join(filepath.Dir(filepath.Dir(self)), "rune_width.gen.go")
+	out := flag.String("out", defaultOut, "path of the generated file")
+	flag.Parse()
+
+	blocks, index := buildTable()
+	emit(*out, blocks, index)
+}
+
+// buildTable returns the deduplicated width blocks and, for each block
+// of codepoints, the index of the block holding its widths.
+func buildTable() (blocks []string, index []byte) {
+	ids := make(map[string]int)
+	for c := 0; c < widthTableLimit; c += widthBlockSize {
+		widths := make([]byte, widthBlockSize)
+		for i := range widths {
+			w := graphemecluster.StringWidth(string(rune(c + i)))
+			if w < 0 || w > 9 {
+				panic(fmt.Sprintf("width %d of %U does not fit in a digit", w, rune(c+i)))
+			}
+			widths[i] = byte('0' + w)
+		}
+		key := string(widths)
+		id, ok := ids[key]
+		if !ok {
+			id = len(blocks)
+			ids[key] = id
+			blocks = append(blocks, key)
+		}
+		if id > 0xFF {
+			panic("block index no longer fits in a byte")
+		}
+		index = append(index, byte(id))
+	}
+	return blocks, index
+}
+
+func emit(path string, blocks []string, index []byte) {
+	f, err := os.Create(path)
+	must(err)
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer func() { must(w.Flush()) }()
+
+	fmt.Fprintf(w, "%s\n\n// Code generated by runewidthgen. DO NOT EDIT.\n\npackage vte\n\n", header)
+
+	fmt.Fprintf(w, "// runeWidthBlocks holds the width of each codepoint as an ASCII\n")
+	fmt.Fprintf(w, "// digit, one %d-codepoint block per line, with identical blocks\n", widthBlockSize)
+	fmt.Fprintf(w, "// stored once and shared through runeWidthBlockIndex.\n")
+	fmt.Fprintf(w, "const runeWidthBlocks = \"\" +\n")
+	for i, block := range blocks {
+		sep := " +"
+		if i == len(blocks)-1 {
+			sep = ""
+		}
+		fmt.Fprintf(w, "\t%q%s\n", block, sep)
+	}
+
+	fmt.Fprintf(w, "\n// runeWidthBlockIndex maps each %d-codepoint block to its block in\n", widthBlockSize)
+	fmt.Fprintf(w, "// runeWidthBlocks.\n")
+	fmt.Fprintf(w, "const runeWidthBlockIndex = \"\" +\n")
+	const perLine = 16
+	for i := 0; i < len(index); i += perLine {
+		end := min(i+perLine, len(index))
+		fmt.Fprint(w, "\t\"")
+		for _, b := range index[i:end] {
+			fmt.Fprintf(w, "\\x%02x", b)
+		}
+		sep := " +"
+		if end == len(index) {
+			sep = ""
+		}
+		fmt.Fprintf(w, "\"%s\n", sep)
+	}
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}

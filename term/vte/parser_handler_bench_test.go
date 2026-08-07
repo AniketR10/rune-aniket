@@ -198,6 +198,65 @@ func BenchmarkParserStreamBytes(b *testing.B) {
 	}
 }
 
+// BenchmarkParserStreamUnicode measures the parse stage on non-ASCII
+// text, the regime `kitten __benchmark__` reports as "Unicode chars".
+// Every codepoint here misses the printable-ASCII run fast path, so the
+// benchmark isolates the per-codepoint UTF-8 decode, grapheme width and
+// continuation-merge costs.
+func BenchmarkParserStreamUnicode(b *testing.B) {
+	const (
+		height  = 24
+		width   = 80
+		lineLen = 40
+	)
+
+	corpora := []struct {
+		name string
+		text string
+	}{
+		{"cjk", "夜半钟声到客船月落乌啼霜满天江枫渔火对愁眠姑苏城外寒山寺"},
+		{"latin1", "größer Ärger naïve café résumé Fußgängerübergänge Straße"},
+		{"mixed", "Καλημέρα κόσμε Привет мир こんにちは世界 안녕하세요 مرحبا"},
+		{"emoji", "🙂🚀🌍🎉🔥💡📦🧪🧵🪝🧬🛰️🪐🧭🗺️"},
+	}
+
+	for _, tc := range corpora {
+		b.Run(tc.name, func(b *testing.B) {
+			payload := []byte(buildUnicodePayload(tc.text, lineLen, 64*1024))
+			ph := newBenchParserHandler(width, height)
+			parser := vteparser.NewParser(ph, new(vteparser.StdTimeout))
+			// Warm the scrollback to its steady state so the measured
+			// loop is not dominated by first-touch row growth.
+			parser.AdvanceBytes(payload)
+
+			b.ReportAllocs()
+			b.SetBytes(int64(len(payload)))
+			b.ResetTimer()
+			for range b.N {
+				parser.AdvanceBytes(payload)
+			}
+		})
+	}
+}
+
+// buildUnicodePayload repeats text until the result reaches at least
+// minBytes, inserting \r\n every lineLen runes so the stream scrolls
+// like real output rather than overwriting one row.
+func buildUnicodePayload(text string, lineLen, minBytes int) string {
+	runes := []rune(text)
+	var sb strings.Builder
+	col := 0
+	for i := 0; sb.Len() < minBytes; i++ {
+		sb.WriteRune(runes[i%len(runes)])
+		col++
+		if col == lineLen {
+			sb.WriteString("\r\n")
+			col = 0
+		}
+	}
+	return sb.String()
+}
+
 func newBenchParserHandler(width, height int) *parserHandler {
 	uri, err := workspaceapi.ParseURI("memory:///bench")
 	if err != nil {

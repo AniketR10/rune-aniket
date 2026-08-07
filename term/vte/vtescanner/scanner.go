@@ -25,6 +25,7 @@ package vtescanner
 
 import (
 	"math"
+	"unicode/utf8"
 
 	"unstable.build/go-tui/term/vte/utf8parser"
 
@@ -81,17 +82,35 @@ func (p *Scanner) Advance(ch byte) {
 }
 
 // GroundRun reports how many leading bytes of buf the scanner would
-// print with no state change: bytes 0x20..0x7E processed in ground
-// state map to the Print action and remain in ground state. DEL (0x7F)
-// is excluded; although the table prints it, handlers treat it as a
-// zero-width control.
+// print without leaving ground state. Bytes 0x20..0x7E take the Print
+// action directly, and a complete well-formed UTF-8 sequence takes the
+// same path via BeginUtf8 and returns to ground once decoded, so both
+// can be handed to the handler in one batch. DEL (0x7F) is excluded;
+// although the table prints it, handlers treat it as a zero-width
+// control.
+//
+// A malformed sequence ends the run so the byte-at-a-time path applies
+// the scanner's own error handling. So does a sequence truncated by the
+// end of buf, which that path buffers until the rest arrives.
 func (p *Scanner) GroundRun(buf []byte) int {
 	if p.state != Ground {
 		return 0
 	}
-	for i, ch := range buf {
-		if ch < 0x20 || ch > 0x7E {
+	for i := 0; i < len(buf); {
+		switch ch := buf[i]; {
+		case ch >= 0x20 && ch <= 0x7E:
+			i++
+		case ch < utf8.RuneSelf:
 			return i
+		default:
+			// DecodeRune reports (RuneError, 1) for both malformed and
+			// truncated input; a literally encoded U+FFFD is 3 bytes
+			// and stays in the run.
+			r, size := utf8.DecodeRune(buf[i:])
+			if r == utf8.RuneError && size <= 1 {
+				return i
+			}
+			i += size
 		}
 	}
 	return len(buf)

@@ -31,6 +31,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
@@ -589,6 +590,31 @@ func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	}
 }
 
+// asciiChars holds every ASCII codepoint in order, so a delete that
+// removes exactly one such cell can report the removed text as a slice
+// of this constant instead of allocating a string. Overwriting a narrow
+// glyph with a wide one drops the cell the wide glyph now covers, once
+// per wide character of bulk output.
+const asciiChars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f" +
+	"\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f" +
+	` !"#$%&'()*+,-./0123456789:;<=>?` +
+	`@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_` +
+	"`abcdefghijklmnopqrstuvwxyz{|}~\x7f"
+
+// singleASCIICellAt reports the rune of the cell the [start, end) range
+// covers when that range is exactly one cell holding one ASCII rune with
+// no combining marks.
+func (c *rawCells) singleASCIICellAt(start, end term.Coordinates) (rune, bool) {
+	if end.X != start.X+1 || start.Y >= len(c.cells) || end.X > len(c.cells[start.Y]) {
+		return 0, false
+	}
+	cell := c.cells[start.Y][start.X]
+	if cell.Combining != nil || cell.Ch < 0 || cell.Ch >= utf8.RuneSelf {
+		return 0, false
+	}
+	return cell.Ch, true
+}
+
 func copyToBuffer(builder *bytes.Buffer, cells [][]term.Cell) {
 	for i, r := range cells {
 		if i != 0 {
@@ -723,9 +749,12 @@ func (c *rawCells) deleteRowRange(
 	builder *strings.Builder, row, fromX, toX int,
 ) {
 	copyRowToBuilder(builder, c.cells[row][fromX:toX])
-	diff := toX - fromX
+	c.removeRowRange(row, fromX, toX)
+}
+
+func (c *rawCells) removeRowRange(row, fromX, toX int) {
 	copy(c.cells[row][fromX:], c.cells[row][toX:])
-	c.cells[row] = c.cells[row][:len(c.cells[row])-diff]
+	c.cells[row] = c.cells[row][:len(c.cells[row])-(toX-fromX)]
 }
 
 func (c *rawCells) delete(from, to term.Coordinates) (
@@ -735,13 +764,18 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	assertValidCoords(to)
 	start, end = term.CoordinatesSort(from, to)
 
-	builder := strings.Builder{}
-
 	if start.Y == end.Y {
+		if r, ok := c.singleASCIICellAt(start, end); ok {
+			c.removeRowRange(start.Y, start.X, end.X)
+			return start, end, asciiChars[r : r+1]
+		}
+		var builder strings.Builder
 		c.deleteRowRange(&builder, start.Y, start.X, end.X)
 		str = builder.String()
 		return
 	}
+
+	builder := strings.Builder{}
 
 	// trim til end of first row
 	if start.X < len(c.cells[start.Y]) {

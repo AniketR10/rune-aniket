@@ -26,17 +26,20 @@ package vte
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
@@ -96,6 +99,9 @@ type parserHandler struct {
 	useAlt         bool
 	usedAlt        bool
 	currentCharset vteparser.CharsetIndex
+
+	// clusterBuf is reused scratch for the mergeContinuation probe.
+	clusterBuf []byte
 }
 
 // use a common api for alternate and primary buffers
@@ -264,24 +270,15 @@ func (t *parserHandler) Input(c rune) {
 }
 
 func (t *parserHandler) input(c rune) {
-	// The decoder emits one codepoint at a time, so a grapheme continuation
-	// (combining mark, VS, skin tone, ZWJ-joined emoji) must fold back into
-	// its base cell. The 0x0300 gate skips this for ASCII; every
-	// continuation codepoint sorts above it.
-	if c >= 0x0300 && !t.shouldWrap && t.mergeContinuation(c) {
+	width := runeWidth(c)
+
+	// Every grapheme continuation codepoint sorts above 0x0300.
+	if c >= 0x0300 && !t.shouldWrap && t.mergeContinuation(c, width) {
 		return
 	}
 
 	if t.shouldWrap {
 		t.wrapLine()
-	}
-
-	// Printable ASCII is always one cell wide; the grapheme machinery
-	// costs a string conversion and a state machine per rune, which
-	// dominates bulk output streams.
-	width := 1
-	if c >= 0x7F {
-		width = graphemecluster.StringWidth(string(c))
 	}
 
 	advance := t.sync.buf.AdvanceColumns(width)
@@ -313,67 +310,176 @@ func (t *parserHandler) input(c rune) {
 	}
 }
 
-// InputRun displays a run of printable ASCII characters. It preserves
-// Input's per-character semantics while acquiring the lock and
-// converting the cursor position once per row segment instead of once
-// per character, which dominates bulk output streams.
+// InputRun displays a run of printable UTF-8 text, preserving Input's
+// per-codepoint semantics.
 func (t *parserHandler) InputRun(run []byte) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	for len(run) > 0 {
-		if t.shouldWrap {
-			t.wrapLine()
-		}
-		if t.modeInsert {
-			t.input(rune(run[0]))
-			run = run[1:]
+		if run[0] >= utf8.RuneSelf {
+			r, size := utf8.DecodeRune(run)
+			t.input(r)
+			run = run[size:]
 			continue
 		}
-		buf := t.sync.buf
-		pos := buf.CursorAtScreen()
-		n := min(len(run), t.width-pos.X)
-		if n <= 0 {
-			t.input(rune(run[0]))
-			run = run[1:]
-			continue
-		}
-		w := buf.WriteRun(run[:n], t.currentCharset)
-		if w == 0 {
-			t.input(rune(run[0]))
-			run = run[1:]
-			continue
-		}
-		run = run[w:]
-		pos.X += w
-		if pos.X < t.width {
-			t.setCursorAtScreen(pos, t.modeOrigin)
-		} else {
-			// per-character writes advance the cursor up to the last
-			// column before flagging the wrap; wrapLine relies on the
-			// cursor sitting on the marked cell.
-			pos.X = t.width - 1
-			t.setCursorAtScreen(pos, t.modeOrigin)
-			t.shouldWrap = true
+		run = run[t.inputASCIIRun(run):]
+	}
+}
+
+// inputASCIIRun writes the leading ASCII bytes of run, which must start
+// with one, and reports how many bytes it consumed.
+func (t *parserHandler) inputASCIIRun(run []byte) int {
+	if t.shouldWrap {
+		t.wrapLine()
+	}
+	if t.modeInsert {
+		t.input(rune(run[0]))
+		return 1
+	}
+	buf := t.sync.buf
+	pos := buf.CursorAtScreen()
+	n := min(len(run), t.width-pos.X)
+	if n > 0 {
+		n = asciiRunLen(run[:n])
+	}
+	if n <= 0 {
+		t.input(rune(run[0]))
+		return 1
+	}
+	w := buf.WriteRun(run[:n], t.currentCharset)
+	if w == 0 {
+		t.input(rune(run[0]))
+		return 1
+	}
+	pos.X += w
+	if pos.X < t.width {
+		t.setCursorAtScreen(pos, t.modeOrigin)
+	} else {
+		// wrapLine relies on the cursor sitting on the marked cell.
+		pos.X = t.width - 1
+		t.setCursorAtScreen(pos, t.modeOrigin)
+		t.shouldWrap = true
+	}
+	return w
+}
+
+// asciiRunLen returns the length of run's leading ASCII bytes.
+func asciiRunLen(run []byte) int {
+	// The mask is identical in every byte position, so byte order is
+	// irrelevant and a native read avoids a bswap on big-endian.
+	const highBits = 0x8080808080808080
+	i := 0
+	for ; i+8 <= len(run); i += 8 {
+		if binary.NativeEndian.Uint64(run[i:])&highBits != 0 {
+			break
 		}
 	}
+	for ; i < len(run); i++ {
+		if run[i] >= utf8.RuneSelf {
+			break
+		}
+	}
+	return i
 }
 
 // mergeContinuation folds c into the preceding cell when c extends that
 // cell's grapheme cluster (base+c still steps as a single cluster),
 // leaving the cursor in place. It reports whether the merge happened;
 // callers fall back to a normal write when it did not.
-func (t *parserHandler) mergeContinuation(c rune) bool {
+func (t *parserHandler) mergeContinuation(c rune, width int) bool {
+	if !mayContinueAnyCluster(c, width) {
+		return false
+	}
 	prev := t.sync.buf.PrevCellAtCursor()
 	if prev == nil || prev.Ch == 0 || prev.Ch == '\n' {
 		return false
 	}
-	base := append([]rune{prev.Ch}, prev.CombiningRunes()...)
-	if _, rest, _, _ := graphemecluster.StepString(string(base)+string(c), -1); rest != "" {
+	combining := prev.CombiningRunes()
+	last := prev.Ch
+	if n := len(combining); n > 0 {
+		last = combining[n-1]
+	}
+	if !mayExtendCluster(last, c, width) {
 		return false
 	}
-	prev.SetCombining(append(base[1:], c))
+	buf := utf8.AppendRune(t.clusterBuf[:0], prev.Ch)
+	for _, r := range combining {
+		buf = utf8.AppendRune(buf, r)
+	}
+	buf = utf8.AppendRune(buf, c)
+	t.clusterBuf = buf
+	if _, rest, _, _ := uniseg.FirstGraphemeCluster(buf, -1); len(rest) != 0 {
+		return false
+	}
+	prev.SetCombining(append(combining, c))
 	return true
+}
+
+// mayContinueAnyCluster is the half of mayExtendCluster that depends
+// only on c, so it can run before the costly lookup of the preceding
+// cell. isSpacingMark searches a Unicode table, so it goes last.
+func mayContinueAnyCluster(c rune, width int) bool {
+	return width == 0 || c == '\n' || isEmojiModifier(c) ||
+		isRegionalIndicator(c) || isHangul(c) || maybePictographic(c) ||
+		isSpacingMark(c)
+}
+
+// mayExtendCluster reports whether c could continue a grapheme cluster
+// whose last codepoint is last. It must never reject a pair that the
+// segmentation probe it gates would merge.
+func mayExtendCluster(last, c rune, width int) bool {
+	if width == 0 || isEmojiModifier(c) || isSpacingMark(c) {
+		return true
+	}
+	switch {
+	case last == zeroWidthJoiner: // GB11
+		return true
+	case last == '\r': // GB3
+		return c == '\n'
+	case isRegionalIndicator(last): // GB12/GB13
+		return isRegionalIndicator(c)
+	case isHangul(last): // GB6/GB7/GB8
+		return isHangul(c)
+	}
+	return false
+}
+
+const zeroWidthJoiner = 0x200D
+
+// maybePictographic is a coarse superset of Extended_Pictographic; it
+// only guards GB11, which also requires a preceding ZWJ.
+func maybePictographic(c rune) bool {
+	switch {
+	case c == 0x00A9 || c == 0x00AE:
+		return true
+	case c >= 0x2000 && c <= 0x33FF:
+		return true
+	case c >= 0x1F000 && c <= 0x1FFFD:
+		return true
+	}
+	return false
+}
+
+// isEmojiModifier reports whether c is a skin-tone modifier, the only
+// non-zero-width codepoint range with Grapheme_Cluster_Break=Extend.
+func isEmojiModifier(c rune) bool { return c >= 0x1F3FB && c <= 0x1F3FF }
+
+// isSpacingMark covers Grapheme_Cluster_Break=SpacingMark, which is the
+// spacing combining marks plus the two Thai/Lao vowel signs that Unicode
+// classifies as letters.
+func isSpacingMark(c rune) bool {
+	return c == 0x0E33 || c == 0x0EB3 || unicode.Is(unicode.Mc, c)
+}
+
+func isRegionalIndicator(c rune) bool { return c >= 0x1F1E6 && c <= 0x1F1FF }
+
+// isHangul covers every codepoint with a Hangul
+// Grapheme_Cluster_Break value.
+func isHangul(c rune) bool {
+	return (c >= 0x1100 && c <= 0x11FF) ||
+		(c >= 0xA960 && c <= 0xA97F) ||
+		(c >= 0xAC00 && c <= 0xD7FF)
 }
 
 // Set cursor to position.
