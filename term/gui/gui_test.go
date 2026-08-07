@@ -292,11 +292,39 @@ func TestUpdate(t *testing.T) {
 		require.Equal(t, 2, drawCalled)
 		assert.Equal(t, 1, userFnCalled)
 
-		gui.updateChan <- term.Event{
-			Type: term.EventInterrupt,
-		}
+		gui.PublishEvent(term.Event{Type: term.EventInterrupt})
 		require.NoError(t, gui.Update())
 		require.Equal(t, 3, drawCalled)
+	})
+
+	t.Run("atomic collapses N client interrupts into one repaint", func(t *testing.T) {
+		var drawCalled int
+		var userFnCalled int
+		mock := mockHandler{assertDraw: func(w term.Writer) { drawCalled++ }}
+		gui, _ := newTestGUI(t, &mock)
+
+		require.NoError(t, gui.Update())
+		require.Equal(t, 1, drawCalled)
+
+		require.True(t, gui.PublishEvent(term.Event{Type: term.EventInterrupt}))
+		require.True(t, gui.PublishEvent(term.Event{Type: term.EventInterrupt}))
+		require.True(t, gui.PublishEvent(term.Event{Type: term.EventInterrupt}))
+		require.NoError(t, gui.Update())
+		require.Equal(t, 2, drawCalled)
+
+		// the atomic was cleared by the previous tick's swap, so a tick
+		// with no new interrupts must not repaint
+		require.NoError(t, gui.Update())
+		require.Equal(t, 2, drawCalled)
+
+		// an interrupt carrying a UserFunc is not a client interrupt and
+		// must still flow through the channel and run its callback
+		require.True(t, gui.PublishEvent(term.Event{
+			Type:     term.EventInterrupt,
+			UserFunc: func() { userFnCalled++ },
+		}))
+		require.NoError(t, gui.Update())
+		assert.Equal(t, 1, userFnCalled)
 	})
 
 	t.Run("returns ErrHandlerExited if handler exits", func(t *testing.T) {

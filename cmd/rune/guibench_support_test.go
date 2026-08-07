@@ -34,6 +34,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,16 +87,15 @@ type guiBenchConfig struct {
 // bootstrapHandler-built ide.IDE dispatched through gui.GUI
 // Update/Draw, with GPU work flushed by benchdraw.
 type guiBenchSession struct {
-	tb          testing.TB
-	root        *bootstrapHandler
-	g           *gui.GUI
-	publishChan chan term.Event
-	screen      *ebiten.Image
-	mu          *sync.Mutex
-	workDir     string
-	dataDir     string
-	cleanups    []func()
-	pixelBuf    []byte
+	tb       testing.TB
+	root     *bootstrapHandler
+	g        *gui.GUI
+	screen   *ebiten.Image
+	mu       *sync.Mutex
+	workDir  string
+	dataDir  string
+	cleanups []func()
+	pixelBuf []byte
 }
 
 func (s *guiBenchSession) close() {
@@ -228,14 +228,13 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 	s.cleanups = append(s.cleanups, restoreFlags)
 
 	s.mu = new(sync.Mutex)
-	s.publishChan = make(chan term.Event, 4096)
+	var guiRef atomic.Pointer[gui.GUI]
 	publishEvent := func(ev term.Event) bool {
-		select {
-		case s.publishChan <- ev:
-			return true
-		default:
+		g := guiRef.Load()
+		if g == nil {
 			return false
 		}
+		return g.PublishEvent(ev)
 	}
 
 	var files []string
@@ -283,7 +282,7 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 	// host monitor. Everything after mirrors runGUI exactly.
 	options := []gui.Option{gui.WithDeviceScale(1)}
 	options = append(options, buildGUIOptions(browser, guiCfg,
-		transparentWindow, s.publishChan, s.mu, false)...)
+		transparentWindow, s.mu, false)...)
 	options = append(options, gui.WithSize(cfg.pixelsW, cfg.pixelsH))
 	if cfg.forceFullRepaint {
 		options = append(options, gui.WithForceFullRepaint(true))
@@ -294,6 +293,7 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 		tb.Fatalf("gui: %v", err)
 	}
 	s.g = g
+	guiRef.Store(g)
 	root.attachGUI(g, transparentWindow)
 	if fg, bg := getGUIWindowOpacity(browser, guiCfg); transparentWindow && (fg != 1 || bg != 1) {
 		g.SetOpacity(bg, fg)
@@ -346,13 +346,11 @@ func (s *guiBenchSession) frameHash() [sha256.Size]byte {
 	return sha256.Sum256(s.pixelBuf)
 }
 
-// publish injects an event through the production publish channel; it
+// publish injects an event through the production GUI publisher; it
 // fails the benchmark if the channel is full, so scripted workloads
 // notice when they outrun the frame loop.
 func (s *guiBenchSession) publish(ev term.Event) {
-	select {
-	case s.publishChan <- ev:
-	default:
+	if !s.g.PublishEvent(ev) {
 		s.tb.Fatalf("publish channel full while injecting %v", ev.Type)
 	}
 }

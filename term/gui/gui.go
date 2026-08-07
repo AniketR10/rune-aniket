@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"image"
 	"sync"
+	"sync/atomic"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -110,6 +111,7 @@ type GUI struct {
 	iteration     int64
 	deviceScale   float64
 
+	interruptPending atomic.Bool
 	// processWindowClosed turns a pending window close request into
 	// events for the handler. WithCloseRequestEvent installs it; it
 	// defaults to a no-op, leaving ebiten's default behavior in place.
@@ -133,7 +135,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 	ret := &GUI{
 		mu:               new(sync.Mutex),
 		handler:          handler,
-		updateChan:       make(chan term.Event, 50),
+		updateChan:       make(chan term.Event, 4096),
 		bgOpacity:        1,
 		fgOpacity:        1,
 		fontManager:      fontManager,
@@ -261,6 +263,26 @@ func (g *GUI) NeedsRender() bool {
 	return g.needsRender
 }
 
+// PublishEvent enqueues ev for the next Update tick. A client
+// interrupt (a bare EventInterrupt that only asks for a redraw of
+// asynchronously refreshed content) is collapsed onto an atomic flag
+// instead of the channel so bursts of them cost no channel traffic;
+// Update folds it into a single repaint. All other events, including
+// interrupts carrying a Raw payload or UserFunc, keep their ordered
+// delivery through the channel.
+func (g *GUI) PublishEvent(ev term.Event) bool {
+	if ev.Type == term.EventInterrupt && ev.Raw == nil && ev.UserFunc == nil {
+		g.interruptPending.Store(true)
+		return true
+	}
+	select {
+	case g.updateChan <- ev:
+		return true
+	default:
+		return false
+	}
+}
+
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
 func (g *GUI) Update() error {
 	g.pendingEvents = append(g.pendingEvents, g.mouse.processMouse()...)
@@ -268,28 +290,12 @@ func (g *GUI) Update() error {
 	g.pendingEvents = append(g.pendingEvents, g.processWindowClosed()...)
 	needsDraw := g.needsDraw
 
-	var interruptPending bool
-loop:
-	for {
-		select {
-		case ev := <-g.updateChan:
-			if ev.Type == term.EventInterrupt {
-				// a client interrupt is defined as an interrupt that serves no
-				// purpose other than to redraw content that was refreshed asynchronously
-				clientInterrupt := ev.Raw == nil && ev.UserFunc == nil
-				if clientInterrupt && interruptPending {
-					continue
-				}
-				// Only ignore the next if we have already a client interrupt in the queue;
-				// We cannot assume that an interrupt with a payload on ev.Raw
-				// would be processed like a client interrupt, as it could be part of another
-				// caching mechanism or state machine (i.e. handlerrpc's stream).
-				interruptPending = interruptPending || clientInterrupt
-			}
-			g.pendingEvents = append(g.pendingEvents, ev)
-		default:
-			break loop
-		}
+	interruptPending := g.interruptPending.Swap(false)
+	for len(g.updateChan) > 0 {
+		g.pendingEvents = append(g.pendingEvents, <-g.updateChan)
+	}
+	if interruptPending {
+		g.pendingEvents = append(g.pendingEvents, term.Event{Type: term.EventInterrupt})
 	}
 
 	// set context with default iteration

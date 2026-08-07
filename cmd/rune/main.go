@@ -36,6 +36,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -674,14 +675,17 @@ func runGUI(
 		chdirerr = fmt.Errorf("cd %s: %w", home, chdirerr)
 	}
 
-	publishChan := make(chan term.Event, 4096)
+	// The GUI is created after the bootstrap handler, but the IDE may
+	// publish redraw interrupts during its async init before the GUI
+	// exists. guiRef is loaded atomically so those early interrupts are
+	// dropped (superseded by the GUI's initial draw) rather than racing.
+	var guiRef atomic.Pointer[gui.GUI]
 	publishEvent := func(ev term.Event) bool {
-		select {
-		case publishChan <- ev:
-			return true
-		default:
+		g := guiRef.Load()
+		if g == nil {
 			return false
 		}
+		return g.PublishEvent(ev)
 	}
 
 	// We load config twice, but it's better than the race conditions caused
@@ -740,8 +744,7 @@ func runGUI(
 		_, _ = browser.Notify(browserapi.LevelError, "%s", envErr)
 	}
 
-	options := buildGUIOptions(browser, cfg, transparentWindow,
-		publishChan, mu, *flagFPS)
+	options := buildGUIOptions(browser, cfg, transparentWindow, mu, *flagFPS)
 	options = append(options, gui.WithDragObserver(root.dragObserver))
 
 	storage := root.storage
@@ -762,6 +765,7 @@ func runGUI(
 	}
 	defer func() { _ = g.Close() }()
 	defer func() { _ = root.Close() }()
+	guiRef.Store(g)
 	root.attachGUI(g, transparentWindow)
 
 	if fg, bg := getGUIWindowOpacity(browser, cfg); transparentWindow && (fg != 1 || bg != 1) {
@@ -801,7 +805,7 @@ func runGUI(
 // GUI wiring.
 func buildGUIOptions(
 	b browser.Browser, cfg config.Config, transparentWindow bool,
-	publishChan chan term.Event, mu sync.Locker, printFPS bool,
+	mu sync.Locker, printFPS bool,
 ) []gui.Option {
 	return []gui.Option{
 		gui.WithColorThemes(getGUIDefaultColorTheme(b, cfg), getGUIColorThemes(b, cfg)),
@@ -815,7 +819,6 @@ func buildGUIOptions(
 		gui.WithLigatures(getGUILigatures(b, cfg)),
 		gui.WithTransparentWindow(transparentWindow),
 		gui.WithBackgroundBlur(getGUIBackgroundBlur(b, cfg)),
-		gui.WithPublishChannel(publishChan),
 		gui.WithLocker(mu),
 		gui.WithPrintFPS(printFPS),
 		gui.WithKeyMapping(getGUIKeyMapping(b, cfg)),

@@ -702,11 +702,12 @@ func TestHandlerPasteEndWritesBufferedInput(t *testing.T) {
 	assert.Equal(t, []byte("secret\r"), raw)
 }
 
-// TestHandlerCoalescesPtyOutputInterrupts pins that a keystroke which
-// drives the embedded program to flush in multiple stages produces at
-// most one publish during an update interval. Terminal sessions rely on
-// output throttling to avoid redraw thrash without blocking input.
-func TestHandlerCoalescesPtyOutputInterrupts(t *testing.T) {
+// TestHandlerPublishesPtyOutputInterrupt pins that a keystroke whose
+// echo drives the embedded program to flush produces at least one
+// EventInterrupt so the GUI repaints. Pacing was removed in favour of
+// publishing directly and letting the event loop fold repaints per
+// tick, so the contract is delivery, not coalescing.
+func TestHandlerPublishesPtyOutputInterrupt(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{
 		{"", `$ ▐                 
@@ -731,13 +732,8 @@ func TestHandlerCoalescesPtyOutputInterrupts(t *testing.T) {
 	assert.True(t, handled)
 	time.Sleep(defaultWaitForIdleVte)
 
-	// The echo usually arrives as a single burst (one publish), but a
-	// loaded scheduler can smear the program's flush across pacing
-	// windows, each of which legitimately forwards its leading edge.
-	// Deterministic coalescing is pinned by TestForwardInterrupts.
-	assert.LessOrEqual(t, len(ch), 2,
-		"a keystroke echo must not publish one EventInterrupt per pty chunk; got %d",
-		len(ch))
+	assert.GreaterOrEqual(t, len(ch), 1,
+		"a keystroke echo must publish at least one EventInterrupt so the GUI repaints")
 }
 
 func drain(ch chan struct{}) {

@@ -146,15 +146,6 @@ func WithCursorAttributes(attr term.Attributes) Option {
 	}
 }
 
-// WithPublishChannel defines the channel responsible for
-// processing input events.
-func WithPublishChannel(ch chan term.Event) Option {
-	return func(g *GUI) error {
-		g.updateChan = ch
-		return nil
-	}
-}
-
 // WithLocker defines the locker to be used to synchronize
 // access to the GUI's root tui.Handler.
 func WithLocker(mu sync.Locker) Option {

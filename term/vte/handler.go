@@ -80,7 +80,6 @@ type Handler struct {
 	closed        atomic.Bool // whether Close has been called
 	exit          atomic.Bool // whether running shell/program has exited
 	width, height int
-	updateCh      chan struct{}
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -132,9 +131,8 @@ func (e *Handler) Init(
 	e.mouse = mouse.New(e.mouseDriver)
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
-	e.updateCh = make(chan struct{}, 1)
 	go debug.CapturePanicReport(func() {
-		logErr := e.comp.Run(e.updateCh)
+		logErr := e.comp.Run(e.publisher)
 		e.exit.Store(true)
 		if err := e.publisher.PublishEvent(term.Event{Type: term.EventNone}); err != nil {
 			e.log(log.ErrorLevel, "pty exit publish: %s", err)
@@ -147,20 +145,6 @@ func (e *Handler) Init(
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			_, _ = e.notifications.Notify(browserapi.LevelError,
 				"terminal run: %v", logErr)
-		}
-	})
-
-	go debug.CapturePanicReport(func() {
-		for {
-			select {
-			case <-e.ctx.Done():
-				return
-			case <-e.updateCh:
-			}
-			err = e.publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
-			if err != nil {
-				e.log(log.ErrorLevel, "interrupt: %s", err)
-			}
 		}
 	})
 

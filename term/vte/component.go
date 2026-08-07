@@ -173,12 +173,7 @@ func (t *Component) triggerBell() {
 
 // Run must be called in a separate goroutine to start processing incoming
 // data from the pty master.
-func (t *Component) Run(updateChan chan struct{}) error {
-	ch := make(chan struct{}, 1)
-	go debug.CapturePanicReport(func() {
-		defer close(updateChan)
-		forwardInterrupts(t.ctx, ch, updateChan, interruptPacing)
-	})
+func (t *Component) Run(publisher browser.EventPublisher) error {
 	go debug.CapturePanicReport(func() {
 		for {
 			select {
@@ -195,46 +190,7 @@ func (t *Component) Run(updateChan chan struct{}) error {
 		}
 	})
 
-	return t.run(ch)
-}
-
-// interruptPacing bounds how often parse wake-ups are forwarded. The period must sit
-// between two rates: above any interactive echo rate (key repeat tops out well below
-// 120Hz, so keystroke echoes always arrive with the window already expired and forward
-// immediately) and far below the pty chunk rate of sustained output (cat-ing a large
-// file), where forwarding every chunk wakes two parked goroutines per chunk and melts the
-// host in cross-thread wake-ups for repaints the event loop would fold into one per tick
-// anyway.
-const interruptPacing = time.Second / 120
-
-// forwardInterrupts relays parse wake-ups to the consumer. The first
-// wake-up after an idle period is forwarded immediately; subsequent
-// ones are paced, with the cap-1 input channel holding one pending
-// wake-up so a trailing update is always delivered after the window.
-func forwardInterrupts(
-	ctx context.Context, in <-chan struct{}, out chan<- struct{},
-	pacing time.Duration,
-) {
-	timer := time.NewTimer(pacing)
-	defer timer.Stop()
-	for {
-		select {
-		case <-in:
-		case <-ctx.Done():
-			return
-		}
-		select {
-		case out <- struct{}{}:
-		case <-ctx.Done():
-			return
-		}
-		timer.Reset(pacing)
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return
-		}
-	}
+	return t.run(publisher)
 }
 
 // Title returns the Title of this Component.
@@ -1145,7 +1101,7 @@ func (t *Component) pendingCallbacks() int {
 	return t.waitParserHandler.pendingCallbacks()
 }
 
-func (t *Component) run(updateChan chan struct{}) error {
+func (t *Component) run(publisher browser.EventPublisher) error {
 	t.mu.Lock()
 	complete := t.complete
 	t.mu.Unlock()
@@ -1160,7 +1116,7 @@ func (t *Component) run(updateChan chan struct{}) error {
 	}()
 
 	if g, ok := newPtyGather(t.ctx, t.pty.Master); ok {
-		return t.runGather(g, updateChan)
+		return t.runGather(g, publisher)
 	}
 
 	buf := make([]byte, os.Getpagesize())
@@ -1171,33 +1127,19 @@ func (t *Component) run(updateChan chan struct{}) error {
 		}
 		t.parser.AdvanceBytes(buf[:n])
 		t.version.Add(1)
-		select {
-		// Close was called, just return error
-		case <-t.ctx.Done():
-			return t.ctx.Err()
-		case updateChan <- struct{}{}:
-		// an interrupt is already pending; it covers this batch too
-		default:
-		}
+		_ = publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 	}
 }
 
 // runGather is the parse stage of the local-pty pipeline: it consumes
 // gathered batches so the gather thread, not this loop, owns draining
 // the kernel pty queue.
-func (t *Component) runGather(g *ptyGather, updateChan chan struct{}) error {
+func (t *Component) runGather(g *ptyGather, publisher browser.EventPublisher) error {
 	for batch := range g.ready {
 		t.parser.AdvanceBytes(batch)
 		g.release(batch)
 		t.version.Add(1)
-		select {
-		// Close was called, just return error
-		case <-t.ctx.Done():
-			return t.ctx.Err()
-		case updateChan <- struct{}{}:
-		// an interrupt is already pending; it covers this batch too
-		default:
-		}
+		_ = publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 	}
 	return g.err
 }
