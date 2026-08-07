@@ -33,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -143,7 +144,8 @@ func TestResolveSysroot(t *testing.T) {
 }
 
 func TestRustInitializeParams(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "/sysroot", false)
+	params, err := rustInitializeParams(
+		"file:///ws", "/data/bin/rust-analyzer", "/sysroot", "info", false)
 	require.NoError(t, err)
 	assert.Equal(t, "file:///ws", params.RootURI)
 
@@ -151,12 +153,13 @@ func TestRustInitializeParams(t *testing.T) {
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
 	assert.Equal(t, "rust", opts["langID"])
 	assert.Equal(t, "/data/bin/rust-analyzer", opts["command"])
+	assert.Equal(t, map[string]any{"RA_LOG": "info"}, opts["env"])
 	assert.Equal(t, "/sysroot", opts["sysroot"])
 	assert.Equal(t, true, opts["checkOnSave"])
 	check, _ := opts["check"].(map[string]any)
 	assert.Equal(t, "clippy", check["command"])
 
-	noSysroot, err := rustInitializeParams("file:///ws", "ra", "", false)
+	noSysroot, err := rustInitializeParams("file:///ws", "ra", "", "info", false)
 	require.NoError(t, err)
 	var opts2 map[string]any
 	require.NoError(t, json.Unmarshal(noSysroot.InitializeOptions, &opts2))
@@ -164,12 +167,29 @@ func TestRustInitializeParams(t *testing.T) {
 	assert.False(t, hasSysroot)
 }
 
+func TestRustLogFilter(t *testing.T) {
+	assert.Equal(t, "info", rustLogFilter(nil, newFakeNotifications()))
+
+	cfg := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"log_level": "rust_analyzer=debug"},
+	})
+	assert.Equal(t, "rust_analyzer=debug",
+		rustLogFilter(cfg, newFakeNotifications()))
+
+	invalid := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"log_level": "info\nEVIL=1"},
+	})
+	notify := newFakeNotifications()
+	assert.Equal(t, "info", rustLogFilter(invalid, notify))
+	assert.NotEmpty(t, notify.notifs)
+}
+
 // TestRustInitializeOptionsExtras guards the initialization options we
 // forward to rust-analyzer beyond the baseline: import shaping so
 // organize-imports and auto-import assists produce idiomatic use trees,
 // assist.emitMustUse, autoimport completion, and lens suppression.
 func TestRustInitializeOptionsExtras(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "ra", "", false)
+	params, err := rustInitializeParams("file:///ws", "ra", "", "info", false)
 	require.NoError(t, err)
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
@@ -196,7 +216,7 @@ func TestRustInitializeOptionsExtras(t *testing.T) {
 // stops into the buffer. codeAction.resolveSupport must stay absent so
 // rust-analyzer resolves each assist's edit eagerly in the codeAction response.
 func TestRustInitializeCapabilities(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "ra", "", false)
+	params, err := rustInitializeParams("file:///ws", "ra", "", "info", false)
 	require.NoError(t, err)
 	var caps map[string]any
 	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
@@ -225,7 +245,7 @@ func TestRustInitializeCapabilities(t *testing.T) {
 // With the experimental flag set, localDocs is advertised so external-docs
 // receives a {web, local} response; the always-on flags stay set.
 func TestRustInitializeCapabilitiesExperimental(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "ra", "", true)
+	params, err := rustInitializeParams("file:///ws", "ra", "", "info", true)
 	require.NoError(t, err)
 	var caps map[string]any
 	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
@@ -262,7 +282,8 @@ func TestRustInitializeCapabilitiesExperimental(t *testing.T) {
 // which splits InitializeOptions.command on spaces. A bundled path with
 // no subcommand keeps the command a single argv element.
 func TestRustInitializeCommandHasNoSpaces(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "", false)
+	params, err := rustInitializeParams(
+		"file:///ws", "/data/bin/rust-analyzer", "", "info", false)
 	require.NoError(t, err)
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))

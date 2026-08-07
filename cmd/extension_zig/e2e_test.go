@@ -33,8 +33,44 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp"
 )
+
+func TestE2EZlsLoggingConfigReachesProcess(t *testing.T) {
+	zlsBin := findZlsBin(t)
+	zigBin := findZigBin(t)
+	dir := setupZigWorkspace(t)
+	rootURI := "file://" + dir
+	uri, err := workspaceapi.ParseURI(rootURI)
+	require.NoError(t, err)
+
+	scheme := newLocalScheme(dir)
+	mgr := idelsp.New(uri, scheme, scheme, &stubPkgManager{bin: zlsBin}, nil, nil,
+		idelsp.Config{MaxRetries: 1, Callback: &zlsCallback{}})
+	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
+
+	cfg := config.JSONFromMap(map[string]any{
+		"lsp_path": zlsBin,
+		"zig_path": zigBin,
+		"debug": map[string]any{
+			"log_level": "debug",
+		},
+	})
+	err = initializeZigRoot(t.Context(), scheme, scheme, newFakeNotifications(), mgr, nil, cfg,
+		langext.Root{Dir: dir, URI: rootURI})
+	require.NoError(t, err)
+
+	started, ok := scheme.startedProcess(zlsBin)
+	require.True(t, ok, "zls process was not started")
+	assert.Equal(t, []string{"--enable-stderr-logs", "--log-level", "debug"}, started.args)
+	require.Eventually(t, func() bool {
+		return started.stderr.String() != ""
+	}, 5*time.Second, 20*time.Millisecond, "zls did not write debug logs to stderr")
+}
 
 // TestE2E_ZlsBringUp drives the extension's zlsInitializeParams against
 // a real zls serving the testdata project: hover answers about the

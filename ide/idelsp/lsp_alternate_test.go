@@ -87,6 +87,63 @@ func TestParseAlternateCommands(t *testing.T) {
 	})
 }
 
+func TestParseLanguageEnv(t *testing.T) {
+	t.Parallel()
+
+	t.Run("absent yields nil", func(t *testing.T) {
+		t.Parallel()
+		got, err := parseLanguageEnv(map[string]any{})
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("well-formed map parses", func(t *testing.T) {
+		t.Parallel()
+		got, err := parseLanguageEnv(map[string]any{
+			"env": map[string]any{
+				"Z_VAR":  "last",
+				"RA_LOG": "info",
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"RA_LOG=info", "Z_VAR=last"}, got)
+	})
+
+	t.Run("wrong container type errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseLanguageEnv(map[string]any{"env": "RA_LOG=info"})
+		require.EqualError(t, err,
+			"'env' should be a map of environment variable to value")
+	})
+
+	t.Run("non-string value errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseLanguageEnv(map[string]any{
+			"env": map[string]any{"RA_LOG": true},
+		})
+		require.EqualError(t, err,
+			"'env.RA_LOG' should be a string")
+	})
+
+	t.Run("invalid name errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseLanguageEnv(map[string]any{
+			"env": map[string]any{"BAD=NAME": "value"},
+		})
+		require.EqualError(t, err,
+			"'env.BAD=NAME' is not a valid environment variable name")
+	})
+
+	t.Run("null byte in value errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseLanguageEnv(map[string]any{
+			"env": map[string]any{"RA_LOG": "info\x00debug"},
+		})
+		require.EqualError(t, err,
+			"'env.RA_LOG' contains a null byte")
+	})
+}
+
 // TestChildName asserts that childName reduces a command string to
 // the base name of its executable, which is used as the diagnostics
 // source identity for a multi-server child.

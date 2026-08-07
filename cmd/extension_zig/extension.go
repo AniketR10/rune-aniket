@@ -159,7 +159,8 @@ func initializeZigRoot(
 	warnMissingCheckStep(fs, notify, root, bos)
 
 	params, err := zlsInitializeParams(
-		root.URI, filepath.Base(root.Dir), command, zigBin, bos)
+		root.URI, filepath.Base(root.Dir), command, zigBin,
+		zlsLogLevel(cfg, notify), bos)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -168,6 +169,32 @@ func initializeZigRoot(
 	}
 	slog.Info("zig lsp initialized", "root", root.Dir, "command", command, "zig", zigBin)
 	return nil
+}
+
+func zlsLogLevel(cfg config.Config, notify browserapi.Notifications) string {
+	const defaultLevel = "info"
+	if cfg == nil {
+		return defaultLevel
+	}
+	debug, err := cfg.GetConfig("debug")
+	if err != nil || debug == nil {
+		return defaultLevel
+	}
+	level, err := debug.GetString("log_level")
+	if err != nil || level == "" {
+		return defaultLevel
+	}
+	switch level {
+	case "err", "warn", "info", "debug":
+		return level
+	default:
+		if notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.zig.config.debug.log_level must be one of "+
+					"\"err\", \"warn\", \"info\", \"debug\"; got %q", level)
+		}
+		return defaultLevel
+	}
 }
 
 func isZigFile(uri workspaceapi.URI) bool {

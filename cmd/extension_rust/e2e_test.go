@@ -31,9 +31,43 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp"
 )
+
+func TestE2ERustAnalyzerLogFilterReachesProcess(t *testing.T) {
+	raBin := findRustAnalyzer(t)
+	dir := setupCargoWorkspace(t)
+	rootURI := "file://" + dir
+	uri, err := workspaceapi.ParseURI(rootURI)
+	require.NoError(t, err)
+
+	scheme := newLocalScheme(dir)
+	mgr := idelsp.New(uri, scheme, scheme, &stubPkgManager{bin: raBin}, nil, nil,
+		idelsp.Config{MaxRetries: 1, Callback: &raCallback{}})
+	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
+
+	cfg := config.JSONFromMap(map[string]any{
+		"lsp_path": raBin,
+		"debug": map[string]any{
+			"log_level": "rust_analyzer=debug",
+		},
+	})
+	err = initializeRustRoot(t.Context(), scheme, scheme, newFakeNotifications(), mgr, nil,
+		"", "", "", cfg, false, langext.Root{Dir: dir, URI: rootURI})
+	require.NoError(t, err)
+
+	started, ok := scheme.startedProcess(raBin)
+	require.True(t, ok, "rust-analyzer process was not started")
+	assert.Equal(t, []string{"RA_LOG=rust_analyzer=debug"}, started.env)
+	require.Eventually(t, func() bool {
+		return strings.Contains(started.stderr.String(), "DEBUG")
+	}, 5*time.Second, 20*time.Millisecond, "rust-analyzer did not write debug logs to stderr")
+}
 
 // TestE2E drives the `rust` command handler against a real rust-analyzer
 // serving a real Cargo project under testdata/e2e. Each subtest exercises

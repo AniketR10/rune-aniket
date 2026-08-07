@@ -134,7 +134,7 @@ func initRustAnalyzer(t *testing.T, raBin string, openFiles []string) *rustEnvE2
 	mgr := idelsp.New(uri, scheme, scheme, &stubPkgManager{bin: raBin}, nil, nil, cfg)
 
 	ctx := context.Background()
-	params, err := rustInitializeParams(rootURI, raBin, sysrootFor(ctx), true)
+	params, err := rustInitializeParams(rootURI, raBin, sysrootFor(ctx), "info", true)
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)

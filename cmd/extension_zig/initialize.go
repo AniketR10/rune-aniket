@@ -26,6 +26,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
@@ -38,6 +39,15 @@ type buildOnSaveOptions struct {
 	Args   []string
 }
 
+func zlsCommand(bin, logLevel string) string {
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	return strings.Join([]string{
+		bin, "--enable-stderr-logs", "--log-level", logLevel,
+	}, " ")
+}
+
 // zlsInitializeParams builds the InitializeParams for zls. The
 // langID/command keys steer the host LSP shim; every other key is
 // forwarded verbatim as zls's config via initializationOptions.
@@ -48,11 +58,12 @@ type buildOnSaveOptions struct {
 //   - zls only pushes diagnostics when the client advertises the
 //     textDocument.publishDiagnostics capability.
 func zlsInitializeParams(
-	rootURI, rootName, command, zigExePath string, bos buildOnSaveOptions,
+	rootURI, rootName, command, zigExePath, logLevel string,
+	bos buildOnSaveOptions,
 ) (semanticapi.InitializeParams, error) {
 	initOptions := map[string]any{
 		"langID":  "zig",
-		"command": command,
+		"command": zlsCommand(command, logLevel),
 		// Plain-text completions: Rune's editor inserts completion text
 		// verbatim, so snippet placeholders must never reach the buffer.
 		"enable_snippets":                        false,

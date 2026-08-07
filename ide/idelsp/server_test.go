@@ -61,7 +61,10 @@ func TestLangServerStartCarriesProcessContext(t *testing.T) {
 	exec := &recordingStartExecutor{err: startErr}
 	srv := newLangServer(
 		context.Background(),
-		langConfig{id: "go", command: "gopls", args: []string{"serve"}},
+		langConfig{
+			id: "go", command: "gopls", args: []string{"serve"},
+			env: []string{"GOPLS_LOG_LEVEL=debug"},
+		},
 		"gopls",
 		exec,
 		"file:///workspace",
@@ -78,6 +81,22 @@ func TestLangServerStartCarriesProcessContext(t *testing.T) {
 	assert.Equal(t, "go", extensionID)
 	assert.Equal(t, "gopls", exec.cmd.Path)
 	assert.Equal(t, []string{"serve"}, exec.cmd.Args)
+	assert.Equal(t, []string{"GOPLS_LOG_LEVEL=debug"}, exec.cmd.Env)
+}
+
+func TestLangServerStartPreservesNilEnvironment(t *testing.T) {
+	startErr := errors.New("start failed")
+	exec := &recordingStartExecutor{err: startErr}
+	srv := newLangServer(
+		context.Background(),
+		langConfig{id: "go", command: "gopls", args: []string{"serve"}},
+		"gopls", exec, "file:///workspace", nil,
+		semanticapi.InitializeParams{},
+	)
+
+	err := srv.start(context.Background())
+	require.ErrorIs(t, err, startErr)
+	assert.Nil(t, exec.cmd.Env)
 }
 
 func TestLangServerStartCancelsProcessWhenTransportSetupFails(t *testing.T) {

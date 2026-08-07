@@ -706,7 +706,9 @@ func (m *Manager) initializeMultiServer(
 		idx, ok := cmdIndex[cmd]
 		if !ok {
 			argv := strings.Split(cmd, " ")
-			childCfg := langConfig{id: lang.id, command: argv[0], args: argv[1:]}
+			childCfg := langConfig{
+				id: lang.id, command: argv[0], args: argv[1:], env: lang.env,
+			}
 			child := m.buildChild(ctx, childCfg, childName(cmd), key.rootURI, params)
 			children = append(children, child)
 			idx = len(children) - 1

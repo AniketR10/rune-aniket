@@ -97,6 +97,35 @@ func TestApplyPyConfig(t *testing.T) {
 	})
 }
 
+func TestPyLogLevel(t *testing.T) {
+	t.Run("defaults to server default", func(t *testing.T) {
+		assert.Empty(t, pyLogLevel(nil, newFakeNotifications()))
+	})
+
+	t.Run("reads debug level", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{
+			"debug": map[string]any{"log_level": "debug"},
+		})
+		assert.Equal(t, "debug", pyLogLevel(cfg, newFakeNotifications()))
+	})
+
+	t.Run("rejects invalid level", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{
+			"debug": map[string]any{"log_level": "verbose"},
+		})
+		notify := newFakeNotifications()
+		assert.Empty(t, pyLogLevel(cfg, notify))
+		assert.NotEmpty(t, notify.notifs)
+	})
+
+	t.Run("invalid level without notifications", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{
+			"debug": map[string]any{"log_level": "verbose"},
+		})
+		assert.Empty(t, pyLogLevel(cfg, nil))
+	})
+}
+
 func TestPyWatchEvents(t *testing.T) {
 	onChange := []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeChange, textapi.EventTypeCreate,

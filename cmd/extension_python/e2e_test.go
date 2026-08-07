@@ -24,19 +24,174 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp"
+	"unstable.build/go-tui/workspace"
 )
+
+type synchronizedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+type startedProcess struct {
+	path   string
+	args   []string
+	env    []string
+	stderr *synchronizedBuffer
+}
+
+type recordingScheme struct {
+	schemeapi.Scheme
+	mu      sync.Mutex
+	started []startedProcess
+}
+
+func (s *recordingScheme) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return s.StartCommand(ctx, cmd)
+}
+
+func (s *recordingScheme) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	stderr := &synchronizedBuffer{}
+	if cmd.Stderr == nil {
+		cmd.Stderr = stderr
+	}
+	pid, err := s.Scheme.StartCommand(ctx, cmd)
+	if err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	s.started = append(s.started, startedProcess{
+		path: cmd.Path, args: append([]string{}, cmd.Args...),
+		env: append([]string{}, cmd.Env...), stderr: stderr,
+	})
+	s.mu.Unlock()
+	return pid, nil
+}
+
+func (s *recordingScheme) startedProcess(path string) (startedProcess, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.started) - 1; i >= 0; i-- {
+		if s.started[i].path == path {
+			return s.started[i], true
+		}
+	}
+	return startedProcess{}, false
+}
+
+type successfulExecutor struct {
+	mu      sync.Mutex
+	nextPid workspaceapi.Pid
+}
+
+func (e *successfulExecutor) Start(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	e.mu.Lock()
+	e.nextPid++
+	pid := e.nextPid
+	e.mu.Unlock()
+	if cmd.Watcher != nil {
+		cmd.Watcher.WatchProcess() <- nil
+	}
+	return pid, nil
+}
+
+func (*successfulExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (*successfulExecutor) Close() error                                  { return nil }
+
+type e2eInstaller map[string]string
+
+func (i e2eInstaller) FindInstalledExecutable(_ context.Context, name string) (string, error) {
+	if path := i[name]; path != "" {
+		return path, nil
+	}
+	return "", os.ErrNotExist
+}
+
+func TestE2EPythonLoggingConfigReachesServers(t *testing.T) {
+	tyBin := findVersionedTool(t, "ty", "0.0.51")
+	ruffBin := findVersionedTool(t, "ruff", "0.15.18")
+	dir := t.TempDir()
+	rootURI := "file://" + dir
+	uri, err := workspaceapi.ParseURI(rootURI)
+	require.NoError(t, err)
+
+	baseScheme, err := workspace.NewFileScheme(t.Context(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	scheme := &recordingScheme{Scheme: baseScheme}
+	mgr := idelsp.New(uri, scheme, scheme, nil, nil, nil,
+		idelsp.Config{MaxRetries: 1})
+	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
+
+	cfg := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"log_level": "debug"},
+	})
+	installer := e2eInstaller{"ty": tyBin, "ruff": ruffBin, "uv": "uv"}
+	err = initializeProjectRoot(t.Context(), scheme, &successfulExecutor{}, newFakeNotifications(),
+		mgr, installer, cfg, langext.Root{Dir: dir, URI: rootURI})
+	require.NoError(t, err)
+
+	ty, ok := scheme.startedProcess(tyBin)
+	require.True(t, ok, "ty process was not started")
+	assert.Equal(t, []string{"server"}, ty.args)
+	ruff, ok := scheme.startedProcess(ruffBin)
+	require.True(t, ok, "ruff process was not started")
+	assert.Equal(t, []string{"server", "-v"}, ruff.args)
+	require.Eventually(t, func() bool {
+		return strings.Contains(ty.stderr.String(), "log_level: Some(") &&
+			strings.Contains(ty.stderr.String(), "Debug,")
+	}, 5*time.Second, 20*time.Millisecond,
+		"ty did not report the forwarded debug initialization option")
+	require.Eventually(t, func() bool {
+		return ruff.stderr.String() != ""
+	}, 5*time.Second, 20*time.Millisecond, "ruff did not write verbose logs to stderr")
+}
+
+func findVersionedTool(t *testing.T, name, version string) string {
+	t.Helper()
+	bin, err := exec.LookPath(name)
+	if err != nil {
+		t.Skipf("%s not found, skipping python logging e2e test", name)
+	}
+	out, err := exec.Command(bin, "--version").CombinedOutput()
+	require.NoError(t, err)
+	require.Contains(t, string(out), version)
+	return bin
+}
 
 // realExecutor spawns real subprocesses, used by the e2e tests against
 // an installed uv. The watcher receives the process exit error. dir, when

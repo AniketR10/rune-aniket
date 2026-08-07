@@ -24,6 +24,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -643,6 +644,42 @@ type localScheme struct {
 	mu      sync.Mutex
 	procs   map[workspaceapi.Pid]*os.Process
 	nextPid workspaceapi.Pid
+	started []startedProcess
+}
+
+type synchronizedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+type startedProcess struct {
+	path   string
+	args   []string
+	env    []string
+	stderr *synchronizedBuffer
+}
+
+func (s *localScheme) startedProcess(path string) (startedProcess, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.started) - 1; i >= 0; i-- {
+		if s.started[i].path == path {
+			return s.started[i], true
+		}
+	}
+	return startedProcess{}, false
 }
 
 func newTestScheme() *localScheme {
@@ -730,6 +767,10 @@ func (s *localScheme) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspac
 }
 
 func (s *localScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	stderr := &synchronizedBuffer{}
+	if cmd.Stderr == nil {
+		cmd.Stderr = stderr
+	}
 	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
 	if cmd.Dir != "" {
 		c.Dir = cmd.Dir
@@ -752,6 +793,10 @@ func (s *localScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (w
 	pid := s.nextPid
 	s.nextPid++
 	s.procs[pid] = c.Process
+	s.started = append(s.started, startedProcess{
+		path: cmd.Path, args: append([]string{}, cmd.Args...),
+		env: append([]string{}, cmd.Env...), stderr: stderr,
+	})
 	s.mu.Unlock()
 
 	if cmd.Watcher != nil {

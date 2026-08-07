@@ -33,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -229,7 +230,7 @@ func TestWarnMissingCheckStep(t *testing.T) {
 func TestZlsInitializeParams(t *testing.T) {
 	enabled := true
 	params, err := zlsInitializeParams("file:///ws", "ws", "/data/bin/zls", "/data/bin/zig",
-		buildOnSaveOptions{Enable: &enabled, Args: []string{"check"}})
+		"debug", buildOnSaveOptions{Enable: &enabled, Args: []string{"check"}})
 	require.NoError(t, err)
 	assert.Equal(t, "file:///ws", params.RootURI)
 
@@ -242,7 +243,9 @@ func TestZlsInitializeParams(t *testing.T) {
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
 	assert.Equal(t, "zig", opts["langID"])
-	assert.Equal(t, "/data/bin/zls", opts["command"])
+	assert.Equal(t,
+		"/data/bin/zls --enable-stderr-logs --log-level debug",
+		opts["command"])
 	assert.Equal(t, "/data/bin/zig", opts["zig_exe_path"])
 	assert.Equal(t, true, opts["enable_build_on_save"])
 	assert.Equal(t, []any{"check"}, opts["build_on_save_args"])
@@ -251,7 +254,8 @@ func TestZlsInitializeParams(t *testing.T) {
 	// With no explicit build-on-save setting, the key must stay absent so
 	// zls keeps its check-step auto-detection default; an absent zig path
 	// lets zls run its own PATH discovery.
-	defaults, err := zlsInitializeParams("file:///ws", "ws", "zls", "", buildOnSaveOptions{})
+	defaults, err := zlsInitializeParams(
+		"file:///ws", "ws", "zls", "", "", buildOnSaveOptions{})
 	require.NoError(t, err)
 	var opts2 map[string]any
 	require.NoError(t, json.Unmarshal(defaults.InitializeOptions, &opts2))
@@ -263,12 +267,29 @@ func TestZlsInitializeParams(t *testing.T) {
 	assert.False(t, hasZig)
 }
 
+func TestZlsLogLevel(t *testing.T) {
+	assert.Equal(t, "info", zlsLogLevel(nil, newFakeNotifications()))
+
+	cfg := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"log_level": "debug"},
+	})
+	assert.Equal(t, "debug", zlsLogLevel(cfg, newFakeNotifications()))
+
+	invalid := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"log_level": "trace"},
+	})
+	notify := newFakeNotifications()
+	assert.Equal(t, "info", zlsLogLevel(invalid, notify))
+	assert.NotEmpty(t, notify.notifs)
+}
+
 // TestZlsInitializeCapabilities pins the two zls-specific requirements
 // (publishDiagnostics advertised, since zls only pushes diagnostics when
 // the client declares it) and keeps the advertised surface within what
 // zls 0.16 implements.
 func TestZlsInitializeCapabilities(t *testing.T) {
-	params, err := zlsInitializeParams("file:///ws", "ws", "zls", "", buildOnSaveOptions{})
+	params, err := zlsInitializeParams(
+		"file:///ws", "ws", "zls", "", "", buildOnSaveOptions{})
 	require.NoError(t, err)
 	var caps map[string]any
 	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
@@ -290,15 +311,15 @@ func TestZlsInitializeCapabilities(t *testing.T) {
 	assert.Contains(t, hover["contentFormat"], "markdown")
 }
 
-// TestZigInitializeCommandHasNoSpaces guards the idelsp command
-// tokenizer, which splits InitializeOptions.command on spaces. A bundled
-// path with no subcommand keeps the command a single argv element.
-func TestZigInitializeCommandHasNoSpaces(t *testing.T) {
-	params, err := zlsInitializeParams("file:///ws", "ws", "/data/bin/zls", "", buildOnSaveOptions{})
+func TestZigInitializeCommandLogsToStderr(t *testing.T) {
+	params, err := zlsInitializeParams(
+		"file:///ws", "ws", "/data/bin/zls", "", "", buildOnSaveOptions{})
 	require.NoError(t, err)
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
-	assert.NotContains(t, opts["command"], " ")
+	assert.Equal(t,
+		"/data/bin/zls --enable-stderr-logs --log-level info",
+		opts["command"])
 }
 
 // TestExtendWorkspaceNonZigRegistersButSkipsInit verifies the REPL
@@ -349,7 +370,9 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	assert.Equal(t, params.RootURI, params.WorkspaceFolders[0].URI)
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
-	assert.Equal(t, "/data/bin/zls", opts["command"])
+	assert.Equal(t,
+		"/data/bin/zls --enable-stderr-logs --log-level info",
+		opts["command"])
 	assert.Equal(t, "/data/bin/zig", opts["zig_exe_path"])
 }
 

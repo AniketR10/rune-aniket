@@ -54,6 +54,7 @@ type langConfig struct {
 	id      string
 	command string
 	args    []string
+	env     []string
 }
 
 var langConfigs = map[string]langConfig{

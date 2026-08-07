@@ -31,9 +31,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
 
-// goplsDebugOptions controls gopls debug instrumentation. Each field maps to a
-// gopls `serve` flag (-rpc.trace, -logfile, -debug) or to the LSP $/logTrace
-// channel (Trace). All fields are optional; the zero value disables debugging.
+// goplsDebugOptions controls gopls debug instrumentation. All fields are
+// optional; the zero value keeps gopls's normal stderr logging.
 type goplsDebugOptions struct {
 	// RPCTrace adds `-rpc.trace` to the gopls command, causing gopls to
 	// log every JSON-RPC message it sends/receives.
@@ -45,6 +44,7 @@ type goplsDebugOptions struct {
 	// gopls HTTP debug endpoint (pprof, /rpc, /cache, /session/*, …) at
 	// http://ADDR/. Example: "localhost:6060".
 	DebugAddr string
+	LogLevel  string
 	// Trace sets the InitializeParams.trace value, which controls
 	// $/logTrace messages from the server. Valid values are "off",
 	// "messages", and "verbose".
@@ -234,6 +234,12 @@ func goplsCommand(dbg goplsDebugOptions, binPath string) string {
 	}
 	if dbg.DebugAddr != "" {
 		parts = append(parts, "-debug="+dbg.DebugAddr)
+	}
+	switch dbg.LogLevel {
+	case "debug":
+		parts = append(parts, "-v")
+	case "trace":
+		parts = append(parts, "-vv")
 	}
 	parts = append(parts, "serve")
 	return strings.Join(parts, " ")

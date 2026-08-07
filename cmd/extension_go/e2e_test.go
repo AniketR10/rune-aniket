@@ -36,10 +36,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/extension/langext"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
@@ -355,6 +357,39 @@ func (s *stubResource) Close() error               { return nil }
 func (s *stubResource) Resource() workspaceapi.URI { return s.uri }
 
 var _ textapi.Handler = (*stubResource)(nil)
+
+func TestE2EGoplsLoggingConfigReachesProcess(t *testing.T) {
+	goplsBin := findGopls(t)
+	dir := setupWorkspace(t, "example.com/logging", []testFile{
+		{name: "main.go", content: "package main\n\nfunc main() {}\n"},
+	})
+	rootURI := "file://" + dir
+	uri, err := workspaceapi.ParseURI(rootURI)
+	require.NoError(t, err)
+
+	scheme := newTestSchemeRooted(dir)
+	mgr := idelsp.New(uri, scheme, scheme, &stubPkgManager{bin: goplsBin}, nil, nil,
+		idelsp.Config{MaxRetries: 1, Callback: &testCallback{}})
+	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
+
+	cfg := config.JSONFromMap(map[string]any{
+		"lsp_path": goplsBin,
+		"debug": map[string]any{
+			"log_level": "trace",
+			"rpc_trace": true,
+		},
+	})
+	err = initializeGoRoot(t.Context(), scheme, scheme, nil, mgr, nil, "file", cfg,
+		langext.Root{Dir: dir, URI: rootURI})
+	require.NoError(t, err)
+
+	started, ok := scheme.startedProcess(goplsBin)
+	require.True(t, ok, "gopls process was not started")
+	assert.Equal(t, []string{"-rpc.trace", "-vv", "serve"}, started.args)
+	require.Eventually(t, func() bool {
+		return strings.Contains(started.stderr.String(), "initialize")
+	}, 5*time.Second, 20*time.Millisecond, "gopls did not write the initialize trace to stderr")
+}
 
 func TestE2E(t *testing.T) {
 	t.Parallel()

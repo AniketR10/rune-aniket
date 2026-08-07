@@ -157,15 +157,17 @@ func initializeProjectRoot(
 
 	tyBin := resolvePyTool(ctx, fs, exec, inst, "ty")
 	ruffBin := resolvePyTool(ctx, fs, exec, inst, "ruff")
+	logLevel := pyLogLevel(cfg, notify)
 	command := pyCommand(tyBin, "ty", "server")
 	alternates := map[string]string{
-		"textDocument/formatting":      pyCommand(ruffBin, "ruff", "server"),
-		"textDocument/rangeFormatting": pyCommand(ruffBin, "ruff", "server"),
+		"textDocument/formatting":      pyRuffCommand(ruffBin, logLevel),
+		"textDocument/rangeFormatting": pyRuffCommand(ruffBin, logLevel),
 	}
 	command, alternates = applyPyConfig(cfg, notify, command, alternates)
 
 	diagnosticMode := pyDiagnosticMode(cfg, notify)
-	params, err := pyInitializeParams(root.URI, command, alternates, diagnosticMode)
+	params, err := pyInitializeParams(
+		root.URI, command, alternates, diagnosticMode, logLevel)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -174,6 +176,31 @@ func initializeProjectRoot(
 	}
 	slog.Info("python lsp initialized", "root", root.Dir, "command", command)
 	return nil
+}
+
+func pyLogLevel(cfg config.Config, notify browserapi.Notifications) string {
+	if cfg == nil {
+		return ""
+	}
+	debug, err := cfg.GetConfig("debug")
+	if err != nil || debug == nil {
+		return ""
+	}
+	level, err := debug.GetString("log_level")
+	if err != nil {
+		return ""
+	}
+	switch level {
+	case "trace", "debug", "info", "warn", "error":
+		return level
+	default:
+		if notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.python.config.debug.log_level must be one of "+
+					"\"trace\", \"debug\", \"info\", \"warn\", \"error\"; got %q", level)
+		}
+		return ""
+	}
 }
 
 // applyPyConfig overrides the ty/ruff defaults with the optional

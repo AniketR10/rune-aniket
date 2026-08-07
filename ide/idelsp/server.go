@@ -31,6 +31,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -188,6 +189,7 @@ func (s *langServer) start(ctx context.Context) error {
 		Path:    s.binPath,
 		Dir:     uriToPath(s.rootURI),
 		Args:    s.cfg.args,
+		Env:     slices.Clone(s.cfg.env),
 		Stdin:   lspFile,
 		Stdout:  lspFile,
 		Watcher: watcher,

@@ -25,6 +25,10 @@ func TestGoplsCommand(t *testing.T) {
 		want string
 	}{
 		{"default", goplsDebugOptions{}, "", "gopls serve"},
+		{"debug logging", goplsDebugOptions{LogLevel: "debug"}, "",
+			"gopls -v serve"},
+		{"trace logging", goplsDebugOptions{LogLevel: "trace"}, "",
+			"gopls -vv serve"},
 		{"rpc trace only", goplsDebugOptions{RPCTrace: true}, "", "gopls -rpc.trace serve"},
 		{"logfile only", goplsDebugOptions{LogFile: "/tmp/gopls.log"}, "",
 			"gopls -logfile=/tmp/gopls.log serve"},
@@ -82,6 +86,7 @@ func TestReadGoplsDebugOptions(t *testing.T) {
 				"logfile":   "/tmp/gopls.log",
 				"addr":      "localhost:6060",
 				"trace":     "verbose",
+				"log_level": "debug",
 			},
 		})
 		assert.Equal(t, goplsDebugOptions{
@@ -89,6 +94,7 @@ func TestReadGoplsDebugOptions(t *testing.T) {
 			LogFile:   "/tmp/gopls.log",
 			DebugAddr: "localhost:6060",
 			Trace:     semanticapi.TraceValueVerbose,
+			LogLevel:  "debug",
 		}, readGoplsDebugOptions(cfg))
 	})
 

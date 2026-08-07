@@ -31,16 +31,19 @@ import (
 )
 
 // rustInitializeParams builds the InitializeParams for rust-analyzer.
-// The langID/command keys steer the host LSP shim; every other key is
+// The langID/command/env keys steer the host LSP shim; every other key is
 // forwarded verbatim as rust-analyzer's initializationOptions, so the
 // cargo/procMacro/check/inlayHints settings configure the server. A
 // non-empty sysroot points rust-analyzer at the standard library.
 func rustInitializeParams(
-	rootURI, command, sysroot string, experimental bool,
+	rootURI, command, sysroot, logFilter string, experimental bool,
 ) (semanticapi.InitializeParams, error) {
 	initOptions := map[string]any{
 		"langID":  "rust",
 		"command": command,
+		"env": map[string]string{
+			"RA_LOG": logFilter,
+		},
 		"cargo": map[string]any{
 			"buildScripts": map[string]any{
 				"enable": true,

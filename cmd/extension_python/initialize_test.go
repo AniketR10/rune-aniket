@@ -52,9 +52,27 @@ func TestPyCommand(t *testing.T) {
 	}
 }
 
+func TestPyRuffCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		logLevel string
+		want     string
+	}{
+		{name: "default", want: "ruff server"},
+		{name: "info", logLevel: "info", want: "ruff server"},
+		{name: "debug", logLevel: "debug", want: "ruff server -v"},
+		{name: "trace", logLevel: "trace", want: "ruff server -v"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, pyRuffCommand("", tt.logLevel))
+		})
+	}
+}
+
 func TestPyInitializeParams(t *testing.T) {
 	t.Run("advertises supported response shapes", func(t *testing.T) {
-		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil, "")
+		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil, "", "")
 		require.NoError(t, err)
 
 		var capabilities map[string]any
@@ -98,7 +116,7 @@ func TestPyInitializeParams(t *testing.T) {
 		params, err := pyInitializeParams("file:///tmp/repo", "ty server", map[string]string{
 			"textDocument/formatting":      "ruff server",
 			"textDocument/rangeFormatting": "ruff server",
-		}, "")
+		}, "", "")
 		require.NoError(t, err)
 		assert.Equal(t, "file:///tmp/repo", params.RootURI)
 
@@ -113,7 +131,8 @@ func TestPyInitializeParams(t *testing.T) {
 	})
 
 	t.Run("single server omits alternate_commands", func(t *testing.T) {
-		params, err := pyInitializeParams("file:///tmp/repo", "pyright-langserver --stdio", nil, "")
+		params, err := pyInitializeParams(
+			"file:///tmp/repo", "pyright-langserver --stdio", nil, "", "")
 		require.NoError(t, err)
 
 		var initOpts map[string]any
@@ -124,7 +143,8 @@ func TestPyInitializeParams(t *testing.T) {
 	})
 
 	t.Run("diagnostic mode injected when set", func(t *testing.T) {
-		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil, "workspace")
+		params, err := pyInitializeParams(
+			"file:///tmp/repo", "ty server", nil, "workspace", "")
 		require.NoError(t, err)
 
 		var initOpts map[string]any
@@ -133,12 +153,22 @@ func TestPyInitializeParams(t *testing.T) {
 	})
 
 	t.Run("diagnostic mode omitted when empty", func(t *testing.T) {
-		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil, "")
+		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil, "", "")
 		require.NoError(t, err)
 
 		var initOpts map[string]any
 		require.NoError(t, json.Unmarshal(params.InitializeOptions, &initOpts))
 		_, ok := initOpts["diagnosticMode"]
 		assert.False(t, ok, "diagnosticMode must be omitted when unset")
+	})
+
+	t.Run("log level injected when set", func(t *testing.T) {
+		params, err := pyInitializeParams(
+			"file:///tmp/repo", "ty server", nil, "", "debug")
+		require.NoError(t, err)
+
+		var initOpts map[string]any
+		require.NoError(t, json.Unmarshal(params.InitializeOptions, &initOpts))
+		assert.Equal(t, "debug", initOpts["logLevel"])
 	})
 }

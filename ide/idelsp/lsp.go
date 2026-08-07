@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,9 @@ const (
 	// rest. This enables composing several single-purpose servers (such
 	// as ty + ruff for Python) behind one language id.
 	InitializeOptionsAlternateCommands = "alternate_commands"
+	// InitializeOptionsLanguageEnv is an optional map of environment
+	// variables added to every language server process for this language.
+	InitializeOptionsLanguageEnv = "env"
 )
 
 // diagnosticSettleTimeout bounds how long a pull-diagnostics request
@@ -125,6 +129,11 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 		err = fmt.Errorf("decode initialize options: %w", err)
 		return
 	}
+	env, err := parseLanguageEnv(initialOptions)
+	if err != nil {
+		err = fmt.Errorf("decode initialize options: %w", err)
+		return
+	}
 	key := serverKey{languageID: id, rootURI: params.RootURI}
 	m.mu.Lock()
 	_, ok = m.servers[key]
@@ -139,13 +148,14 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 	delete(initialOptions, InitializeOptionsLanguageID)
 	delete(initialOptions, InitializeOptionsLanguageCommand)
 	delete(initialOptions, InitializeOptionsAlternateCommands)
+	delete(initialOptions, InitializeOptionsLanguageEnv)
 
 	params.InitializeOptions, err = json.Marshal(initialOptions)
 	if err != nil {
 		err = fmt.Errorf("re-marshal initialize options: %w", err)
 		return
 	}
-	cfg := langConfig{id: id, command: argv[0], args: argv[1:]}
+	cfg := langConfig{id: id, command: argv[0], args: argv[1:], env: env}
 	if len(alternates) == 0 {
 		var srv *langServer
 		srv, err = m.initializeServer(ctx, cfg, key, params)
@@ -188,6 +198,41 @@ func parseAlternateCommands(opts map[string]any) (map[string]string, error) {
 		ret[method] = cmd
 	}
 	return ret, nil
+}
+
+func parseLanguageEnv(opts map[string]any) ([]string, error) {
+	raw, ok := opts[InitializeOptionsLanguageEnv]
+	if !ok {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("'%s' should be a map of environment variable to value",
+			InitializeOptionsLanguageEnv)
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	env := make([]string, 0, len(m))
+	for _, key := range keys {
+		value, ok := m[key].(string)
+		if !ok {
+			return nil, fmt.Errorf("'%s.%s' should be a string",
+				InitializeOptionsLanguageEnv, key)
+		}
+		if key == "" || strings.ContainsAny(key, "=\x00") {
+			return nil, fmt.Errorf("'%s.%s' is not a valid environment variable name",
+				InitializeOptionsLanguageEnv, key)
+		}
+		if strings.ContainsRune(value, '\x00') {
+			return nil, fmt.Errorf("'%s.%s' contains a null byte",
+				InitializeOptionsLanguageEnv, key)
+		}
+		env = append(env, key+"="+value)
+	}
+	return env, nil
 }
 
 // Initialized is a no-op; servers are initialized lazily.

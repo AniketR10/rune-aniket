@@ -230,6 +230,12 @@ func readGoplsDebugOptions(cfg config.Config) goplsDebugOptions {
 			opts.Trace = semanticapi.TraceValue(v)
 		}
 	}
+	if v, err := dbg.GetString("log_level"); err == nil {
+		switch v {
+		case "info", "debug", "trace":
+			opts.LogLevel = v
+		}
+	}
 	return opts
 }
 

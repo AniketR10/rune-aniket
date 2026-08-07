@@ -44,9 +44,17 @@ func pyCommand(bin, fallback, subcmd string) string {
 	return name + " " + subcmd
 }
 
+func pyRuffCommand(bin, logLevel string) string {
+	command := pyCommand(bin, "ruff", "server")
+	if logLevel == "debug" || logLevel == "trace" {
+		return command + " -v"
+	}
+	return command
+}
+
 func pyInitializeParams(
 	rootURI, command string, alternates map[string]string,
-	diagnosticMode string,
+	diagnosticMode, logLevel string,
 ) (semanticapi.InitializeParams, error) {
 	initOptions := map[string]any{
 		"langID":  "python",
@@ -63,6 +71,9 @@ func pyInitializeParams(
 	// forwards the rest verbatim, so this key reaches ty unchanged.
 	if diagnosticMode != "" {
 		initOptions["diagnosticMode"] = diagnosticMode
+	}
+	if logLevel != "" {
+		initOptions["logLevel"] = logLevel
 	}
 
 	initOptionsData, err := json.Marshal(initOptions)

@@ -207,7 +207,8 @@ func initializeRustRoot(
 	}
 
 	command := resolveRustAnalyzer(ctx, cfg, notify, inst)
-	params, err := rustInitializeParams(root.URI, command, sysroot, experimental)
+	params, err := rustInitializeParams(
+		root.URI, command, sysroot, rustLogFilter(cfg, notify), experimental)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -216,6 +217,29 @@ func initializeRustRoot(
 	}
 	slog.Info("rust lsp initialized", "root", root.Dir, "command", command)
 	return nil
+}
+
+func rustLogFilter(cfg config.Config, notify browserapi.Notifications) string {
+	const defaultFilter = "info"
+	if cfg == nil {
+		return defaultFilter
+	}
+	debug, err := cfg.GetConfig("debug")
+	if err != nil || debug == nil {
+		return defaultFilter
+	}
+	filter, err := debug.GetString("log_level")
+	if err != nil || filter == "" {
+		return defaultFilter
+	}
+	if strings.ContainsAny(filter, "\x00\r\n") {
+		if notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.rust.config.debug.log_level contains invalid characters")
+		}
+		return defaultFilter
+	}
+	return filter
 }
 
 func isRustFile(uri workspaceapi.URI) bool {
