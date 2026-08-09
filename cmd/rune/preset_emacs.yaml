@@ -114,6 +114,7 @@ command:
     "<ctrl-x>1": windowcloseall          # delete-other-windows
     "<ctrl-x>2": "windownew down"        # split-window-below
     "<ctrl-x>3": "windownew right"       # split-window-right
+    "<ctrl-x>o": "windowfocus other"     # other-window
     "<alt-shift-x>": history             # M-X, the M-x history sibling
     # P/N/B/F follows Emacs's previous, next, backward, and forward directions.
     "<meta-p>": "windowfocus up"

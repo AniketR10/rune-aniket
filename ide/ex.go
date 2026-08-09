@@ -1309,6 +1309,8 @@ func (e *ex) windowfocus(_ context.Context, args ...string) error {
 		e.comp.Browser().FocusLeft()
 	case "up":
 		e.comp.Browser().FocusUp()
+	case "other":
+		e.comp.Browser().ShiftFocus()
 	default:
 		return fmt.Errorf("invalid argument %q", args[0])
 	}

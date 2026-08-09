@@ -283,11 +283,18 @@ var (
 		"windownew":   manSplitWindow,
 		"windowfocus": {
 			man: textapi.CommandManual{
-				Summary:  "Switch focus to the window on the given side of the current active window.",
-				Synopsis: "(right|left|up|down)",
+				Summary: "Switch focus to the window on the given side of the current active window, " +
+					"or back to the previously focused window with `other`.",
+				Synopsis: "(right|left|up|down|other)",
 			},
-			handler:   (*ex).windowfocus,
-			completer: completeWithArrows,
+			handler: (*ex).windowfocus,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
+			) (iterator.Iterator[string], string, error) {
+				if len(cmd.Args) <= 1 {
+					return iterator.FromSlice([]string{"right", "left", "up", "down", "other"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
 		"windowmove": {
 			man: textapi.CommandManual{

@@ -5151,6 +5151,29 @@ func TestFullScreen(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestFocusOtherWindow(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory())
+	t.Cleanup(func() { _ = ex.Close() })
+	ex.Resize(100, 100)
+
+	first := ex.invokeWindow()
+	require.Error(t, ex.windowfocus(bgctx, "sideways"))
+	require.Equal(t, first, ex.invokeWindow())
+
+	ex.windownew(bgctx)
+	second := ex.invokeWindow()
+	require.NotEqual(t, first, second)
+
+	require.NoError(t, ex.windowfocus(bgctx, "other"))
+	require.Equal(t, first, ex.invokeWindow())
+	require.NoError(t, ex.windowfocus(bgctx, "other"))
+	require.Equal(t, second, ex.invokeWindow())
+}
+
 func TestMoveWindowContent(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowsplit>:edit aaa>:windowmove left>",
