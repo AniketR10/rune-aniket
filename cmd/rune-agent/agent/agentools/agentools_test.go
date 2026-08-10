@@ -883,10 +883,32 @@ func TestFindFiles(t *testing.T) {
 	}{
 		{
 			name: "regex pattern matches files",
-			args: `{"pattern": "\\.go$"}`,
+			args: `{"pattern": "\\.go$", "recursive": true}`,
 			assertFn: func(t *testing.T, result agent.ToolResult) {
 				assert.False(t, result.IsError)
 				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "non-recursive search only checks given directory",
+			args: `{"pattern": ".*", "recursive": false}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "hello.txt")
+				assert.NotContains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "non-recursive search checks files directly in scoped directory",
+			args: `{"pattern": ".*", "path": "sub", "recursive": false}`,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub", "deep"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "deep", "deeper.go"), nil, 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "sub/nested.go")
+				assert.NotContains(t, result.Content, "deeper.go")
 			},
 		},
 		{
@@ -1000,6 +1022,25 @@ func TestFindFiles(t *testing.T) {
 			tt.assertFn(t, result)
 		})
 	}
+}
+
+func TestFindFilesDefinitionDescribesRecursiveScope(t *testing.T) {
+	tool := newFindFiles(localFS{}, dirURI("/workspace"), NewFileTracker(), nil)
+	parameters, ok := tool.Definition().Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	properties, ok := parameters["properties"].(map[string]any)
+	require.True(t, ok)
+	recursive, ok := properties["recursive"].(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, "boolean", recursive["type"])
+	description, ok := recursive["description"].(string)
+	require.True(t, ok)
+	assert.Contains(t, description, "only files directly inside path")
+	assert.Contains(t, description, "files in child directories are excluded")
+	assert.Contains(t, description, "every descendant subdirectory under path, at any depth")
+	assert.Contains(t, parameters["required"], "recursive")
+	assert.NotContains(t, tool.Definition().Function.Description, "editor swap files")
 }
 
 func TestBash_args_do_not_include_program_name(t *testing.T) {

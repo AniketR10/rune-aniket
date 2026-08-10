@@ -48,8 +48,9 @@ type findFilesTool struct {
 }
 
 type findFilesArgs struct {
-	Pattern string `json:"pattern"`
-	Path    string `json:"path"`
+	Pattern   string `json:"pattern"`
+	Path      string `json:"path"`
+	Recursive *bool  `json:"recursive"`
 }
 
 func newFindFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker, filter walkdir.Filter) agent.Tool {
@@ -63,10 +64,12 @@ func (t *findFilesTool) Definition() llmapi.Tool {
 		Type: llmapi.ToolTypeFunction,
 		Function: llmapi.FunctionDefinition{
 			Name: "find_files",
-			Description: `Find files by name or path using a regex pattern. Recursively walks
-the directory tree starting from path (defaults to workspace root),
-skipping .git, node_modules, and vendor directories as well as
-gitignored and editor swap files.
+			Description: `Find files by name or path using a regex pattern. Searches the
+directory starting from path (defaults to workspace root), skipping
+.git, node_modules, and vendor directories as well as gitignored files.
+Set recursive to false to inspect only files whose immediate parent is
+path. Set recursive to true to also inspect files in every descendant
+subdirectory under path, at any depth.
 
 Returns matching file paths relative to the workspace root, one per
 line, capped at 500 results. The pattern is matched against the full
@@ -85,8 +88,12 @@ Go regex (RE2) syntax.`,
 						"type":        []string{"string", "null"},
 						"description": "Optional directory to search in (relative to workspace root or absolute). Defaults to workspace root.",
 					},
+					"recursive": map[string]any{
+						"type":        "boolean",
+						"description": "Whether to search subdirectories under path. When false, matches can include only files directly inside path; files in child directories are excluded. When true, matches can also include files in every descendant subdirectory under path, at any depth.",
+					},
 				},
-				"required":             []string{"pattern", "path"},
+				"required":             []string{"pattern", "path", "recursive"},
 				"additionalProperties": false,
 			},
 		},
@@ -123,7 +130,11 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	walkCtx := walkdir.WithContextFilter(boundedWalkdirContext(ctx), t.filter)
 	wsRoot := t.cwd.Path()
 
-	paths, err := listToolFiles(walkCtx, t.fs, t.cwd, root, t.filter)
+	recursive := true
+	if args.Recursive != nil {
+		recursive = *args.Recursive
+	}
+	paths, err := t.listFiles(walkCtx, root, recursive)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}
@@ -180,4 +191,47 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		output += "\n\n" + warning
 	}
 	return agent.ToolResult{Content: output}
+}
+
+func (t *findFilesTool) listFiles(
+	ctx context.Context, root string, recursive bool,
+) (iterator.Iterator[string], error) {
+	if recursive {
+		return listToolFiles(ctx, t.fs, t.cwd, root, t.filter)
+	}
+
+	info, err := t.fs.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode().IsRegular() {
+		return listToolFiles(ctx, t.fs, t.cwd, root, t.filter)
+	}
+	if !info.IsDir() {
+		return iterator.Empty[string](), nil
+	}
+	entries, err := t.fs.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	rootURI, err := t.fs.URI(root)
+	if err != nil {
+		return nil, fmt.Errorf("URI: %v", err)
+	}
+	relRoot := workspaceapi.RelPath(t.cwd, rootURI)
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		path := filepath.Join(relRoot, entry.Name())
+		if t.filter != nil && t.filter.MatchRelPath(path, false) {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return iterator.FromSlice(paths), nil
 }

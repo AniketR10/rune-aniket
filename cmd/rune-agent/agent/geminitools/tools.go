@@ -187,8 +187,9 @@ func find(base agent.Tool) agent.Tool {
 		Pattern         string `json:"Pattern"`
 	}
 	type findFilesArgs struct {
-		Pattern string `json:"pattern"`
-		Path    string `json:"path,omitempty"`
+		Pattern   string `json:"pattern"`
+		Path      string `json:"path,omitempty"`
+		Recursive bool   `json:"recursive"`
 	}
 	translate := func(arguments string) (string, error) {
 		var a antigravityArgs
@@ -196,8 +197,9 @@ func find(base agent.Tool) agent.Tool {
 			return "", err
 		}
 		return remarshal(findFilesArgs{
-			Pattern: globToRegex(a.Pattern),
-			Path:    a.SearchDirectory,
+			Pattern:   globToRegex(a.Pattern),
+			Path:      a.SearchDirectory,
+			Recursive: true,
 		})
 	}
 	return &specializedTool{

@@ -112,6 +112,7 @@ func TestFindGlobToRegex(t *testing.T) {
 	got := decode(t, base.lastArgs)
 	assert.Equal(t, `.*\.go$`, got["pattern"])
 	assert.Equal(t, "cmd", got["path"])
+	assert.Equal(t, true, got["recursive"])
 }
 
 func TestCodebaseSearchForwardsQuery(t *testing.T) {
