@@ -230,7 +230,9 @@ func TestCommandAdapterCompactScopesToOpenChat(t *testing.T) {
 // Any positional dialogue id is rejected; chat commands no longer
 // target other dialogues.
 func TestCommandAdapterRejectsPositionalID(t *testing.T) {
-	for _, name := range []string{"clear", "history", "export", "log", "fork"} {
+	for _, name := range []string{
+		"clear", "history", "export", "log", "fork", "reviewchanges",
+	} {
 		t.Run(name, func(t *testing.T) {
 			h := &captureCommandHandler{}
 			a := newCaptureAdapter(h)

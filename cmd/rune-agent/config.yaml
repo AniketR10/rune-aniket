@@ -49,3 +49,8 @@ extensions:
       # to keep the composer in normal mode at startup. Only affects the
       # modal composer; modeless is unchanged.
       editor_modal_start_insert: true
+      # How many lines of surrounding code `chatreviewchanges` shows
+      # around each hunk. Patches carry very little context of their
+      # own, so the review reads the rest from the file as it stands
+      # now. Set to 0 to show only the lines the agent changed.
+      review_context_lines: 3

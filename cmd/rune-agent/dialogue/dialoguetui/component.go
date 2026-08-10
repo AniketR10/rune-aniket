@@ -340,6 +340,25 @@ func (c *Component) Attachments() []Attachment {
 	return c.attachments
 }
 
+// UpsertAttachment adds a, replacing any pending attachment carrying the
+// same non-empty ID so a virtual attachment can be refreshed in place.
+func (c *Component) UpsertAttachment(a Attachment) {
+	if a.ID != "" {
+		for i, existing := range c.attachments {
+			if existing.ID != a.ID {
+				continue
+			}
+			c.attachments[i] = a
+			c.attachTabs.SetTabIcon(i, a.Icon)
+			c.attachTabs.SetTabName(i, a.Name)
+			c.attachTabs.ResetFocus()
+			c.relayout()
+			return
+		}
+	}
+	c.AddAttachment(a)
+}
+
 // TakeAttachments returns the pending attachments and clears the strip.
 func (c *Component) TakeAttachments() []Attachment {
 	if len(c.attachments) == 0 {

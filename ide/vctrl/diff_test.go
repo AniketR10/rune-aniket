@@ -33,7 +33,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 )
 
 func TestDiffUtils(t *testing.T) {
@@ -301,6 +303,93 @@ func TestDiffUtils(t *testing.T) {
 				diff.NewName = ""
 				assert.Equal(t, test.expFileDiff, diff)
 			})
+		})
+	}
+}
+
+func TestDiffBuffer(t *testing.T) {
+	// Changed lines are tinted through the background only, so the
+	// foreground stays available for syntax highlighting.
+	wantAdd := term.Attributes{Bg: term.GetColor("darkgreen")}
+	wantDel := term.Attributes{Bg: term.GetColor("darkred")}
+	tests := []struct {
+		name     string
+		diffs    []diffmatchpatch.Diff
+		wantText string
+		// wantAttr maps a row to the attributes every cell in it carries.
+		wantAttr map[int]term.Attributes
+	}{
+		{
+			name:     "empty",
+			diffs:    nil,
+			wantText: "",
+		},
+		{
+			name: "equal lines are unstyled and unprefixed",
+			diffs: []diffmatchpatch.Diff{
+				{Type: diffmatchpatch.DiffEqual, Text: "a\nb\n"},
+			},
+			wantText: "a\nb\n",
+			wantAttr: map[int]term.Attributes{0: {}, 1: {}},
+		},
+		{
+			name: "insert lines are prefixed and tinted dark green",
+			diffs: []diffmatchpatch.Diff{
+				{Type: diffmatchpatch.DiffInsert, Text: "a\nb\n"},
+			},
+			wantText: "+a\n+b\n",
+			wantAttr: map[int]term.Attributes{
+				0: wantAdd, 1: wantAdd,
+			},
+		},
+		{
+			name: "delete lines are prefixed and tinted dark red",
+			diffs: []diffmatchpatch.Diff{
+				{Type: diffmatchpatch.DiffDelete, Text: "a\nb\n"},
+			},
+			wantText: "-a\n-b\n",
+			wantAttr: map[int]term.Attributes{
+				0: wantDel, 1: wantDel,
+			},
+		},
+		{
+			name: "trailing line without newline keeps its prefix",
+			diffs: []diffmatchpatch.Diff{
+				{Type: diffmatchpatch.DiffInsert, Text: "a"},
+			},
+			wantText: "+a",
+			wantAttr: map[int]term.Attributes{0: wantAdd},
+		},
+		{
+			name: "mixed operations keep order",
+			diffs: []diffmatchpatch.Diff{
+				{Type: diffmatchpatch.DiffEqual, Text: " ctx\n"},
+				{Type: diffmatchpatch.DiffDelete, Text: "old\n"},
+				{Type: diffmatchpatch.DiffInsert, Text: "new\n"},
+			},
+			wantText: " ctx\n-old\n+new\n",
+			wantAttr: map[int]term.Attributes{0: {}, 1: wantDel, 2: wantAdd},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := DiffBuffer(tt.diffs)
+			assert.Equal(t, tt.wantText, buf.String())
+			// DiffComponent and DiffString share the same buffer path.
+			assert.Equal(t, tt.wantText, DiffString(tt.diffs))
+			scroll, ok := DiffComponent(tt.diffs).(*component.Scroll)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantText, scroll.Buffer().String())
+
+			for y, attr := range tt.wantAttr {
+				for x := 0; x < buf.Columns(y)-1; x++ {
+					c, ok := buf.Cell(term.Coordinates{X: x, Y: y})
+					require.Truef(t, ok, "no cell at %d,%d", x, y)
+					assert.Equalf(t, attr,
+						term.Attributes{Fg: c.Fg, Bg: c.Bg, Attrs: c.Attrs},
+						"attributes at %d,%d (%q)", x, y, string(c.Ch))
+				}
+			}
 		})
 	}
 }

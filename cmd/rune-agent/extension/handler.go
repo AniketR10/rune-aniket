@@ -88,15 +88,16 @@ const (
 	commandQuery = "?"
 	commandChat  = "agent"
 
-	commandEffort    = "chateffort"
-	commandMaxTokens = "chatmaxtokens"
-	commandSkill     = "chatskill"
-	commandModel     = "chatmodel"
-	commandClear     = "chatclear"
-	commandCompact   = "chatcompact"
-	commandFork      = "chatfork"
-	commandExport    = "chatexport"
-	commandLog       = "chatlog"
+	commandEffort        = "chateffort"
+	commandMaxTokens     = "chatmaxtokens"
+	commandSkill         = "chatskill"
+	commandModel         = "chatmodel"
+	commandClear         = "chatclear"
+	commandCompact       = "chatcompact"
+	commandFork          = "chatfork"
+	commandReviewChanges = "chatreviewchanges"
+	commandExport        = "chatexport"
+	commandLog           = "chatlog"
 )
 
 // Router-side model aliases the agent resolves to for its own concepts.
@@ -380,6 +381,7 @@ func newCommandEventHandler(
 	} else if err != nil && !errors.Is(err, config.ErrNotFound) {
 		slog.Warn("get 'auto_compact_ratio' from config", "error", err)
 	}
+	ret.reviewContextLines = resolveReviewContextLines(pconfig)
 	// The host-provided llmapi.Service (w.LLM(ctx)) owns provider auth,
 	// llama.cpp, codex login, and custom_provider routing; rune-agent
 	// no longer constructs its own registry.
@@ -677,6 +679,7 @@ type aiEditorHandler struct {
 
 	maxToolOutputBytes int
 	autoCompactRatio   float64
+	reviewContextLines int
 
 	resources      map[string]string
 	clip           clipboard.Register
@@ -926,7 +929,8 @@ func (h *aiEditorHandler) HandleCommand(
 	case commandChat:
 		return h.handleChat(cmd)
 	case commandModel, commandEffort, commandMaxTokens, commandSkill,
-		commandClear, commandCompact, commandFork, commandExport, commandLog:
+		commandClear, commandCompact, commandFork, commandReviewChanges,
+		commandExport, commandLog:
 		return h.routeChatCommand(cmd)
 	}
 
@@ -983,6 +987,11 @@ func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
 			return err
 		}
 		name = "fork"
+	case commandReviewChanges:
+		if err := rejectPositionalID("reviewchanges", cmd.Args); err != nil {
+			return err
+		}
+		name = "reviewchanges"
 	case commandExport:
 		if err := rejectPositionalID("export", cmd.Args); err != nil {
 			return err
@@ -1201,6 +1210,12 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		currentModel:  model,
 		skillRegistry: h.skillRegistry,
 		auditStore:    h.auditStore,
+		editor:        h.cfg.Editor,
+		editorModal:   h.cfg.EditorModal,
+		parser:        h.parser,
+		fs:            h.fs,
+		cwd:           h.cwd,
+		reviewContext: h.reviewContextLines,
 		mu:            mu,
 		comp:          &comp,
 		hintSlot:      hs,
@@ -1645,6 +1660,10 @@ func (h *aiEditorHandler) attachmentParts(
 				Type: llmapi.ContentPartTypeText,
 				Text: fmt.Sprintf(format, args...),
 			}
+		}
+		if a.ID != "" {
+			parts = append(parts, text("%s\n%s", chatReviewHeading, a.Content))
+			continue
 		}
 		data, err := readWorkspaceFile(h.fs, a.Path)
 		if err != nil {

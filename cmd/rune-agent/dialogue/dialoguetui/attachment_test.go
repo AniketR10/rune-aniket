@@ -27,6 +27,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -209,5 +210,107 @@ func TestHandlerSubmitCarriesAttachments(t *testing.T) {
 	assert.Equal(t, "look at this", msg.Text)
 	require.Len(t, msg.Attachments, 1)
 	assert.Equal(t, path, msg.Attachments[0].Path)
+	assert.Empty(t, comp.Attachments())
+}
+
+// A virtual attachment carries inline content instead of a file path.
+// The strip renders "<icon> <name>", so a name with a leading space
+// yields the two-column gap the changes-review label is specified with.
+func TestUpsertVirtualAttachmentRenders(t *testing.T) {
+	h, comp, _ := newAttachmentHandler(t)
+
+	comp.UpsertAttachment(Attachment{
+		ID: "chatreviewchanges", Name: " changes review", Icon: '\uf4d2',
+		Content: "+added\n",
+	})
+
+	require.Len(t, comp.Attachments(), 1)
+	assert.Empty(t, comp.Attachments()[0].Path)
+	assert.Equal(t, "+added\n", comp.Attachments()[0].Content)
+
+	w := term.NewStringWriter(40, 12)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Contains(t, w.String(), "\uf4d2  changes review")
+}
+
+// Reopening the diff must refresh the pending attachment in place rather
+// than stack a second tab.
+func TestUpsertVirtualAttachmentReplacesSameID(t *testing.T) {
+	h, comp, _ := newAttachmentHandler(t)
+
+	comp.UpsertAttachment(Attachment{
+		ID: "chatreviewchanges", Name: " changes review", Icon: '\uf4d2', Content: "first",
+	})
+	comp.UpsertAttachment(Attachment{
+		ID: "chatreviewchanges", Name: " changes review", Icon: '\uf4d2', Content: "second",
+	})
+
+	require.Len(t, comp.Attachments(), 1)
+	assert.Equal(t, "second", comp.Attachments()[0].Content)
+
+	w := term.NewStringWriter(40, 12)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Equal(t, 1, strings.Count(w.String(), "changes review"))
+}
+
+// Distinct identities, and file attachments (which carry none), still
+// accumulate.
+func TestUpsertAttachmentKeepsDistinctEntries(t *testing.T) {
+	_, comp, _ := newAttachmentHandler(t)
+	path := writeTempFile(t, "shot.png")
+
+	comp.UpsertAttachment(NewAttachment(path))
+	comp.UpsertAttachment(NewAttachment(path))
+	comp.UpsertAttachment(Attachment{ID: "a", Name: "a", Icon: ' '})
+	comp.UpsertAttachment(Attachment{ID: "b", Name: "b", Icon: ' '})
+	comp.UpsertAttachment(Attachment{ID: "a", Name: "a", Icon: ' ', Content: "x"})
+
+	require.Len(t, comp.Attachments(), 4)
+	assert.Equal(t, "x", comp.Attachments()[2].Content)
+}
+
+// The strip is cleared on submit, so the comments attachment travels with
+// exactly one message.
+func TestVirtualAttachmentClearedOnSubmit(t *testing.T) {
+	h, comp, rx := newAttachmentHandler(t)
+	comp.UpsertAttachment(Attachment{
+		ID: "chatreviewchanges", Name: " changes review", Icon: '\uf4d2', Content: "+added\n",
+	})
+
+	typeText(h, "look")
+	done := make(chan SubmitMessage, 1)
+	go func() { done <- <-rx }()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.True(t, handled)
+
+	msg := <-done
+	require.Len(t, msg.Attachments, 1)
+	assert.Equal(t, "chatreviewchanges", msg.Attachments[0].ID)
+	assert.Equal(t, "+added\n", msg.Attachments[0].Content)
+	assert.Empty(t, comp.Attachments())
+}
+
+// Clicking a virtual attachment removes it like any other.
+func TestClickRemovesVirtualAttachment(t *testing.T) {
+	h, comp, _ := newAttachmentHandler(t)
+	comp.UpsertAttachment(Attachment{
+		ID: "chatreviewchanges", Name: " changes review", Icon: '\uf4d2',
+	})
+
+	w := term.NewStringWriter(40, 12)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+
+	pos, ok := comp.AttachmentsPosition()
+	require.True(t, ok)
+	_, handled := h.Handle(term.Event{
+		Type:   term.EventMouse,
+		Key:    term.MouseLeft,
+		MouseX: pos.X + 3,
+		MouseY: pos.Y,
+	})
+	assert.True(t, handled)
 	assert.Empty(t, comp.Attachments())
 }

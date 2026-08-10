@@ -108,6 +108,13 @@ var (
 			Synopsis: "",
 		},
 		{
+			Name: commandReviewChanges,
+			Summary: "Review every patch the focused agent chat applied as one " +
+				"editable diff. Edits are attached as a changes review to the " +
+				"next message. Run from an open agent chat tab.",
+			Synopsis: "",
+		},
+		{
 			Name: commandExport,
 			Summary: "Export the focused agent chat or its audit log to a temp " +
 				"file. Run from an open agent chat tab.",

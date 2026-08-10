@@ -43,6 +43,13 @@ type Attachment struct {
 	IsImage bool
 	// Icon is the glyph rendered before Name.
 	Icon rune
+	// ID identifies a virtual attachment that is not backed by a file.
+	// Attachments sharing a non-empty ID replace one another instead of
+	// stacking up in the strip. It is empty for file attachments.
+	ID string
+	// Content is the inline text a virtual attachment contributes to the
+	// next user message. It is empty for file attachments.
+	Content string
 }
 
 const (

@@ -151,13 +151,18 @@ func ConvertChangesToFileDiff(
 
 // DiffString converts the given changes into a diff.
 func DiffString(diffs []diffmatchpatch.Diff) string {
-	scroll := DiffComponent(diffs).(*component.Scroll)
-	return scroll.Buffer().String()
+	return DiffBuffer(diffs).String()
 }
 
 // DiffComponent converts the given changes into a string
 // component with background and foreground attributes set.
 func DiffComponent(diffs []diffmatchpatch.Diff) tui.Component {
+	return component.NewScroll(DiffBuffer(diffs))
+}
+
+// DiffBuffer converts the given changes into a cell buffer with background
+// and foreground attributes set.
+func DiffBuffer(diffs []diffmatchpatch.Diff) *cell.Buffer {
 	buf := cell.NewBuffer()
 	cursor := term.Coordinates{}
 	for _, diff := range diffs {
@@ -193,10 +198,13 @@ func DiffComponent(diffs []diffmatchpatch.Diff) tui.Component {
 		}
 	}
 
-	return component.NewScroll(buf)
+	return buf
 }
 
+// Changed lines are tinted through the background only, leaving the
+// foreground free for syntax highlighting on top. The shades are dark
+// enough that default-colored text stays readable over them.
 var (
-	addAttr = term.Attributes{Bg: term.ColorGreen}
-	delAttr = term.Attributes{Bg: term.ColorRed}
+	addAttr = term.Attributes{Bg: term.GetColor("darkgreen")}
+	delAttr = term.Attributes{Bg: term.GetColor("darkred")}
 )

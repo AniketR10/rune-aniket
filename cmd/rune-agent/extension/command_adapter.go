@@ -35,11 +35,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
@@ -50,6 +53,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/component/markdown"
 	mdhandler "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/text"
 )
 
 // commandAdapter wraps a repl.CommandHandler into a dialoguetui.CommandHandler
@@ -76,6 +80,20 @@ type commandAdapter struct {
 	// Skill resolution. When a /name command matches a skill, the
 	// formatted skill content is returned as UserMessage.
 	skillRegistry *skills.SkillRegistry
+
+	// Conversation patch review (/diff). editor opens the aggregate diff
+	// in a floating window and attachFn hands the edited text back to the
+	// live dialogue component as a pending attachment.
+	editor      text.Editor
+	editorModal bool
+	parser      syntaxapi.Parser
+	fs          workspaceapi.FileSystem
+	cwd         workspaceapi.URI
+	// reviewContext is how many workspace lines are shown around each
+	// hunk (extensions.rune-agent.config.review_context_lines).
+	reviewContext int
+	attachFn      func(dialoguetui.Attachment)
+	reviewSeq     int
 }
 
 // commandAdapterDeps groups the values commandAdapter borrows from its
@@ -93,6 +111,12 @@ type commandAdapterDeps struct {
 	currentModel  string
 	skillRegistry *skills.SkillRegistry
 	auditStore    *audit.Store
+	editor        text.Editor
+	editorModal   bool
+	parser        syntaxapi.Parser
+	fs            workspaceapi.FileSystem
+	cwd           workspaceapi.URI
+	reviewContext int
 
 	// mu guards comp / hintSlot writes; the closures below take it.
 	mu          *sync.Mutex
@@ -118,9 +142,20 @@ func newCommandAdapter(deps commandAdapterDeps) *commandAdapter {
 		currentModel:  deps.currentModel,
 		skillRegistry: deps.skillRegistry,
 		auditStore:    deps.auditStore,
+		editor:        deps.editor,
+		editorModal:   deps.editorModal,
+		parser:        deps.parser,
+		fs:            deps.fs,
+		cwd:           deps.cwd,
+		reviewContext: deps.reviewContext,
 		resetFn: func() {
 			deps.mu.Lock()
 			(*deps.comp).Reset()
+			deps.mu.Unlock()
+		},
+		attachFn: func(a dialoguetui.Attachment) {
+			deps.mu.Lock()
+			(*deps.comp).UpsertAttachment(a)
 			deps.mu.Unlock()
 		},
 		compactFn: func(msgs []llmapi.Message) {
@@ -198,6 +233,11 @@ func (a *commandAdapter) HandleCommand(
 		}
 		name = "chats"
 		args = []string{"fork", a.dialogueID}
+	case "reviewchanges":
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
+		}
+		return a.handleReviewChanges(ctx)
 	}
 	it, err := a.handler.HandleCommand(
 		ctx, repl.Command{Name: name, Args: args}, repl.NopProgressWriter(),
@@ -496,6 +536,109 @@ func (a *commandAdapter) handleCompact(
 			compactFn:  a.compactFn,
 		},
 	}, nil
+}
+
+const (
+	// chatReviewAttachmentIcon is the Nerd Font diff glyph. The strip
+	// renders "<icon> <name>", so the leading space in the name widens
+	// the gap to the two columns the label is specified with.
+	chatReviewAttachmentIcon = '\uf4d2'
+	chatReviewAttachmentID   = "chatreviewchanges"
+	chatReviewAttachmentName = " changes review"
+	chatReviewHeading        = "Changes review from the user:"
+)
+
+// handleReviewChanges opens every apply_patch invocation of this
+// conversation as a single editable diff in a centered floating window.
+// Whatever the user leaves behind, if it differs from what was opened,
+// becomes a pending attachment carried into the next message.
+func (a *commandAdapter) handleReviewChanges(
+	ctx context.Context,
+) (dialoguetui.CommandResult, error) {
+	if a.editor == nil || a.attachFn == nil {
+		return dialoguetui.CommandResult{},
+			errors.New("/reviewchanges requires a configured editor")
+	}
+	d, err := a.store.Get(ctx, a.dialogueID)
+	if err != nil {
+		return dialoguetui.CommandResult{},
+			fmt.Errorf("get conversation %q: %w", a.dialogueID, err)
+	}
+	review, err := reviewChanges(d.Messages, workspaceView{
+		src:     workspaceSource(a.fs, a.cwd),
+		context: a.reviewContext,
+	})
+	if err != nil {
+		return dialoguetui.CommandResult{}, err
+	}
+
+	// Each invocation opens its own resource: the editor indexes open
+	// handlers by URI, and a reopened diff must not collide with one the
+	// user has not closed yet.
+	a.reviewSeq++
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf(
+		"rune-agent-review://%s/%d", a.dialogueID, a.reviewSeq))
+	if err != nil {
+		return dialoguetui.CommandResult{},
+			fmt.Errorf("review resource URI: %w", err)
+	}
+
+	buf := reviewBuffer(ctx, review, a.parser)
+	baseline := buf.String()
+	edh, err := a.editor.Edit(ctx, uri, buf, false, false)
+	if err != nil {
+		return dialoguetui.CommandResult{},
+			fmt.Errorf("open review editor: %w", err)
+	}
+
+	var (
+		win  browserapi.Window
+		once sync.Once
+	)
+	bhandler := browserapi.FuncHandler(
+		a.reviewChangesKeyHandler(edh),
+		func() (err error) {
+			once.Do(func() {
+				if edited := buf.String(); edited != baseline {
+					a.attachFn(dialoguetui.Attachment{
+						ID:      chatReviewAttachmentID,
+						Name:    chatReviewAttachmentName,
+						Icon:    chatReviewAttachmentIcon,
+						Content: edited,
+					})
+				}
+				err = errors.Join(edh.Close(), a.wm.CloseWindow(win))
+			})
+			return err
+		})
+	floating := browserapi.FuncFloating(bhandler, edh.Dimensions)
+
+	win, err = a.wm.Floating(floating, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+	if err != nil {
+		_ = edh.Close()
+		return dialoguetui.CommandResult{},
+			fmt.Errorf("open floating window: %w", err)
+	}
+	return dialoguetui.CommandResult{}, nil
+}
+
+// reviewChangesKeyHandler makes the review window closable. <c-w> always
+// closes it, mirroring Rune's tabclose binding. Esc closes it too, but
+// only for a modeless editor: a modal editor needs Esc to leave insert
+// mode.
+func (a *commandAdapter) reviewChangesKeyHandler(edh text.Handler) tui.Handler {
+	return handler.Wrap(edh, func(ev term.Event) (exit, handled bool) {
+		if ev.Type == term.EventKey && !edh.IsSearchMode() {
+			closing := ev.Ch == 'w' && ev.Mod == term.ModCtrl
+			closing = closing || (ev.Key == term.KeyEsc && !a.editorModal)
+			if closing {
+				return true, true
+			}
+		}
+		return edh.Handle(ev)
+	})
 }
 
 func (a *commandAdapter) openCommandFloating(items []component.Responsive) {
