@@ -49,8 +49,11 @@ const (
 	gatherBatchCount = 4
 
 	// gatherBatchSize is also the unit of work the parse stage does
-	// per batch, so it bounds gather latency and parse chunking.
+	// initially; occupancy feedback adjusts it for sustained output.
 	gatherBatchSize = 64 * 1024
+
+	gatherMinBatchSize = gatherBatchSize
+	gatherMaxBatchSize = 1024 * 1024
 
 	// gatherSaturatedRead marks a stream as saturated: the kernel
 	// hands the master at most about 1KiB per read, so a full read
@@ -78,19 +81,20 @@ const (
 	// delivered with what it has.
 	gatherPollTimeoutMs = 1
 
-	// gatherBudget bounds how long one batch may bridge refill gaps
-	// before it is delivered regardless, keeping batching well under
-	// one display frame.
-	gatherBudget = 3 * time.Millisecond
+	// A payload target learned during continuous output should not
+	// delay the first parse after the terminal has gone idle.
+	gatherIdleThreshold = 3 * time.Millisecond
+	gatherBudget        = gatherIdleThreshold
 )
 
 type ptyGather struct {
-	ctx   context.Context
-	fd    int
-	quitR int
-	quitW int
-	free  chan []byte
-	ready chan []byte
+	ctx       context.Context
+	fd        int
+	quitR     int
+	quitW     int
+	free      chan []byte
+	ready     chan []byte
+	batchSize int
 	// err is set by the gather goroutine before ready is closed and
 	// must only be read after ready is drained.
 	err error
@@ -127,12 +131,13 @@ func newPtyGather(ctx context.Context, master workspaceapi.File) (*ptyGather, bo
 	_ = unix.SetNonblock(pipe[1], true)
 
 	g := &ptyGather{
-		ctx:   ctx,
-		fd:    dup,
-		quitR: pipe[0],
-		quitW: pipe[1],
-		free:  make(chan []byte, gatherBatchCount),
-		ready: make(chan []byte, gatherBatchCount),
+		ctx:       ctx,
+		fd:        dup,
+		quitR:     pipe[0],
+		quitW:     pipe[1],
+		free:      make(chan []byte, gatherBatchCount),
+		ready:     make(chan []byte, gatherBatchCount),
+		batchSize: gatherBatchSize,
 	}
 	for range gatherBatchCount {
 		g.free <- make([]byte, gatherBatchSize)
@@ -147,10 +152,32 @@ func newPtyGather(ctx context.Context, master workspaceapi.File) (*ptyGather, bo
 	return g, true
 }
 
+func (g *ptyGather) adjustBatchSize(free int) {
+	switch free {
+	case gatherBatchCount - 1:
+		g.batchSize = min(g.batchSize*9/8, gatherMaxBatchSize)
+	case 0:
+		g.batchSize = max(g.batchSize*8/9, gatherMinBatchSize)
+	}
+}
+
+func gatherFillPolicy(
+	target int,
+	wait time.Duration,
+) (int, time.Duration, bool) {
+	if wait >= gatherIdleThreshold {
+		target = gatherMinBatchSize
+	}
+	if target == gatherMinBatchSize {
+		return target, gatherBudget, wait >= gatherIdleThreshold
+	}
+	return target, 0, false
+}
+
 // release returns a consumed batch to the gather stage. The ring has
 // exactly gatherBatchCount buffers so the send can never block.
 func (g *ptyGather) release(batch []byte) {
-	g.free <- batch[:gatherBatchSize]
+	g.free <- batch[:cap(batch)]
 }
 
 func (g *ptyGather) gather() {
@@ -173,8 +200,19 @@ func (g *ptyGather) gather() {
 			g.err = g.ctx.Err()
 			return
 		}
-		n, err := g.fill(buf)
+		if cap(buf) < g.batchSize {
+			buf = make([]byte, gatherMaxBatchSize)
+		} else {
+			buf = buf[:g.batchSize]
+		}
+		n, saturated, idle, err := g.fill(buf, g.batchSize)
+		if idle {
+			g.batchSize = gatherMinBatchSize
+		}
 		if n > 0 {
+			if saturated {
+				g.adjustBatchSize(len(g.free))
+			}
 			select {
 			case g.ready <- buf[:n]:
 			case <-g.ctx.Done():
@@ -189,61 +227,70 @@ func (g *ptyGather) gather() {
 	}
 }
 
-// fill gathers one batch. It returns a nil error when the batch should
-// be delivered and gathering should continue, and a terminal error
-// (io.EOF, EIO, context cancellation) once the stream is over.
-func (g *ptyGather) fill(buf []byte) (int, error) {
+// fill gathers one batch. target is the current parser work unit for
+// saturated output; interactive trickles return as soon as input pauses.
+func (g *ptyGather) fill(
+	buf []byte,
+	target int,
+) (int, bool, bool, error) {
 	var n, spins int
-	var start time.Time
-	saturated := false
-	for n < len(buf) {
-		r, err := unix.Read(g.fd, buf[n:])
+	var saturated, idle bool
+	_, budget, _ := gatherFillPolicy(target, 0)
+	var deadline time.Time
+	for n < target {
+		r, err := unix.Read(g.fd, buf[n:target])
 		if r > 0 {
-			if n == 0 {
-				start = time.Now()
+			if n == 0 && budget > 0 {
+				deadline = time.Now().Add(budget)
 			}
 			n += r
 			saturated = saturated || r >= gatherSaturatedRead
 			spins = 0
-			if time.Since(start) >= gatherBudget {
-				return n, nil
+			if !deadline.IsZero() && !time.Now().Before(deadline) {
+				return n, saturated, idle, nil
 			}
 			continue
 		}
 		if r == 0 && err == nil {
-			return n, io.EOF
+			return n, saturated, idle, io.EOF
 		}
 		switch err {
 		case unix.EINTR:
 			continue
 		case unix.EAGAIN:
 		default:
-			return n, &os.SyscallError{Syscall: "read", Err: err}
+			return n, saturated, idle, &os.SyscallError{Syscall: "read", Err: err}
 		}
 		if n > 0 {
 			if !saturated {
-				return n, nil
+				return n, false, idle, nil
 			}
 			if spins < gatherSpinMax {
 				spins++
 				continue
 			}
 		}
+		waitStart := time.Now()
 		ptyReady, quit, err := g.poll(n > 0)
 		if err != nil {
-			return n, err
+			return n, saturated, idle, err
 		}
 		if quit {
 			if err := g.ctx.Err(); err != nil {
-				return n, err
+				return n, saturated, idle, err
 			}
-			return n, context.Canceled
+			return n, saturated, idle, context.Canceled
 		}
 		if !ptyReady && n > 0 {
-			return n, nil
+			return n, saturated, idle, nil
+		}
+		if n == 0 {
+			var becameIdle bool
+			target, budget, becameIdle = gatherFillPolicy(target, time.Since(waitStart))
+			idle = idle || becameIdle
 		}
 	}
-	return n, nil
+	return n, saturated, idle, nil
 }
 
 func (g *ptyGather) poll(bounded bool) (ptyReady, quit bool, err error) {

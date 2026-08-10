@@ -32,8 +32,77 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/pty"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
+
+func TestGatherBatchSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		start    int
+		free     int
+		expected int
+	}{
+		{name: "parser caught up grows payload", start: 64 << 10, free: 3, expected: 72 << 10},
+		{name: "one free buffer is balanced", start: 8 << 10, free: 1, expected: 8 << 10},
+		{name: "two free buffers are balanced", start: 8 << 10, free: 2, expected: 8 << 10},
+		{name: "parser behind shrinks payload", start: 128 << 10, free: 0, expected: (128 << 10) * 8 / 9},
+		{name: "growth is capped", start: gatherMaxBatchSize, free: 3, expected: gatherMaxBatchSize},
+		{name: "shrink is bounded", start: gatherMinBatchSize, free: 0, expected: gatherMinBatchSize},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := ptyGather{batchSize: tc.start}
+			g.adjustBatchSize(tc.free)
+			assert.Equal(t, tc.expected, g.batchSize)
+		})
+	}
+}
+
+func TestGatherFillPolicy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		target       int
+		wait         time.Duration
+		expected     int
+		expectedWait time.Duration
+		expectedIdle bool
+	}{
+		{
+			name:     "writer refill gap preserves target",
+			target:   gatherMaxBatchSize,
+			wait:     gatherIdleThreshold - time.Nanosecond,
+			expected: gatherMaxBatchSize,
+		},
+		{
+			name:         "idle transition resets target and restores budget",
+			target:       gatherMaxBatchSize,
+			wait:         gatherIdleThreshold,
+			expected:     gatherMinBatchSize,
+			expectedWait: gatherBudget,
+			expectedIdle: true,
+		},
+		{
+			name:         "floor keeps budget across refill gap",
+			target:       gatherMinBatchSize,
+			wait:         gatherIdleThreshold - time.Nanosecond,
+			expected:     gatherMinBatchSize,
+			expectedWait: gatherBudget,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			target, budget, idle := gatherFillPolicy(tc.target, tc.wait)
+			assert.Equal(t, tc.expected, target)
+			assert.Equal(t, tc.expectedWait, budget)
+			assert.Equal(t, tc.expectedIdle, idle)
+		})
+	}
+}
 
 func TestPtyGather(t *testing.T) {
 	t.Parallel()
@@ -59,7 +128,9 @@ func TestPtyGather(t *testing.T) {
 		for i := range payload {
 			payload[i] = 'a' + byte(i%26)
 		}
-		go func() {
+		drained := make(chan struct{})
+		defer close(drained)
+		go debug.CapturePanicReport(func() {
 			defer tty.Close()
 			for chunk := payload; len(chunk) > 0; {
 				n := min(len(chunk), 8192)
@@ -68,11 +139,15 @@ func TestPtyGather(t *testing.T) {
 				}
 				chunk = chunk[n:]
 			}
-		}()
+			<-drained
+		})
 
 		var got bytes.Buffer
-		for batch := range g.ready {
-			require.LessOrEqual(t, len(batch), gatherBatchSize)
+		for got.Len() < len(payload) {
+			batch, ok := <-g.ready
+			require.True(t, ok, "gather ended after %d of %d bytes",
+				got.Len(), len(payload))
+			require.LessOrEqual(t, len(batch), gatherMaxBatchSize)
 			require.NotEmpty(t, batch)
 			got.Write(batch)
 			g.release(batch)
@@ -83,7 +158,6 @@ func TestPtyGather(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 		}
-		require.True(t, isNormalPtyExit(g.err), "unexpected stream end: %v", g.err)
 		require.Equal(t, len(payload), got.Len())
 		assert.Equal(t, payload, got.Bytes())
 	})
@@ -161,7 +235,7 @@ func BenchmarkPtyGatherDrain(b *testing.B) {
 		// before closing, and the reader stops on the byte count rather
 		// than on a close-driven EOF that would race the final bytes.
 		drained := make(chan struct{})
-		go func() {
+		go debug.CapturePanicReport(func() {
 			defer tty.Close()
 			for chunk := payload; len(chunk) > 0; {
 				n := min(len(chunk), 65536)
@@ -171,7 +245,7 @@ func BenchmarkPtyGatherDrain(b *testing.B) {
 				chunk = chunk[n:]
 			}
 			<-drained
-		}()
+		})
 		var total int
 		for total < len(payload) {
 			batch, ok := <-g.ready
