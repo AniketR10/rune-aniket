@@ -286,45 +286,48 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.log(log.DebugLevel, "Handle: exit")
 		return
 	}
-	if e.viMode {
-		exit, handled := e.vi.Handle(ev)
-		if exit {
-			e.exitViMode()
+	if e.modalEnabled {
+		if e.viMode {
+			exit, handled := e.vi.Handle(ev)
+			if exit {
+				e.exitViMode()
+			}
+			return false, handled
 		}
-		return false, handled
+
+		if ev.Key == term.KeyEsc && ev.Mod == 0 && !e.comp.IsAltBuffer() {
+			handled = true
+			cursor := e.comp.CursorAtScroll()
+			e.comp.systemCanDispatchBell(func(err error) {
+				if err == nil {
+					e.enterViMode(cursor)
+					return
+				}
+				msg := "You pressed <esc>, which would enable modal (vi) mode, " +
+					"but it cannot be enabled because the shell's " +
+					"audible bell is currently unavailable. " +
+					"Ensure that the shell's audible bell is configured and " +
+					"working correctly. You can test it in your terminal with `printf '\\a'`."
+				e.log(log.WarnLevel, "%s: %v", msg, err)
+				if _, err := e.notifications.NotifyOnce(browserapi.LevelWarn, "%s", msg); err != nil {
+					e.log(log.ErrorLevel, "notify: %v", err)
+				}
+			})
+			return
+		}
 	}
 
-	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && ev.Mod == 0 {
-		handled = true
-		cursor := e.comp.CursorAtScroll()
-		e.comp.systemCanDispatchBell(func(err error) {
-			if err == nil {
-				e.enterViMode(cursor)
-				return
-			}
-			msg := "You pressed <esc>, which would enable modal (vi) mode, " +
-				"but it cannot be enabled because the shell's " +
-				"audible bell is currently unavailable. " +
-				"Ensure that the shell's audible bell is configured and " +
-				"working correctly. You can test it in your terminal with `printf '\\a'`."
-			e.log(log.WarnLevel, "%s: %v", msg, err)
-			if _, err := e.notifications.NotifyOnce(browserapi.LevelWarn, "%s", msg); err != nil {
-				e.log(log.ErrorLevel, "notify: %v", err)
-			}
-		})
-		return
-	}
-
-	switch ev.Mod {
-	case 0, term.ModCtrl, term.ModCtrlShift, term.ModShift:
-	default:
-		// no other modifiers are handled by vte
+	if ev.Mod&^term.ModCtrlShift != 0 {
 		return
 	}
 
 	var raw []byte
-	handled, raw = e.handleInput(ev)
-	if exit || handled || len(raw) == 0 {
+	if !e.bracketedPaste && ev.Type == term.EventKey && ev.Mod == 0 && ev.Ch != 0 {
+		raw = ev.Raw
+	} else {
+		handled, raw = e.handleInput(ev)
+	}
+	if handled || len(raw) == 0 {
 		return
 	}
 
@@ -333,16 +336,12 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	err := e.comp.WriteToPty(raw)
+	_, err := e.comp.pty.Master.Write(raw)
 	if err != nil {
 		e.log(log.ErrorLevel, "write to pty: %s", err)
 		e.notify(browserapi.LevelError, "write to pty: %v", err)
 		return
 	}
-	// A successful pty queue write consumes the event. Waiting for output
-	// cannot establish that contract: password prompts do not echo and a
-	// remote pty may answer after the caller has already reissued an
-	// apparently unhandled sequence prefix.
 	handled = true
 
 	// do not scroll to bottom in all cases or it could

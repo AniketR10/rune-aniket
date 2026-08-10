@@ -25,7 +25,6 @@ package vte
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -63,8 +62,6 @@ type Component struct {
 	cancelCtx func()
 	uri       workspaceapi.URI
 	remote    remote
-	writech   chan []byte
-	writeErr  atomic.Value
 	// closed is set by Close so the async expandAndStart goroutine
 	// can bail before handing the pty FDs to os/exec. It is atomic
 	// because Close runs on the host event loop while the
@@ -125,7 +122,6 @@ func (t *Component) Init(
 	t.selectionAttr = cfg.SelectionAttributes
 	t.terminal = term
 	t.executor = e
-	t.writech = make(chan []byte, 64)
 	t.cfg = cfg
 	// Start at 1 so the zero value (0) means "never observed" for
 	// consumers comparing Version across calls.
@@ -174,22 +170,6 @@ func (t *Component) triggerBell() {
 // Run must be called in a separate goroutine to start processing incoming
 // data from the pty master.
 func (t *Component) Run(publisher browser.EventPublisher) error {
-	go debug.CapturePanicReport(func() {
-		for {
-			select {
-			case data := <-t.writech:
-				_, err := t.pty.Master.Write(data)
-				if err != nil {
-					t.log(log.ErrorLevel, "write to pty: %v", err)
-					t.writeErr.Store(err)
-					return
-				}
-			case <-t.ctx.Done():
-				return
-			}
-		}
-	})
-
 	return t.run(publisher)
 }
 
@@ -208,16 +188,11 @@ func (t *Component) URI() workspaceapi.URI {
 
 // WriteToPty writes the given data to the underlying pty master.
 func (t *Component) WriteToPty(data []byte) error {
-	if err := t.writeErr.Load(); err != nil {
-		return err.(error)
+	_, err := t.pty.Master.Write(data)
+	if err != nil {
+		return err
 	}
-	// t.log(log.TraceLevel, "WriteToPty: %s", string(data))
-	select {
-	case t.writech <- data:
-		t.log(log.TraceLevel, "written %d byte(s) to the pty", len(data))
-	default:
-		return errors.New("pty write queue is full")
-	}
+	t.log(log.TraceLevel, "written %d byte(s) to the pty", len(data))
 	return nil
 }
 

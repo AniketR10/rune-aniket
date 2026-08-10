@@ -24,11 +24,13 @@
 package vte
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -41,8 +43,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 // this is the timeout to wait for the shell to stop updating the
@@ -602,6 +606,202 @@ func (n nopNotifications) UpdateNotificationProgress(
 	return nil
 }
 
+type recordingPtyFile struct {
+	workspacetest.File
+	err    error
+	writes chan struct{}
+	record bool
+}
+
+func (f *recordingPtyFile) Write(data []byte) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	if f.record {
+		f.File.Writes = append(f.File.Writes, bytes.Clone(data))
+	}
+	if f.writes != nil {
+		f.writes <- struct{}{}
+	}
+	return len(data), nil
+}
+
+type recordingNotifications struct {
+	nopNotifications
+	mu       sync.Mutex
+	messages []string
+}
+
+func (n *recordingNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.messages = append(n.messages, fmt.Sprintf(msg, args...))
+	return "", nil
+}
+
+func (n *recordingNotifications) Messages() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return slices.Clone(n.messages)
+}
+
+func newHandleTestHandler(master workspaceapi.File) *Handler {
+	handler := &Handler{
+		comp: &Component{
+			pty:           workspaceapi.Pty{Master: master},
+			parserHandler: &parserHandler{},
+		},
+		ctx:           context.Background(),
+		notifications: nopNotifications{},
+	}
+	handler.comp.scroll.InitPerformance(cell.NewBuffer())
+	handler.comp.scroll.InvertOffset = true
+	return handler
+}
+
+func TestHandlerHandleWritesBeforeReturning(t *testing.T) {
+	t.Parallel()
+	master := &recordingPtyFile{record: true}
+	handler := newHandleTestHandler(master)
+
+	exit, handled := handler.Handle(term.Event{
+		Type: term.EventKey,
+		Ch:   'a',
+		Raw:  []byte("a"),
+	})
+
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Equal(t, [][]byte{[]byte("a")}, master.Writes)
+}
+
+func TestHandlerHandlePtyWriteError(t *testing.T) {
+	t.Parallel()
+	writeErr := errors.New("write failed")
+	master := &recordingPtyFile{err: writeErr}
+	notifications := new(recordingNotifications)
+	handler := newHandleTestHandler(master)
+	handler.notifications = notifications
+
+	exit, handled := handler.Handle(term.Event{
+		Type: term.EventKey,
+		Ch:   'a',
+		Raw:  []byte("a"),
+	})
+
+	assert.False(t, exit)
+	assert.False(t, handled)
+	assert.Equal(t, []string{"write to pty: write failed"}, notifications.Messages())
+}
+
+func TestHandlerHandleInputPaths(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		ev          term.Event
+		configure   func(*Handler)
+		expected    []byte
+		expectWrite bool
+		handled     bool
+	}{
+		{
+			name:        "printable",
+			ev:          term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
+			expected:    []byte("a"),
+			expectWrite: true,
+			handled:     true,
+		},
+		{
+			name:        "shifted",
+			ev:          term.Event{Type: term.EventKey, Ch: 'A', Mod: term.ModShift, Raw: []byte("A")},
+			expected:    []byte("A"),
+			expectWrite: true,
+			handled:     true,
+		},
+		{
+			name:        "ctrl-c",
+			ev:          term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl, Raw: []byte{0x03}},
+			expected:    []byte{0x03},
+			expectWrite: true,
+			handled:     true,
+		},
+		{
+			name: "application cursor",
+			ev:   term.Event{Type: term.EventKey, Key: term.KeyArrowUp, Raw: []byte("\x1b[A")},
+			configure: func(handler *Handler) {
+				handler.comp.parserHandler.modeCursorKeys = true
+			},
+			expected:    []byte("\x1bOA"),
+			expectWrite: true,
+			handled:     true,
+		},
+		{
+			name: "new line mode",
+			ev:   term.Event{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte("\r")},
+			configure: func(handler *Handler) {
+				handler.comp.parserHandler.modeLineFeedNewLine = true
+			},
+			expected:    []byte("\r\n"),
+			expectWrite: true,
+			handled:     true,
+		},
+		{
+			name:    "unsupported modifier",
+			ev:      term.Event{Type: term.EventKey, Ch: 'a', Mod: term.ModAlt, Raw: []byte("a")},
+			handled: false,
+		},
+		{
+			name:    "unknown modifier bit",
+			ev:      term.Event{Type: term.EventKey, Ch: 'a', Mod: term.Modifier(1 << 7), Raw: []byte("a")},
+			handled: false,
+		},
+		{
+			name:    "empty input",
+			ev:      term.Event{Type: term.EventKey},
+			handled: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			master := &recordingPtyFile{record: true}
+			handler := newHandleTestHandler(master)
+			if tc.configure != nil {
+				tc.configure(handler)
+			}
+
+			exit, handled := handler.Handle(tc.ev)
+
+			assert.False(t, exit)
+			assert.Equal(t, tc.handled, handled)
+			if tc.expectWrite {
+				assert.Equal(t, [][]byte{tc.expected}, master.Writes)
+			} else {
+				assert.Empty(t, master.Writes)
+			}
+		})
+	}
+}
+
+func BenchmarkHandlerHandlePrintableKey(b *testing.B) {
+	writes := make(chan struct{}, 1)
+	master := &recordingPtyFile{writes: writes}
+	handler := newHandleTestHandler(master)
+	ev := term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		exit, handled := handler.Handle(ev)
+		if exit || !handled {
+			b.Fatalf("Handle returned exit=%t handled=%t", exit, handled)
+		}
+		<-writes
+	}
+}
+
 // TestHandlerHandleReturnsHandledWithoutPtyEcho pins the regression
 // where a slow pty round-trip (e.g. an SSH workspace pty whose output
 // arrives via workspacerpc) caused vte.Handler.Handle to return
@@ -654,13 +854,8 @@ func TestHandlerHandleBurstDoesNotWaitForPtyEcho(t *testing.T) {
 		keys        = 4
 		maxDuration = 100 * time.Millisecond
 	)
-	handler := &Handler{
-		comp: &Component{
-			parserHandler: &parserHandler{},
-			writech:       make(chan []byte, keys),
-		},
-		ctx: context.Background(),
-	}
+	master := &recordingPtyFile{record: true}
+	handler := newHandleTestHandler(master)
 
 	start := time.Now()
 	for range keys {
@@ -674,32 +869,34 @@ func TestHandlerHandleBurstDoesNotWaitForPtyEcho(t *testing.T) {
 	}
 	require.Less(t, time.Since(start), maxDuration,
 		"a burst of PTY writes must not block the UI event loop waiting for echo")
+	require.Len(t, master.Writes, keys)
 }
 
 func TestHandlerPasteEndWritesBufferedInput(t *testing.T) {
 	t.Parallel()
 
-	handler := &Handler{
-		comp: &Component{
-			parserHandler: &parserHandler{useAlt: true},
-		},
-	}
+	master := &recordingPtyFile{record: true}
+	handler := newHandleTestHandler(master)
+	handler.comp.parserHandler.useAlt = true
 
-	handled, raw := handler.handleInput(term.Event{Type: term.EventPasteStart})
+	exit, handled := handler.Handle(term.Event{Type: term.EventPasteStart})
+	assert.False(t, exit)
 	assert.True(t, handled)
-	assert.Empty(t, raw)
+	assert.Empty(t, master.Writes)
 
-	handled, raw = handler.handleInput(term.Event{
+	exit, handled = handler.Handle(term.Event{
 		Type: term.EventKey,
 		Ch:   's',
 		Raw:  []byte("secret\n"),
 	})
+	assert.False(t, exit)
 	assert.True(t, handled)
-	assert.Empty(t, raw)
+	assert.Empty(t, master.Writes)
 
-	handled, raw = handler.handleInput(term.Event{Type: term.EventPasteEnd})
-	assert.False(t, handled)
-	assert.Equal(t, []byte("secret\r"), raw)
+	exit, handled = handler.Handle(term.Event{Type: term.EventPasteEnd})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Equal(t, [][]byte{[]byte("secret\r")}, master.Writes)
 }
 
 // TestHandlerPublishesPtyOutputInterrupt pins that a keystroke whose
