@@ -567,8 +567,18 @@ func shellWrappedCommandNameWord(word *syntax.Word, out map[string]struct{}) (st
 	if name == "" || strings.ContainsAny(name, " \t\r\n") {
 		return "", false
 	}
+	// A name whose basename is nothing but expansion placeholders (e.g.
+	// "$CMD") could resolve to any program, so the script stays opaque.
+	if strings.Trim(filepath.Base(name), commandNameExpansionPlaceholder) == "" {
+		return "", false
+	}
 	return name, true
 }
+
+// commandNameExpansionPlaceholder stands in for a parameter expansion
+// inside a command-name word, so that "/tmp/$v.test" is identified as
+// "*.test" rather than making the whole script opaque.
+const commandNameExpansionPlaceholder = "*"
 
 func shellWrappedCommandNamePart(part syntax.WordPart, out map[string]struct{}) (string, bool) {
 	switch p := part.(type) {
@@ -578,6 +588,8 @@ func shellWrappedCommandNamePart(part syntax.WordPart, out map[string]struct{}) 
 		return p.Value, true
 	case *syntax.DblQuoted:
 		return shellWrappedCommandNameParts(p.Parts, out)
+	case *syntax.ParamExp:
+		return commandNameExpansionPlaceholder, true
 	case *syntax.CmdSubst:
 		return shellWrappedLiteralCommandSubstitution(p, out)
 	default:

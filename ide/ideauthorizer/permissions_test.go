@@ -31,6 +31,25 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 )
 
+const benchmarkComparisonScript = `go test -c -o /tmp/after.test ./handler/search/ && cd handler/search && for i in 1 2 3; do
+  for v in before after; do
+    /tmp/$v.test -test.run='^$' -test.bench='BenchmarkDrawRows' -test.benchmem -test.count=4 2>/dev/null | python3 -c "
+import sys
+for l in sys.stdin:
+    if l.startswith('BenchmarkDrawRows'):
+        p=l.split(); print('$v', p[0].split('-')[0], p[2], p[6])
+"
+  done
+done | python3 -c "
+import sys,collections,statistics
+d=collections.defaultdict(list)
+for l in sys.stdin:
+    v,b,ns,al=l.split(); d[(b,v)].append(int(ns))
+for b in ['BenchmarkDrawRowsASCII','BenchmarkDrawRowsWide']:
+    be,af=d[(b,'before')],d[(b,'after')]
+    print(f'{b:26} before med={statistics.median(be):>8.0f} | after med={statistics.median(af):>8.0f} | {100*(statistics.median(af)/statistics.median(be)-1):+.1f}%')
+"`
+
 func TestPluginPermissionEffectiveCommands(t *testing.T) {
 	t.Parallel()
 
@@ -167,6 +186,15 @@ func TestPluginPermissionEffectiveCommands(t *testing.T) {
 				Path: "/bin/bash", Args: []string{"-c", "$CMD args"},
 			},
 			wantOK: false,
+		},
+		{
+			name: "regression: benchmark comparison script with nested loops and python heredocs",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", benchmarkComparisonScript},
+			},
+			want:   []string{"*.test", "go", "python3"},
+			wantOK: true,
 		},
 		{
 			name: "literal command substitution in command word decomposes",
