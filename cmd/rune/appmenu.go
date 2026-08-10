@@ -185,6 +185,8 @@ func appMenus(
 			cmd("File Explorer", "fexplorer"),
 			cmd("Command History", "history"),
 			prefill("Change Opacity…", "guiopacity"),
+			cmd("Increase Font Size", "guifontsize", "increase"),
+			cmd("Decrease Font Size", "guifontsize", "decrease"),
 			sep,
 			cmd("Expand Fold", "foldexpand"),
 			cmd("Collapse Fold", "foldcollapse"),
