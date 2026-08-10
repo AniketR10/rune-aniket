@@ -31,6 +31,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1774,6 +1775,29 @@ func TestCursorFolds(t *testing.T) {
 		cursor = e.Coordinates()
 		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
 	})
+}
+
+func TestCursorEmptyFoldsScheduleOperation(t *testing.T) {
+	buf := cell.NewBuffer()
+	fs := &testFoldsService{folds: iterator.FromSlice([]term.Range{})}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	scheduled := make(chan func(), 1)
+	cursor := NewCursor(scroll, func(fn func()) bool {
+		scheduled <- fn
+		return true
+	})
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
+	require.NoError(t, err)
+	scroll.Resize(100, 100)
+
+	require.True(t, cursor.ExpandAllFolds(context.Background()))
+	select {
+	case fn := <-scheduled:
+		fn()
+	case <-time.After(time.Second):
+		t.Fatal("empty fold operation did not run through the scheduler")
+	}
 }
 
 func TestCursorSearch(t *testing.T) {

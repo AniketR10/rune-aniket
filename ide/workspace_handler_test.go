@@ -86,13 +86,8 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 		os.RemoveAll(dir)
 	})
 
-	uri1, err := workspaceapi.ParseURI("memory://" + dir)
-	require.NoError(t, err)
-
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
-	require.NoError(t, m.addOrCreateWorkspace(uri1))
-	m.drainPendingWorkspaces()
 
 	h := newSafeHandler(m)
 	// jumptolocation is registered on a per-file basis, so the following tests
@@ -306,34 +301,9 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 	}
 }
 
-// TestFileExplorerReactsToFilesystemChangesIntegration is a
-// black-box regression test for the cached file explorer becoming
-// stale after the user closes it, creates a new file, and re-opens
-// it. The fileExplorerHandler is cached across :fexplorer toggles,
-// so without the FS-watcher subscription the second open would
-// render the on-disk snapshot from when the explorer was first
-// constructed and miss the newly-written file.
-//
-// The flow exercised end-to-end through the production handler
-// chain (driven by handlertest.RunHandlerSequence with exact-frame
-// assertions on each step) is:
-//
-//  1. Open the explorer via :fexplorer; alpha.go and beta.go must
-//     render in the tree.
-//  2. Close the explorer via :fexplorer (toggle).
-//  3. Open and write gamma.go via :edit / :write so the FS watcher
-//     fires a create event under the workspace root. The editor
-//     transiently creates `.gamma.go.rswp` while it is open, but
-//     the explorer's gitignore-derived ignore matcher (RUNE-143)
-//     hides `*.rswp` so the swap file does not pollute the
-//     rendered tree.
-//  4. Re-open the explorer via :fexplorer; the rendered tree must
-//     now include gamma.go.
-//
-// The watcher delivery is asynchronous, so step 4's frame is
-// asserted via require.Eventually that calls RunHandlerSequence
-// with no input keys (just redrawing) until the expected frame is
-// produced.
+// TestFileExplorerReactsToFilesystemChangesIntegration verifies that reopening
+// the cached explorer refreshes its tree from disk after a file is created while
+// the explorer is closed.
 func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	// Resolve symlinks so the workspace URI matches the canonical
 	// path emitted by the FS watcher. On macOS t.TempDir() returns
@@ -356,7 +326,10 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDirs(t,
 		defaultConfigWithWrap(false), dir, t.TempDir(),
 		nopShutdownShaderConfig())
-	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.mu.Lock()
+	err = m.addOrCreateWorkspace(uri)
+	m.mu.Unlock()
+	require.NoError(t, err)
 	m.drainPendingWorkspaces()
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -396,10 +369,6 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│1 1  2 2                    │",
 		"└─────━━━────────────────────┘",
 	}, "\n")
-	// Final frame after re-opening the explorer: the on-disk
-	// gamma.go entry must have been picked up by the FS-watcher
-	// subscription and rendered in the tree. The buffer pane on
-	// the right still shows the gamma.go editor opened in step 3.
 	reopenedFrame := strings.Join([]string{
 		"┌────────────────────────────┐",
 		"│o gamma.go                  │",
@@ -412,20 +381,6 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"└─────━━━────────────────────┘",
 	}, "\n")
 
-	// Steps 1–3: drive the production handler chain with
-	// RunHandlerSequence and assert the exact rendered frame at
-	// each step. The toggle is invoked via :fexplorer rather than
-	// a <tab> key binding because the test config's empty
-	// workspace pre-focus does not propagate <tab> to the
-	// command-key dispatcher; TestFileExplorerToggleViaTabKey
-	// covers the <tab>-binding code path with a focused editor.
-	//
-	//  1. Open the file explorer: both pre-existing files must
-	//     render in the tree.
-	//  2. Close the file explorer with the toggle command.
-	//  3. :edit gamma.go, type "hello", :write — flushes the new
-	//     file to disk under the workspace root which fires the
-	//     FS watcher.
 	handlertest.RunHandlerSequence(t, h, width, height,
 		[]handlertest.SequenceTestCase{
 			{
@@ -443,32 +398,11 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 			},
 		})
 
-	// Step 4: re-open the explorer; the rendered frame must now
-	// include gamma.go alongside the pre-existing entries. The FS
-	// watcher delivers its create event on a separate goroutine
-	// (kqueue on macOS, inotify on Linux) with platform-dependent
-	// latency, so retry the final RunHandlerSequence under
-	// require.Eventually until the FS-watcher subscription has
-	// rendered gamma.go in the tree. The explorer toggle in step
-	// 2 closed the window, so the first iteration opens it; every
-	// subsequent iteration is a no-op redraw (empty
-	// InputSequence) because re-issuing the toggle would close
-	// the just-opened explorer.
-	require.Eventually(t, func() bool {
-		fakeT := &testing.T{}
-		input := "<c-\\\\>fexplorer<enter>"
-		if m.focusEx().fileExplorerWin != nil {
-			input = ""
-		}
-		handlertest.RunHandlerSequence(fakeT, h, width, height,
-			[]handlertest.SequenceTestCase{{
-				InputSequence: input,
-				Expected:      reopenedFrame,
-			}})
-		return !fakeT.Failed()
-	}, 5*time.Second, 25*time.Millisecond,
-		"reopened explorer must render gamma.go after the FS "+
-			"watcher delivers the create event for the new file")
+	handlertest.RunHandlerSequence(t, h, width, height,
+		[]handlertest.SequenceTestCase{{
+			InputSequence: "<c-\\\\>fexplorer<enter>",
+			Expected:      reopenedFrame,
+		}})
 }
 
 // TestGitlinkIntegration exercises the :gitlink command end-to-end

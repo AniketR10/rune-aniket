@@ -4542,7 +4542,9 @@ func (c *Cursor) opFoldsIter(
 	go debug.CapturePanicReport(func() {
 		folds, isEmpty := iterator.IsEmpty(ctx, folds)
 		if isEmpty {
-			op(nil)
+			c.scheduleNextTick(func() {
+				op(nil)
+			})
 			return
 		}
 		c.scheduleNextTick(func() {
