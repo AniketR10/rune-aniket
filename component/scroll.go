@@ -374,6 +374,24 @@ func (s *Scroll) SetOffset(pos term.Coordinates) bool {
 	return ok
 }
 
+// ClampOffset clamps the current offset into the valid range so an offset
+// left past the maximum (for example after content shrinks on resize)
+// snaps back to the last valid position instead of scrolling off the end.
+// It reports whether the offset changed. Unlike a Seek it does not notify
+// subscribers, so callers may use it from a Resize path.
+func (s *Scroll) ClampOffset() bool {
+	maxOff := s.MaxOffset()
+	clamped := term.Coordinates{
+		X: min(s.offset.X, maxOff.X),
+		Y: min(s.offset.Y, maxOff.Y),
+	}
+	if clamped == s.offset {
+		return false
+	}
+	s.offset = clamped
+	return true
+}
+
 // SeekNextResult shifts the contents of this scroll to visualize
 // the next result in the result list.
 func (s *Scroll) SeekNextResult() bool {
@@ -527,26 +545,6 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
-func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (
-	offset int, ret [][]term.Cell,
-) {
-	cells := s.buf.RawCells()
-	offset = s.convertedOffset().Y + hiddenOffset
-	switch {
-	// negative offset means add negative space
-	case offset < 0 && len(cells) > 0:
-		return offset, cells[0:]
-	case offset <= len(cells):
-		return offset, cells[offset:]
-	// this can happen in some cases when content is modified
-	// outside scroll and offset.Y is simply stale.
-	case len(cells) > 0:
-		return offset, cells[len(cells)-1:]
-	default:
-		return offset, cells[:]
-	}
-}
-
 func (s *Scroll) hiddenOffset() (ret int) {
 	if s.InvertOffset {
 		return 0
@@ -566,10 +564,12 @@ type startEndBlock struct {
 
 func (s *Scroll) drawNoAttr(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	yoffset, cells := s.rawCellsOffsetNoWrap(0)
-	yoffset = -min(0, yoffset)
-	ywindow := max(0, min(s.height-yoffset, len(cells)))
-	for y, r := range cells[:ywindow] {
+	rowOffset := s.convertedOffset().Y
+	yoffset := -min(0, rowOffset)
+	start := max(0, min(rowOffset, s.buf.Rows()))
+	ywindow := max(0, min(s.height-yoffset, s.buf.Rows()-start))
+	for y := range ywindow {
+		r := s.buf.Row(start + y)
 		var xoffset int
 		for x, c := range r {
 			if c.Ch == '\t' {
@@ -593,10 +593,12 @@ func (s *Scroll) drawNoAttr(writer term.Writer) {
 
 func (s *Scroll) draw(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	yoffset, cells := s.rawCellsOffsetNoWrap(0)
-	yoffset = -min(0, yoffset)
-	ywindow := max(0, min(s.height-yoffset, len(cells)))
-	for y, r := range cells[:ywindow] {
+	rowOffset := s.convertedOffset().Y
+	yoffset := -min(0, rowOffset)
+	start := max(0, min(rowOffset, s.buf.Rows()))
+	ywindow := max(0, min(s.height-yoffset, s.buf.Rows()-start))
+	for y := range ywindow {
+		r := s.buf.Row(start + y)
 		var xoffset int
 		for x, c := range r {
 			if c.Ch == '\t' {
@@ -1179,8 +1181,7 @@ func (s *scrollSubscriber) OnDidEdit(
 }
 
 func (s *Scroll) viewColumns(y int) (ret int) {
-	cells := s.Buffer().RawCells()
-	for _, c := range cells[y] {
+	for _, c := range s.Buffer().Row(y) {
 		if c.Ch == '\t' {
 			ret += s.tabspaces
 		} else {
@@ -1196,14 +1197,14 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 	var targety, hideLineIconOffset int
 	endblock := -1
 	hiddenOffset := s.hiddenOffset()
-	yoffset, cells := s.rawCellsOffsetNoWrap(hiddenOffset)
+	yoffset := s.convertedOffset().Y + hiddenOffset
 	targety = -min(0, yoffset)
 	yoffset = max(0, yoffset)
-	for y := 0; y < len(cells); y++ {
+	for y := 0; y+yoffset < s.buf.Rows(); y++ {
 		if targety >= ywindow {
 			break
 		}
-		r := cells[y]
+		r := s.buf.Row(y + yoffset)
 		scrollY := y + yoffset
 		if scrollY < endblock {
 			continue
@@ -1329,20 +1330,19 @@ func (s *Scroll) repositionLine(target, y int) (seek int) {
 
 func (s *Scroll) expandCoordinatesWidth(scrollPos term.Coordinates) (ret term.Coordinates) {
 	ret = scrollPos
-	cells := s.buf.RawCells()
-	if scrollPos.Y < 0 || scrollPos.Y >= len(cells) {
+	if scrollPos.Y < 0 || scrollPos.Y >= s.buf.Rows() {
 		return
 	}
-	posx := max(0, min(scrollPos.X, len(cells[scrollPos.Y])))
-	for _, c := range cells[scrollPos.Y][:posx] {
+	row := s.buf.Row(scrollPos.Y)
+	posx := max(0, min(scrollPos.X, len(row)))
+	for _, c := range row[:posx] {
 		if c.Ch == '\t' {
 			ret.X += s.tabspaces - 1
 		} else if c.Width > 1 {
 			ret.X += int(c.Width) - 1
 		}
 	}
-	if scrollPos.X < len(cells[scrollPos.Y]) &&
-		cells[scrollPos.Y][scrollPos.X].Ch == '\t' {
+	if scrollPos.X < len(row) && row[scrollPos.X].Ch == '\t' {
 		ret.X += s.tabspaces - 1
 	}
 
@@ -1351,14 +1351,13 @@ func (s *Scroll) expandCoordinatesWidth(scrollPos term.Coordinates) (ret term.Co
 
 func (s *Scroll) contractCoordinatesWidth(pos term.Coordinates) (ret term.Coordinates) {
 	ret = pos
-	cells := s.buf.RawCells()
-	if pos.Y < 0 || pos.Y >= len(cells) {
+	if pos.Y < 0 || pos.Y >= s.buf.Rows() {
 		return
 	}
 	// Indexed rather than ranged: this runs once per cursor conversion,
 	// i.e. several times per parsed codepoint, and copying each 24-byte
 	// cell dominated the loop.
-	row := cells[pos.Y]
+	row := s.buf.Row(pos.Y)
 	for x := 0; x < len(row) && x < ret.X; x++ {
 		if row[x].Ch == '\t' {
 			ret.X -= s.tabspaces - 1

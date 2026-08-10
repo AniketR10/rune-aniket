@@ -98,26 +98,41 @@ func TestPrimaryScrollUpHistory(t *testing.T) {
 		assert.Equal(t, 3, b.Columns(3))
 	})
 
-	t.Run("trims oldest rows in amortized chunks past max history", func(t *testing.T) {
+	t.Run("recycles oldest rows past max history", func(t *testing.T) {
 		history := 5
 		b := NewPrimaryBuffer(0, history)
 		b.SetDefaultChar(' ')
 		b.Resize(3, 3)
 		resetPrimaryBuffer(b, "0\n1\n2")
 
-		slack := b.historySlack()
-		require.Equal(t, 1, slack)
-
-		for b.Rows() < history+slack {
+		for b.Rows() < history {
 			b.ScrollUpHistory(1)
 		}
-		assert.Equal(t, history+slack, b.Rows())
-		assert.Equal(t, "0  ", cellsRowString(b, 0))
-
-		// next scroll exceeds the slack and trims back to max history
-		b.ScrollUpHistory(1)
 		assert.Equal(t, history, b.Rows())
-		assert.Equal(t, "2  ", cellsRowString(b, 0))
+		assert.Equal(t, "0  ", cellsRowString(b, 0))
+		recycled := &b.Cells.RawCells()[0][0]
+
+		for range history + 1 {
+			b.ScrollUpHistory(1)
+		}
+		assert.Equal(t, history, b.Rows())
+		assert.Same(t, recycled, &b.Cells.RawCells()[history-1][0])
+		for y := range history {
+			assert.Equal(t, "   ", cellsRowString(b, y))
+		}
+	})
+
+	t.Run("trims rows already beyond max history", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, 3)
+		b.SetDefaultChar(' ')
+		b.Restore(term.StringToCells("0\n1\n2\n3\n4"), term.Coordinates{Y: 4}, 1, 2)
+		require.Equal(t, 5, b.Rows())
+
+		b.ScrollUpHistory(1)
+		assert.Equal(t, 3, b.Rows())
+		assert.Equal(t, "3", cellsRowString(b, 0))
+		assert.Equal(t, "4", cellsRowString(b, 1))
+		assert.Equal(t, " ", cellsRowString(b, 2))
 	})
 
 	t.Run("rotates in place when history is disabled", func(t *testing.T) {

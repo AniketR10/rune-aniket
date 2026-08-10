@@ -25,7 +25,6 @@ package vteparser
 
 import (
 	"bytes"
-	"math"
 	"time"
 	"unicode/utf8"
 
@@ -73,6 +72,9 @@ type Parser struct {
 	state   parserState
 	scanner *vtescanner.Scanner
 	handler Handler
+	// scratch backs the single-byte Advance entry point so it can share
+	// the batched synchronized-update path without allocating.
+	scratch [1]byte
 }
 
 // NewParser returns a new Parser instance.
@@ -107,10 +109,11 @@ func (p *Parser) SyncTimeout() Timeout {
 // Advance processes a new byte from the PTY.
 func (p *Parser) Advance(ch byte) {
 	if p.state.syncState.timeout.PendingTimeout() {
-		p.advanceSync(ch)
-	} else {
-		p.scanner.Advance(ch)
+		p.scratch[0] = ch
+		p.advanceSync(p.scratch[:])
+		return
 	}
+	p.scanner.Advance(ch)
 }
 
 // AdvanceBytes processes a batch of bytes from the PTY. Runs of
@@ -120,30 +123,53 @@ func (p *Parser) Advance(ch byte) {
 func (p *Parser) AdvanceBytes(buf []byte) {
 	for len(buf) > 0 {
 		if p.state.syncState.timeout.PendingTimeout() {
-			p.advanceSync(buf[0])
-			buf = buf[1:]
+			buf = buf[p.advanceSync(buf):]
 			continue
 		}
-		if n := p.scanner.GroundRun(buf); n > 0 {
-			p.handler.InputRun(buf[:n])
-			p.state.precedingChar, _ = utf8.DecodeLastRune(buf[:n])
-			buf = buf[n:]
-			continue
-		}
-		p.scanner.Advance(buf[0])
-		buf = buf[1:]
+		buf = buf[p.advanceRuns(buf, true):]
 	}
+}
+
+// advanceRuns feeds buf through the scanner, handing each printable run
+// to the handler in a single InputRun call, and reports how many bytes
+// it consumed. With stopOnSync it returns as soon as a synchronized
+// update opens so the caller can buffer the remainder instead; StopSync
+// clears it because re-entering the buffer it is draining would corrupt
+// that buffer.
+func (p *Parser) advanceRuns(buf []byte, stopOnSync bool) int {
+	consumed := 0
+	for consumed < len(buf) {
+		rest := buf[consumed:]
+		if n := p.scanner.GroundRun(rest); n > 0 {
+			p.handler.InputRun(rest[:n])
+			p.state.precedingChar, _ = utf8.DecodeLastRune(rest[:n])
+			consumed += n
+			continue
+		}
+		p.scanner.Advance(rest[0])
+		consumed++
+		if stopOnSync && p.state.syncState.timeout.PendingTimeout() {
+			break
+		}
+	}
+	return consumed
 }
 
 // StopSync ends a synchronized update.
 func (p *Parser) StopSync() {
-	// Process all synchronized bytes.
-	for _, ch := range p.state.syncState.buffer {
-		p.scanner.Advance(ch)
-	}
+	p.stopSync(true)
+}
 
-	// Report that update ended, since we could end due to timeout.
-	p.handler.UnsetPrivateMode(PrivateModeSyncUpdate)
+func (p *Parser) stopSync(reportEnd bool) {
+	// Buffered bytes are ordinary terminal output: replay them through
+	// the same batched path AdvanceBytes uses so a synchronized frame is
+	// not charged per-byte dispatch on top of the buffering pass.
+	p.advanceRuns(p.state.syncState.buffer, false)
+
+	if reportEnd {
+		// Timeout and overflow have no ESU for the driver to dispatch.
+		p.handler.UnsetPrivateMode(PrivateModeSyncUpdate)
+	}
 	// Resetting state after processing makes sure we don't interpret buffered sync escapes.
 	p.state.syncState.buffer = p.state.syncState.buffer[:0]
 	p.state.syncState.timeout.ClearTimeout()
@@ -154,29 +180,55 @@ func (p *Parser) SyncBytesCount() int {
 	return len(p.state.syncState.buffer)
 }
 
-// AdvanceSync processes a new byte during a synchronized update.
-func (p *Parser) advanceSync(ch byte) {
-	p.state.syncState.buffer = append(p.state.syncState.buffer, ch)
+// advanceSync buffers the leading bytes of buf that belong to the open
+// synchronized update and reports how many it consumed. The BSU/ESU
+// terminators are located with one scan over the appended bytes rather
+// than a suffix comparison after every byte.
+//
+// NOTE: It is technically legal to specify multiple private modes in the
+// same escape, but we only recognize EXACTLY `\e[?2026h`/`\e[?2026l` to
+// keep the parser reasonable.
+func (p *Parser) advanceSync(buf []byte) int {
+	sync := &p.state.syncState
+	prevLen := len(sync.buffer)
+	// The region is flushed as soon as it reaches syncBufferSize-1, so
+	// the buffer never outgrows its initial capacity.
+	n := min(len(buf), syncBufferSize-1-prevLen)
+	sync.buffer = append(sync.buffer, buf[:n]...)
 
-	// Handle sync CSI escape sequences.
-	p.advanceSyncCSI()
-}
+	// Only the last syncEscapeLen-1 already-buffered bytes can begin a
+	// marker that completes within the bytes just appended, so anything
+	// before that was already classified by an earlier call.
+	at := max(prevLen-(syncEscapeLen-1), 0)
+	for {
+		i := bytes.IndexByte(sync.buffer[at:], c0ESC)
+		if i < 0 {
+			break
+		}
+		at += i
+		if at+syncEscapeLen > len(sync.buffer) {
+			// A marker split across batches: re-examined from here once
+			// the rest of it arrives.
+			break
+		}
+		switch seq := sync.buffer[at : at+syncEscapeLen]; {
+		case bytes.Equal(seq, bsuCSI):
+			sync.timeout.SetTimeout(syncUpdateTimeout)
+			at += syncEscapeLen
+		case bytes.Equal(seq, esuCSI):
+			end := at + syncEscapeLen
+			sync.buffer = sync.buffer[:end]
+			// Replaying ESU resets any incomplete scanner state in the body
+			// and dispatches the normal mode transition exactly once.
+			p.stopSync(false)
+			return end - prevLen
+		default:
+			at++
+		}
+	}
 
-// AdvanceSyncCSI handles BSU/ESU CSI sequences during synchronized update.
-func (p *Parser) advanceSyncCSI() {
-	// Get the last few bytes for comparison.
-	len := len(p.state.syncState.buffer)
-	offset := int(math.Max(float64(len-syncEscapeLen), 0))
-	end := p.state.syncState.buffer[offset:]
-
-	// NOTE: It is technically legal to specify multiple private modes in the same
-	// escape, but we only allow EXACTLY `\e[?2026h`/`\e[?2026l` to keep the parser
-	// reasonable.
-	//
-	// Check for extension/termination of the synchronized update.
-	if bytes.Equal(end, bsuCSI) {
-		p.state.syncState.timeout.SetTimeout(syncUpdateTimeout)
-	} else if bytes.Equal(end, esuCSI) || len >= syncBufferSize-1 {
+	if len(sync.buffer) >= syncBufferSize-1 {
 		p.StopSync()
 	}
+	return n
 }

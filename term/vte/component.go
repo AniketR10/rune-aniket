@@ -248,6 +248,10 @@ func (t *Component) Resize(width, height int) error {
 	t.height = height
 	t.parserHandler.resizeLocked(width, height)
 	t.scroll.Resize(width, height)
+	// Widening unwraps history into fewer rows, which can leave a
+	// scrolled-up offset past the new maximum and blank the view; snap it
+	// back to the top of history instead.
+	t.scroll.ClampOffset()
 	t.mu.Unlock()
 
 	return nil
@@ -699,12 +703,12 @@ func (t *Component) snapshotLocked(dst [][]term.Cell) Snapshot {
 	cursor := t.parserHandler.sync.buf.CursorAtScreen()
 	if t.parserHandler.useAlt {
 		snap.Alternate = ScreenSnapshot{
-			Cells:  term.CopyCells(dst, t.parserHandler.sync.altBuf.Cells.RawCells()),
+			Cells:  t.parserHandler.sync.altBuf.Cells.CopyRows(dst),
 			Cursor: cursor,
 		}
 	} else {
 		snap.Primary = ScreenSnapshot{
-			Cells:  term.CopyCells(dst, t.parserHandler.sync.primBuf.Cells.RawCells()),
+			Cells:  t.parserHandler.sync.primBuf.Cells.CopyRows(dst),
 			Cursor: cursor,
 		}
 	}

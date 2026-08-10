@@ -109,6 +109,99 @@ func (d *testDispatcher) ESCDispatch(intermediates []byte, ignore bool, ch byte)
 	d.dispatched = append(d.dispatched, dispatchedEsc{intermediates, ignore, ch})
 }
 
+// copyingDispatcher deep-copies the params of every CSI dispatch. The
+// scanner owns the params storage and only guarantees it for the
+// duration of the call, so a handler that wants them later must copy.
+type copyingDispatcher struct {
+	testDispatcher
+	csiParams [][][]uint16
+	hooks     []dispatchedHook
+}
+
+func copyScannerParams(params [][]uint16) [][]uint16 {
+	record := make([][]uint16, len(params))
+	for i, param := range params {
+		record[i] = append([]uint16(nil), param...)
+	}
+	return record
+}
+
+func (d *copyingDispatcher) CSIDispatch(
+	params [][]uint16, _ []byte, _ bool, _ rune,
+) {
+	d.csiParams = append(d.csiParams, copyScannerParams(params))
+}
+
+func (d *copyingDispatcher) Hook(
+	params [][]uint16, intermediates []byte, ignore bool, action rune,
+) {
+	d.hooks = append(d.hooks, dispatchedHook{
+		params:        copyScannerParams(params),
+		intermediates: append([]byte(nil), intermediates...),
+		ignore:        ignore,
+		action:        action,
+	})
+}
+
+// TestScannerCSIParamsPerDispatch pins that each CSI dispatch observes
+// exactly its own parameters. Params storage is reused across
+// dispatches, so a stale entry left over from a longer preceding
+// sequence would surface here.
+func TestScannerCSIParamsPerDispatch(t *testing.T) {
+	var d copyingDispatcher
+	scanner := NewScanner(&d)
+
+	// A long sequence first, then progressively shorter ones, then
+	// subparameters, so every way the reused storage could leak a stale
+	// entry is exercised.
+	input := "\x1b[1;2;3;4;5;6m" +
+		"\x1b[9;8m" +
+		"\x1b[7m" +
+		"\x1bm" +
+		"\x1b[38:2:10:20:30;48;5;9m" +
+		"\x1b[11;22;33;44;55;66;77;88m"
+	for _, b := range []byte(input) {
+		scanner.Advance(b)
+	}
+
+	assert.Equal(t, [][][]uint16{
+		{{1}, {2}, {3}, {4}, {5}, {6}},
+		{{9}, {8}},
+		{{7}},
+		{{38, 2, 10, 20, 30}, {48}, {5}, {9}},
+		{{11}, {22}, {33}, {44}, {55}, {66}, {77}, {88}},
+	}, d.csiParams)
+}
+
+func TestScannerDCSParamsPerDispatch(t *testing.T) {
+	var d copyingDispatcher
+	scanner := NewScanner(&d)
+	input := "\x1bP1;2:3;4;5$qbody\x1b\\" +
+		"\x1bP9$qshort\x1b\\" +
+		"\x1bP$qempty\x1b\\"
+	for _, b := range []byte(input) {
+		scanner.Advance(b)
+	}
+
+	assert.Equal(t, []dispatchedHook{
+		{
+			params:        [][]uint16{{1}, {2, 3}, {4}, {5}},
+			intermediates: []byte{'$'},
+			action:        'q',
+		},
+		{
+			params:        [][]uint16{{9}},
+			intermediates: []byte{'$'},
+			action:        'q',
+		},
+		{
+			params:        [][]uint16{{0}},
+			intermediates: []byte{'$'},
+			action:        'q',
+		},
+	}, d.hooks)
+}
+
 func TestScanner(t *testing.T) {
 	t.Run("parse osc", func(t *testing.T) {
 		var d testDispatcher

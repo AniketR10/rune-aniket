@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -58,21 +59,42 @@ type rawCells struct {
 	columnCap  int
 	rowCap     int
 	cells      [][]term.Cell
+	rowMeta    []rawRowMeta
+	ringHead   int
 	free       [][]term.Cell
 	fillInChar rune
-	zwj        bool
-	zwjPos     term.Coordinates
+	// blank is fillInChar's measured cell, kept in step by
+	// setFillInChar so appendBlankRows does not re-measure the grapheme
+	// width on every linefeed.
+	blank  term.Cell
+	zwj    bool
+	zwjPos term.Coordinates
+}
+
+type rawRowMeta struct {
+	occupied int
+	blank    term.Cell
 }
 
 // init initializes this rawCells with the given tabspaces config and resets its contents.
 func (c *rawCells) init() {
-	c.fillInChar = ' '
+	c.setFillInChar(' ')
 	c.reset()
 }
 
 func (c *rawCells) initWithCap(rowCap, columnCap int, fillInChar rune) {
-	c.fillInChar = fillInChar
+	c.setFillInChar(fillInChar)
 	c.resetWithCap(rowCap, columnCap)
+}
+
+func (c *rawCells) setFillInChar(ch rune) {
+	s := string(ch)
+	c.fillInChar = ch
+	c.blank = term.Cell{
+		Ch:    ch,
+		Width: uint8(graphemecluster.StringWidth(s)),
+		Bytes: uint8(len(s)),
+	}
 }
 
 func (c *rawCells) reset() {
@@ -89,30 +111,24 @@ func (c *rawCells) resetWithCap(rowCap, columnCap int) {
 	c.columnCap = columnCap
 	c.rowCap = rowCap
 	c.cells = make([][]term.Cell, 1, c.rowCap)
+	c.rowMeta = make([]rawRowMeta, 1, c.rowCap)
+	c.ringHead = 0
 	c.cells[0] = makeNewRow(0, c.columnCap)
 	c.free = nil
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
 }
 
-// adoptCells discards this rawCells' contents and adopts cells in place.
-// The *rawCells identity (and therefore any Editor/View pinned to it via
-// cell.Buffer) is preserved. Intended for bulk reloads (e.g. snapshot
-// restore) that must not be observable as an Edit.
-//
-// columnCap/rowCap/fillInChar are left intact — they're configuration,
-// not content. The cells slice is adopted directly; callers must clone
-// when the source slice is shared.
-//
-// Panics if cells is empty: rawCells maintains the invariant that there
-// is always at least one row, and silently substituting a fresh row
-// would break the caller's expectation that the passed slice is the
-// authoritative content.
 func (c *rawCells) adoptCells(cells [][]term.Cell) {
 	if len(cells) == 0 {
 		panic("rawCells.adoptCells: cells must contain at least one row")
 	}
 	c.cells = cells
+	c.rowMeta = make([]rawRowMeta, len(cells))
+	for i, row := range cells {
+		c.rowMeta[i].occupied = len(row)
+	}
+	c.ringHead = 0
 	c.free = nil
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
@@ -128,6 +144,48 @@ func makeNewRow(length, capacity int) (row []term.Cell) {
 	capacity = int(math.Max(float64(length), float64(capacity)))
 	row = make([]term.Cell, length, capacity)
 	return
+}
+
+func (c *rawCells) physicalRow(y int) int {
+	if len(c.cells) == 0 {
+		return 0
+	}
+	return (c.ringHead + y) % len(c.cells)
+}
+
+func (c *rawCells) ensureRowMeta() {
+	if len(c.rowMeta) == len(c.cells) {
+		return
+	}
+	c.normalizeRows()
+	c.rowMeta = make([]rawRowMeta, len(c.cells))
+	for i, row := range c.cells {
+		c.rowMeta[i] = rawRowMeta{occupied: len(row), blank: c.blank}
+	}
+}
+
+func (c *rawCells) row(y int) []term.Cell {
+	return c.cells[c.physicalRow(y)]
+}
+
+func (c *rawCells) normalizeRows() {
+	if c.ringHead == 0 || len(c.cells) <= 1 {
+		return
+	}
+	slices.Reverse(c.cells[:c.ringHead])
+	slices.Reverse(c.cells[c.ringHead:])
+	slices.Reverse(c.cells)
+	if len(c.rowMeta) == len(c.cells) {
+		slices.Reverse(c.rowMeta[:c.ringHead])
+		slices.Reverse(c.rowMeta[c.ringHead:])
+		slices.Reverse(c.rowMeta)
+	}
+	c.ringHead = 0
+}
+
+func (c *rawCells) linearize() {
+	c.normalizeRows()
+	c.rowMeta = nil
 }
 
 func (c *rawCells) insertNewRow(pos term.Coordinates) {
@@ -150,24 +208,7 @@ func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	}
 }
 
-// splitRowsBatch applies a batch of splits to rows in c.cells with a single
-// outer-slice allocation (at most). Splits must reference distinct, strictly
-// increasing row indices.
-//
-// Each split at row Y with (Width, Times) re-slices c.cells[Y] into
-// (Times+1) pieces of length Width (head and intermediate pieces) and a
-// trailing piece containing whatever remained. The original row slice is
-// reused with 3-index slicing (cap = len), so sub-pieces do not share
-// append-writable capacity with their neighbours.
-//
-// If padToWidth > 0 and a tail piece ends up shorter than padToWidth, the
-// tail is materialized as a fresh slice of length padToWidth with the
-// original cells copied into the first positions and term.Cell{Ch: fillChar}
-// filling the rest. All such tail materializations share a single slab
-// allocation so per-tail allocations are avoided.
-//
-// Returns the total number of rows added.
-func (c *rawCells) splitRowsBatch(splits []RowSplit, padToWidth int, fillChar rune) (added int) {
+func (c *rawCells) splitRowsBatch(splits []RowSplit, padToWidth int, fill term.Cell) (added int) {
 	if len(splits) == 0 {
 		return 0
 	}
@@ -196,7 +237,6 @@ func (c *rawCells) splitRowsBatch(splits []RowSplit, padToWidth int, fillChar ru
 	// over from the original tail.
 	var padSlab []term.Cell
 	var padOff int
-	var fill term.Cell
 	if padToWidth > 0 {
 		var padTails int
 		for _, s := range splits {
@@ -211,7 +251,6 @@ func (c *rawCells) splitRowsBatch(splits []RowSplit, padToWidth int, fillChar ru
 		}
 		if padTails > 0 {
 			padSlab = make([]term.Cell, padTails*padToWidth)
-			fill = term.Cell{Ch: fillChar}
 		}
 	}
 
@@ -406,15 +445,13 @@ func (c *rawCells) fillInColumns(pos term.Coordinates) (n int) {
 	return
 }
 
-// extendRowToWidth pads row y with term.Cell{Ch: c.fillInChar} until its
-// length reaches width. It performs a single slice grow when capacity is
-// insufficient. If the row is already at least width columns wide, it is
-// left unchanged.
 func (c *rawCells) extendRowToWidth(y, width int) (added int) {
 	if y < 0 || y >= len(c.cells) {
 		return 0
 	}
-	row := c.cells[y]
+	c.ensureRowMeta()
+	physical := c.physicalRow(y)
+	row := c.cells[physical]
 	cur := len(row)
 	if cur >= width {
 		return 0
@@ -427,11 +464,12 @@ func (c *rawCells) extendRowToWidth(y, width int) (added int) {
 	} else {
 		row = row[:width]
 	}
-	fill := term.Cell{Ch: c.fillInChar}
+	fill := c.blank
 	for i := cur; i < width; i++ {
 		row[i] = fill
 	}
-	c.cells[y] = row
+	c.cells[physical] = row
+	c.rowMeta[physical].occupied = max(c.rowMeta[physical].occupied, width)
 	return need
 }
 
@@ -439,6 +477,7 @@ func (c *rawCells) extendRowToWidth(y, width int) (added int) {
 // at least one row (matches the invariant maintained elsewhere). It is
 // allocation-free.
 func (c *rawCells) trimRowsFromEnd(count int) (removed int) {
+	c.normalizeRows()
 	if count <= 0 {
 		return 0
 	}
@@ -453,13 +492,15 @@ func (c *rawCells) trimRowsFromEnd(count int) (removed int) {
 	// are not pinned by the unused tail of the backing array.
 	clear(c.cells[newLen:])
 	c.cells = c.cells[:newLen]
+	if len(c.rowMeta) >= n {
+		clear(c.rowMeta[newLen:])
+		c.rowMeta = c.rowMeta[:newLen]
+	}
 	return removed
 }
 
-// trimRowsFromStart drops up to count rows from the start of c.cells,
-// keeping at least one row. Trimmed row storage is retained (bounded by
-// maxFreeRows) so appendBlankRows can reuse it instead of allocating.
 func (c *rawCells) trimRowsFromStart(count int) (removed int) {
+	c.normalizeRows()
 	if count <= 0 {
 		return 0
 	}
@@ -477,23 +518,21 @@ func (c *rawCells) trimRowsFromStart(count int) (removed int) {
 	// allocations are not pinned by the unused tail of the backing array.
 	clear(c.cells[newLen:])
 	c.cells = c.cells[:newLen]
+	if len(c.rowMeta) >= n {
+		copy(c.rowMeta, c.rowMeta[removed:])
+		clear(c.rowMeta[newLen:])
+		c.rowMeta = c.rowMeta[:newLen]
+	}
 	return removed
 }
 
-// appendBlankRows appends count rows of width cells filled with
-// c.fillInChar after the last row, producing the same cell shape as the
-// Edit insert path. Row storage recycled by trimRowsFromStart is reused
-// when available so sustained append/trim cycles do not allocate.
 func (c *rawCells) appendBlankRows(count, width int) {
+	c.normalizeRows()
 	if count <= 0 || width < 0 {
 		return
 	}
-	fillStr := string(c.fillInChar)
-	fill := term.Cell{
-		Ch:    c.fillInChar,
-		Width: uint8(graphemecluster.StringWidth(fillStr)),
-		Bytes: uint8(len(fillStr)),
-	}
+	c.ensureRowMeta()
+	fill := c.blank
 	for range count {
 		row := c.takeFreeRow(width)
 		if len(row) > 0 {
@@ -503,7 +542,131 @@ func (c *rawCells) appendBlankRows(count, width int) {
 			}
 		}
 		c.cells = append(c.cells, row)
+		c.rowMeta = append(c.rowMeta, rawRowMeta{blank: fill})
 	}
+}
+
+func (c *rawCells) appendBlankRowsBounded(count, width, limit int) {
+	if count <= 0 || width < 0 || limit <= 0 {
+		return
+	}
+	c.ensureRowMeta()
+	if excess := len(c.cells) - limit; excess > 0 {
+		c.trimRowsFromStart(excess)
+	}
+	for range count {
+		if len(c.cells) < limit {
+			row := makeNewRow(width, c.columnCap)
+			fillCells(row, c.blank)
+			c.normalizeRows()
+			c.cells = append(c.cells, row)
+			c.rowMeta = append(c.rowMeta, rawRowMeta{blank: c.blank})
+			continue
+		}
+
+		physical := c.ringHead
+		row := c.cells[physical]
+		meta := c.rowMeta[physical]
+		switch {
+		case cap(row) < width:
+			row = makeNewRow(width, c.columnCap)
+			fillCells(row, c.blank)
+		case len(row) != width || meta.blank != c.blank:
+			row = row[:width]
+			fillCells(row, c.blank)
+		default:
+			fillCells(row[:min(meta.occupied, width)], c.blank)
+		}
+		c.cells[physical] = row
+		c.rowMeta[physical] = rawRowMeta{blank: c.blank}
+		c.ringHead = (c.ringHead + 1) % len(c.cells)
+	}
+}
+
+func fillCells(row []term.Cell, fill term.Cell) {
+	if len(row) == 0 {
+		return
+	}
+	row[0] = fill
+	for filled := 1; filled < len(row); filled *= 2 {
+		copy(row[filled:], row[:filled])
+	}
+}
+
+func (c *rawCells) resetRowRange(y, start, end int, fill term.Cell) {
+	if y < 0 || y >= c.Rows() || start < 0 || start >= end {
+		return
+	}
+	c.ensureRowMeta()
+	physical := c.physicalRow(y)
+	row := c.cells[physical]
+	end = min(end, len(row))
+	if start >= end {
+		return
+	}
+	meta := &c.rowMeta[physical]
+	if start == 0 && end == len(row) {
+		if meta.blank == fill {
+			fillCells(row[:min(meta.occupied, len(row))], fill)
+			*meta = rawRowMeta{blank: fill}
+			return
+		}
+		fillCells(row, fill)
+		*meta = rawRowMeta{blank: fill}
+	} else {
+		fillCells(row[start:end], fill)
+		meta.occupied = max(meta.occupied, end)
+	}
+}
+
+func (c *rawCells) rotateRows(start, end, count int) {
+	c.ensureRowMeta()
+	start = max(0, start)
+	end = min(end, len(c.cells))
+	length := end - start
+	if length <= 1 {
+		return
+	}
+	count %= length
+	if count < 0 {
+		count += length
+	}
+	if count == 0 {
+		return
+	}
+	if start == 0 && end == len(c.cells) {
+		c.ringHead = c.physicalRow(count)
+		return
+	}
+	c.normalizeRows()
+	if count == 1 {
+		row := c.cells[start]
+		copy(c.cells[start:end-1], c.cells[start+1:end])
+		c.cells[end-1] = row
+		meta := c.rowMeta[start]
+		copy(c.rowMeta[start:end-1], c.rowMeta[start+1:end])
+		c.rowMeta[end-1] = meta
+		return
+	}
+	if count == length-1 {
+		row := c.cells[end-1]
+		copy(c.cells[start+1:end], c.cells[start:end-1])
+		c.cells[start] = row
+		meta := c.rowMeta[end-1]
+		copy(c.rowMeta[start+1:end], c.rowMeta[start:end-1])
+		c.rowMeta[start] = meta
+		return
+	}
+	rotate := func(rows [][]term.Cell) {
+		slices.Reverse(rows[:count])
+		slices.Reverse(rows[count:])
+		slices.Reverse(rows)
+	}
+	rotate(c.cells[start:end])
+	meta := c.rowMeta[start:end]
+	slices.Reverse(meta[:count])
+	slices.Reverse(meta[count:])
+	slices.Reverse(meta)
 }
 
 func (c *rawCells) takeFreeRow(width int) []term.Cell {
@@ -650,18 +813,6 @@ func (c *rawCells) conflate(row int) {
 	c.cells = c.cells[:last]
 }
 
-// mergeMarkedRows walks rows [0..end] and, whenever a row's last cell
-// satisfies isMark, merges it (and as many consecutive subsequent rows whose
-// previous row's last cell satisfies isMark) into the group head. The merge
-// is performed in a single pass across the backing slice.
-//
-// The mark cell in merged positions is cleared via clearMark before merging
-// so the caller can use a sentinel byte (e.g. vte wrapMarker) to detect group
-// continuation. end is exclusive; only rows at indexes < end are eligible to
-// start a group (groups may still extend past end into later rows if marked).
-//
-// Returns the total number of rows consumed by merges (i.e. how much the
-// row count shrank).
 func (c *rawCells) mergeMarkedRows(
 	end int,
 	isMark func(term.Cell) bool,
@@ -821,6 +972,8 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 func (c *rawCells) Edit(_ context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
+	c.normalizeRows()
+	defer func() { c.rowMeta = nil }()
 	// Merge a grapheme-cluster continuation typed one keystroke after its
 	// base (skin-tone modifier, variation selector, joiner) into the
 	// preceding cell so it stays one undoable edit instead of a broken box.
@@ -844,12 +997,6 @@ func (c *rawCells) Edit(_ context.Context, start, end term.Coordinates, str stri
 	return
 }
 
-// continuationReplace reports whether inserting str at pos extends the
-// preceding cell's grapheme cluster and, if so, returns the replace range
-// [pos-1, pos) covering that cell together with its current content, so
-// the caller can rewrite the insert as an undoable replace that keeps the
-// cluster in one cell. Routing joiners here instead of the re-cluster in
-// insertAt keeps every keystroke coordinate-stable, which undo relies on.
 func (c *rawCells) continuationReplace(pos term.Coordinates, str string) (
 	start, end term.Coordinates, base string, ok bool,
 ) {
@@ -877,7 +1024,7 @@ func (c *rawCells) continuationReplace(pos term.Coordinates, str string) (
 }
 
 func (c *rawCells) Columns(y int) (j int) {
-	j = len(c.cells[y])
+	j = len(c.row(y))
 	return
 }
 
@@ -886,10 +1033,15 @@ func (c *rawCells) Rows() int {
 }
 
 func (c *rawCells) String() string {
-	return term.CellsToString(c.cells)
+	return term.CellsToString(c.RawCells())
 }
 
 func (c *rawCells) RawCells() [][]term.Cell {
+	c.ensureRowMeta()
+	for i, row := range c.cells {
+		c.rowMeta[i].occupied = len(row)
+	}
+	c.normalizeRows()
 	return c.cells
 }
 
@@ -897,10 +1049,10 @@ func (c *rawCells) Cell(pos term.Coordinates) (
 	cell term.Cell, ok bool,
 ) {
 	assertValidCoords(pos)
-	if pos.Y >= c.Rows() || pos.X >= len(c.cells[pos.Y]) {
+	if pos.Y >= c.Rows() || pos.X >= len(c.row(pos.Y)) {
 		return
 	}
-	cell = c.cells[pos.Y][pos.X]
+	cell = c.row(pos.Y)[pos.X]
 	ok = true
 	return
 }

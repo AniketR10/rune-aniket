@@ -155,6 +155,12 @@ func BenchmarkPtyGatherDrain(b *testing.B) {
 		if !ok {
 			b.Fatal("gather rejected local pty")
 		}
+		// Closing the tty discards any bytes the kernel has not yet
+		// handed to the master, so the writer must stay open until the
+		// reader has drained the whole payload. It waits on drained
+		// before closing, and the reader stops on the byte count rather
+		// than on a close-driven EOF that would race the final bytes.
+		drained := make(chan struct{})
 		go func() {
 			defer tty.Close()
 			for chunk := payload; len(chunk) > 0; {
@@ -164,15 +170,18 @@ func BenchmarkPtyGatherDrain(b *testing.B) {
 				}
 				chunk = chunk[n:]
 			}
+			<-drained
 		}()
 		var total int
-		for batch := range g.ready {
+		for total < len(payload) {
+			batch, ok := <-g.ready
+			if !ok {
+				b.Fatalf("drained %d of %d bytes: %v", total, len(payload), g.err)
+			}
 			total += len(batch)
 			g.release(batch)
 		}
-		if total != len(payload) {
-			b.Fatalf("drained %d of %d bytes: %v", total, len(payload), g.err)
-		}
+		close(drained)
 		cancel()
 		master.Close()
 	}

@@ -117,6 +117,13 @@ func (b *Buffer) InitPerformance(rowCapacity, columnCapacity int, fillInChar run
 	b.initPerformanceWithCells(cells)
 }
 
+// BlankCell returns the measured cell used to fill blank space, kept in
+// step with the fill-in char so callers can pass its width without
+// re-measuring.
+func (b *Buffer) BlankCell() term.Cell {
+	return b.cells.blank
+}
+
 // ResetCapacity resets the capacity given to new rows. Non-positive
 // values fall back to the default capacity.
 func (b *Buffer) ResetCapacity(capacity int) {
@@ -307,6 +314,7 @@ func (b *Buffer) ConflateRowContext(
 		if y < 0 || b.Rows() <= 1 || y >= b.Rows()-1 {
 			return 0, false
 		}
+		b.cells.linearize()
 		x = len(b.cells.cells[y])
 		b.cells.conflate(y)
 		return x, true
@@ -344,6 +352,7 @@ func (b *Buffer) MergeMarkedRows(
 	if b.undoer != nil {
 		panic("MergeMarkedRows should not be used if not initialized via InitPerformance")
 	}
+	b.cells.linearize()
 	return b.cells.mergeMarkedRows(end, isMark, clearMark), true
 }
 
@@ -364,19 +373,44 @@ func (b *Buffer) SplitRowsBatch(splits []RowSplit) (added int, ok bool) {
 	if b.undoer != nil {
 		panic("SplitRowsBatch should not be used if not initialized via InitPerformance")
 	}
-	return b.cells.splitRowsBatch(splits, 0, 0), true
+	if !b.validRowSplits(splits) {
+		return 0, false
+	}
+	b.cells.linearize()
+	return b.cells.splitRowsBatch(splits, 0, term.Cell{}), true
 }
 
 // SplitRowsBatchPadded is like SplitRowsBatch but any tail piece of a split
-// whose length is less than padToWidth is padded to padToWidth using
-// term.Cell{Ch: fillChar}. Padding is performed by materializing new rows
-// drawn from a single slab allocation so per-tail allocations are avoided.
-// Only supported in performance mode.
-func (b *Buffer) SplitRowsBatchPadded(splits []RowSplit, padToWidth int, fillChar rune) (added int, ok bool) {
+// whose length is less than padToWidth is padded to padToWidth with fill.
+// Padding is performed by materializing new rows drawn from a single slab
+// allocation so per-tail allocations are avoided. Only supported in
+// performance mode.
+func (b *Buffer) SplitRowsBatchPadded(splits []RowSplit, padToWidth int, fill term.Cell) (added int, ok bool) {
 	if b.undoer != nil {
 		panic("SplitRowsBatchPadded should not be used if not initialized via InitPerformance")
 	}
-	return b.cells.splitRowsBatch(splits, padToWidth, fillChar), true
+	if padToWidth < 0 || !b.validRowSplits(splits) {
+		return 0, false
+	}
+	b.cells.linearize()
+	return b.cells.splitRowsBatch(splits, padToWidth, fill), true
+}
+
+func (b *Buffer) validRowSplits(splits []RowSplit) bool {
+	previousY := -1
+	for _, split := range splits {
+		if split.Y <= previousY || split.Y < 0 || split.Y >= b.cells.Rows() {
+			return false
+		}
+		previousY = split.Y
+		if split.Width <= 0 || split.Times <= 0 {
+			continue
+		}
+		if split.Width > len(b.cells.row(split.Y))/split.Times {
+			return false
+		}
+	}
+	return true
 }
 
 // ExtendRowToWidth pads row y with fill cells until its length equals
@@ -423,6 +457,17 @@ func (b *Buffer) AppendBlankRows(count, width int) (ok bool) {
 	return true
 }
 
+// AppendBlankRowsBounded appends blank rows while keeping at most limit
+// rows. Once full, the oldest row storage is recycled as the new last
+// row without shifting the remaining row slice.
+func (b *Buffer) AppendBlankRowsBounded(count, width, limit int) (ok bool) {
+	if b.undoer != nil {
+		panic("AppendBlankRowsBounded should not be used if not initialized via InitPerformance")
+	}
+	b.cells.appendBlankRowsBounded(count, width, limit)
+	return true
+}
+
 // WrapRow is equivalent to calling WrapRowContext
 // with context.Background.
 func (b *Buffer) WrapRow(y, at int) (ok bool) {
@@ -438,6 +483,7 @@ func (b *Buffer) WrapRowContext(
 		if y < 0 || y >= b.Rows() || at > b.Columns(y) {
 			return false
 		}
+		b.cells.linearize()
 		b.cells.insertNewRow(term.Coordinates{Y: y, X: at})
 		return true
 	}
@@ -502,6 +548,121 @@ func (b *Buffer) MaxColumns() (max int) {
 // cell at position.
 func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
 	return b.view.Cell(pos)
+}
+
+// Row returns the cells at logical row y. The returned slice is
+// invalidated by operations that add, remove, or reorder rows.
+func (b *Buffer) Row(y int) []term.Cell {
+	view, internal := b.view.(*rawCells)
+	if !internal || view != b.cells {
+		cells := b.view.RawCells()
+		if y < 0 || y >= len(cells) {
+			return nil
+		}
+		return cells[y]
+	}
+	if y < 0 || y >= b.cells.Rows() {
+		return nil
+	}
+	return b.cells.row(y)
+}
+
+// MutableRow returns row y and records that cells before end may be
+// modified. It is only supported in performance mode.
+func (b *Buffer) MutableRow(y, end int) []term.Cell {
+	if b.undoer != nil {
+		panic("MutableRow should not be used if not initialized via InitPerformance")
+	}
+	if y < 0 || y >= b.cells.Rows() {
+		return nil
+	}
+	b.cells.ensureRowMeta()
+	physical := b.cells.physicalRow(y)
+	b.cells.rowMeta[physical].occupied = max(b.cells.rowMeta[physical].occupied, end)
+	return b.cells.cells[physical]
+}
+
+// SetRow replaces the cells at logical row y. It is only supported in
+// performance mode.
+func (b *Buffer) SetRow(y int, row []term.Cell) {
+	if b.undoer != nil {
+		panic("SetRow should not be used if not initialized via InitPerformance")
+	}
+	if y < 0 || y >= b.cells.Rows() {
+		return
+	}
+	b.cells.ensureRowMeta()
+	physical := b.cells.physicalRow(y)
+	b.cells.cells[physical] = row
+	b.cells.rowMeta[physical].occupied = max(b.cells.rowMeta[physical].occupied, len(row))
+}
+
+// DeleteRowRange removes [start, end) from logical row y without
+// linearizing circular row storage. It is only supported in performance
+// mode.
+func (b *Buffer) DeleteRowRange(y, start, end int) {
+	if b.undoer != nil {
+		panic("DeleteRowRange should not be used if not initialized via InitPerformance")
+	}
+	if y < 0 || y >= b.cells.Rows() || start < 0 || start >= end {
+		return
+	}
+	columns := len(b.cells.row(y))
+	if start >= columns {
+		return
+	}
+	row := b.MutableRow(y, columns)
+	end = min(end, len(row))
+	copy(row[start:], row[end:])
+	b.SetRow(y, row[:len(row)-(end-start)])
+}
+
+// CopyRows copies rows in logical order into dst, reusing dst's row
+// capacities where possible.
+func (b *Buffer) CopyRows(dst [][]term.Cell) [][]term.Cell {
+	rows := b.Rows()
+	if len(dst) > rows {
+		dst = dst[:rows]
+	} else {
+		for len(dst) < rows {
+			dst = append(dst, nil)
+		}
+	}
+	for y := range rows {
+		row := b.Row(y)
+		if row == nil {
+			dst[y] = nil
+			continue
+		}
+		if cap(dst[y]) < len(row) {
+			dst[y] = make([]term.Cell, len(row))
+		} else if len(row) == 0 && dst[y] == nil {
+			dst[y] = make([]term.Cell, 0)
+		} else {
+			dst[y] = dst[y][:len(row)]
+		}
+		copy(dst[y], row)
+	}
+	return dst
+}
+
+// ResetRowRange fills [start, end) in logical row y. Resetting a whole
+// row establishes a new blank template so later recycling only clears
+// cells modified after this call.
+func (b *Buffer) ResetRowRange(y, start, end int, fill term.Cell) {
+	if b.undoer != nil {
+		panic("ResetRowRange should not be used if not initialized via InitPerformance")
+	}
+	b.cells.resetRowRange(y, start, end, fill)
+}
+
+// RotateRows rotates [start, end) toward lower row indexes by count.
+// A negative count rotates toward higher indexes.
+func (b *Buffer) RotateRows(start, end, count int) {
+	if b.undoer != nil {
+		panic("RotateRows should not be used if not initialized via InitPerformance")
+	}
+	b.cells.rotateRows(start, end, count)
 }
 
 // RawCells gives clients access to the underlying cell matrix.
@@ -667,6 +828,7 @@ func (b *Buffer) ReloadContents(ctx context.Context, str string) {
 // This shopuld only be used when buffer has been initialized with InitPerformance,
 // as subscribers won't be notified of this change, and it will break undo correctness.
 func (b *Buffer) ResetPerformance() {
+	b.cells.linearize()
 	for y, row := range b.cells.cells {
 		b.cells.cells[y] = row[:0]
 	}

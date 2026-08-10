@@ -68,31 +68,16 @@ func (b *PrimaryBuffer) Restore(cells [][]term.Cell, cursor term.Coordinates, wi
 
 const wrapMarker uint8 = 1 << 7
 
-// maxHistorySlack caps how many rows history may exceed maxHistory
-// before ScrollUpHistory trims the oldest rows. Trimming compacts the
-// whole backing slice, so a larger slack amortizes that memmove over
-// more appended lines at the cost of transiently retaining more rows.
-const maxHistorySlack = 1024
-
-func (b *PrimaryBuffer) historySlack() int {
-	return max(1, min(b.maxHistory/10, maxHistorySlack))
-}
-
 // ScrollUpHistory scrolls the visible screen up by count lines by
 // appending blank rows after the last row, growing history. The oldest
-// rows are trimmed in amortized chunks once the buffer exceeds
-// maxHistory by the allowed slack, so sustained output streams avoid a
-// per-line memmove of the entire scrollback. When history is disabled
-// (maxHistory <= 0) the buffer is rotated in place instead.
+// row allocation is recycled once maxHistory rows are present. When
+// history is disabled (maxHistory <= 0) the visible buffer is rotated.
 func (b *PrimaryBuffer) ScrollUpHistory(count int) {
 	if b.maxHistory <= 0 {
 		b.ScrollUp(0, b.Cells.Rows(), count)
 		return
 	}
-	b.Cells.AppendBlankRows(count, b.width)
-	if rows := b.Cells.Rows(); rows > b.maxHistory+b.historySlack() {
-		b.Cells.TrimRowsFromStart(rows - b.maxHistory)
-	}
+	b.Cells.AppendBlankRowsBounded(count, b.width, max(b.maxHistory, b.height))
 }
 
 // MarkWrapAtCursor marks the current line/column of the cursor
@@ -315,7 +300,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	if len(splits) > 0 {
 		// Pad split tails to `width` via a single slab allocation so the
 		// subsequent "grow history lines" loop is a no-op for tail rows.
-		b.Cells.SplitRowsBatchPadded(splits, width, b.AltBuffer.defaultChar)
+		b.Cells.SplitRowsBatchPadded(splits, width, b.Cells.BlankCell())
 		cells = b.Cells.RawCells()
 		shift := 0
 		for _, s := range splits {
@@ -512,6 +497,31 @@ func (b *PrimaryBuffer) WriteRun(run []byte, charset vteparser.CharsetIndex) int
 	return b.writeRunAt(b.CursorAtScroll(), run, charset)
 }
 
+// WriteGlyphRun writes glyphs at the cursor in one pass and reports how
+// many it wrote; 0 demands the per-glyph Write path. The glyphs occupy
+// one cell each but cover their full display width, so the cells the
+// extra columns now hide are dropped in a single splice instead of
+// Write's per-glyph consumeCoveredCells. Every covered cell must be
+// narrow: a wide one under the run would leave half a glyph behind,
+// which only consumeCoveredCells handles.
+func (b *PrimaryBuffer) WriteGlyphRun(glyphs []Glyph, charset vteparser.CharsetIndex) int {
+	columns := 0
+	for _, g := range glyphs {
+		columns += b.AdvanceColumns(int(g.Width))
+	}
+	pos := b.CursorAtScroll()
+	if _, ok := b.runTarget(pos, columns, charset); !ok {
+		return 0
+	}
+	if n := b.writeGlyphRunAt(pos, glyphs, charset); n == 0 {
+		return 0
+	}
+	if columns > len(glyphs) {
+		b.Cells.DeleteRowRange(pos.Y, pos.X+len(glyphs), pos.X+columns)
+	}
+	return len(glyphs)
+}
+
 // consumeCoveredCells removes the cells whose columns a glyph
 // overwrite at pos now covers. The primary buffer stores one cell per
 // glyph and rows must sum to at most the terminal width in visual
@@ -526,8 +536,7 @@ func (b *PrimaryBuffer) consumeCoveredCells(pos term.Coordinates, delta int) {
 			return
 		}
 		delta -= b.AdvanceColumns(int(cell.Width))
-		b.Cells.DeleteContext(b.AltBuffer.ctx,
-			next, term.Coordinates{Y: next.Y, X: next.X + 1})
+		b.Cells.DeleteRowRange(next.Y, next.X, next.X+1)
 	}
 	// a consumed glyph was wider than the columns claimed: keep the
 	// leftover column blank so following glyphs stay in place.

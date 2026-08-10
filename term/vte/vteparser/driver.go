@@ -73,6 +73,11 @@ const (
 type driver struct {
 	handler Handler
 	state   *parserState
+	// Scratch buffers for SGR dispatch. Neither escapes the dispatch
+	// call and the parse stage is single-threaded, so reusing them keeps
+	// dense attribute streams allocation-free.
+	sgrAttrs      []Attr
+	sgrHeadParams []uint16
 }
 
 func newDriver(state *parserState, h Handler) *driver {
@@ -578,30 +583,47 @@ func (p *driver) ESCDispatch(intermediates []byte, ignore bool, b byte) {
 }
 
 func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
-	attrs := make([]Attr, 0, len(params))
+	attrs := p.sgrAttrs[:0]
 
 	for i := 0; i < len(params); i++ {
 		param := params[i]
-		if len(param) == 0 || len(param) > 2 {
+		if len(param) == 0 {
 			p.log(log.DebugLevel,
 				"unhandled sgr parameter in CSI dispatch: params=%v", params)
 			continue
 		}
 
-		if len(param) == 2 && param[0] == 4 {
-			switch param[1] {
-			case 0:
-				attrs = append(attrs, Attr{Type: CancelUnderlineAttr})
-			case 2:
-				attrs = append(attrs, Attr{Type: DoubleUnderlineAttr})
-			case 3:
-				attrs = append(attrs, Attr{Type: UndercurlAttr})
+		if len(param) > 1 {
+			switch param[0] {
 			case 4:
-				attrs = append(attrs, Attr{Type: DottedUnderlineAttr})
-			case 5:
-				attrs = append(attrs, Attr{Type: DashedUnderlineAttr})
+				if len(param) != 2 {
+					p.logUnhandledAttribute(params)
+					continue
+				}
+				switch param[1] {
+				case 0:
+					attrs = append(attrs, Attr{Type: CancelUnderlineAttr})
+				case 2:
+					attrs = append(attrs, Attr{Type: DoubleUnderlineAttr})
+				case 3:
+					attrs = append(attrs, Attr{Type: UndercurlAttr})
+				case 4:
+					attrs = append(attrs, Attr{Type: DottedUnderlineAttr})
+				case 5:
+					attrs = append(attrs, Attr{Type: DashedUnderlineAttr})
+				default:
+					attrs = append(attrs, Attr{Type: UnderlineAttr})
+				}
+			case 38, 48, 58:
+				attr := sgrColorAttr(param[0])
+				color, ok := parseColonSGRColor(param[1:])
+				if !ok {
+					p.logUnhandledAttribute(params)
+					continue
+				}
+				attrs = append(attrs, Attr{Type: attr, Color: color})
 			default:
-				attrs = append(attrs, Attr{Type: UnderlineAttr})
+				p.logUnhandledAttribute(params)
 			}
 			continue
 		}
@@ -660,29 +682,12 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 		case 37:
 			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorSilver})
 		case 38, 48, 58:
-			var attr AttrType
-			switch param[0] {
-			case 38:
-				attr = ForegroundAttr
-			case 48:
-				attr = BackgroundAttr
-			case 58:
-				attr = UnderlineAttr
-			}
-			if len(param) == 1 {
-				n, color, ok := parseSGRColor(mapParamsToHeadParam(params[i+1:]))
-				if ok {
-					i += n
-					attrs = append(attrs, Attr{Type: attr, Color: color})
-					continue
-				}
-			} else if len(param) > 1 {
-				n, color, ok := handleColonRGB(param[1:])
-				if ok {
-					i += n - 1
-					attrs = append(attrs, Attr{Type: attr, Color: color})
-					continue
-				}
+			attr := sgrColorAttr(param[0])
+			n, color, ok := parseSGRColor(p.headParams(params[i+1:]))
+			i += n
+			if ok {
+				attrs = append(attrs, Attr{Type: attr, Color: color})
+				continue
 			}
 			p.logUnhandledAttribute(params)
 		case 39:
@@ -744,6 +749,7 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 		}
 	}
 
+	p.sgrAttrs = attrs
 	return attrs
 }
 
@@ -791,23 +797,35 @@ func (p *driver) logUnhandledAttribute(params [][]uint16) {
 	p.log(log.DebugLevel, "Unhandled Attribute in CSI dispatch: params=%v", params)
 }
 
-// handleColonRGB handles colon separated RGB color escape sequence.
-func handleColonRGB(params []uint16) (int, term.Color, bool) {
-	var rgbStart int
-	if len(params) > 4 {
-		rgbStart = 2
-	} else {
-		rgbStart = 1
+func sgrColorAttr(param uint16) AttrType {
+	switch param {
+	case 38:
+		return ForegroundAttr
+	case 48:
+		return BackgroundAttr
+	default:
+		return UnderlineColorAttr
 	}
+}
 
-	newLen := len(params) - rgbStart
-	newParams := make([]uint16, newLen)
-	copy(newParams, params[rgbStart:])
-	n, color, ok := parseSGRColor(newParams)
-	if !ok {
-		return 0, 0, false
+func parseColonSGRColor(params []uint16) (term.Color, bool) {
+	if len(params) == 2 && params[0] == 5 && params[1] <= 255 {
+		return term.PaletteColor(int(params[1])), true
 	}
-	return n + rgbStart, color, ok
+	if len(params) == 4 && params[0] == 2 {
+		return newSGRRGB(params[1:])
+	}
+	if len(params) == 5 && params[0] == 2 && params[1] == 0 {
+		return newSGRRGB(params[2:])
+	}
+	return 0, false
+}
+
+func newSGRRGB(params []uint16) (term.Color, bool) {
+	if len(params) != 3 || params[0] > 255 || params[1] > 255 || params[2] > 255 {
+		return 0, false
+	}
+	return term.NewRGBColor(int32(params[0]), int32(params[1]), int32(params[2])), true
 }
 
 // parse a color
@@ -817,35 +835,32 @@ func parseSGRColor(params []uint16) (int, term.Color, bool) {
 	}
 	switch params[0] {
 	case 2:
-		// rgb color
-		var r, g, b int32
-		for i := 1; i < len(params) && i < 4; i++ {
-			switch i {
-			case 1:
-				r = int32(params[i])
-			case 2:
-				g = int32(params[i])
-			case 3:
-				b = int32(params[i])
-			}
+		n := min(4, len(params))
+		if len(params) < 4 {
+			return n, 0, false
 		}
-		return 4, term.NewRGBColor(r, g, b), true
+		color, ok := newSGRRGB(params[1:4])
+		return 4, color, ok
 	case 5:
-		// indexed color
-		if len(params) > 1 {
-			return 2, term.PaletteColor(int(params[1])), true
+		n := min(2, len(params))
+		if len(params) < 2 || params[1] > 255 {
+			return n, 0, false
 		}
-		return 1, term.ColorBlack, true
+		return 2, term.PaletteColor(int(params[1])), true
 	default:
-		return 0, 0, false
+		return 1, 0, false
 	}
 }
 
-func mapParamsToHeadParam(params [][]uint16) (ret []uint16) {
+// headParams flattens params to their leading value. The result aliases
+// a scratch buffer that the next call overwrites.
+func (p *driver) headParams(params [][]uint16) []uint16 {
+	ret := p.sgrHeadParams[:0]
 	for _, param := range params {
 		if len(param) != 0 {
 			ret = append(ret, param[0])
 		}
 	}
-	return
+	p.sgrHeadParams = ret
+	return ret
 }

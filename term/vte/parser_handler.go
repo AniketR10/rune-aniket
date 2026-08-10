@@ -102,6 +102,8 @@ type parserHandler struct {
 
 	// clusterBuf is reused scratch for the mergeContinuation probe.
 	clusterBuf []byte
+	// glyphBuf is reused scratch for the batched non-ASCII write.
+	glyphBuf []vtescreen.Glyph
 }
 
 // use a common api for alternate and primary buffers
@@ -116,6 +118,10 @@ type screenBuffer interface {
 	// pass and reports how many were written; 0 demands the per-character
 	// Write path. See AltBuffer.WriteRun.
 	WriteRun(run []byte, charset vteparser.CharsetIndex) int
+	// WriteGlyphRun writes decoded glyphs at the cursor in one pass and
+	// reports how many were written; 0 demands the per-glyph Write path.
+	// See AltBuffer.WriteGlyphRun and PrimaryBuffer.WriteGlyphRun.
+	WriteGlyphRun(glyphs []vtescreen.Glyph, charset vteparser.CharsetIndex) int
 	Delete(count int)
 	ResetCells(start, end int)
 	ResetLines(start, end int)
@@ -318,13 +324,65 @@ func (t *parserHandler) InputRun(run []byte) {
 
 	for len(run) > 0 {
 		if run[0] >= utf8.RuneSelf {
-			r, size := utf8.DecodeRune(run)
-			t.input(r)
-			run = run[size:]
+			run = run[t.inputGlyphRun(run):]
 			continue
 		}
 		run = run[t.inputASCIIRun(run):]
 	}
+}
+
+// inputGlyphRun writes the leading non-ASCII codepoints of run, which
+// must start with one, and reports how many bytes it consumed. Only
+// codepoints that cannot continue a grapheme cluster and that fit whole
+// before the right margin join the batch; anything else ends it so the
+// per-codepoint path keeps its semantics.
+func (t *parserHandler) inputGlyphRun(run []byte) int {
+	if t.shouldWrap || t.modeInsert {
+		return t.inputFirstRune(run)
+	}
+	buf := t.sync.buf
+	room := t.width - buf.CursorAtScreen().X
+	glyphs := t.glyphBuf[:0]
+	size, columns, last := 0, 0, 0
+	for size < len(run) && run[size] >= utf8.RuneSelf {
+		c, n := utf8.DecodeRune(run[size:])
+		if c == utf8.RuneError && n <= 1 {
+			break
+		}
+		width := runeWidth(c)
+		if mayContinueAnyCluster(c, width) {
+			break
+		}
+		last = buf.AdvanceColumns(width)
+		if last > room-columns {
+			break
+		}
+		glyphs = append(glyphs, vtescreen.Glyph{Ch: c, Width: uint8(width)})
+		columns += last
+		size += n
+	}
+	t.glyphBuf = glyphs
+
+	if len(glyphs) == 0 || buf.WriteGlyphRun(glyphs, t.currentCharset) == 0 {
+		return t.inputFirstRune(run)
+	}
+
+	pos := buf.CursorAtScreen()
+	pos.X += columns
+	if pos.X >= t.width {
+		// input leaves the cursor on the glyph that filled the margin
+		// so wrapLine still finds the marked cell.
+		pos.X -= last
+		t.shouldWrap = true
+	}
+	t.setCursorAtScreen(pos, t.modeOrigin)
+	return size
+}
+
+func (t *parserHandler) inputFirstRune(run []byte) int {
+	c, n := utf8.DecodeRune(run)
+	t.input(c)
+	return n
 }
 
 // inputASCIIRun writes the leading ASCII bytes of run, which must start

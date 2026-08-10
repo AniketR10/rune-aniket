@@ -108,7 +108,7 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 		}
 	}
 	cells.cells = w.cells
-	cells.fillInChar = ' '
+	cells.setFillInChar(' ')
 	cells.columnCap = defColumnCap
 	cells.rowCap = defRowCap
 	b.initWithCells(cells)

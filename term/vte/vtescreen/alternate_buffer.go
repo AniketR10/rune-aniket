@@ -59,7 +59,6 @@ type AltBuffer struct {
 	}
 
 	defaultChar rune
-	tempScroll  [1][]term.Cell
 	savedCursor CursorState
 	cursor      CursorState
 	ctx         context.Context
@@ -195,20 +194,49 @@ func (b *AltBuffer) WriteRun(run []byte, charset vteparser.CharsetIndex) int {
 	return b.writeRunAt(b.cursor.position, run, charset)
 }
 
+// Glyph is a decoded printable codepoint and its display width, the
+// unit WriteGlyphRun writes.
+type Glyph struct {
+	Ch    rune
+	Width uint8
+}
+
+// WriteGlyphRun writes glyphs at the cursor position, one cell each,
+// and reports how many it wrote. Zero means the caller must fall back
+// to per-glyph Write, under the same conditions as WriteRun.
+func (b *AltBuffer) WriteGlyphRun(glyphs []Glyph, charset vteparser.CharsetIndex) int {
+	return b.writeGlyphRunAt(b.cursor.position, glyphs, charset)
+}
+
+func (b *AltBuffer) writeGlyphRunAt(
+	pos term.Coordinates, glyphs []Glyph, charset vteparser.CharsetIndex,
+) int {
+	_, ok := b.runTarget(pos, len(glyphs), charset)
+	if !ok {
+		return 0
+	}
+	target := b.Cells.MutableRow(pos.Y, pos.X+len(glyphs))[pos.X : pos.X+len(glyphs)]
+	for i, g := range glyphs {
+		target[i] = term.NewCell(g.Ch, g.Width, b.cursor.attr)
+	}
+	return len(glyphs)
+}
+
 func (b *AltBuffer) writeRunAt(
 	pos term.Coordinates, run []byte, charset vteparser.CharsetIndex,
 ) int {
+	// Deliberately not sharing runTarget: this runs once per printable
+	// run and the extra call costs ~6% on single-character runs.
 	if b.cursor.hidden {
 		return 0
 	}
 	if cs, ok := b.cursor.Charsets[charset]; ok && cs != vteparser.StandardCharsetASCII {
 		return 0
 	}
-	cells := b.Cells.RawCells()
-	if pos.Y < 0 || pos.Y >= len(cells) || pos.X < 0 {
+	if pos.Y < 0 || pos.Y >= b.Cells.Rows() || pos.X < 0 {
 		return 0
 	}
-	row := cells[pos.Y]
+	row := b.Cells.Row(pos.Y)
 	end := pos.X + len(run)
 	if end > len(row) {
 		return 0
@@ -219,13 +247,40 @@ func (b *AltBuffer) writeRunAt(
 			return 0
 		}
 	}
+	target = b.Cells.MutableRow(pos.Y, end)[pos.X:end]
 	for i, c := range run {
-		cell := &target[i]
-		cell.Ch = rune(c)
-		cell.SetAttributes(b.cursor.attr)
-		cell.Width = 1
+		target[i] = term.NewCell(rune(c), 1, b.cursor.attr)
 	}
 	return len(run)
+}
+
+// runTarget returns the n cells a bulk write starting at pos would
+// overwrite. It reports false when the write must fall back to the
+// per-character path.
+func (b *AltBuffer) runTarget(
+	pos term.Coordinates, n int, charset vteparser.CharsetIndex,
+) ([]term.Cell, bool) {
+	if b.cursor.hidden {
+		return nil, false
+	}
+	if cs, ok := b.cursor.Charsets[charset]; ok && cs != vteparser.StandardCharsetASCII {
+		return nil, false
+	}
+	if pos.Y < 0 || pos.Y >= b.Cells.Rows() || pos.X < 0 {
+		return nil, false
+	}
+	row := b.Cells.Row(pos.Y)
+	end := pos.X + n
+	if end > len(row) {
+		return nil, false
+	}
+	target := row[pos.X:end]
+	for i := range target {
+		if target[i].Width > 1 {
+			return nil, false
+		}
+	}
+	return target, true
 }
 
 // WriteAt writes the given character with the given width to the cell
@@ -244,9 +299,7 @@ func (b *AltBuffer) WriteAt(
 		b.InsertAt(at, c, width, charset)
 		return
 	}
-	cell.Ch = c
-	cell.SetAttributes(b.cursor.attr)
-	cell.Width = uint8(width)
+	*cell = term.NewCell(c, uint8(width), b.cursor.attr)
 }
 
 // ResetCells erases all the cells from start to end, on the current
@@ -281,21 +334,19 @@ func (b *AltBuffer) Delete(count int) {
 // DeleteAt deletes the the given number of cells, shifting left
 // all the cells to the right of given position.
 func (b *AltBuffer) DeleteAt(pos term.Coordinates, count int) {
-	if count <= 0 {
+	if count <= 0 || pos.Y < 0 || pos.Y >= b.Cells.Rows() || pos.X < 0 {
 		return
 	}
 	columns := b.Cells.Columns(pos.Y)
-	count = int(math.Min(
-		float64(count),
-		float64(columns-pos.X),
-	))
+	if pos.X >= columns {
+		return
+	}
+	count = min(count, columns-pos.X)
 
-	cells := b.Cells.RawCells()
-	copy(cells[pos.Y][pos.X:], cells[pos.Y][pos.X+count:])
-	cells[pos.Y] = cells[pos.Y][:columns-count]
-
-	// reset cells that were deleted
-	b.ResetCells(columns-count, columns)
+	row := b.Cells.MutableRow(pos.Y, columns)
+	copy(row[pos.X:], row[pos.X+count:])
+	blank := term.NewCell(b.defaultChar, 1, term.Attributes{Bg: b.cursor.attr.Bg})
+	b.Cells.ResetRowRange(pos.Y, columns-count, columns, blank)
 }
 
 // SetCursorAtScreen updates the cursor position in the screen.
@@ -313,53 +364,30 @@ func (b *AltBuffer) SetCursorAtScreen(c term.Coordinates, relative bool) {
 
 // ScrollUp scrolls up the scrollable region set by SetScrollableRegion by count of lines
 func (b *AltBuffer) ScrollUp(start, end, count int) {
+	if count <= 0 || start < 0 || end > b.Cells.Rows() || start >= end {
+		return
+	}
 	if end-start <= count {
 		b.ResetLinesWith(start, end, b.defaultChar)
 		return
 	}
 
-	var temp [][]term.Cell
-	if count == 1 {
-		// optimization for long output streams on primary buffer that
-		// cause Linefeed to scroll up exactly 1 when max scrollable history
-		// is reached.
-		temp = b.tempScroll[:]
-	} else {
-		temp = make([][]term.Cell, count)
-	}
-
-	// copying to temp is because we need a place to temporarily
-	// store the **rows**, so we can re-use the allocations, not the content.
-	// the content is reset below.
-	cells := b.Cells.RawCells()
-	copy(temp, cells[start:start+count])
-	copy(cells[start:end-count], cells[start+count:end])
-	copy(cells[end-count:end], temp)
+	b.Cells.RotateRows(start, end, count)
 
 	b.ResetLinesWith(end-count, end, b.defaultChar)
 }
 
 // ScrollDown scrolls down the scrollable region set by SetScrollableRegion by count of lines
 func (b *AltBuffer) ScrollDown(start, end, count int) {
+	if count <= 0 || start < 0 || end > b.Cells.Rows() || start >= end {
+		return
+	}
 	if end-start <= count {
 		b.ResetLinesWith(start, end, b.defaultChar)
 		return
 	}
 
-	var temp [][]term.Cell
-	if count == 1 {
-		temp = b.tempScroll[:]
-	} else {
-		temp = make([][]term.Cell, count)
-	}
-
-	// copying to temp is because we need a place to temporarily
-	// store the **rows**, so we can re-use the allocations, not the content.
-	// the content is reset below.
-	cells := b.Cells.RawCells()
-	copy(temp, cells[end-count:end])
-	copy(cells[start+count:end], cells[start:end-count])
-	copy(cells[start:start+count], temp)
+	b.Cells.RotateRows(start, end, -count)
 
 	b.ResetLinesWith(start, start+count, b.defaultChar)
 }
@@ -408,14 +436,14 @@ func (b *AltBuffer) CellAt(pos term.Coordinates) *term.Cell {
 	// Do not use Height, or intended number of screen lines here:
 	// there might be a significant latency betwen resizing and upserting cells.
 	// This effectively prevents Insert(pos)=ok then CellAt(pos)=nil
-	cells := b.Cells.RawCells()
-	if pos.Y >= len(cells) {
+	if pos.Y < 0 || pos.Y >= b.Cells.Rows() {
 		return nil
 	}
-	if pos.X >= len(cells[pos.Y]) {
+	row := b.Cells.Row(pos.Y)
+	if pos.X < 0 || pos.X >= len(row) {
 		return nil
 	}
-	return &cells[pos.Y][pos.X]
+	return &b.Cells.MutableRow(pos.Y, pos.X+1)[pos.X]
 }
 
 // PrevCellAtCursor returns the cell immediately left of the cursor, or nil
@@ -642,16 +670,24 @@ func (b *AltBuffer) Scroll() *component.Scroll {
 // resetCellsAt erases all the cells from start to end, at the given line,
 // The start to end range is left inclusive, right exclusive.
 func (b *AltBuffer) resetCellsAt(y int, start, end int, with rune) {
-	// ensure there are enough columns
-	if y >= b.Cells.Rows() || end > b.Cells.Columns(y) {
-		endInsert := int(math.Max(float64(end), float64(b.width)))
-		b.Cells.InsertContext(b.ctx, term.Coordinates{Y: y, X: endInsert - 1}, with)
+	if y < 0 || start < 0 || start >= end {
+		return
 	}
-
-	cells := b.Cells.RawCells()
-	for x := start; x < end; x++ {
-		cells[y][x] = term.NewCell(with, 1, term.Attributes{Bg: b.cursor.attr.Bg})
+	baseBlank := term.NewCell(with, 1, term.Attributes{})
+	targetWidth := max(end, b.width)
+	columns := b.Cells.Columns(y)
+	if y >= b.Cells.Rows() {
+		firstNew := b.Cells.Rows()
+		b.Cells.AppendBlankRows(y-firstNew+1, targetWidth)
+		for newY := firstNew; newY <= y; newY++ {
+			b.Cells.ResetRowRange(newY, 0, targetWidth, baseBlank)
+		}
+	} else if end > columns {
+		_, _ = b.Cells.ExtendRowToWidth(y, targetWidth)
+		b.Cells.ResetRowRange(y, columns, targetWidth, baseBlank)
 	}
+	blank := term.NewCell(with, 1, term.Attributes{Bg: b.cursor.attr.Bg})
+	b.Cells.ResetRowRange(y, start, end, blank)
 }
 
 func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {

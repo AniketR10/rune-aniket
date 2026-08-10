@@ -87,3 +87,71 @@ func TestWriteRun(t *testing.T) {
 		assert.Equal(t, 0, b.WriteRun(make([]byte, 11), vteparser.CharsetIndexG0))
 	})
 }
+
+func TestWriteGlyphRun(t *testing.T) {
+	wide := func(chars string) []Glyph {
+		glyphs := make([]Glyph, 0, len(chars))
+		for _, c := range chars {
+			glyphs = append(glyphs, Glyph{Ch: c, Width: 2})
+		}
+		return glyphs
+	}
+
+	t.Run("primary drops the columns wide glyphs cover", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, testHistory)
+		b.SetDefaultChar(' ')
+		b.Resize(10, 3)
+
+		require.Equal(t, 3, b.WriteGlyphRun(wide("漢字漢"), vteparser.CharsetIndexG0))
+		// Three wide glyphs claim six columns, so the row keeps three
+		// glyph cells plus the four blanks that were not covered.
+		assert.Equal(t, 7, b.Columns(0))
+		assert.Equal(t, "漢字漢    ", cellsRowString(b, 0))
+		for x := range 3 {
+			assert.Equal(t, uint8(2), b.CellAt(term.Coordinates{X: x}).Width)
+		}
+	})
+
+	t.Run("alternate keeps one cell per glyph", func(t *testing.T) {
+		b := NewAltBuffer()
+		b.SetDefaultChar(' ')
+		b.Resize(10, 3)
+
+		require.Equal(t, 3, b.WriteGlyphRun(wide("漢字漢"), vteparser.CharsetIndexG0))
+		assert.Equal(t, 10, b.Columns(0))
+		assert.Equal(t, "漢字漢       ",
+			term.CellsToString(b.Cells.RawCells()[:1]))
+	})
+
+	t.Run("primary falls back when the covered columns leave the row", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, testHistory)
+		b.SetDefaultChar(' ')
+		b.Resize(10, 3)
+		b.SetCursorAtScreen(term.Coordinates{X: 6}, false)
+
+		// Three wide glyphs need six columns but only four remain.
+		assert.Equal(t, 0, b.WriteGlyphRun(wide("漢字漢"), vteparser.CharsetIndexG0))
+	})
+
+	t.Run("falls back on a wide cell under the run", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, testHistory)
+		b.SetDefaultChar(' ')
+		b.Resize(10, 3)
+		b.Write('漢', 2, vteparser.CharsetIndexG0)
+
+		assert.Equal(t, 0, b.WriteGlyphRun(wide("字漢"), vteparser.CharsetIndexG0))
+	})
+
+	t.Run("falls back on concealed cursor and line drawing charset", func(t *testing.T) {
+		b := NewPrimaryBuffer(0, testHistory)
+		b.SetDefaultChar(' ')
+		b.Resize(10, 3)
+		b.SetHiddenCursor(true)
+		assert.Equal(t, 0, b.WriteGlyphRun(wide("漢"), vteparser.CharsetIndexG0))
+
+		b.SetHiddenCursor(false)
+		b.ConfigureCharset(vteparser.CharsetIndexG0,
+			vteparser.StandardCharsetSpecialCharacterAndLineDrawing)
+		assert.Equal(t, 0, b.WriteGlyphRun(wide("漢"), vteparser.CharsetIndexG0))
+	})
+}

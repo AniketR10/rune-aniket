@@ -24,8 +24,11 @@
 package vtescanner
 
 type params struct {
-	subparams        [MaxParams]uint16
-	params           [MaxParams]uint16
+	subparams [MaxParams]uint16
+	params    [MaxParams]uint16
+	// slices backs slice() so a CSI dispatch costs no allocation in
+	// steady state. Its contents are only valid until the next dispatch.
+	slices           [MaxParams][]uint16
 	currentSubparams uint16
 	len              uint16
 }
@@ -48,15 +51,19 @@ func (p *params) extend(item uint16) {
 	p.len += 1
 }
 
-func (p *params) slice() (ret [][]uint16) {
+// slice groups the parsed parameters by subparameter run. The returned
+// slice, and the slices it holds, alias storage the scanner reuses: a
+// driver that needs them past the dispatch call must copy.
+func (p *params) slice() [][]uint16 {
+	n := 0
 	index := uint16(0)
 	for index < p.len {
 		numSubparams := p.subparams[index]
-		param := p.params[index : index+numSubparams]
-		ret = append(ret, param)
+		p.slices[n] = p.params[index : index+numSubparams]
+		n++
 		index += numSubparams
 	}
-	return
+	return p.slices[:n]
 }
 
 func (p *params) reset() {

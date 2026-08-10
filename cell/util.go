@@ -63,7 +63,7 @@ func CellsToBufferPerformance(c [][]term.Cell, fillInChar rune) *Buffer {
 // defensive copy would only add allocation churn.
 func AdoptCellsToBuffer(c [][]term.Cell) *Buffer {
 	cells := new(rawCells)
-	cells.fillInChar = ' '
+	cells.setFillInChar(' ')
 	cells.columnCap = defColumnCap
 	cells.rowCap = defRowCap
 	cells.cells = c
@@ -78,7 +78,7 @@ func AdoptCellsToBuffer(c [][]term.Cell) *Buffer {
 
 func cellsToBuffer(c [][]term.Cell, fillInChar rune, performance bool) *Buffer {
 	cells := new(rawCells)
-	cells.fillInChar = fillInChar
+	cells.setFillInChar(fillInChar)
 	cells.resetWithCap(defRowCap, defColumnCap)
 	if performance {
 		cells.cells = copyCellsContiguous(cells.cells, c)

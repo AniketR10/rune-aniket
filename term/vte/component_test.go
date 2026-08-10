@@ -26,6 +26,7 @@ package vte
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -369,9 +370,7 @@ func TestIntegrationComponent(t *testing.T) {
 				p.Linefeed()
 				p.Input('g')
 				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
-				// history transiently exceeds max scroll length by the
-				// slack before the amortized trim kicks in
-				assert.Equal(t, p.maxScrollLength+1, p.sync.buf.Rows())
+				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
 
 				p.CarriageReturn()
 				p.Linefeed()
@@ -842,12 +841,116 @@ func TestComponentDrawSnapshotIsConsistentUnderParserPressure(t *testing.T) {
 	writerWG.Wait()
 }
 
+func TestComponentPrimaryRingWrap(t *testing.T) {
+	newComponent := func(t *testing.T) *Component {
+		t.Helper()
+		cfg := DefaultConfig()
+		cfg.MaxLines = 6
+		comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+			&mockTabManager{}, cfg)
+		require.NoError(t, err)
+		comp.parserHandler.sync.primBuf.SetDefaultChar(' ')
+		comp.parserHandler.sync.altBuf.SetDefaultChar(' ')
+		require.NoError(t, comp.Resize(4, 3))
+		return comp
+	}
+
+	t.Run("draw snapshot and selection preserve logical order", func(t *testing.T) {
+		comp := newComponent(t)
+		comp.parser.AdvanceBytes([]byte(
+			"0\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7\r\n8"))
+
+		assertDraw(t, comp, "6   \n7   \n8   ")
+		snap, err := comp.Snapshot()
+		require.NoError(t, err)
+		assert.Equal(t, "3   \n4   \n5   \n6   \n7   \n8   ",
+			term.CellsToString(snap.Primary.Cells))
+
+		selected, _, ok := comp.parserHandler.sync.primBuf.Cells.SelectLine(
+			term.Coordinates{}, term.Coordinates{Y: 5})
+		require.True(t, ok)
+		assert.Equal(t, "3   \n4   \n5   \n6   \n7   \n8   ",
+			term.CellsToString(selected))
+	})
+
+	t.Run("resize and wide writes after wrap", func(t *testing.T) {
+		comp := newComponent(t)
+		comp.parser.AdvanceBytes([]byte(
+			"0\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7\r\n8"))
+		require.NoError(t, comp.Resize(6, 3))
+		comp.parser.AdvanceBytes([]byte("\r\n漢字"))
+
+		assertDraw(t, comp, "7     \n8     \n漢 字   ")
+		snap, err := comp.Snapshot()
+		require.NoError(t, err)
+		assert.Equal(t, "4     \n5     \n6     \n7     \n8     \n漢字  ",
+			term.CellsToString(snap.Primary.Cells))
+	})
+}
+
 func assertDraw(t *testing.T, comp *Component, expected string) {
 	t.Helper()
 	writer := term.NewStringWriter(comp.width, comp.height)
 	comp.Draw(writer)
 	writer.Flush()
 	assert.Equal(t, expected, writer.String())
+}
+
+// TestComponentWidenWhileScrolledUpKeepsContentVisible reproduces the
+// black, frozen screen from catting a large file, narrowing the terminal
+// (vertical splits), scrolling to the top, then widening it again.
+// Widening unwraps the history into far fewer rows, but the view scroll
+// kept its old, now out-of-bounds offset, so it converted to a negative
+// start row and drew nothing — and could not be scrolled up out of. The
+// offset must snap back to the top of history so the content stays
+// visible and scrolling still works.
+func TestComponentWidenWhileScrolledUpKeepsContentVisible(t *testing.T) {
+	t.Parallel()
+
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+		&mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	comp.parserHandler.sync.primBuf.SetDefaultChar(' ')
+
+	const narrow, wide, height, lines = 10, 40, 6, 100
+	require.NoError(t, comp.Resize(narrow, height))
+
+	var payload strings.Builder
+	for i := range lines {
+		payload.WriteString(strings.Repeat(string(rune('0'+i%10)), 24))
+		payload.WriteString("\r\n")
+	}
+	comp.parser.AdvanceBytes([]byte(payload.String()))
+
+	// Scroll all the way to the top of history.
+	require.True(t, comp.ScrollUp(lines*4))
+	require.False(t, comp.ScrollUp(1), "precondition: already at the top")
+	require.Positive(t, comp.scroll.Offset().Y, "precondition: scrolled up into history")
+	rowsNarrow := comp.parserHandler.sync.primBuf.Cells.Rows()
+
+	// Widen ~2x, as a vertical split being closed would.
+	require.NoError(t, comp.Resize(wide, height))
+	require.Less(t, comp.parserHandler.sync.primBuf.Cells.Rows(), rowsNarrow,
+		"precondition: widening unwraps history into fewer rows")
+
+	writer := term.NewStringWriter(wide, height)
+	comp.Draw(writer)
+	writer.Flush()
+	rows := strings.Split(writer.String(), "\n")
+
+	nonBlank := 0
+	for _, row := range rows {
+		if strings.TrimSpace(row) != "" {
+			nonBlank++
+		}
+	}
+	assert.Positive(t, nonBlank, "widening while scrolled up must not black out the screen")
+	assert.Equal(t, strings.Repeat("0", 24), strings.TrimRight(rows[0], " "),
+		"the top of history must be visible after the widen")
+
+	// The view is still live: the user can scroll back down toward the
+	// bottom rather than being stuck.
+	assert.True(t, comp.ScrollDown(1), "must be able to scroll back down after widening")
 }
 
 // newPopulatedComponentForBench builds a component with a fully written

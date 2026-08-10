@@ -89,6 +89,32 @@ T *win)
 	comptest.TestComponent(t, scroll, w, tests)
 }
 
+func TestScrollDrawsRingBackedRowsInLogicalOrder(t *testing.T) {
+	buf := new(cell.Buffer)
+	buf.InitPerformance(4, 1, ' ')
+	require.True(t, buf.AppendBlankRowsBounded(4, 1, 4))
+	for y, ch := range "0123" {
+		buf.MutableRow(y, 1)[0].Ch = ch
+	}
+	// Recycle twice so the physical row boundary lies between logical
+	// rows 1 and 2.
+	for _, ch := range "45" {
+		require.True(t, buf.AppendBlankRowsBounded(1, 1, 4))
+		buf.MutableRow(3, 1)[0].Ch = ch
+	}
+
+	scroll := new(Scroll)
+	scroll.InitPerformance(buf)
+	scroll.Resize(1, 3)
+	scroll.InvertOffset = false
+	scroll.SetOffset(term.Coordinates{Y: 1})
+	w := term.NewStringWriter(1, 3)
+	scroll.Draw(w)
+	w.Flush()
+
+	assert.Equal(t, "3\n4\n5", w.String())
+}
+
 func TestInitPerfWithHidden(t *testing.T) {
 	s := new(Scroll)
 	s.InitPerformance(cell.NewBuffer())
@@ -1131,6 +1157,55 @@ func TestScrollDrawOffsetOOB(t *testing.T) {
 	})
 }
 
+func TestScrollClampOffset(t *testing.T) {
+	t.Run("no-op when already in range", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+		require.True(t, scroll.SetOffset(term.Coordinates{Y: 2}))
+
+		assert.False(t, scroll.ClampOffset())
+		assert.Equal(t, term.Coordinates{Y: 2}, scroll.Offset())
+	})
+
+	t.Run("clamps an offset past the max down to the max", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+		// SetOffset does not clamp, so this leaves the offset OOB, as a
+		// resize that shrinks the content would.
+		require.True(t, scroll.SetOffset(term.Coordinates{Y: 100, X: 100}))
+
+		assert.True(t, scroll.ClampOffset())
+		assert.Equal(t, scroll.MaxOffset(), scroll.Offset())
+	})
+
+	t.Run("clamps against the inverted max", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		scroll.InvertOffset = true
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+		require.True(t, scroll.SetOffset(term.Coordinates{Y: 100}))
+
+		assert.True(t, scroll.ClampOffset())
+		assert.Equal(t, scroll.MaxOffset().Y, scroll.Offset().Y)
+	})
+
+	t.Run("does not notify subscribers", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+		require.True(t, scroll.SetOffset(term.Coordinates{Y: 100}))
+
+		seeks := 0
+		scroll.Subscribe(FuncScrollSubscriber(func(from, to term.Coordinates) {
+			seeks++
+		}))
+		assert.True(t, scroll.ClampOffset())
+		assert.Zero(t, seeks, "ClampOffset must not dispatch seek events")
+	})
+}
+
 func TestScrollDrawWrapZeroWidth(t *testing.T) {
 	scroll := newScroll(4, true, 0, 0)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
@@ -2001,4 +2076,431 @@ func newScrollWrapTestCase(t *testing.T, width, height int) (*Scroll, *term.Stri
 
 	w := term.NewStringWriter(width, height)
 	return scroll, w
+}
+
+func TestScrollDrawRingMutationTable(t *testing.T) {
+	tests := []struct {
+		name       string
+		wrap       bool
+		width      int
+		height     int
+		offset     term.Coordinates
+		attributes term.Attributes
+	}{
+		{
+			name:   "no wrap with horizontal and vertical offsets",
+			width:  6,
+			height: 4,
+			offset: term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			name:   "wrap across logical row boundary",
+			wrap:   true,
+			width:  5,
+			height: 5,
+			offset: term.Coordinates{Y: 1},
+		},
+		{
+			name:       "draw attributes preserve explicit cell styles",
+			width:      7,
+			height:     4,
+			offset:     term.Coordinates{Y: 1},
+			attributes: term.Attributes{Fg: term.ColorGreen, Bg: term.ColorBlue},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rows := scrollRingInitialRows()
+			buf := new(cell.Buffer)
+			buf.InitPerformance(len(rows), 8, ' ')
+			buf.ResetCells(rows)
+			for y, row := range rows {
+				if row != nil && len(row) == 0 {
+					buf.SetRow(y, make([]term.Cell, 0))
+				}
+			}
+			model := cloneScrollRingRows(rows)
+
+			scroll := new(Scroll)
+			scroll.InitPerformance(buf)
+			scroll.SetTabspaces(4)
+			scroll.Wrap = tt.wrap
+			scroll.InvertOffset = false
+			scroll.Attributes = tt.attributes
+			scroll.Resize(tt.width, tt.height)
+			scroll.offset = tt.offset
+
+			assertScrollRingDraw(t, scroll, model, "initial")
+			for round := range 6 {
+				exerciseScrollRingRound(t, scroll, &model, round)
+			}
+		})
+	}
+}
+
+func exerciseScrollRingRound(
+	t *testing.T, scroll *Scroll, model *[][]term.Cell, round int,
+) {
+	t.Helper()
+	buf := scroll.Buffer()
+	stage := func(operation string) {
+		t.Helper()
+		assertScrollRingDraw(t, scroll, *model, fmt.Sprintf("round %d: %s", round, operation))
+	}
+
+	rotation := 1 + round%max(1, len(*model)-1)
+	if round%2 != 0 {
+		rotation = -rotation
+	}
+	buf.RotateRows(0, len(*model), rotation)
+	rotateScrollRingRows(*model, 0, len(*model), rotation)
+	stage("rotate all rows")
+
+	const limit = 6
+	recycledWidth := 6 + round%3
+	require.True(t, buf.AppendBlankRowsBounded(2, recycledWidth, limit))
+	*model = appendScrollRingRowsBounded(*model, 2, recycledWidth, limit)
+	for i := range 2 {
+		y := len(*model) - 2 + i
+		row := scrollRingReplacementRow(round*2 + i)
+		buf.SetRow(y, cloneScrollRingRow(row))
+		(*model)[y] = cloneScrollRingRow(row)
+	}
+	stage("append and populate recycled rows")
+
+	raw := buf.RawCells()
+	if y, ok := firstScrollRingRow(raw, 1); ok {
+		color := term.Color(20 + round)
+		raw[y][0].Bg = color
+		(*model)[y][0].Bg = color
+	}
+	stage("linearize through raw cells")
+
+	require.True(t, buf.AppendBlankRowsBounded(1, 5+round%2, limit))
+	*model = appendScrollRingRowsBounded(*model, 1, 5+round%2, limit)
+	last := len(*model) - 1
+	row := scrollRingReplacementRow(20 + round)
+	buf.SetRow(last, cloneScrollRingRow(row))
+	(*model)[last] = cloneScrollRingRow(row)
+	stage("return to bounded append")
+
+	if len(*model) > 3 {
+		start, end := 1, len(*model)-1
+		count := 1
+		if round%2 != 0 {
+			count = -1
+		}
+		buf.RotateRows(start, end, count)
+		rotateScrollRingRows(*model, start, end, count)
+		stage("rotate a logical subregion")
+	}
+
+	if y, ok := firstScrollRingRow(*model, 4); ok {
+		fill := scrollRingStyledCell(' ', 30+round)
+		buf.ResetRowRange(y, 1, 3, fill)
+		for x := 1; x < 3; x++ {
+			(*model)[y][x] = fill
+		}
+		stage("reset cells in a wrapped row")
+
+		buf.DeleteRowRange(y, 1, 2)
+		copy((*model)[y][1:], (*model)[y][2:])
+		(*model)[y] = (*model)[y][:len((*model)[y])-1]
+		stage("delete cells in a wrapped row")
+	}
+
+	if y, ok := firstScrollRingRow(*model, 4); ok {
+		at := len((*model)[y]) / 2
+		require.True(t, buf.WrapRow(y, at))
+		*model = splitScrollRingRow(*model, y, at)
+		stage("linearize by splitting a row")
+
+		_, ok := buf.ConflateRow(y)
+		require.True(t, ok)
+		*model = conflateScrollRingRow(*model, y)
+		stage("conflate the split row")
+	}
+
+	if len(*model) > 1 {
+		removed, ok := buf.TrimRowsFromStart(1)
+		require.True(t, ok)
+		require.Equal(t, 1, removed)
+		*model = append([][]term.Cell(nil), (*model)[1:]...)
+		stage("linearize by trimming from start")
+
+		width := 5 + round%3
+		require.True(t, buf.AppendBlankRows(1, width))
+		*model = append(*model, repeatScrollRingCell(scrollRingBlankCell(), width))
+		stage("append a recycled row after trimming")
+	}
+
+	buf.ResetCells(*model)
+	for y, row := range *model {
+		if len(row) == 0 {
+			(*model)[y] = nil
+		}
+	}
+	stage("reset cells before another ring round")
+}
+
+func assertScrollRingDraw(t *testing.T, scroll *Scroll, rows [][]term.Cell, stage string) {
+	t.Helper()
+	assert.Equal(t, rows, scroll.Buffer().CopyRows(nil), "%s: logical rows", stage)
+
+	writer := term.NewStringWriter(scroll.width, scroll.height)
+	scroll.Draw(writer)
+	assert.Equal(
+		t,
+		drawScrollRingModel(
+			rows,
+			scroll.width,
+			scroll.height,
+			scroll.tabspaces,
+			scroll.offset,
+			scroll.Wrap,
+			scroll.Attributes,
+		),
+		writer.Cells(),
+		"%s: drawn cells",
+		stage,
+	)
+}
+
+func drawScrollRingModel(
+	rows [][]term.Cell,
+	width, height, tabspaces int,
+	offset term.Coordinates,
+	wrap bool,
+	attributes term.Attributes,
+) []term.Cell {
+	cells := make([]term.Cell, width*height)
+	if attributes != (term.Attributes{}) {
+		fill := term.NewCell(0, 0, attributes)
+		for i := range cells {
+			cells[i] = fill
+		}
+	}
+	draw := func(x, y int, c term.Cell) {
+		if x < 0 || x >= width || y < 0 || y >= height {
+			return
+		}
+		if attributes != (term.Attributes{}) {
+			if c.Bg == 0 {
+				c.Bg = attributes.Bg
+			}
+			if c.Fg == 0 {
+				c.Fg = attributes.Fg
+			}
+		}
+		cells[y*width+x] = c
+	}
+
+	if !wrap {
+		for y := max(0, offset.Y); y < len(rows) && y-offset.Y < height; y++ {
+			xoffset := 0
+			for x, c := range rows[y] {
+				if c.Ch == '\t' {
+					xoffset += tabspaces - 1
+				}
+				visualX := x + xoffset
+				if c.Width > 1 {
+					xoffset += int(c.Width) - 1
+				}
+				if visualX >= offset.X+width {
+					break
+				}
+				draw(visualX-offset.X, y-offset.Y, c)
+			}
+		}
+		return cells
+	}
+
+	wrapsBefore := 0
+	for y, row := range rows {
+		xoffset := 0
+		rowWraps := 0
+		for x, c := range row {
+			if c.Ch == '\t' {
+				xoffset += tabspaces - 1
+			}
+			visualX := x + xoffset
+			if c.Width > 1 {
+				xoffset += int(c.Width) - 1
+			}
+			cellWrap := visualX / width
+			rowWraps = max(rowWraps, cellWrap)
+			draw(visualX%width, y+wrapsBefore+cellWrap-offset.Y, c)
+		}
+		wrapsBefore += rowWraps
+	}
+	return cells
+}
+
+func scrollRingInitialRows() [][]term.Cell {
+	return [][]term.Cell{
+		{
+			scrollRingStyledCell('A', 1),
+			scrollRingBlankCell(),
+			scrollRingTabCell(),
+			scrollRingWideCell('漢'),
+			scrollRingCombiningCell(),
+		},
+		nil,
+		{},
+		{
+			scrollRingStyledCell('B', 2),
+			scrollRingStyledCell('C', 3),
+			scrollRingWideCell('界'),
+			scrollRingBlankCell(),
+		},
+		{
+			scrollRingBlankCell(),
+			scrollRingTabCell(),
+			scrollRingStyledCell('D', 4),
+			scrollRingWideCell('語'),
+		},
+		{
+			scrollRingCombiningCell(),
+			scrollRingStyledCell('E', 5),
+			scrollRingBlankCell(),
+			scrollRingStyledCell('F', 6),
+		},
+	}
+}
+
+func scrollRingReplacementRow(seed int) []term.Cell {
+	return []term.Cell{
+		scrollRingStyledCell(rune('a'+seed%26), seed+1),
+		scrollRingTabCell(),
+		scrollRingWideCell([]rune("漢界語")[seed%3]),
+		scrollRingCombiningCell(),
+		scrollRingBlankCell(),
+		scrollRingStyledCell(rune('A'+seed%26), seed+7),
+	}
+}
+
+func scrollRingBlankCell() term.Cell {
+	return term.Cell{Ch: ' ', Width: 1, Bytes: 1}
+}
+
+func scrollRingTabCell() term.Cell {
+	return term.Cell{Ch: '\t', Width: 1, Bytes: 1}
+}
+
+func scrollRingWideCell(ch rune) term.Cell {
+	return term.Cell{Ch: ch, Width: 2, Bytes: uint8(len(string(ch)))}
+}
+
+func scrollRingCombiningCell() term.Cell {
+	cell := term.Cell{Ch: 'e', Width: 1, Bytes: 3}
+	cell.SetCombining([]rune{'\u0301'})
+	return cell
+}
+
+func scrollRingStyledCell(ch rune, seed int) term.Cell {
+	return term.Cell{
+		Ch:    ch,
+		Width: 1,
+		Bytes: uint8(len(string(ch))),
+		Fg:    term.Color(1 + seed%8),
+		Bg:    term.Color(9 + seed%8),
+		Attrs: term.AttrBold | term.AttrUnderline,
+	}
+}
+
+func cloneScrollRingRows(rows [][]term.Cell) [][]term.Cell {
+	cloned := make([][]term.Cell, len(rows))
+	for y, row := range rows {
+		cloned[y] = cloneScrollRingRow(row)
+	}
+	return cloned
+}
+
+func cloneScrollRingRow(row []term.Cell) []term.Cell {
+	if row == nil {
+		return nil
+	}
+	cloned := make([]term.Cell, len(row))
+	copy(cloned, row)
+	for x := range cloned {
+		if combining := cloned[x].CombiningRunes(); combining != nil {
+			cloned[x].SetCombining(append([]rune(nil), combining...))
+		}
+	}
+	return cloned
+}
+
+func repeatScrollRingCell(fill term.Cell, count int) []term.Cell {
+	row := make([]term.Cell, count)
+	for x := range row {
+		row[x] = fill
+	}
+	return row
+}
+
+func appendScrollRingRowsBounded(
+	rows [][]term.Cell, count, width, limit int,
+) [][]term.Cell {
+	if count <= 0 || width < 0 || limit <= 0 {
+		return rows
+	}
+	if excess := len(rows) - limit; excess > 0 {
+		rows = append([][]term.Cell(nil), rows[excess:]...)
+	}
+	for range count {
+		blank := repeatScrollRingCell(scrollRingBlankCell(), width)
+		if len(rows) < limit {
+			rows = append(rows, blank)
+			continue
+		}
+		copy(rows, rows[1:])
+		rows[len(rows)-1] = blank
+	}
+	return rows
+}
+
+func rotateScrollRingRows(rows [][]term.Cell, start, end, count int) {
+	if start < 0 || end > len(rows) || start >= end {
+		return
+	}
+	length := end - start
+	count %= length
+	if count < 0 {
+		count += length
+	}
+	if count == 0 {
+		return
+	}
+	rotated := append([][]term.Cell(nil), rows[start:end]...)
+	copy(rows[start:end-count], rotated[count:])
+	copy(rows[end-count:end], rotated[:count])
+}
+
+func splitScrollRingRow(rows [][]term.Cell, y, at int) [][]term.Cell {
+	head := rows[y][:at]
+	tail := rows[y][at:]
+	rows = append(rows, nil)
+	copy(rows[y+2:], rows[y+1:])
+	rows[y] = head
+	rows[y+1] = tail
+	return rows
+}
+
+func conflateScrollRingRow(rows [][]term.Cell, y int) [][]term.Cell {
+	joined := make([]term.Cell, 0, len(rows[y])+len(rows[y+1]))
+	joined = append(joined, rows[y]...)
+	joined = append(joined, rows[y+1]...)
+	rows[y] = joined
+	copy(rows[y+1:], rows[y+2:])
+	return rows[:len(rows)-1]
+}
+
+func firstScrollRingRow(rows [][]term.Cell, count int) (int, bool) {
+	for y, row := range rows {
+		if len(row) >= count {
+			return y, true
+		}
+	}
+	return 0, false
 }
