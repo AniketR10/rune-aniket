@@ -69,6 +69,7 @@ func TestRouteChatCommandDelivers(t *testing.T) {
 		{"skill", commandSkill, []string{"review", "foo"}, "review", []string{"foo"}},
 		{"clear", commandClear, nil, "clear", nil},
 		{"compact", commandCompact, nil, "compact", nil},
+		{"compact model", commandCompact, []string{"openai/gpt-5"}, "compact", []string{"openai/gpt-5"}},
 		{"fork", commandFork, nil, "fork", nil},
 		{"export", commandExport, []string{"--audit"}, "export", []string{"--audit"}},
 		{"log", commandLog, nil, "log", nil},
@@ -127,9 +128,7 @@ func TestRouteChatCommandErrors(t *testing.T) {
 
 	// Store commands reject a positional dialogue id; they act on the
 	// focused chat only.
-	for _, name := range []string{
-		commandClear, commandCompact, commandFork, commandExport, commandLog,
-	} {
+	for _, name := range []string{commandClear, commandFork, commandExport, commandLog} {
 		err = h.routeChatCommand(textapi.Command{
 			Name: name,
 			Args: []string{"other-chat"},
@@ -137,6 +136,13 @@ func TestRouteChatCommandErrors(t *testing.T) {
 		})
 		require.Errorf(t, err, "%s with positional id should error", name)
 	}
+
+	err = h.routeChatCommand(textapi.Command{
+		Name: commandCompact,
+		Args: []string{"openai/gpt-5", "codex/gpt-5"},
+		URI:  mustURI(t, "rune-agent://openai_gpt-5/rolling-fox"),
+	})
+	require.Error(t, err)
 }
 
 func TestCompleteChatPromptCommands(t *testing.T) {
@@ -150,6 +156,10 @@ func TestCompleteChatPromptCommands(t *testing.T) {
 
 	t.Run("model", func(t *testing.T) {
 		got := completeToSlice(t, ctx, h, commandModel)
+		assert.Equal(t, []string{"openai/gpt-5", "codex/gpt-5"}, got)
+	})
+	t.Run("compact", func(t *testing.T) {
+		got := completeToSlice(t, ctx, h, commandCompact)
 		assert.Equal(t, []string{"openai/gpt-5", "codex/gpt-5"}, got)
 	})
 	t.Run("effort", func(t *testing.T) {
@@ -174,9 +184,7 @@ func TestCompleteChatPromptCommandsDialogues(t *testing.T) {
 	h := &aiEditorHandler{}
 	ctx := context.Background()
 
-	for _, name := range []string{
-		commandClear, commandCompact, commandFork, commandExport, commandLog,
-	} {
+	for _, name := range []string{commandClear, commandFork, commandExport, commandLog} {
 		t.Run(name, func(t *testing.T) {
 			got := completeToSlice(t, ctx, h, name)
 			assert.Empty(t, got)

@@ -96,9 +96,10 @@ var (
 		},
 		{
 			Name: commandCompact,
-			Summary: "Compact the focused agent chat into a summarized copy. " +
+			Summary: "Compact the focused agent chat into a summarized copy, using " +
+				"the compact model alias when no model is provided. " +
 				"Run from an open agent chat tab.",
-			Synopsis: "",
+			Synopsis: "[<model>]",
 		},
 		{
 			Name: commandFork,

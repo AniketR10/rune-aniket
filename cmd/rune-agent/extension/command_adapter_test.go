@@ -201,23 +201,36 @@ func TestCommandAdapterScopesToOpenChat(t *testing.T) {
 	}
 }
 
-// compact returns a lazy iterator that dispatches against the open
-// chat; draining it issues "chats compact <dialogueID>".
 func TestCommandAdapterCompactScopesToOpenChat(t *testing.T) {
-	h := &captureCommandHandler{}
-	a := newCaptureAdapter(h)
-	res, err := a.HandleCommand(context.Background(), "compact", nil)
-	require.NoError(t, err)
-	require.NotNil(t, res.Display)
-	_, _ = res.Display.Next(context.Background())
-	assert.Equal(t, "chats", h.last.Name)
-	assert.Equal(t, []string{"compact", "rolling-fox"}, h.last.Args)
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		wantArgs []string
+	}{
+		{"default", nil, []string{"compact", "rolling-fox"}},
+		{"model", []string{"openai/gpt-5.5"}, []string{"compact", "rolling-fox", "openai/gpt-5.5"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &captureCommandHandler{}
+			a := newCaptureAdapter(h)
+			res, err := a.HandleCommand(context.Background(), "compact", tc.args)
+			require.NoError(t, err)
+			require.NotNil(t, res.Display)
+			_, _ = res.Display.Next(context.Background())
+			assert.Equal(t, "chats", h.last.Name)
+			assert.Equal(t, tc.wantArgs, h.last.Args)
+		})
+	}
+
+	a := newCaptureAdapter(&captureCommandHandler{})
+	_, err := a.HandleCommand(context.Background(), "compact", []string{"openai/gpt-5", "codex/gpt-5"})
+	require.Error(t, err)
 }
 
 // Any positional dialogue id is rejected; chat commands no longer
 // target other dialogues.
 func TestCommandAdapterRejectsPositionalID(t *testing.T) {
-	for _, name := range []string{"clear", "history", "compact", "export", "log", "fork"} {
+	for _, name := range []string{"clear", "history", "export", "log", "fork"} {
 		t.Run(name, func(t *testing.T) {
 			h := &captureCommandHandler{}
 			a := newCaptureAdapter(h)
@@ -227,11 +240,11 @@ func TestCommandAdapterRejectsPositionalID(t *testing.T) {
 	}
 }
 
-// Bare names must not appear in /model completions: two providers
+// Bare names must not appear in model-argument completions: two providers
 // can ship the same Name (e.g. openai/gpt-5.5 vs codex/gpt-5.5),
 // and a bare candidate would silently dispatch to whichever provider
 // Models() iterates first.
-func TestCommandAdapterModelCompleter(t *testing.T) {
+func TestCommandAdapterModelArgumentCompleters(t *testing.T) {
 	svc := llmtest.New([]llmapi.ModelEntry{
 		{Provider: "openai", Name: "gpt-5.5"},
 		{Provider: "codex", Name: "gpt-5.5"},
@@ -239,15 +252,19 @@ func TestCommandAdapterModelCompleter(t *testing.T) {
 	})
 	a := &commandAdapter{llmSvc: svc}
 	ctx := context.Background()
-	it, err := a.Complete(ctx, "model", nil)
-	require.NoError(t, err)
-	got, err := iterator.ToSlice(ctx, it)
-	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"openai/gpt-5.5",
-		"codex/gpt-5.5",
-		"openai/gpt-4o",
-	}, got)
+	for _, name := range []string{"model", "compact"} {
+		t.Run(name, func(t *testing.T) {
+			it, err := a.Complete(ctx, name, nil)
+			require.NoError(t, err)
+			got, err := iterator.ToSlice(ctx, it)
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"openai/gpt-5.5",
+				"codex/gpt-5.5",
+				"openai/gpt-4o",
+			}, got)
+		})
+	}
 }
 
 // aliasResolvingService resolves the bare name "default" to a

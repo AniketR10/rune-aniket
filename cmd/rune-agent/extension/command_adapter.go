@@ -169,10 +169,10 @@ func (a *commandAdapter) HandleCommand(
 		name = "chats"
 		args = []string{"show", a.dialogueID}
 	case "compact":
-		if err := rejectPositionalID(name, args); err != nil {
-			return dialoguetui.CommandResult{}, err
+		if len(args) > 1 {
+			return dialoguetui.CommandResult{}, errors.New("usage: /compact [<model>]")
 		}
-		return a.handleCompact(ctx)
+		return a.handleCompact(ctx, args)
 	case "export":
 		if err := rejectPositionalID(name, args); err != nil {
 			return dialoguetui.CommandResult{}, err
@@ -481,13 +481,18 @@ func (a *commandAdapter) handleClear(ctx context.Context) (dialoguetui.CommandRe
 // the animation node) resets the component and replays the compacted
 // messages. This ordering avoids the panic from Remove-after-Reset.
 func (a *commandAdapter) handleCompact(
-	_ context.Context,
+	_ context.Context, args []string,
 ) (dialoguetui.CommandResult, error) {
+	var model string
+	if len(args) > 0 {
+		model = args[0]
+	}
 	return dialoguetui.CommandResult{
 		Display: &compactIterator{
 			handler:    a.handler,
 			store:      a.store,
 			dialogueID: a.dialogueID,
+			model:      model,
 			compactFn:  a.compactFn,
 		},
 	}, nil
@@ -574,7 +579,10 @@ func (a *commandAdapter) openMarkdownFloating(md *markdown.Component) {
 func (a *commandAdapter) Complete(
 	ctx context.Context, name string, args []string,
 ) (iterator.Iterator[string], error) {
-	if name == "model" && a.llmSvc != nil {
+	if name == "compact" && len(args) > 1 {
+		return iterator.FromSlice[string](nil), nil
+	}
+	if (name == "model" || name == "compact") && a.llmSvc != nil {
 		// Qualified to disambiguate name collisions across providers
 		// (e.g. openai/gpt-5.5 vs codex/gpt-5.5).
 		return iterator.Map(a.llmSvc.Models(), func(e llmapi.ModelEntry) string {

@@ -974,8 +974,8 @@ func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
 		}
 		name = "clear"
 	case commandCompact:
-		if err := rejectPositionalID("compact", cmd.Args); err != nil {
-			return err
+		if len(cmd.Args) > 1 {
+			return errors.New("usage: chatcompact [<model>]")
 		}
 		name = "compact"
 	case commandFork:
@@ -1050,6 +1050,11 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 			return iterator.FromSlice[string](nil), nil
 		}
 	case commandModel:
+		return h.completeWithModelsIterator(ctx)
+	case commandCompact:
+		if len(filtered) > 1 {
+			return iterator.FromSlice[string](nil), nil
+		}
 		return h.completeWithModelsIterator(ctx)
 	case commandEffort:
 		levels := make([]string, len(validEffortLevels))

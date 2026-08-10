@@ -62,6 +62,8 @@ import (
 // Pass it to repl.WithExitError so the REPL exits on this error.
 var ErrExit = errors.New("exit")
 
+const compactModelAlias = "compact"
+
 // MCPInfo provides a snapshot of MCP server state.
 type MCPInfo interface {
 	Servers() []*mcp.ServerInfo
@@ -238,7 +240,7 @@ var commandManual = textapi.CommandManual{
 				{Name: "log", Summary: "Show the LLM token audit log for a conversation.", Synopsis: "<id>"},
 				{Name: "export", Summary: "Export a conversation or audit log to a temp file.", Synopsis: "[--audit] <id>"},
 				{Name: "clear", Summary: "Clear a conversation and archive its previous contents.", Synopsis: "<id>"},
-				{Name: "compact", Summary: "Compact a conversation into a summarized copy.", Synopsis: "<id>"},
+				{Name: "compact", Summary: "Compact a conversation into a summarized copy using the compact model alias by default.", Synopsis: "<id> [<model>]"},
 				{Name: "fork", Summary: "Open a picker to fork a conversation at a selected message.", Synopsis: "<id>"},
 			},
 		},
@@ -491,10 +493,14 @@ func (s *shell) handleChats(
 		}
 		return s.clearConversation(ctx, args[1])
 	case "compact":
-		if len(args) < 2 {
-			return nil, errors.New("usage: chats compact <id>")
+		if len(args) < 2 || len(args) > 3 {
+			return nil, errors.New("usage: chats compact <id> [<model>]")
 		}
-		return s.compactConversation(ctx, args[1])
+		var model string
+		if len(args) == 3 {
+			model = args[2]
+		}
+		return s.compactConversation(ctx, args[1], model)
 	case "fork":
 		if len(args) < 2 {
 			return nil, errors.New("usage: chats fork <id>")
@@ -1035,19 +1041,22 @@ func (s *shell) exportAudit(
 }
 
 func (s *shell) compactConversation(
-	ctx context.Context, id string,
+	ctx context.Context, id, modelArg string,
 ) (iterator.Iterator[component.Responsive], error) {
 	d, err := s.store.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get conversation %q: %w", id, err)
 	}
 
-	svc, err := s.serviceForModel(s.defaultModel)
+	if modelArg == "" {
+		modelArg = compactModelAlias
+	}
+	svc, err := s.serviceForModel(modelArg)
 	if err != nil {
 		return nil, fmt.Errorf("create llm service: %w", err)
 	}
 
-	model, err := llmarg.Resolve(ctx, svc, s.defaultModel)
+	model, err := llmarg.Resolve(ctx, svc, modelArg)
 	if err != nil {
 		return nil, err
 	}
@@ -1354,7 +1363,16 @@ func (s *shell) completeChats(ctx context.Context, args []string) (iterator.Iter
 			return s.completeDialogueIDs(ctx)
 		}
 	}
+	if len(args) == 3 && args[0] == "compact" {
+		return s.completeModels(), nil
+	}
 	return iterator.FromSlice[string](nil), nil
+}
+
+func (s *shell) completeModels() iterator.Iterator[string] {
+	return iterator.Map(s.llmSvc.Models(), func(e llmapi.ModelEntry) string {
+		return e.Provider + "/" + e.Name
+	})
 }
 
 func (s *shell) completeDialogueIDs(ctx context.Context) (iterator.Iterator[string], error) {

@@ -45,6 +45,7 @@ type compactIterator struct {
 	handler    repl.CommandHandler
 	store      dialoguemanager.Store
 	dialogueID string
+	model      string
 	compactFn  func(msgs []llmapi.Message)
 
 	called bool
@@ -59,8 +60,12 @@ func (c *compactIterator) Next(ctx context.Context) (component.Responsive, bool)
 	c.called = true
 
 	// This call blocks while the LLM summarises the conversation.
+	args := []string{"compact", c.dialogueID}
+	if c.model != "" {
+		args = append(args, c.model)
+	}
 	it, err := c.handler.HandleCommand(ctx, repl.Command{
-		Name: "chats", Args: []string{"compact", c.dialogueID},
+		Name: "chats", Args: args,
 	}, repl.NopProgressWriter())
 	if err != nil {
 		c.err = err
