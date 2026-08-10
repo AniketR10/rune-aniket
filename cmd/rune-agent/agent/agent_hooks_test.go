@@ -126,8 +126,15 @@ func TestHooks_SessionStartAdditionalContext(t *testing.T) {
 		}
 	}
 	require.NotNil(t, userMsg)
-	assert.True(t, strings.Contains(userMsg.Content, "context-from-hook"),
-		"user message should carry hook additionalContext, got %q", userMsg.Content)
+	assert.Equal(t, "hello", userMsg.Content,
+		"session hook context is request-only and must not pollute persisted text")
+	require.Len(t, svc.requests, 1)
+	requestUser := svc.requests[0].Messages[len(svc.requests[0].Messages)-1]
+	if len(requestUser.MultiContent) > 0 {
+		assert.Contains(t, requestUser.MultiContent[0].Text, "context-from-hook")
+	} else {
+		assert.Contains(t, requestUser.Content, "context-from-hook")
+	}
 }
 
 func TestHooks_PreCompactManualBlocked(t *testing.T) {

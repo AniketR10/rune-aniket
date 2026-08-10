@@ -251,7 +251,17 @@ func (s *GoroutineSpawner) Run(
 		}
 	}
 
-	inner := ag.Run(runCtx, dialogueID, req.Message)
+	var runOpts []RunOption
+	if req.DisplayMessage != "" {
+		runOpts = append(runOpts, WithDisplayMessage(req.DisplayMessage))
+	}
+	if len(req.Attachments) > 0 {
+		runOpts = append(runOpts, WithAttachments(req.Attachments))
+	}
+	if req.AdditionalContext != "" {
+		runOpts = append(runOpts, WithAdditionalContext(req.AdditionalContext))
+	}
+	inner := ag.Run(runCtx, dialogueID, req.Message, runOpts...)
 	it := &spawnerIterator{
 		inner:      inner,
 		cancel:     cancel,

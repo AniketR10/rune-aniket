@@ -1578,3 +1578,215 @@ func TestHandlerPromptCtrlCDismissesFreeForm(t *testing.T) {
 	vals := <-resultCh
 	assert.Nil(t, vals, "Ctrl-C in free-form prompt should dismiss, not submit")
 }
+
+// linkedDraft composes "check alpha.go" with the label linked to a
+// freshly keyed attachment, the shape a '#' completion leaves behind.
+func linkedDraft(comp *Component) Attachment {
+	a := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	comp.Input().SetDraft("check alpha.go",
+		[]InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}})
+	return a
+}
+
+func TestHandlerSubmitsAttachmentOnlyDraft(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	h, tx, rx := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	mu.Lock()
+	a := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	mu.Unlock()
+
+	got := make(chan SubmitMessage, 1)
+	go func() { got <- <-rx }()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+
+	msg := <-got
+	assert.Equal(t, "", msg.Text)
+	assert.Equal(t, []Attachment{a}, msg.Attachments)
+	assert.Empty(t, comp.Attachments())
+}
+
+func TestHandlerEnterIgnoresFullyEmptyDraft(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+
+	select {
+	case msg := <-rx:
+		t.Fatalf("empty draft must not submit, got %q", msg.Text)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestHandlerSubmitCarriesInlineLinks(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	h, tx, rx := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	mu.Lock()
+	a := linkedDraft(comp)
+	mu.Unlock()
+
+	got := make(chan SubmitMessage, 1)
+	go func() { got <- <-rx }()
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	msg := <-got
+	assert.Equal(t, "check alpha.go", msg.Text)
+	assert.Equal(t, []Attachment{a}, msg.Attachments)
+	assert.Equal(t, []InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}}, msg.Links)
+}
+
+func TestHandlerQueueRecallRestoresAttachmentsAndLinks(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	interrupt := make(chan struct{}, 10)
+	h, tx, _ := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error {
+			interrupt <- struct{}{}
+			return nil
+		}))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	tx <- MessageEvent{Type: MessageEventBusy, Busy: true}
+	<-interrupt
+
+	mu.Lock()
+	a := linkedDraft(comp)
+	mu.Unlock()
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	mu.Lock()
+	require.Empty(t, comp.Attachments(), "submitting takes the whole draft")
+	mu.Unlock()
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, "check alpha.go", comp.Input().Text())
+	assert.Equal(t, []Attachment{a}, comp.Attachments())
+	assert.Equal(t, []InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}},
+		comp.Input().Links())
+	assert.Equal(t, 0, comp.QueueLen())
+}
+
+func TestHandlerQueueRecallKeepsAttachmentOnlyDraft(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	interrupt := make(chan struct{}, 10)
+	h, tx, _ := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error {
+			interrupt <- struct{}{}
+			return nil
+		}))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	tx <- MessageEvent{Type: MessageEventBusy, Busy: true}
+	<-interrupt
+
+	typeText(h, "queued")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	mu.Lock()
+	pending := comp.AddAttachment(NewWorkspaceFileAttachment("bravo.go"))
+	mu.Unlock()
+
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+
+	mu.Lock()
+	assert.Equal(t, 1, comp.QueueLen(),
+		"an attachment-only draft must not pop the queue over itself")
+	mu.Unlock()
+
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []Attachment{pending}, comp.Attachments(),
+		"history browsing must give the attachment-only draft back")
+	assert.Equal(t, 1, comp.QueueLen())
+}
+
+func TestHandlerHistoryRecallRestoresDraftAndScratch(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	h, tx, rx := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	got := make(chan SubmitMessage, 1)
+	go func() { got <- <-rx }()
+	mu.Lock()
+	a := linkedDraft(comp)
+	mu.Unlock()
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	<-got
+
+	typeText(h, "scratch")
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+
+	mu.Lock()
+	assert.Equal(t, "check alpha.go", comp.Input().Text())
+	assert.Equal(t, []Attachment{a}, comp.Attachments())
+	assert.Equal(t, []InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}},
+		comp.Input().Links())
+	mu.Unlock()
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+	assert.True(t, handled)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, "scratch", comp.Input().Text(),
+		"walking past the newest entry must restore the interrupted draft")
+	assert.Empty(t, comp.Attachments())
+}
+
+func TestHandlerCommandHistoryEntriesAreTextOnly(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	commands := &mockCommandHandler{
+		handleFunc: func(context.Context, string, []string) (CommandResult, error) {
+			return CommandResult{}, nil
+		},
+	}
+	h, tx, _ := Handler(context.Background(), mu, comp, term.NopInterrupter(),
+		WithCommands(commands))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	mu.Lock()
+	comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	mu.Unlock()
+
+	typeText(h, "/help")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	dh := h.(*dialogueHandler)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, dh.history, 1)
+	assert.Equal(t, Draft{Text: "/help"}, dh.history[0])
+	assert.Len(t, comp.Attachments(), 1,
+		"a command must not consume the pending attachments")
+}

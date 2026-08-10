@@ -67,6 +67,14 @@ func (s syncComponent) addStatusHint() *statusHint {
 	return hint
 }
 
+// completionOpen reports whether the chat's '#' completion band is
+// showing.
+func (s syncComponent) completionOpen() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.comp.CompletionOpen()
+}
+
 func (s syncComponent) removeStatusHint(hint *statusHint) {
 	_ = hint.Close()
 

@@ -37,13 +37,20 @@ type Spawner interface {
 
 // RunRequest is a request to run a sub-agent.
 type RunRequest struct {
-	Message      string
-	Label        string
-	AgentID      string
-	Model        string
-	AllowedTools []string // if non-empty, sub-agent receives only these tools
-	SystemPrompt string   // if non-empty, overrides the agent definition's prompt
-	Cleanup      string   // "delete" or "keep"
+	Message string
+	// DisplayMessage is persisted and shown in transcripts when it differs
+	// from the model-facing Message.
+	DisplayMessage string
+	// Attachments are ordered content parts appended after Message.
+	Attachments []llmapi.ContentPart
+	// AdditionalContext is prepended only to the provider request.
+	AdditionalContext string
+	Label             string
+	AgentID           string
+	Model             string
+	AllowedTools      []string // if non-empty, sub-agent receives only these tools
+	SystemPrompt      string   // if non-empty, overrides the agent definition's prompt
+	Cleanup           string   // "delete" or "keep"
 
 	// InitialMessages, when non-empty, are prepended to the child
 	// dialogue (after the child agent's own system prompt) before the

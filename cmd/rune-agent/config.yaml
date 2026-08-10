@@ -44,6 +44,30 @@ extensions:
         bg: default
       context_hint_attr:
         fg: red
+      # Styling for the '#' context completion overlay. Defaults mirror
+      # the command prompt (see "command.*_attr" in rune.star) so both
+      # search overlays look consistent.
+      completion_matched_text_attr:
+        fg: blue
+        bg: default
+        flags: bold
+      completion_focus_element_attr:
+        fg: purple
+        bg: default
+      completion_element_attr:
+        fg: default
+        bg: default
+        flags: dim
+      # Sweep color of the radar-frame shader drawn over the compose box
+      # while completion candidates stream in. Neutral by default so it
+      # reads the same under every theme.
+      completion_radar_color: dimgray
+      # Accepted '#' completions remain readable in the sentence while
+      # their attachment chips stay visible above the composer.
+      inline_attachment_attr:
+        fg: aqua
+        bg: default
+        flags: underline
       # When the modal (vi-style) composer opens, enter insert mode so
       # the first keystroke types instead of requiring `i`. Set to false
       # to keep the composer in normal mode at startup. Only affects the

@@ -26,7 +26,9 @@ package dialoguetui
 import (
 	"context"
 	"strings"
+	"unicode"
 
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -38,6 +40,10 @@ import (
 // editor. It never maps to a real file; the buffer is owned by the
 // dialogue component.
 var dialogueComposeURI = mustParseURI("dialogue-compose://session")
+
+// inlineAttachmentLocationID names the location list that styles the
+// still-linked inline attachment labels in the compose buffer.
+const inlineAttachmentLocationID = "rune-agent-inline-attachment"
 
 func mustParseURI(s string) workspaceapi.URI {
 	uri, err := workspaceapi.ParseURI(s)
@@ -57,6 +63,21 @@ type Input interface {
 	Text() string
 	SetText(string)
 	Clear()
+	// ReplaceBeforeCursor replaces the n cells immediately preceding the
+	// cursor with s. When key is non-zero and s is not empty, the
+	// inserted range is linked to that attachment.
+	ReplaceBeforeCursor(n int, s string, key AttachmentKey)
+	// Links returns the still-valid inline links, ordered by position,
+	// as byte offsets into Text().
+	Links() []InlineAttachmentLink
+	// Unlink drops every inline link to key. The text stays as it is:
+	// removing an attachment does not rewrite what the user wrote.
+	Unlink(key AttachmentKey)
+	// SetDraft replaces the composed text and its inline links. Links
+	// that do not fit text are dropped.
+	SetDraft(text string, links []InlineAttachmentLink)
+	// AtWordBoundary reports whether a token may begin at the cursor.
+	AtWordBoundary() bool
 	// EnterSubmits handles an <Enter> / <Shift-Enter> key event and
 	// reports whether the dialogue should submit the composed message.
 	// A bare <Enter> always submits; <Shift-Enter> inserts a newline.
@@ -72,7 +93,73 @@ type Input interface {
 // modal handler does not reinterpret replayed key events.
 type textHandlerInput struct {
 	text.Handler
-	buf *cell.Buffer
+	buf     *cell.Buffer
+	tracker *linkTracker
+	attr    term.Attributes
+	// styled reports whether a location list is currently installed, so
+	// an input without links does not clear a list on every keystroke.
+	styled       bool
+	unsubscribed bool
+}
+
+// newTextHandlerInput subscribes to the root publisher of buf, not to
+// its usage publisher, so undo and redo reach the range tracker too.
+func newTextHandlerInput(
+	h text.Handler, buf *cell.Buffer, attr term.Attributes,
+) *textHandlerInput {
+	in := &textHandlerInput{
+		Handler: h,
+		buf:     buf,
+		attr:    attr,
+		tracker: &linkTracker{view: buf},
+	}
+	buf.Subscribe(in.tracker)
+	return in
+}
+
+// Handle refreshes the inline link styling once the edit the event may
+// have caused has returned. The tracker cannot do this itself: a
+// cell.Subscriber must not touch the editor it observes.
+func (b *textHandlerInput) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = b.Handler.Handle(ev)
+	b.refreshLinks()
+	return
+}
+
+// Close stops tracking edits. It is idempotent, as the browser handler
+// contract requires.
+func (b *textHandlerInput) Close() error {
+	if !b.unsubscribed {
+		b.buf.Unsubscribe(b.tracker)
+		b.unsubscribed = true
+	}
+	return b.Handler.Close()
+}
+
+// refreshLinks drops ranges that no longer cover their label and
+// re-installs the location list. The editor drops location lists on
+// every buffer update, so the list must be rebuilt after each edit.
+func (b *textHandlerInput) refreshLinks() {
+	b.tracker.prune(b.buf.String())
+	if len(b.tracker.links) == 0 {
+		if b.styled {
+			b.Handler.SetLocationList(
+				textapi.LocationPriorityInfo, inlineAttachmentLocationID, nil)
+			b.styled = false
+		}
+		return
+	}
+	locs := make([]textapi.Location, 0, len(b.tracker.links))
+	for _, l := range b.tracker.links {
+		locs = append(locs, textapi.Location{
+			From: textCoordinates(b.buf, l.start),
+			To:   textCoordinates(b.buf, l.end),
+			Attr: b.attr,
+		})
+	}
+	b.Handler.SetLocationList(textapi.LocationPriorityInfo,
+		inlineAttachmentLocationID, text.LocationSlice(locs))
+	b.styled = true
 }
 
 // EnterSubmits decides newline-vs-submit for the configured editor.
@@ -82,7 +169,7 @@ type textHandlerInput struct {
 func (b *textHandlerInput) EnterSubmits(ev term.Event) bool {
 	if ev.Mod&term.ModShift != 0 {
 		ev.Mod &^= term.ModShift
-		b.Handler.Handle(ev)
+		b.Handle(ev)
 		return false
 	}
 	return true
@@ -94,10 +181,60 @@ func (b *textHandlerInput) Text() string {
 
 func (b *textHandlerInput) SetText(s string) {
 	b.Handler.CellEditor().Edit(context.Background(), term.Coordinates{}, b.bufEnd(), s)
+	b.tracker.reset()
+	b.refreshLinks()
 }
 
 func (b *textHandlerInput) Clear() {
 	b.SetText("")
+}
+
+func (b *textHandlerInput) ReplaceBeforeCursor(n int, s string, key AttachmentKey) {
+	if n <= 0 && s == "" {
+		return
+	}
+	end := b.Handler.CursorAtScroll()
+	start := end
+	start.X -= n
+	if start.X < 0 {
+		start.X = 0
+	}
+	from, to, _ := b.Handler.CellEditor().Edit(context.Background(), start, end, s)
+	b.tracker.add(key, s, textOffset(b.buf, from), textOffset(b.buf, to))
+	b.refreshLinks()
+}
+
+func (b *textHandlerInput) Links() []InlineAttachmentLink {
+	b.tracker.prune(b.buf.String())
+	return b.tracker.snapshot()
+}
+
+func (b *textHandlerInput) Unlink(key AttachmentKey) {
+	b.tracker.unlink(key)
+	b.refreshLinks()
+}
+
+func (b *textHandlerInput) SetDraft(s string, links []InlineAttachmentLink) {
+	b.SetText(s)
+	for _, l := range links {
+		if l.Start < 0 || l.End > len(s) || l.Start >= l.End {
+			continue
+		}
+		b.tracker.add(l.Key, s[l.Start:l.End], l.Start, l.End)
+	}
+	b.refreshLinks()
+}
+
+func (b *textHandlerInput) AtWordBoundary() bool {
+	pos := b.Handler.CursorAtScroll()
+	if pos.X == 0 {
+		return true
+	}
+	rows := b.buf.RawCells()
+	if pos.Y < 0 || pos.Y >= len(rows) || pos.X > len(rows[pos.Y]) {
+		return false
+	}
+	return unicode.IsSpace(rows[pos.Y][pos.X-1].Ch)
 }
 
 // Resize re-clamps the editor's scroll offset to the grown viewport.

@@ -629,6 +629,48 @@ func formatReferences(
 	return sb.String()
 }
 
+// SymbolContext is semantic context resolved from one exact document position.
+type SymbolContext struct {
+	Definition    string
+	References    string
+	Documentation string
+}
+
+// SymbolContextAtPosition resolves a symbol from one exact document position.
+func SymbolContextAtPosition(
+	ctx context.Context, lsp semanticapi.LSP, fs workspaceapi.FileSystem,
+	cwd, uri workspaceapi.URI, pos semanticapi.Position,
+) (SymbolContext, error) {
+	doc := semanticapi.TextDocumentIdentifier{URI: "file://" + uri.Path()}
+	definition, err := lsp.Definition(ctx, semanticapi.DefinitionParams{
+		TextDocument: doc,
+		Position:     pos,
+	})
+	if err != nil {
+		return SymbolContext{}, fmt.Errorf("definition: %w", err)
+	}
+	references, err := lsp.References(ctx, semanticapi.ReferenceParams{
+		TextDocument: doc,
+		Position:     pos,
+		Context:      semanticapi.ReferenceContext{IncludeDeclaration: true},
+	})
+	if err != nil {
+		return SymbolContext{}, fmt.Errorf("references: %w", err)
+	}
+	hover, err := lsp.Hover(ctx, semanticapi.HoverParams{
+		TextDocument: doc,
+		Position:     pos,
+	})
+	if err != nil {
+		return SymbolContext{}, fmt.Errorf("hover: %w", err)
+	}
+	return SymbolContext{
+		Definition:    formatLocations(definition, cwd),
+		References:    formatReferences(fs, cwd, references, make(map[string][]string)),
+		Documentation: hoverContent(hover),
+	}, nil
+}
+
 // dedupPaths returns paths with duplicates removed, preserving order.
 func dedupPaths(paths []string) []string {
 	if len(paths) == 0 {

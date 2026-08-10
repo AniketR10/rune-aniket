@@ -25,15 +25,19 @@ package search
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"strconv"
 	"sync"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/junegunn/fzf/src/util"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
@@ -787,6 +791,118 @@ func (l *List) resize(width, height int) {
 type searchResultComponent struct {
 	component.LazyBytes
 	Match
+}
+
+// Draw renders one result row. component.LazyBytes maps each byte to a
+// single-width cell, which is what makes it allocation free, but it
+// mangles anything outside ASCII. Rows are only drawn when visible, so
+// the cheap ASCII scan below keeps that fast path intact and pays for
+// grapheme-aware rendering only on the rows that actually need it.
+func (s searchResultComponent) Draw(w term.Writer) {
+	if asciiRunLen(s.LazyBytes.Data) == len(s.LazyBytes.Data) {
+		s.LazyBytes.Draw(w)
+		return
+	}
+	s.drawGraphemes(w)
+}
+
+// drawGraphemes renders s.Data one grapheme cluster per cell. Clusters
+// are stepped in place rather than materialized through
+// term.StringToCells, which would allocate a cell matrix per row on
+// every frame. fzf reports match positions as rune indices, so columns
+// are tracked separately from rune offsets to stay correct across wide
+// glyphs and combining marks.
+func (s searchResultComponent) drawGraphemes(w term.Writer) {
+	var tokens []int
+	if s.LazyBytes.Tokens != nil {
+		tokens = *s.LazyBytes.Tokens
+	}
+	data := s.LazyBytes.Data
+	str := bytesToString(data)
+	col, runeIdx, i := 0, 0, 0
+	for i < len(data) {
+		// Every combining mark is non-ASCII, so an ASCII byte followed
+		// by another ASCII byte always stands alone and can be blitted
+		// without consulting the grapheme state machine. Only the byte
+		// abutting the next non-ASCII sequence may be a cluster base.
+		end := i + asciiRunLen(data[i:])
+		if end < len(data) {
+			end--
+		}
+		for ; i < end; i++ {
+			w.SetCell(term.Coordinates{X: col},
+				term.NewCell(rune(data[i]), 1, s.Attributes))
+			if containsTokenInRange(tokens, runeIdx, runeIdx+1) {
+				w.UnionAttributes(term.Coordinates{X: col}, s.TokenAttributes)
+			}
+			col++
+			runeIdx++
+		}
+		if i == len(data) {
+			return
+		}
+		var cluster string
+		var width uint8
+		cluster, _, width, _ = graphemecluster.StepString(str[i:], -1)
+		r, size := utf8.DecodeRuneInString(cluster)
+		cell := term.NewCell(r, width, s.Attributes)
+		next := runeIdx + 1
+		if size < len(cluster) {
+			combining := []rune(cluster[size:])
+			cell.SetCombining(combining)
+			next += len(combining)
+		}
+		w.SetCell(term.Coordinates{X: col}, cell)
+		if containsTokenInRange(tokens, runeIdx, next) {
+			w.UnionAttributes(term.Coordinates{X: col}, s.TokenAttributes)
+		}
+		i += len(cluster)
+		runeIdx = next
+		col += int(width)
+	}
+}
+
+// bytesToString aliases data as a string. The match data pushed into a
+// List is owned by the list and never mutated after it is stored, so
+// the alias cannot observe a change, and avoiding the copy keeps
+// redraws of non-ASCII rows allocation free.
+func bytesToString(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(data), len(data))
+}
+
+// asciiRunLen returns the length of data's leading ASCII bytes. It
+// mirrors the scan in term/vte: the mask is identical in every byte
+// position, so byte order is irrelevant and a native read avoids a
+// bswap on big-endian.
+func asciiRunLen(data []byte) int {
+	const highBits = 0x8080808080808080
+	i := 0
+	for ; i+8 <= len(data); i += 8 {
+		if binary.NativeEndian.Uint64(data[i:])&highBits != 0 {
+			break
+		}
+	}
+	for ; i < len(data); i++ {
+		if data[i] >= utf8.RuneSelf {
+			break
+		}
+	}
+	return i
+}
+
+// containsTokenInRange reports whether any token falls in [lo, hi).
+// tokens is bounded by the query length, so a linear scan beats
+// building an index.
+func containsTokenInRange(tokens []int, lo, hi int) bool {
+	for _, t := range tokens {
+		if t >= lo && t < hi {
+			return true
+		}
+	}
+	return false
 }
 
 type matchCounter struct {

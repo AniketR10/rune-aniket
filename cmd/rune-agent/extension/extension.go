@@ -126,11 +126,18 @@ var (
 				"Run from an open agent chat tab.",
 			Synopsis: "",
 		},
+		{
+			Name: commandAddSymbol,
+			Summary: "Attach a named symbol, or the symbol under the cursor, " +
+				"with its definition, references and documentation to the last " +
+				"focused agent chat.",
+			Synopsis: "[symbol]",
+		},
 	}
 	events = []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeFocus,
 		textapi.EventTypeUnfocus, textapi.EventTypeFlush,
-		textapi.EventTypeClose,
+		textapi.EventTypeClose, textapi.EventTypeCursor,
 	}
 	permissions = []extensionapi.Permission{
 		extensionapi.PermissionBrowserWindowManager,

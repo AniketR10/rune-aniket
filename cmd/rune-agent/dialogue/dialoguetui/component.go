@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -43,6 +44,9 @@ import (
 	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/component/shader/glslshader"
+	"unstable.build/go-tui/component/shader/timeshader"
 	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/text/standard"
@@ -54,12 +58,109 @@ type reasoningEntry struct {
 	comp component.Responsive // the real reasoning component (for restore)
 }
 
+// completionList is the '#' context completion overlay drawn between the
+// messages region and the attachment strip.
+type completionList interface {
+	tui.Component
+	// InputHeight reports the rows taken by the list's own search bar,
+	// which is clipped away so the compose box shows the query instead.
+	InputHeight() int
+}
+
+// completionMaxRows caps the completion band so it cannot swallow the
+// whole messages region.
+const completionMaxRows = 10
+
+const (
+	completionRadarFPS      = 30
+	completionRadarDuration = 24 * time.Hour
+	completionRadarLoop     = 1200 * time.Millisecond
+	// Wider than the radar default. The wedge fades to nothing at both
+	// edges, so with a sweep this neutral a narrow one barely registers;
+	// a broad wedge keeps enough of the frame lit to read as motion.
+	completionRadarAngularWidth = 0.7
+)
+
+type loadingFrame struct {
+	mu            sync.Mutex
+	root          tui.Component
+	shader        *shader.Component
+	width, height int
+}
+
+func (f *loadingFrame) Draw(w term.Writer) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.shader != nil {
+		f.shader.Draw(w)
+		return
+	}
+	f.root.Draw(w)
+}
+
+func (f *loadingFrame) Resize(width, height int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.width, f.height = width, height
+	if f.shader != nil {
+		f.shader.Resize(width, height)
+		return
+	}
+	f.root.Resize(width, height)
+}
+
+func (f *loadingFrame) setLoading(
+	loading bool, frame *handler.Frame, radarColor term.Color,
+	interrupter term.Interrupter,
+) {
+	f.mu.Lock()
+	if loading == (f.shader != nil) {
+		f.mu.Unlock()
+		return
+	}
+	var closing *shader.Component
+	if loading {
+		params := completionRadarParams(frame.FrameCharSet, radarColor)
+		frameAttr := frame.Attributes
+		if frameAttr.Fg == term.ColorDefault {
+			frameAttr.Fg = term.ColorWhite
+		}
+		inner := glslshader.RadarFrame(params, frameAttr)
+		cycles := int(completionRadarDuration / completionRadarLoop)
+		f.shader = shader.New(f.root, timeshader.Loop(inner, cycles),
+			interrupter, completionRadarFPS, completionRadarDuration)
+		f.shader.Resize(f.width, f.height)
+	} else {
+		closing = f.shader
+		f.shader = nil
+	}
+	f.mu.Unlock()
+	if closing != nil {
+		_ = closing.Close()
+	}
+}
+
+// completionRadarParams builds the radar-frame parameters for the compose
+// box shader, overriding the built-in sweep color only when a color is
+// configured.
+func completionRadarParams(
+	charSet component.FrameCharSet, radarColor term.Color,
+) glslshader.RadarFrameParams {
+	params := glslshader.DefaultRadarFrameParams(charSet)
+	params.AngularWidth = completionRadarAngularWidth
+	if radarColor != term.ColorDefault {
+		params.Color = radarColor
+	}
+	return params
+}
+
 // Component implements a dialogue tui.Component.
 type Component struct {
 	cfg          ComponentConfig
 	messages     component.ResponsiveList
 	spanMessages component.Span
 	box          *handler.Frame
+	loadingBox   loadingFrame
 	input        Input
 	height       int
 	width        int
@@ -74,6 +175,16 @@ type Component struct {
 	attachArea  component.Virtual[tui.Component]
 	attachTabs  tcomponent.Tabs
 	attachments []Attachment
+	// nextKey allocates draft-local attachment keys. It only ever
+	// advances, so removing a chip never hands its key to a later
+	// attachment and re-targets a stale inline link.
+	nextKey AttachmentKey
+	// completion is the '#' completion overlay, nil when closed. It is
+	// drawn directly rather than through a Virtual so its own search bar
+	// can be clipped out of the band.
+	completion     completionList
+	completionRows int
+	completionPos  term.Coordinates
 	// layoutBoxH and layoutMsgH are the compose box height and the total
 	// messages content height observed at the last relayout. A change in
 	// either means the regions must be resized again; this makes the layout
@@ -131,6 +242,11 @@ type Component struct {
 	// queued follow-up messages (displayed while agent is busy)
 	queuedNodes []*component.ListNode
 
+	// sentAttachments tracks the attachment chip grids rendered above
+	// sent messages, paired with their list node so a mouse position can
+	// be resolved back to a chip.
+	sentAttachments []sentAttachmentGrid
+
 	interrupter term.Interrupter
 	mu          sync.Locker // set by Handler; used by AddCommand for async locking
 }
@@ -179,7 +295,8 @@ func (c *Component) Init(cfg ComponentConfig) {
 	if cfg.InputBox.FrameCharSet != (component.FrameCharSet{}) {
 		c.box.FrameCharSet = cfg.InputBox.FrameCharSet
 	}
-	c.boxArea.C = c.box
+	c.loadingBox.root = c.box
+	c.boxArea.C = &c.loadingBox
 
 	c.attachTabs.Init()
 	c.attachTabs.SetBorder(false)
@@ -212,7 +329,7 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 	if modal && cfg.ModalStartInsert {
 		h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
 	}
-	return &textHandlerInput{Handler: h, buf: buf}
+	return newTextHandlerInput(h, buf, cfg.InlineAttachmentAttr)
 }
 
 // Draw satisfies tui.Component.
@@ -233,10 +350,42 @@ func (c *Component) Draw(w term.Writer) {
 	}
 	vw := component.VirtualWriter{Writer: w, Height: c.height, Width: c.width}
 	c.msgArea.Draw(&vw)
+	if c.completion != nil && c.completionRows > 0 {
+		cw := component.VirtualWriter{
+			Writer: &vw,
+			Offset: c.completionPos,
+			Width:  c.boxWidth(c.width),
+			Height: c.completionRows,
+		}
+		c.completion.Draw(&cw)
+	}
 	if len(c.attachments) > 0 {
 		c.attachArea.Draw(&vw)
 	}
 	c.boxArea.Draw(&vw)
+}
+
+// SetCompletion installs the '#' completion overlay above the compose box.
+func (c *Component) SetCompletion(l completionList) {
+	c.completion = l
+	c.relayout()
+}
+
+// ClearCompletion removes the '#' completion overlay.
+func (c *Component) ClearCompletion() {
+	c.completion = nil
+	c.completionRows = 0
+	c.relayout()
+}
+
+// CompletionOpen reports whether the '#' completion band is showing.
+func (c *Component) CompletionOpen() bool {
+	return c.completion != nil
+}
+
+func (c *Component) setCompletionLoading(loading bool) {
+	c.loadingBox.setLoading(loading, c.box, c.cfg.CompletionRadarColor, c.interrupter)
+	_ = c.interrupter.Interrupt(context.Background())
 }
 
 // Resize satisfies tui.Component.
@@ -272,13 +421,22 @@ func (c *Component) relayout() {
 	if len(c.attachments) > 0 && height-boxH > 0 {
 		attachH = 1
 	}
-	msgH := height - boxH - attachH
+	compH := 0
+	if c.completion != nil {
+		compH = max(0, min(completionMaxRows, height-boxH-attachH-1))
+	}
+	c.completionRows = compH
+	msgH := height - boxH - attachH - compH
 
 	c.msgArea.Move(term.Coordinates{})
 	c.msgArea.Resize(width, msgH)
-	c.attachArea.Move(term.Coordinates{X: boxX, Y: msgH})
+	c.completionPos = term.Coordinates{X: boxX, Y: msgH}
+	if c.completion != nil {
+		c.completion.Resize(boxW, compH+c.completion.InputHeight())
+	}
+	c.attachArea.Move(term.Coordinates{X: boxX, Y: msgH + compH})
 	c.attachArea.Resize(boxW, attachH)
-	c.boxArea.Move(term.Coordinates{X: boxX, Y: msgH + attachH})
+	c.boxArea.Move(term.Coordinates{X: boxX, Y: msgH + compH + attachH})
 	c.boxArea.Resize(boxW, boxH)
 	c.layoutMsgH = c.messagesContentHeight()
 }
@@ -324,15 +482,25 @@ func (c *Component) MessagesPosition() term.Coordinates {
 }
 
 // AddAttachment appends a pending attachment to the strip above the
-// compose input.
-func (c *Component) AddAttachment(a Attachment) {
+// compose input. It returns the attachment with its draft key, which
+// callers need to link it to a range of the compose text.
+func (c *Component) AddAttachment(a Attachment) Attachment {
+	if a.Key == 0 {
+		c.nextKey++
+		a.Key = c.nextKey
+	} else if a.Key > c.nextKey {
+		c.nextKey = a.Key
+	}
 	c.attachments = append(c.attachments, a)
-	c.attachTabs.Add(a.Icon, a.Name)
+	idx := c.attachTabs.Add(a.Icon, a.Name)
+	c.attachTabs.SetTabAction(idx, removeAttachmentIcon,
+		term.Attributes{Fg: term.ColorRed})
 	// The strip is a passive list: nothing in it is selected, so no tab
 	// should render with the focused attributes Tabs.Add assigns to the
 	// first entry.
 	c.attachTabs.ResetFocus()
 	c.relayout()
+	return a
 }
 
 // Attachments returns the pending attachments, oldest first.
@@ -348,6 +516,9 @@ func (c *Component) UpsertAttachment(a Attachment) {
 			if existing.ID != a.ID {
 				continue
 			}
+			// Preserve the existing key so inline links to the
+			// attachment survive the refresh.
+			a.Key = existing.Key
 			c.attachments[i] = a
 			c.attachTabs.SetTabIcon(i, a.Icon)
 			c.attachTabs.SetTabName(i, a.Name)
@@ -359,26 +530,55 @@ func (c *Component) UpsertAttachment(a Attachment) {
 	c.AddAttachment(a)
 }
 
-// TakeAttachments returns the pending attachments and clears the strip.
-func (c *Component) TakeAttachments() []Attachment {
-	if len(c.attachments) == 0 {
-		return nil
+// Draft returns a snapshot of the composed message: its text, the
+// pending attachments and the ranges of the text still linked to them.
+func (c *Component) Draft() Draft {
+	return Draft{
+		Text:        c.input.Text(),
+		Attachments: slices.Clone(c.attachments),
+		Links:       c.input.Links(),
 	}
-	ret := c.attachments
-	c.attachments = nil
-	c.attachTabs.RemoveAll()
-	c.relayout()
-	return ret
 }
 
-// RemoveAttachment drops the attachment at idx.
+// TakeDraft returns the composed draft and clears the compose input and
+// the attachment strip together, so text, chips and links can never be
+// submitted out of sync.
+func (c *Component) TakeDraft() Draft {
+	d := Draft{
+		Text:        c.input.Text(),
+		Attachments: c.attachments,
+		Links:       c.input.Links(),
+	}
+	c.attachments = nil
+	c.attachTabs.RemoveAll()
+	c.input.Clear()
+	c.relayout()
+	return d
+}
+
+// RestoreDraft replaces the compose state with d, preserving the
+// attachment keys its links refer to.
+func (c *Component) RestoreDraft(d Draft) {
+	c.attachments = nil
+	c.attachTabs.RemoveAll()
+	for _, a := range d.Attachments {
+		c.AddAttachment(a)
+	}
+	c.input.SetDraft(d.Text, d.Links)
+	c.relayout()
+}
+
+// RemoveAttachment drops the attachment at idx. Its inline labels stay
+// in the compose text as ordinary words; only the links are dropped.
 func (c *Component) RemoveAttachment(idx int) {
 	if idx < 0 || idx >= len(c.attachments) {
 		return
 	}
+	key := c.attachments[idx].Key
 	c.attachments = append(c.attachments[:idx], c.attachments[idx+1:]...)
 	c.attachTabs.Remove(idx)
 	c.attachTabs.ResetFocus()
+	c.input.Unlink(key)
 	c.relayout()
 }
 
@@ -405,6 +605,45 @@ func (c *Component) AttachmentAt(pos term.Coordinates) (int, bool) {
 	return idx, true
 }
 
+// AttachmentRemoveAt returns the index of the attachment whose remove
+// affordance is rendered at pos, which is relative to the strip.
+func (c *Component) AttachmentRemoveAt(pos term.Coordinates) (int, bool) {
+	if len(c.attachments) == 0 {
+		return -1, false
+	}
+	idx, ok := c.attachTabs.TabActionAt(pos)
+	if !ok || idx < 0 || idx >= len(c.attachments) {
+		return -1, false
+	}
+	return idx, true
+}
+
+// SentAttachmentAt returns the attachment whose chip in a sent message's
+// grid covers pos, which is relative to the messages content origin.
+func (c *Component) SentAttachmentAt(pos term.Coordinates) (Attachment, bool) {
+	for _, e := range c.sentAttachments {
+		if idx, ok := e.grid.chipAt(term.CoordinatesDiff(pos, e.origin())); ok {
+			return e.grid.attachments[idx], true
+		}
+	}
+	return Attachment{}, false
+}
+
+// HoverSentAttachment highlights the sent-message chip at pos, clearing
+// any other highlight, and reports whether the rendering changed.
+func (c *Component) HoverSentAttachment(pos term.Coordinates) (changed bool) {
+	for _, e := range c.sentAttachments {
+		idx, ok := e.grid.chipAt(term.CoordinatesDiff(pos, e.origin()))
+		if !ok {
+			idx = -1
+		}
+		if e.grid.setHovered(idx) {
+			changed = true
+		}
+	}
+	return
+}
+
 // InputSubmit submits the contents of the input buffer as a send message,
 // and returns it for delivery or returns false if there's no text
 // in the input buffer. There is no need to call AddSendMessage
@@ -422,9 +661,22 @@ func (c *Component) InputSubmit() (string, bool) {
 
 // AddSendMessage adds the following msg as a sent message.
 func (c *Component) AddSendMessage(msg string) {
+	c.AddSendMessageAttachments(msg, nil)
+}
+
+// AddSendMessageAttachments adds msg as a sent message, preceded by a
+// grid of chips for the attachments that were sent with it.
+func (c *Component) AddSendMessageAttachments(msg string, atts []Attachment) {
 	maxOff, scrolled := c.scrollState()
 	defer c.restoreScroll(maxOff, scrolled)
 	c.clearProgress()
+	if len(atts) > 0 {
+		grid := newAttachmentGrid(atts, c.cfg.SendMessageStringConfig.Attributes)
+		span := component.NewSpan(grid, c.cfg.SendMessageSpanConfig)
+		node := c.messages.PushBack(span)
+		c.sentAttachments = append(c.sentAttachments,
+			sentAttachmentGrid{node: node, span: span, grid: grid})
+	}
 	var strComp component.Responsive
 	strComp = component.NewResponsiveString(msg,
 		component.StringResponsiveConfig{
@@ -1245,6 +1497,7 @@ func (c *Component) resetContent() {
 		c.progressNode = nil
 	}
 	c.queuedNodes = nil
+	c.sentAttachments = nil
 	c.msg.Reset()
 	c.tail = nil
 	c.tailMd = nil

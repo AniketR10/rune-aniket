@@ -209,6 +209,24 @@ type ComponentConfig struct {
 	// and the surrounding Frame. ColorDefault leaves both at the
 	// terminal default.
 	InputBackgroundColor term.Color
+
+	// CompletionMatchedTextAttr styles the fuzzy-matched substring within
+	// each '#' completion candidate. Mirrors the command overlay default.
+	CompletionMatchedTextAttr term.Attributes
+	// CompletionFocusElementAttr styles the currently selected candidate
+	// row in the '#' completion list. Mirrors the command overlay default.
+	CompletionFocusElementAttr term.Attributes
+	// CompletionElementAttr styles non-selected candidate rows in the '#'
+	// completion list.
+	CompletionElementAttr term.Attributes
+	// CompletionRadarColor is the sweep color of the radar-frame shader
+	// drawn over the compose box while '#' candidates stream in. A
+	// ColorDefault value uses the radar frame's built-in default.
+	CompletionRadarColor term.Color
+	// InlineAttachmentAttr styles the inline label left in the compose
+	// text by an accepted '#' completion, for as long as that label is
+	// still linked to a pending attachment.
+	InlineAttachmentAttr term.Attributes
 }
 
 // InputBoxConfig holds styling configuration for the compose input

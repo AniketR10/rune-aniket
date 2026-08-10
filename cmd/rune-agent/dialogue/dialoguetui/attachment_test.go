@@ -183,6 +183,32 @@ func TestHandlerClickRemovesAttachment(t *testing.T) {
 
 	pos, ok := comp.AttachmentsPosition()
 	require.True(t, ok)
+	x, ok := removeIconColumn(w.String(), pos.Y)
+	require.True(t, ok, "remove affordance should be drawn")
+	_, handled := h.Handle(term.Event{
+		Type:   term.EventMouse,
+		Key:    term.MouseLeft,
+		MouseX: x,
+		MouseY: pos.Y,
+	})
+	assert.True(t, handled)
+	assert.Empty(t, comp.Attachments())
+	_, ok = comp.AttachmentsPosition()
+	assert.False(t, ok)
+}
+
+// TestHandlerClickOnAttachmentNameKeepsIt pins that only the remove
+// affordance drops an attachment, so clicking the label is safe.
+func TestHandlerClickOnAttachmentNameKeepsIt(t *testing.T) {
+	h, comp, _ := newAttachmentHandler(t)
+	paste(t, h, writeTempFile(t, "shot.png"))
+
+	w := term.NewStringWriter(40, 12)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+
+	pos, ok := comp.AttachmentsPosition()
+	require.True(t, ok)
 	_, handled := h.Handle(term.Event{
 		Type:   term.EventMouse,
 		Key:    term.MouseLeft,
@@ -190,9 +216,22 @@ func TestHandlerClickRemovesAttachment(t *testing.T) {
 		MouseY: pos.Y,
 	})
 	assert.True(t, handled)
-	assert.Empty(t, comp.Attachments())
-	_, ok = comp.AttachmentsPosition()
-	assert.False(t, ok)
+	assert.Len(t, comp.Attachments(), 1)
+}
+
+// removeIconColumn locates the remove affordance on the given row of a
+// flushed StringWriter, where one cell renders as exactly one rune.
+func removeIconColumn(out string, row int) (int, bool) {
+	lines := strings.Split(out, "\n")
+	if row < 0 || row >= len(lines) {
+		return 0, false
+	}
+	for x, r := range []rune(lines[row]) {
+		if r == removeAttachmentIcon {
+			return x, true
+		}
+	}
+	return 0, false
 }
 
 func TestHandlerSubmitCarriesAttachments(t *testing.T) {
@@ -305,10 +344,12 @@ func TestClickRemovesVirtualAttachment(t *testing.T) {
 
 	pos, ok := comp.AttachmentsPosition()
 	require.True(t, ok)
+	x, ok := removeIconColumn(w.String(), pos.Y)
+	require.True(t, ok, "remove affordance should be drawn")
 	_, handled := h.Handle(term.Event{
 		Type:   term.EventMouse,
 		Key:    term.MouseLeft,
-		MouseX: pos.X + 3,
+		MouseX: x,
 		MouseY: pos.Y,
 	})
 	assert.True(t, handled)

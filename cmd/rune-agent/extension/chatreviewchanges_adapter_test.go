@@ -414,12 +414,13 @@ func TestCommandAdapterReviewChangesFloatingFailureClosesEditor(t *testing.T) {
 func TestAttachmentPartsInlineVirtualAttachment(t *testing.T) {
 	h := &aiEditorHandler{}
 
-	parts := h.attachmentParts([]dialoguetui.Attachment{{
+	finalized := []finalizedAttachment{{id: "attachment-1", Attachment: dialoguetui.Attachment{
 		ID:      chatReviewAttachmentID,
 		Name:    chatReviewAttachmentName,
 		Icon:    chatReviewAttachmentIcon,
 		Content: wantConversationDiff + "why this rename?\n",
-	}})
+	}}}
+	parts := h.attachmentContentParts(context.Background(), finalized)
 
 	require.Len(t, parts, 1)
 	assert.Equal(t, llmapi.ContentPartTypeText, parts[0].Type)

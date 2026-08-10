@@ -1109,6 +1109,57 @@ func TestApplyTextEdits(t *testing.T) {
 	})
 }
 
+func TestSymbolContextAtPositionUsesExactCursor(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "scope.go")
+	require.NoError(t, os.WriteFile(source, []byte(strings.Join([]string{
+		"package scope",
+		"func f() {",
+		"\tvalue := 1",
+		"\t_ = value",
+		"}",
+	}, "\n")), 0o600))
+	uri := "file://" + source
+	pos := semanticapi.Position{Line: 3, Character: 5}
+	assertParams := func(doc semanticapi.TextDocumentIdentifier, got semanticapi.Position) {
+		assert.Equal(t, uri, doc.URI)
+		assert.Equal(t, pos, got)
+	}
+	lsp := &stubLSP{
+		workspaceSymbolFn: func(semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+			t.Fatal("cursor resolution must not call WorkspaceSymbol")
+			return nil, nil
+		},
+		definitionFn: func(p semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+			assertParams(p.TextDocument, p.Position)
+			definition := loc(uri, 2, 1)
+			return semanticapi.LocationResult{Location: &definition}, nil
+		},
+		referencesFn: func(p semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+			assertParams(p.TextDocument, p.Position)
+			assert.True(t, p.Context.IncludeDeclaration)
+			return []semanticapi.Location{loc(uri, 2, 1), loc(uri, 3, 5)}, nil
+		},
+		hoverFn: func(p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+			assertParams(p.TextDocument, p.Position)
+			return &semanticapi.Hover{
+				Contents: semanticapi.MarkupContent{Value: "```go\nvar value int\n```"},
+			}, nil
+		},
+	}
+
+	got, err := SymbolContextAtPosition(
+		context.Background(), lsp, localFS{root: root}, dirURI(root),
+		dirURI(source), pos,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, SymbolContext{
+		Definition:    "scope.go:3",
+		References:    "scope.go:3:\tvalue := 1\nscope.go:4:\t_ = value",
+		Documentation: "```go\nvar value int\n```",
+	}, got)
+}
+
 func TestFormatLocations(t *testing.T) {
 	root := "/workspace"
 

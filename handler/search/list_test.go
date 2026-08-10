@@ -572,6 +572,50 @@ func TestListDrawBottomSearchBar(t *testing.T) {
 	testListDrawBottomSearchBar(t, newSimpleList)
 }
 
+// TestListDrawWideRunes pins that rows holding multi-byte or wide
+// glyphs render as text rather than as one cell per UTF-8 byte.
+func TestListDrawWideRunes(t *testing.T) {
+	l, _ := newSimpleList(ListConfig{})
+	defer l.Close()
+	l.Resize(20, 4)
+	w := term.NewStringWriter(20, 4)
+
+	l.PushSync([]byte("café.go"))
+	l.PushSync([]byte("\U000F0295 charlie"))
+
+	require.NoError(t, w.Clear(term.Attributes{}))
+	l.Draw(w)
+	require.NoError(t, w.Flush())
+
+	out := w.String()
+	assert.Contains(t, out, "café.go")
+	assert.Contains(t, out, "\U000F0295 charlie")
+}
+
+// TestListDrawCombiningMarks pins that the ASCII fast path inside
+// grapheme rendering never splits a base character from a following
+// combining mark into two cells.
+func TestListDrawCombiningMarks(t *testing.T) {
+	const width = 20
+	l, _ := newSimpleList(ListConfig{})
+	defer l.Close()
+	l.Resize(width, 3)
+	w := term.NewStringWriter(width, 3)
+
+	l.PushSync([]byte("cafe\u0301.go"))
+
+	require.NoError(t, w.Clear(term.Attributes{}))
+	l.Draw(w)
+
+	// StringWriter.Flush renders Cell.Ch only, so the combining mark has
+	// to be read off the cell itself. Row 0 is the match counter.
+	cells := w.Cells()
+	base := cells[width+3]
+	assert.Equal(t, 'e', base.Ch)
+	assert.Equal(t, []rune{'\u0301'}, base.CombiningRunes())
+	assert.Equal(t, '.', cells[width+4].Ch)
+}
+
 func testListDrawBottomSearchBar(t *testing.T, constructor listConstructor) {
 	l, buf := constructor(ListConfig{BottomSearchBar: true})
 	l.Resize(8, 4)
@@ -1024,3 +1068,41 @@ func benchmarkScroll(b *testing.B, n int) {
 
 func BenchmarkScroll1000(b *testing.B)    { benchmarkScroll(b, 1000) }
 func BenchmarkScroll1000000(b *testing.B) { benchmarkScroll(b, 1000000) }
+
+// benchmarkDrawRows measures a single redraw of a full viewport of
+// result rows, with no scrolling or searching in the timed loop. Row
+// rendering is where the ASCII fast path lives, so this is the
+// benchmark that resolves changes to it; benchmarkScroll spends most of
+// its samples in the writer and the scheduler and drowns them out.
+func benchmarkDrawRows(b *testing.B, row string) {
+	const rows = 200
+	l := NewList(ListConfig{})
+	l.Resize(300, rows)
+	l.cancelSearch = func() {}
+
+	ch := l.Push(context.Background())
+	for range rows {
+		ch <- []byte(row)
+	}
+	close(ch)
+	l.Wait()
+
+	w := term.NoopWriter{}
+	l.Draw(w)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		l.Draw(w)
+	}
+}
+
+func BenchmarkDrawRowsASCII(b *testing.B) {
+	benchmarkDrawRows(b,
+		"2022-06-17 15:45:25.003\tDEBUG\t[-]\textension_fuzzy_file\tmsg: address")
+}
+
+func BenchmarkDrawRowsWide(b *testing.B) {
+	benchmarkDrawRows(b,
+		"2022-06-17 15:45:25.003\tDEBUG\t[—]\textension_fuzzy_filé\tmsg: address")
+}

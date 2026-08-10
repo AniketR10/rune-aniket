@@ -33,6 +33,27 @@ import (
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
+func TestCompleteChatAddSymbolUsesReferencedSymbols(t *testing.T) {
+	h := &aiEditorHandler{parser: &symbolsParser{
+		symbols: []string{"pkg.A", "pkg.B", "pkg.A"},
+	}}
+
+	it, err := h.Complete(t.Context(), commandAddSymbol, []string{"pkg"})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, it.Close()) }()
+
+	var got []string
+	for {
+		symbol, ok := it.Next(t.Context())
+		if !ok {
+			break
+		}
+		got = append(got, symbol)
+	}
+	require.NoError(t, it.Err())
+	assert.Equal(t, []string{"pkg.A", "pkg.B"}, got)
+}
+
 // TestOpenChatTabUsesDialogueIDAsLabel verifies that the visible tab name is
 // the dialogue's petname ID (e.g. "rolling-fox") and not the internal
 // "rune-agent://<model>/<id>" URI.
@@ -876,7 +897,7 @@ func TestPlanSkillSpawnInheritsQualifiedModel(t *testing.T) {
 	tx := make(chan dialoguetui.MessageEvent, 64)
 	rx := make(chan completionRequest, 1)
 	childEvents := make(chan agent.ChildEvent, 64)
-	rx <- completionRequest{msg: "plan it", skillName: "plan", ctx: ctx}
+	rx <- completionRequest{displayText: "plan it", modelText: "plan it", skillName: "plan", ctx: ctx}
 
 	done := make(chan struct{})
 	go func() {

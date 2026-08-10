@@ -315,7 +315,7 @@ func newPromptHandler(t *testing.T, opts promptHandlerOpts) tui.Handler {
 	// the Ctrl-C notify path.
 	owner := &aiEditorHandler{n: stubNotifications{}}
 	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
-	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx, "e2e-fixture")
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -327,7 +327,7 @@ func newPromptHandler(t *testing.T, opts promptHandlerOpts) tui.Handler {
 				if !ok {
 					return
 				}
-				it := ag.Run(req.ctx, "test-dialogue", req.msg)
+				it := ag.Run(req.ctx, "test-dialogue", req.modelText)
 				for {
 					if _, more := it.Next(req.ctx); !more {
 						break
@@ -491,7 +491,7 @@ func agentE2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string, ls
 
 	owner := &aiEditorHandler{n: stubNotifications{}}
 	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
-	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx, "e2e-fixture")
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -503,7 +503,7 @@ func agentE2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string, ls
 				if !ok {
 					return
 				}
-				it := ag.Run(req.ctx, "test-dialogue", req.msg)
+				it := ag.Run(req.ctx, "test-dialogue", req.modelText)
 				for {
 					if _, more := it.Next(req.ctx); !more {
 						break
@@ -583,7 +583,7 @@ func stopReasonE2EHandler(t *testing.T, svc *llmtest.Service) tui.Handler {
 
 	owner := &aiEditorHandler{n: stubNotifications{}}
 	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
-	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx, "e2e-fixture")
 
 	childEvents := make(chan agent.ChildEvent)
 	go debug.CapturePanicReport(func() {
@@ -688,7 +688,7 @@ func subAgentSpawnE2EHandler(
 
 	owner := &aiEditorHandler{n: stubNotifications{}}
 	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
-	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx, "e2e-fixture")
 
 	go debug.CapturePanicReport(func() {
 		createAgentCompletions(ctx, cancel, tx, msgRx, ag, spawner,
@@ -745,7 +745,7 @@ func maxTokensE2EHandler(t *testing.T, model llmapi.ModelEntry) (tui.Handler, *a
 
 	owner := &aiEditorHandler{n: stubNotifications{}}
 	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
-	wrapped, _ := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	wrapped, _ := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx, "e2e-fixture")
 
 	t.Cleanup(cancel)
 

@@ -1,0 +1,197 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package extension
+
+import (
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	runeStarPath  = "../../rune/rune.star"
+	agentYAMLPath = "../config.yaml"
+)
+
+var (
+	starAttrRe = regexp.MustCompile(
+		`"(\w+)":\s*attr\(([^)]*)\)`)
+	starFieldRe = regexp.MustCompile(
+		`(\w+)\s*=\s*(?:"([^"]*)"|\[([^\]]*)\])`)
+)
+
+// parseStarAttrs extracts the attr(...) literals declared in the given
+// slice of rune.star source.
+func parseStarAttrs(t *testing.T, src string) map[string]term.Attributes {
+	t.Helper()
+	out := make(map[string]term.Attributes)
+	for _, m := range starAttrRe.FindAllStringSubmatch(src, -1) {
+		var attr term.Attributes
+		for _, f := range starFieldRe.FindAllStringSubmatch(m[2], -1) {
+			switch f[1] {
+			case "fg":
+				attr.Fg = starColor(f[2])
+			case "bg":
+				attr.Bg = starColor(f[2])
+			case "flags":
+				for flag := range strings.SplitSeq(f[3], ",") {
+					attr.Attrs |= starFlag(t, strings.Trim(
+						strings.TrimSpace(flag), `"`))
+				}
+			}
+		}
+		out[m[1]] = attr
+	}
+	return out
+}
+
+func starColor(name string) term.Color {
+	if name == "default" || name == "" {
+		return term.ColorDefault
+	}
+	return term.GetColor(name)
+}
+
+func starFlag(t *testing.T, name string) term.AttrMask {
+	t.Helper()
+	switch name {
+	case "":
+		return 0
+	case "bold":
+		return term.AttrBold
+	case "dim":
+		return term.AttrDim
+	case "italic":
+		return term.AttrItalic
+	case "underline":
+		return term.AttrUnderline
+	case "reverse":
+		return term.AttrReverse
+	}
+	t.Fatalf("unhandled rune.star attr flag %q; extend starFlag", name)
+	return 0
+}
+
+// section returns the rune.star source between the start anchor and the
+// following end anchor, failing when either anchor moves.
+func section(t *testing.T, src, start, end string) string {
+	t.Helper()
+	i := strings.Index(src, start)
+	require.GreaterOrEqual(t, i, 0,
+		"anchor %q missing from rune.star; update this test", start)
+	rest := src[i+len(start):]
+	j := strings.Index(rest, end)
+	require.GreaterOrEqual(t, j, 0,
+		"anchor %q missing from rune.star; update this test", end)
+	return rest[:j]
+}
+
+// promptTheme is the command prompt styling declared in rune.star. The
+// radar sweep is intentionally not part of it: the completion overlay
+// uses a neutral color instead of the command prompt's hue.
+type promptTheme struct {
+	matched, focus, element term.Attributes
+}
+
+func loadPromptTheme(t *testing.T) promptTheme {
+	t.Helper()
+	raw, err := os.ReadFile(runeStarPath)
+	require.NoError(t, err)
+	src := string(raw)
+
+	attrs := parseStarAttrs(t,
+		section(t, src, "# Prompt colors.", `"separator_charset"`))
+	for _, k := range []string{"matched_text_attr", "focus_element_attr", "element_attr"} {
+		require.Contains(t, attrs, k, "rune.star command prompt is missing %q", k)
+	}
+
+	return promptTheme{
+		matched: attrs["matched_text_attr"],
+		focus:   attrs["focus_element_attr"],
+		element: attrs["element_attr"],
+	}
+}
+
+// TestCompletionThemeDefaultsMatchCommandPrompt pins the '#' completion
+// overlay defaults to the command prompt styling shipped in rune.star. The
+// Go library fallbacks differ from the shipped config, so deriving the
+// defaults from them silently desynchronizes the two overlays.
+func TestCompletionThemeDefaultsMatchCommandPrompt(t *testing.T) {
+	want := loadPromptTheme(t)
+
+	assert.Equal(t, want.matched, defaultComponentCfg.CompletionMatchedTextAttr)
+	assert.Equal(t, want.focus, defaultComponentCfg.CompletionFocusElementAttr)
+	assert.Equal(t, want.element, defaultComponentCfg.CompletionElementAttr)
+}
+
+// TestShippedAgentConfigMatchesCommandPrompt covers the bundled
+// config.yaml, which the packaging step copies next to the binary. Because
+// it sets the completion keys explicitly it overrides defaultComponentCfg
+// at runtime, so it has to track rune.star independently.
+func TestShippedAgentConfigMatchesCommandPrompt(t *testing.T) {
+	want := loadPromptTheme(t)
+
+	raw, err := os.ReadFile(agentYAMLPath)
+	require.NoError(t, err)
+	var doc struct {
+		Extensions struct {
+			RuneAgent struct {
+				Config map[string]any `yaml:"config"`
+			} `yaml:"rune-agent"`
+		} `yaml:"extensions"`
+	}
+	require.NoError(t, yaml.Unmarshal(raw, &doc))
+	pconfig := config.MapConfig(doc.Extensions.RuneAgent.Config)
+	require.NotEmpty(t, doc.Extensions.RuneAgent.Config,
+		"extensions.rune-agent.config missing from %s", agentYAMLPath)
+
+	for _, tc := range []struct {
+		key  string
+		want term.Attributes
+	}{
+		{"completion_matched_text_attr", want.matched},
+		{"completion_focus_element_attr", want.focus},
+		{"completion_element_attr", want.element},
+		{"inline_attachment_attr", defaultComponentCfg.InlineAttachmentAttr},
+	} {
+		got, err := config.GetAttributes(pconfig, tc.key)
+		require.NoError(t, err, "reading %q from %s", tc.key, agentYAMLPath)
+		assert.Equal(t, tc.want, got, "%s in %s", tc.key, agentYAMLPath)
+	}
+
+	// The radar tracks defaultComponentCfg rather than rune.star, but the
+	// two files still have to agree: config.yaml ships next to the binary
+	// and overrides the Go default at runtime.
+	radar, err := pconfig.GetColor("completion_radar_color")
+	require.NoError(t, err)
+	assert.Equal(t, defaultComponentCfg.CompletionRadarColor, radar,
+		"completion_radar_color in %s", agentYAMLPath)
+}

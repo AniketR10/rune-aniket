@@ -830,6 +830,51 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 	assert.Equal(t, "now plan the implementation", d.Messages[3].Content)
 }
 
+func TestGoroutineSpawnerRunPreservesDisplayModelAndAttachments(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{ID: "agent", Name: "Agent", Model: "test-model", AllowAny: true},
+	})
+	svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
+	store := newMockStore()
+	spawner := NewGoroutineSpawner(
+		store,
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
+		},
+		cfg, skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "", "session", "agent", workspaceapi.URI{}, noopPrompter{},
+	)
+	spawner.GenerateDialogueID = func(context.Context, string) string {
+		return "sub-agent-linked"
+	}
+	parts := []llmapi.ContentPart{{
+		Type: llmapi.ContentPartTypeText, Text: "attachment body",
+	}}
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID:           "agent",
+		Message:           "inspect <attachment-1>",
+		DisplayMessage:    "inspect config.go",
+		Attachments:       parts,
+		AdditionalContext: "transient",
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	d, ok := store.getDialogue("sub-agent-linked")
+	require.True(t, ok)
+	persisted := d.Messages[len(d.Messages)-2]
+	assert.Equal(t, "inspect config.go", persisted.Content)
+	require.Len(t, persisted.MultiContent, 2)
+	assert.Equal(t, "inspect <attachment-1>", persisted.MultiContent[0].Text)
+	assert.Equal(t, parts[0], persisted.MultiContent[1])
+
+	request := svc.requests[0].Messages[len(svc.requests[0].Messages)-1]
+	assert.Equal(t, "transient\n\ninspect <attachment-1>",
+		request.MultiContent[0].Text)
+	assert.Equal(t, parts[0], request.MultiContent[1])
+}
+
 // consumeReply drains the handle's events, collects EventText into
 // a reply string, and closes the iterator.
 func consumeReply(t *testing.T, handle RunHandle) string {

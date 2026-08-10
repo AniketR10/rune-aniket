@@ -3898,6 +3898,56 @@ func TestAgentRunWithAttachments(t *testing.T) {
 	assert.Len(t, persisted.MultiContent, 3)
 }
 
+func TestAgentRunSeparatesDisplayAndModelText(t *testing.T) {
+	parts := []llmapi.ContentPart{{
+		Type: llmapi.ContentPartTypeText,
+		Text: `Rune attachment v1: {"id":"attachment-1"}`,
+	}}
+	svc := &mockService{responses: []mockResponse{stopResponse("seen")}}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "test"})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d",
+		"inspect <attachment-1>",
+		WithDisplayMessage("inspect config.go"),
+		WithAdditionalContext("transient context"),
+		WithAttachments(parts)))
+	assert.True(t, hasEventType(events, EventDone))
+
+	req := svc.requests[0].Messages[len(svc.requests[0].Messages)-1]
+	assert.Equal(t, "inspect config.go", req.Content)
+	require.Len(t, req.MultiContent, 2)
+	assert.Equal(t, "transient context\n\ninspect <attachment-1>",
+		req.MultiContent[0].Text)
+	assert.Equal(t, parts[0], req.MultiContent[1])
+
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	persisted := d.Messages[len(d.Messages)-2]
+	assert.Equal(t, "inspect config.go", persisted.Content)
+	require.Len(t, persisted.MultiContent, 2)
+	assert.Equal(t, "inspect <attachment-1>", persisted.MultiContent[0].Text)
+	assert.Equal(t, parts[0], persisted.MultiContent[1])
+}
+
+func TestAgentRunPersistsModelTextWithoutAttachments(t *testing.T) {
+	svc := &mockService{responses: []mockResponse{stopResponse("seen")}}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "test"})
+
+	collectEvents(t, ag.Run(context.Background(), "d", "model text",
+		WithDisplayMessage("display text")))
+
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	persisted := d.Messages[len(d.Messages)-2]
+	assert.Equal(t, "display text", persisted.Content)
+	require.Len(t, persisted.MultiContent, 1)
+	assert.Equal(t, "model text", persisted.MultiContent[0].Text)
+}
+
 // TestToolContextCarriesModelEntry verifies that the fully-qualified
 // ModelEntry (Provider set) is carried into a tool's context, so
 // sub-agents inheriting the model resolve to a single provider instead

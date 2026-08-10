@@ -65,6 +65,9 @@ const (
 	// dialogue, running it exactly as if the user had typed it. Used to
 	// route workspace command-prompt commands to the focused chat.
 	MessageEventCommand
+	// MessageEventAttachment adds a pending attachment to the compose
+	// strip, as if the user had picked it from the '#' completion.
+	MessageEventAttachment
 )
 
 // MessageEvent is a structured event sent through the display channel.
@@ -100,6 +103,9 @@ type MessageEvent struct {
 	// Command fields (MessageEventCommand)
 	CommandName string
 	CommandArgs []string
+
+	// Attachment field (MessageEventAttachment)
+	Attachment Attachment
 }
 
 // MemoryRecallEntry represents a single memory in a recall event.

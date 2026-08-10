@@ -25,7 +25,6 @@ package extension
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,7 +48,6 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/geminitools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -98,6 +96,15 @@ const (
 	commandReviewChanges = "chatreviewchanges"
 	commandExport        = "chatexport"
 	commandLog           = "chatlog"
+	commandAddSymbol     = "chataddsymbol"
+)
+
+// Floating windows opened by the agent are capped rather than sized to
+// their content: prose stretched across a wide terminal is unreadable,
+// and long output should scroll instead of covering the workspace.
+const (
+	floatingWidth  = 90
+	floatingHeight = 45
 )
 
 // Router-side model aliases the agent resolves to for its own concepts.
@@ -230,6 +237,22 @@ var (
 				Alignment:  component.AlignmentLeft,
 				Attributes: term.Attributes{Fg: term.GetColor("dimgray")},
 			},
+		},
+		// Mirrors the command prompt overlay shipped in cmd/rune/rune.star
+		// ("command.*_attr") rather than the library fallbacks, which the
+		// shipped config overrides.
+		CompletionMatchedTextAttr: term.Attributes{
+			Fg: term.ColorBlue, Attrs: term.AttrBold,
+		},
+		CompletionFocusElementAttr: term.Attributes{Fg: term.ColorPurple},
+		CompletionElementAttr:      term.Attributes{Attrs: term.AttrDim},
+		// Deliberately neutral rather than the command prompt's red: the
+		// shader bakes its blend into literal RGB inside this process,
+		// which has no access to the host's themed palette, so a hue would
+		// clash with themes that remap it.
+		CompletionRadarColor: term.GetColor("dimgray"),
+		InlineAttachmentAttr: term.Attributes{
+			Fg: term.ColorAqua, Attrs: term.AttrUnderline,
 		},
 	}
 )
@@ -555,6 +578,42 @@ func newCommandEventHandler(
 		ret.contextHintCfg.labelAttr.Attrs |= term.AttrDim
 	}
 
+	if attr, err := config.GetAttributes(pconfig, "completion_matched_text_attr"); err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'completion_matched_text_attr' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.CompletionMatchedTextAttr = attr
+	}
+	if attr, err := config.GetAttributes(pconfig, "completion_focus_element_attr"); err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'completion_focus_element_attr' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.CompletionFocusElementAttr = attr
+	}
+	if attr, err := config.GetAttributes(pconfig, "completion_element_attr"); err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'completion_element_attr' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.CompletionElementAttr = attr
+	}
+	if col, err := pconfig.GetColor("completion_radar_color"); err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'completion_radar_color' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.CompletionRadarColor = col
+	}
+	if attr, err := config.GetAttributes(pconfig, "inline_attachment_attr"); err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'inline_attachment_attr' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.InlineAttachmentAttr = attr
+	}
+
 	ret.queryDefaultModel = queryModelAlias
 
 	ret.compactModel = compactModelAlias
@@ -683,7 +742,7 @@ type aiEditorHandler struct {
 
 	resources      map[string]string
 	clip           clipboard.Register
-	ed             textapi.Editor
+	ed             cursorEditor
 	wm             browserapi.WindowManager
 	n              browserapi.Notifications
 	o              browserapi.ResourceOpener
@@ -715,6 +774,12 @@ type aiEditorHandler struct {
 
 	openChats      sync.Map
 	openChatAgents sync.Map
+	// lastCursor and lastChatID mirror the caret position and the chat
+	// that last had focus. Workspace commands run once the prompt owns
+	// the caret and from outside any chat tab, so both have to be read
+	// back from state captured as the events happened.
+	lastCursor atomic.Value // *cursorLocation
+	lastChatID atomic.Value // *string
 	// openChatTx maps an open chat's dialogue ID to its dialoguetui event
 	// channel, letting workspace command-prompt commands inject in-chat
 	// commands into the focused chat. Stored and deleted alongside
@@ -912,6 +977,8 @@ func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bo
 		err = h.queryAgent.RemoveContextResource(ctx, ev.URI)
 	case textapi.EventTypeClose:
 		delete(h.resources, ev.URI.String())
+	case textapi.EventTypeCursor:
+		h.recordCursor(ev)
 	}
 
 	if err != nil {
@@ -932,6 +999,8 @@ func (h *aiEditorHandler) HandleCommand(
 		commandClear, commandCompact, commandFork, commandReviewChanges,
 		commandExport, commandLog:
 		return h.routeChatCommand(cmd)
+	case commandAddSymbol:
+		return h.handleChatAddSymbol(cmd)
 	}
 
 	return nil
@@ -1078,6 +1147,8 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 			names[i] = s.Name
 		}
 		return iterator.FromSlice(names), nil
+	case commandAddSymbol:
+		return referencedSymbols(ctx, h.parser)
 	default:
 		return iterator.FromSlice[string](nil), nil
 	}
@@ -1232,6 +1303,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 
 	dhandler, tx, rx := dialoguetui.Handler(ctx, mu, comp, h.p,
 		dialoguetui.WithCommands(adapter),
+		dialoguetui.WithContextCompleter(newContextCompleter(h.fs, h.parser)),
+		dialoguetui.WithAttachmentOpener(attachmentPreviewer{h}),
 		dialoguetui.WithCloseFunc(cancel),
 	)
 
@@ -1320,7 +1393,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	h.subscribeTools(d.ID, len(baseTools), chatRegistry, cmdRegistry)
 	h.warnPendingMCPServers(tx)
 
-	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx, d.ID)
 	go debug.CapturePanicReport(func() {
 		createAgentCompletions(ctx, cancel, tx, msgRx, chatAgent, spawner, childEvents, h.skillRegistry, d.ID, syncComp, h.n,
 			makeOnCompacted(h.dialogueStore, adapter.compactFn),
@@ -1400,7 +1473,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	syncComp := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
 
 	qrx := make(chan dialoguetui.SubmitMessage)
-	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, qrx)
+	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, qrx, "")
 
 	// wrap rx to enable sending query and so get
 	// context cancelation for free
@@ -1582,6 +1655,7 @@ func (h *aiEditorHandler) completeWithModelsIterator(ctx context.Context) (
 func (h *aiEditorHandler) wrapDialogueHandler(
 	ctx context.Context, comp syncComponent,
 	dhandler tui.Handler, rx <-chan dialoguetui.SubmitMessage,
+	dialogueID string,
 ) (tui.Handler, <-chan completionRequest) {
 	ret := make(chan completionRequest)
 
@@ -1601,10 +1675,12 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 				mu.Lock()
 				cancel = cancelFn
 				mu.Unlock()
-				parts := h.attachmentParts(msg.Attachments)
+				finalized := finalizeSubmitMessage(msg)
+				parts := h.attachmentContentParts(reqCtx, finalized.Attachments)
 				select {
 				case ret <- completionRequest{
-					msg:         msg.Text,
+					displayText: finalized.DisplayText,
+					modelText:   finalized.ModelText,
 					skillName:   msg.SkillName,
 					attachments: parts,
 					ctx:         reqCtx,
@@ -1619,11 +1695,20 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 
 	// wrap it for ctrl-c cancelation of context
 	return handler.Wrap(dhandler, func(ev term.Event) (exit bool, handled bool) {
+		// Handle only runs while this chat has browser focus, so it is
+		// the signal workspace commands use to find the target chat.
+		h.recordFocusedChat(dialogueID)
 		if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
+			// An open '#' completion band owns Ctrl-C: it dismisses the
+			// band without cancelling the in-flight completion request.
+			completing := comp.completionOpen()
 			// Let the dialogue handler dismiss any active prompt first.
 			// Otherwise the prompt UI would stay visible while only the
 			// underlying completion context is cancelled.
 			exit, _ = dhandler.Handle(ev)
+			if completing {
+				return exit, true
+			}
 			mu.Lock()
 			cancelFn := cancel
 			cancel = nil
@@ -1637,69 +1722,6 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 		}
 		return dhandler.Handle(ev)
 	}), ret
-}
-
-// attachmentParts reads the files the user attached to the chat and
-// renders them as content parts for the next user message. A file that
-// cannot be read, or that exceeds the model's image caps, becomes an
-// explanatory text part so the rest of the message still goes through.
-func (h *aiEditorHandler) attachmentParts(
-	attachments []dialoguetui.Attachment,
-) []llmapi.ContentPart {
-	if len(attachments) == 0 {
-		return nil
-	}
-	maxOutput := h.maxToolOutputBytes
-	if maxOutput <= 0 {
-		maxOutput = agent.DefaultMaxToolOutputBytes
-	}
-	parts := make([]llmapi.ContentPart, 0, len(attachments)+1)
-	for _, a := range attachments {
-		text := func(format string, args ...any) llmapi.ContentPart {
-			return llmapi.ContentPart{
-				Type: llmapi.ContentPartTypeText,
-				Text: fmt.Sprintf(format, args...),
-			}
-		}
-		if a.ID != "" {
-			parts = append(parts, text("%s\n%s", chatReviewHeading, a.Content))
-			continue
-		}
-		data, err := readWorkspaceFile(h.fs, a.Path)
-		if err != nil {
-			_, _ = h.n.Notify(browserapi.LevelError,
-				"attachment %s: %v", a.Name, err)
-			parts = append(parts, text(
-				"Attached file %s could not be read: %v", a.Path, err))
-			continue
-		}
-		if mime, isImage := agentools.ImageMediaType(a.Path); isImage {
-			uri, encErr := agentools.EncodeImageDataURI(a.Path, data, mime)
-			if encErr != nil {
-				_, _ = h.n.Notify(browserapi.LevelError,
-					"attachment %s: %v", a.Name, encErr)
-				parts = append(parts, text(
-					"Attached image %s could not be sent: %v",
-					a.Path, encErr))
-				continue
-			}
-			parts = append(parts,
-				text("Attached image %s:", a.Path),
-				llmapi.ContentPart{
-					Type:     llmapi.ContentPartTypeImageURL,
-					ImageURL: uri,
-				})
-			continue
-		}
-		if utf8validate.IsBinary(data) {
-			parts = append(parts, text("Attached file %s:\n%s", a.Path,
-				utf8validate.BinaryStub(a.Name, len(data), sha256.Sum256(data))))
-			continue
-		}
-		parts = append(parts, text("Attached file %s:\n%s", a.Path,
-			agent.TruncateMiddle(utf8validate.Sanitize(string(data)), maxOutput)))
-	}
-	return parts
 }
 
 // parseDialogueID extracts a user-provided dialogue ID from the
@@ -1798,7 +1820,7 @@ func addMessage(c *dialoguetui.Component, msg llmapi.Message, pendingTools map[s
 			strings.HasPrefix(msg.Content, "Plan approved. Saved to ") {
 			c.AddSendMessageMarkdown(msg.Content)
 		} else {
-			c.AddSendMessage(msg.Content)
+			c.AddSendMessageAttachments(msg.Content, replayedAttachments(msg))
 		}
 	case llmapi.RoleSystem:
 	case llmapi.RoleTool:
@@ -1852,11 +1874,24 @@ func firstModel(svc llmapi.Service) string {
 }
 
 type completionRequest struct {
-	msg       string
+	// displayText is the text the user composed, unchanged. It is the
+	// human-readable form of the turn: no attachment links are rewritten.
+	displayText string
+	// modelText is displayText with every valid inline attachment link
+	// rewritten to its "<attachment-N>" placeholder, matching the IDs on
+	// attachments below. This is the text actually sent to the model.
+	//
+	// TODO(agent-split): ag.Run below persists whatever text it is given
+	// as the turn's message content, so replay currently shows modelText
+	// rather than displayText. The agent package split should persist
+	// displayText for the turn and keep modelText+attachments as what is
+	// actually sent to the provider.
+	modelText string
 	skillName string
 	ctx       context.Context
-	// attachments are content parts for files the user attached to the
-	// chat, sent alongside msg in the same user message.
+	// attachments are canonical v1 content parts for files the user
+	// attached to the chat, sent alongside modelText in the same user
+	// message.
 	attachments []llmapi.ContentPart
 }
 
@@ -2103,6 +2138,30 @@ func createAgentCompletions(
 			return
 		}
 		hint := syncComp.addStatusHint()
+		upsRes := ag.Hooks().Run(req.ctx, hooks.Payload{
+			SessionID:     id,
+			Cwd:           ag.Workspace(),
+			HookEventName: hooks.EventUserPromptSubmit,
+			Prompt:        req.displayText,
+		})
+		if upsRes.Blocked() {
+			reason := upsRes.Reason
+			if reason == "" {
+				reason = "blocked by UserPromptSubmit hook"
+			}
+			select {
+			case tx <- dialoguetui.MessageEvent{
+				Type: dialoguetui.MessageEventError, Text: reason,
+			}:
+			case <-ctx.Done():
+			}
+			select {
+			case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventBreak}:
+			case <-ctx.Done():
+			}
+			syncComp.removeStatusHint(hint)
+			continue
+		}
 
 		// Agent-type skills: spawn a sub-agent whose events are
 		// rendered as top-level (tool calls, text, reasoning all
@@ -2117,16 +2176,19 @@ func createAgentCompletions(
 				var initialMessages []llmapi.Message
 				if skill.ParentContext {
 					initialMessages = parentDialogueContextMessages(
-						req.ctx, parentStore, id, req.msg,
+						req.ctx, parentStore, id, req.displayText,
 					)
 				}
 				handle, skillErr := spawner.Run(req.ctx, agent.RunRequest{
-					Label:           skill.Name,
-					Model:           llmarg.Qualify(ag.ModelEntry()),
-					Message:         req.msg,
-					AllowedTools:    allowedTools,
-					SystemPrompt:    skill.Body,
-					InitialMessages: initialMessages,
+					Label:             skill.Name,
+					Model:             llmarg.Qualify(ag.ModelEntry()),
+					Message:           req.modelText,
+					DisplayMessage:    req.displayText,
+					Attachments:       req.attachments,
+					AdditionalContext: upsRes.AdditionalContext,
+					AllowedTools:      allowedTools,
+					SystemPrompt:      skill.Body,
+					InitialMessages:   initialMessages,
 				})
 				if skillErr != nil {
 					select {
@@ -2145,46 +2207,17 @@ func createAgentCompletions(
 			}
 		}
 		if it == nil {
-			// UserPromptSubmit hook: fires before the agent loop
-			// receives the prompt. A blocked decision cancels the
-			// turn and surfaces the reason as an error to the TUI;
-			// otherwise additionalContext is prepended to the prompt
-			// for this turn (transient — never persisted).
-			upsRes := ag.Hooks().Run(req.ctx, hooks.Payload{
-				SessionID:     id,
-				Cwd:           ag.Workspace(),
-				HookEventName: hooks.EventUserPromptSubmit,
-				Prompt:        req.msg,
-			})
-			if upsRes.Blocked() {
-				reason := upsRes.Reason
-				if reason == "" {
-					reason = "blocked by UserPromptSubmit hook"
-				}
-				select {
-				case tx <- dialoguetui.MessageEvent{
-					Type: dialoguetui.MessageEventError, Text: reason,
-				}:
-				case <-ctx.Done():
-				}
-				select {
-				case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventBreak}:
-				case <-ctx.Done():
-				}
-				syncComp.removeStatusHint(hint)
-				continue
+			runOpts := []agent.RunOption{
+				agent.WithDisplayMessage(req.displayText),
+				agent.WithAdditionalContext(upsRes.AdditionalContext),
 			}
-			if upsRes.AdditionalContext != "" {
-				req.msg = upsRes.AdditionalContext + "\n\n" + req.msg
-			}
-			var runOpts []agent.RunOption
 			if req.skillName != "" {
 				runOpts = append(runOpts, agent.WithSkillName(req.skillName))
 			}
 			if len(req.attachments) > 0 {
 				runOpts = append(runOpts, agent.WithAttachments(req.attachments))
 			}
-			it = ag.Run(req.ctx, id, req.msg, runOpts...)
+			it = ag.Run(req.ctx, id, req.modelText, runOpts...)
 		}
 		var lastUsage agent.Event // track last usage event for post-turn hint
 		func() {

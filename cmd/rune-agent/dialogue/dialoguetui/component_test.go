@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -4624,4 +4625,95 @@ func TestComponentTaskActiveFormSuppressesVisibleProgress(t *testing.T) {
 
 	assert.Equal(t, "Writing tests", comp.progress.ActiveForm())
 	assert.Equal(t, "", comp.TaskActiveForm())
+}
+
+func TestComponentAttachmentKeysAreStable(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 10)
+
+	first := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	second := comp.AddAttachment(NewWorkspaceFileAttachment("bravo.go"))
+	require.NotEqual(t, first.Key, second.Key)
+
+	comp.RemoveAttachment(0)
+	require.Len(t, comp.Attachments(), 1)
+	assert.Equal(t, second.Key, comp.Attachments()[0].Key,
+		"removing an earlier chip must not renumber the later ones")
+
+	third := comp.AddAttachment(NewWorkspaceFileAttachment("charlie.go"))
+	assert.NotEqual(t, first.Key, third.Key,
+		"a freed key must not be handed out again")
+	assert.NotEqual(t, second.Key, third.Key)
+}
+
+func TestComponentRemoveAttachmentUnlinksButKeepsText(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 10)
+
+	a := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	comp.Input().SetDraft("check alpha.go",
+		[]InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}})
+
+	comp.RemoveAttachment(0)
+
+	assert.Equal(t, "check alpha.go", comp.Input().Text(),
+		"dropping a chip must not rewrite what the user typed")
+	assert.Empty(t, comp.Input().Links())
+	assert.Empty(t, comp.Attachments())
+}
+
+func TestComponentInlineLabelDeletionKeepsChip(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 10)
+
+	a := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	comp.Input().SetDraft("check alpha.go",
+		[]InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}})
+
+	in := comp.Input().(*textHandlerInput)
+	edit(in, 6, 14, "")
+
+	assert.Equal(t, "check ", comp.Input().Text())
+	assert.Empty(t, comp.Input().Links())
+	assert.Len(t, comp.Attachments(), 1,
+		"deleting one inline label must not drop the attachment")
+}
+
+func TestComponentTakeAndRestoreDraft(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 10)
+
+	a := comp.AddAttachment(NewWorkspaceFileAttachment("alpha.go"))
+	comp.Input().SetDraft("check alpha.go",
+		[]InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}})
+
+	d := comp.TakeDraft()
+
+	assert.Equal(t, "check alpha.go", d.Text)
+	assert.Equal(t, []Attachment{a}, d.Attachments)
+	assert.Equal(t, []InlineAttachmentLink{{Key: a.Key, Start: 6, End: 14}}, d.Links)
+	assert.Equal(t, "", comp.Input().Text())
+	assert.Empty(t, comp.Attachments())
+	assert.Empty(t, comp.Input().Links())
+
+	comp.RestoreDraft(d)
+
+	assert.Equal(t, d.Text, comp.Input().Text())
+	assert.Equal(t, d.Attachments, comp.Attachments())
+	assert.Equal(t, d.Links, comp.Input().Links(),
+		"restoring must preserve the keys the links point at")
+}
+
+func TestComponentRestoreDraftDoesNotSynthesizeLinks(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 10)
+
+	comp.RestoreDraft(Draft{
+		Text:        "check alpha.go",
+		Attachments: []Attachment{NewWorkspaceFileAttachment("alpha.go")},
+	})
+
+	assert.Empty(t, comp.Input().Links(),
+		"plain text that happens to match a chip must stay unlinked")
+	assert.Len(t, comp.Attachments(), 1)
 }

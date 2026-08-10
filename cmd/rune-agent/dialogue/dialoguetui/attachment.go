@@ -29,6 +29,23 @@ import (
 	"strings"
 )
 
+// AttachmentKind distinguishes what an Attachment points at.
+type AttachmentKind int
+
+// AttachmentKey identifies a pending attachment within the current
+// draft. Inline references in the compose text point at a key rather
+// than at a strip index, so removing an earlier chip does not silently
+// re-target them. The zero value means "not allocated yet".
+type AttachmentKey int64
+
+const (
+	// AttachmentFile is a file read from disk or the workspace.
+	AttachmentFile AttachmentKind = iota
+	// AttachmentSymbol is a workspace symbol expanded into definition,
+	// reference and documentation context when the message is sent.
+	AttachmentSymbol
+)
+
 // Attachment is a file queued to be sent along with the next user
 // message. Attachments are created by dropping or pasting file paths
 // into the chat and are rendered as a strip of tabs above the compose
@@ -38,6 +55,11 @@ type Attachment struct {
 	Path string
 	// Name is the label rendered in the attachment strip.
 	Name string
+	// Label is the untruncated name written into the compose text when
+	// the attachment is accepted from the '#' completion list. Name is
+	// truncated to keep the strip readable, which would make the inline
+	// text ambiguous.
+	Label string
 	// IsImage reports whether the file is sent to the model as visual
 	// content rather than as text.
 	IsImage bool
@@ -47,14 +69,34 @@ type Attachment struct {
 	// Attachments sharing a non-empty ID replace one another instead of
 	// stacking up in the strip. It is empty for file attachments.
 	ID string
-	// Content is the inline text a virtual attachment contributes to the
-	// next user message. It is empty for file attachments.
+	// Kind selects how the attachment is expanded into content parts.
+	Kind AttachmentKind
+	// Symbol is the workspace symbol name when Kind is AttachmentSymbol.
+	Symbol string
+	// Content is the inline text a non-file attachment contributes to the
+	// next user message: a virtual attachment's body when ID is set, or
+	// an already-resolved symbol snapshot when Kind is AttachmentSymbol.
+	// It is empty for file attachments and for name-based '#' symbol
+	// attachments, which are resolved when sent.
 	Content string
+	// Key is this attachment's draft-local identity, allocated by
+	// Component. It is UI state: it is neither shown to the user nor
+	// persisted.
+	Key AttachmentKey
 }
 
 const (
 	imageAttachmentIcon = '🎆'
 	fileAttachmentIcon  = '📎'
+	// WorkspaceFileIcon marks a file picked from the '#' completion
+	// list, keeping it visually distinct from a dragged or pasted file.
+	WorkspaceFileIcon = '\uf15b'
+	// SymbolIcon marks a workspace symbol picked from the '#'
+	// completion list.
+	SymbolIcon = '\U000F0295'
+	// removeAttachmentIcon is the affordance for dropping a pending
+	// attachment, rendered at the right edge of its tab.
+	removeAttachmentIcon = 'ˣ'
 	// maxAttachmentNameLen caps the attachment label so a handful of
 	// attachments still fit in the strip without shrinking each other
 	// into single graphemes.
@@ -63,16 +105,64 @@ const (
 
 // NewAttachment builds an Attachment for the file at path.
 func NewAttachment(path string) Attachment {
-	name := filepath.Base(path)
-	if r := []rune(name); len(r) > maxAttachmentNameLen {
-		name = string(r[:maxAttachmentNameLen-1]) + "…"
-	}
+	label := filepath.Base(path)
 	_, isImage := imageMediaType(path)
 	icon := fileAttachmentIcon
 	if isImage {
 		icon = imageAttachmentIcon
 	}
-	return Attachment{Path: path, Name: name, IsImage: isImage, Icon: icon}
+	return Attachment{
+		Path:    path,
+		Name:    truncateAttachmentName(label),
+		Label:   label,
+		IsImage: isImage,
+		Icon:    icon,
+	}
+}
+
+// NewWorkspaceFileAttachment builds an Attachment for a workspace-relative
+// path picked from the '#' completion list.
+func NewWorkspaceFileAttachment(relpath string) Attachment {
+	label := filepath.Base(relpath)
+	_, isImage := imageMediaType(relpath)
+	icon := WorkspaceFileIcon
+	if isImage {
+		icon = imageAttachmentIcon
+	}
+	return Attachment{
+		Path:    relpath,
+		Name:    truncateAttachmentName(label),
+		Label:   label,
+		IsImage: isImage,
+		Icon:    icon,
+	}
+}
+
+// NewSymbolAttachment builds an Attachment for a workspace symbol picked
+// from the '#' completion list.
+func NewSymbolAttachment(name string) Attachment {
+	return Attachment{
+		Name:   truncateAttachmentName(name),
+		Label:  name,
+		Icon:   SymbolIcon,
+		Kind:   AttachmentSymbol,
+		Symbol: name,
+	}
+}
+
+// NewResolvedSymbolAttachment builds a symbol attachment whose semantic
+// context was resolved from an exact document position.
+func NewResolvedSymbolAttachment(name, content string) Attachment {
+	a := NewSymbolAttachment(name)
+	a.Content = content
+	return a
+}
+
+func truncateAttachmentName(name string) string {
+	if r := []rune(name); len(r) > maxAttachmentNameLen {
+		return string(r[:maxAttachmentNameLen-1]) + "…"
+	}
+	return name
 }
 
 // imageMediaType reports whether path names an image the model can see.

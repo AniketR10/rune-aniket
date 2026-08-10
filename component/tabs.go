@@ -79,6 +79,10 @@ type tab struct {
 	focus    bool
 	defAttr  term.Attributes
 	attr     term.Attributes
+	// action is an optional trailing glyph, padded on both sides, that
+	// callers hit-test separately from the tab body via TabActionAt.
+	action     rune
+	actionAttr term.Attributes
 }
 
 // Tabs is a simple component that draws a list of component
@@ -394,6 +398,15 @@ func (t *Tabs) SetTabIcon(idx int, icon rune) {
 	t.dirty = true
 }
 
+// SetTabAction gives the tab at idx a trailing action glyph rendered
+// with attr and a blank column on either side. A zero rune removes it.
+// Clicks on the glyph are resolved with TabActionAt.
+func (t *Tabs) SetTabAction(idx int, action rune, attr term.Attributes) {
+	t.tabs[idx].action = action
+	t.tabs[idx].actionAttr = attr
+	t.dirty = true
+}
+
 // SetTabDefaultIcon sets the default icon of the tab at idx. Calls to
 // ResetTabIcon will reset the tab icon to the given icon. If the tab
 // at idx does not exist, this method will panic.
@@ -589,6 +602,60 @@ func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
 	return 0, true
 }
 
+// TabActionAt returns the tab whose trailing action glyph covers pos.
+// It reports false when pos is elsewhere in the tab, so callers can give
+// the glyph its own behavior.
+func (t *Tabs) TabActionAt(pos term.Coordinates) (int, bool) {
+	idx, ok := t.TabAt(pos)
+	if !ok || idx < 0 || idx >= len(t.tabs) {
+		return -1, false
+	}
+	tab := t.tabs[idx]
+	actionW := tabActionWidth(tab)
+	if actionW == 0 {
+		return -1, false
+	}
+	start, width, ok := t.tabBounds(idx)
+	if !ok || width < actionW {
+		return -1, false
+	}
+	// The glyph sits between the two padding columns at the cell's end.
+	glyph := start + width - actionW + 1
+	if pos.X >= glyph && pos.X < glyph+runeCellWidth(tab.action) {
+		return idx, true
+	}
+	return -1, false
+}
+
+// tabBounds returns the first column and width of the tab at idx in the
+// same coordinate space TabAt accepts.
+func (t *Tabs) tabBounds(idx int) (start, width int, ok bool) {
+	if t.border {
+		start = 1
+	}
+	sepLen := len(t.separator)
+	if len(t.layout.cells) > 0 {
+		for i, cell := range t.layout.cells {
+			if cell.idx == idx {
+				return start, cell.width, true
+			}
+			start += cell.width
+			if i < len(t.layout.cells)-1 {
+				start += sepLen
+			}
+		}
+		return 0, 0, false
+	}
+	for i, tab := range t.tabs {
+		w := tabFullWidth(tab)
+		if i == idx {
+			return start, w, true
+		}
+		start += w + sepLen
+	}
+	return 0, 0, false
+}
+
 // Tab returns the name of the tab at idx.
 func (t *Tabs) Tab(idx int) (string, bool) {
 	if idx >= len(t.tabs) {
@@ -648,6 +715,13 @@ func (t *Tabs) insertTabCell(pos term.Coordinates, cell tabCellLayout) term.Coor
 	}
 
 	remaining := cell.width
+	// The action glyph is anchored to the right edge of the cell, so its
+	// block is reserved before the name competes for the space.
+	actionW := tabActionWidth(tab)
+	if actionW > remaining {
+		actionW = 0
+	}
+	remaining -= actionW
 	if tab.icon != 0 {
 		iconWidth := runeCellWidth(tab.icon)
 		if remaining >= iconWidth {
@@ -659,9 +733,8 @@ func (t *Tabs) insertTabCell(pos term.Coordinates, cell tabCellLayout) term.Coor
 			}
 		} else {
 			// No room for the icon: fill the cell with blanks.
-			for remaining > 0 {
+			for range cell.width {
 				pos = t.fileListBuf.Insert(pos, ' ')
-				remaining--
 			}
 			return pos
 		}
@@ -676,6 +749,11 @@ func (t *Tabs) insertTabCell(pos term.Coordinates, cell tabCellLayout) term.Coor
 	for remaining > 0 {
 		pos = t.fileListBuf.Insert(pos, ' ')
 		remaining--
+	}
+	if actionW > 0 {
+		pos = t.fileListBuf.Insert(pos, ' ')
+		pos = t.fileListBuf.InsertWithAttr(pos, tab.action, tab.actionAttr)
+		pos = t.fileListBuf.Insert(pos, ' ')
 	}
 	return pos
 }
@@ -899,9 +977,19 @@ func (t *Tabs) innerWidth() int {
 
 func tabFullWidth(t *tab) int {
 	if t.icon != 0 {
-		return stringCellWidth(t.name) + runeCellWidth(t.icon) + 1
+		return stringCellWidth(t.name) + runeCellWidth(t.icon) + 1 +
+			tabActionWidth(t)
 	}
-	return stringCellWidth(t.name)
+	return stringCellWidth(t.name) + tabActionWidth(t)
+}
+
+// tabActionWidth is the width the action glyph occupies including the
+// blank column on either side.
+func tabActionWidth(t *tab) int {
+	if t.action == 0 {
+		return 0
+	}
+	return runeCellWidth(t.action) + 2
 }
 
 func stringCellWidth(s string) int {

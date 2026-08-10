@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -35,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/handler/search"
 	tterm "unstable.build/go-tui/term"
 )
 
@@ -45,6 +47,14 @@ type SubmitMessage struct {
 	// Attachments are the files pending in the chat when the message
 	// was submitted. They are sent alongside Text as content parts.
 	Attachments []Attachment
+	// Links are the ranges of Text that still referred to an
+	// attachment when the message was submitted.
+	Links []InlineAttachmentLink
+}
+
+// Draft returns the compose state this message was submitted from.
+func (m SubmitMessage) Draft() Draft {
+	return Draft{Text: m.Text, Attachments: m.Attachments, Links: m.Links}
 }
 
 // CommandResult is the outcome of a handled /command.
@@ -73,6 +83,18 @@ type HandlerOption func(*dialogueHandler)
 // WithCommands sets a CommandHandler for intercepting /commands.
 func WithCommands(h CommandHandler) HandlerOption {
 	return func(dh *dialogueHandler) { dh.commands = h }
+}
+
+// AttachmentOpener previews an attachment the user clicked in a sent
+// message's chip grid.
+type AttachmentOpener interface {
+	OpenAttachment(a Attachment)
+}
+
+// WithAttachmentOpener makes the attachment chips above sent messages
+// clickable.
+func WithAttachmentOpener(o AttachmentOpener) HandlerOption {
+	return func(dh *dialogueHandler) { dh.attachmentOpener = o }
 }
 
 // WithCloseFunc sets a function called when a command returns
@@ -128,9 +150,12 @@ type dialogueHandler struct {
 	rx            chan MessageEvent  // assistant messages
 	mu            sync.Locker
 	commands      CommandHandler
-	closeFn       func()
-	ctx           context.Context
-	inputFocused  bool // true when last mouse interaction was in the input area
+	completer     ContextCompleter
+	// attachmentOpener previews attachments clicked in the transcript.
+	attachmentOpener AttachmentOpener
+	closeFn          func()
+	ctx              context.Context
+	inputFocused     bool // true when last mouse interaction was in the input area
 	// messagesDragging is true while a left-button selection drag that
 	// started in the messages area is in progress. While set, mouse events
 	// keep routing to the messages selection even when the pointer crosses
@@ -146,15 +171,19 @@ type dialogueHandler struct {
 	// Messages are injected FIFO when the handler becomes idle.
 	queue []SubmitMessage
 
-	// history holds the text of previously submitted messages (sent,
-	// queued, and command lines), oldest first. ArrowUp/ArrowDown walk
-	// it to recall earlier input once the compose editor's cursor is at
-	// the top/bottom edge and the queue is exhausted.
-	history []string
+	// history holds previously submitted drafts (sent, queued, and
+	// command lines), oldest first. ArrowUp/ArrowDown walk it to recall
+	// earlier input once the compose editor's cursor is at the top/bottom
+	// edge and the queue is exhausted.
+	history []Draft
 	// historyIdx is the cursor into history for recall. It equals
 	// len(history) when not actively browsing; ArrowUp decrements it and
 	// ArrowDown increments it.
 	historyIdx int
+	// scratch is the draft that was being composed when history
+	// browsing started, restored when the user walks back past the
+	// newest entry.
+	scratch Draft
 
 	// pasting is true between EventPasteStart and EventPasteEnd. While
 	// set, key events accumulate in pasteBuf instead of reaching the
@@ -162,6 +191,17 @@ type dialogueHandler struct {
 	// paths becomes attachments instead of text.
 	pasting  bool
 	pasteBuf []term.Event
+
+	// compList is the '#' context completion band, non-nil only while
+	// the band is open. compQuery mirrors the characters typed after the
+	// '#' into the list's filter; the compose box keeps showing them.
+	compList              *search.List
+	compQuery             []rune
+	compCancel            context.CancelFunc
+	compDone              chan struct{}
+	compLoadingGeneration atomic.Uint64
+	// compSyncSearch makes completion filtering synchronous. Testing only.
+	compSyncSearch bool
 }
 
 func (h *dialogueHandler) publishInterrupt(ctx context.Context) {
@@ -227,7 +267,7 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		if apos, ok := s.comp.AttachmentsPosition(); ok &&
 			ev.MouseY == apos.Y && !dragging {
 			if ev.Key == term.MouseLeft {
-				idx, found := s.comp.AttachmentAt(
+				idx, found := s.comp.AttachmentRemoveAt(
 					term.Coordinates{X: ev.MouseX - apos.X})
 				if found {
 					s.comp.RemoveAttachment(idx)
@@ -246,6 +286,9 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		if s.inputFocused {
 			s.inputFocused = false
+		}
+		if exit, handled := s.handleAttachmentChip(ev, dragging); handled {
+			return exit, true
 		}
 		if ev.Key == term.MouseLeft {
 			s.messagesDragging = true
@@ -390,6 +433,16 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
+	if s.compList != nil && s.handleCompletionKey(ev) {
+		return false, true
+	}
+	if s.completer != nil && s.compList == nil &&
+		ev.Ch == '#' && ev.Mod == 0 && s.atWordBoundary() {
+		s.comp.Input().Handle(ev)
+		s.openCompletion()
+		return false, true
+	}
+
 	switch {
 	case ev.Key == term.KeyEnter && (ev.Mod == 0 || ev.Mod == term.ModShift):
 		// The compose input decides whether this Enter submits or just
@@ -403,7 +456,7 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		if s.commands != nil && isCommand(text) {
 			item, ok := s.comp.InputSubmit()
 			if ok {
-				s.appendHistory(item)
+				s.appendHistory(Draft{Text: item})
 				name, args := parseCommand(item)
 				go debug.CapturePanicReport(func() {
 					s.executeCommand(name, args)
@@ -411,14 +464,15 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 			return
 		}
-		if len(text) == 0 {
+		if s.comp.Draft().Empty() {
 			return
 		}
-		s.comp.Input().Clear()
+		d := s.comp.TakeDraft()
 		s.submitMessage(SubmitMessage{
-			Text:        text,
-			Attachments: s.comp.TakeAttachments(),
-		}, text, true)
+			Text:        d.Text,
+			Attachments: d.Attachments,
+			Links:       d.Links,
+		}, d.Text, true)
 		return
 	case ev.Mod == term.ModCtrl && ev.Ch == 'c':
 		// Ctrl-C clears the compose input. The editor backend consumes
@@ -625,6 +679,8 @@ func (s *dialogueHandler) consumeIncoming() {
 			}
 		case MessageEventTaskProgress:
 			s.comp.UpdateTaskProgress(ev.TaskProgress)
+		case MessageEventAttachment:
+			s.comp.AddAttachment(ev.Attachment)
 		case MessageEventPromptDismiss:
 			ch := s.comp.PreparePromptDismiss()
 			if ch != nil {
@@ -698,29 +754,29 @@ func (s *dialogueHandler) executeCommand(name string, args []string) {
 // the message is rendered as a sent message before being forwarded. queuedLabel is
 // used for the visible queued indicator when the message is deferred.
 func (s *dialogueHandler) submitMessage(msg SubmitMessage, queuedLabel string, displayNow bool) {
-	s.appendHistory(msg.Text)
+	s.appendHistory(msg.Draft())
 	if s.busy {
 		s.queue = append(s.queue, msg)
 		s.comp.AddQueuedMessage(queuedLabel)
 		return
 	}
 	if displayNow {
-		s.comp.AddSendMessage(msg.Text)
+		s.comp.AddSendMessageAttachments(msg.Text, msg.Attachments)
 	}
 	s.mu.Unlock()
 	s.tx <- msg
 	s.mu.Lock()
 }
 
-// appendHistory records text as the most recent recall entry and resets
+// appendHistory records d as the most recent recall entry and resets
 // the recall cursor so the next ArrowUp starts from the newest entry.
 // Consecutive duplicates are collapsed to avoid stuttering recall.
-func (s *dialogueHandler) appendHistory(text string) {
-	if text == "" {
+func (s *dialogueHandler) appendHistory(d Draft) {
+	if d.Empty() {
 		return
 	}
-	if n := len(s.history); n == 0 || s.history[n-1] != text {
-		s.history = append(s.history, text)
+	if n := len(s.history); n == 0 || !s.history[n-1].Equal(d) {
+		s.history = append(s.history, d.Clone())
 	}
 	s.historyIdx = len(s.history)
 }
@@ -729,33 +785,38 @@ func (s *dialogueHandler) appendHistory(text string) {
 // pops the newest queued message into the compose input, then walks back
 // through the submit history. It reports whether anything was recalled.
 func (s *dialogueHandler) recallUp() bool {
-	if s.comp.Input().Text() == "" && len(s.queue) > 0 {
+	if s.comp.Draft().Empty() && len(s.queue) > 0 {
 		msg := s.queue[len(s.queue)-1]
 		s.queue = s.queue[:len(s.queue)-1]
 		s.comp.RemoveLastQueuedMessage()
-		s.comp.Input().SetText(msg.Text)
+		s.comp.RestoreDraft(msg.Draft())
 		return true
 	}
 	if s.historyIdx <= 0 {
 		return false
 	}
+	if s.historyIdx == len(s.history) {
+		s.scratch = s.comp.Draft()
+	}
 	s.historyIdx--
-	s.comp.Input().SetText(s.history[s.historyIdx])
+	s.comp.RestoreDraft(s.history[s.historyIdx])
 	return true
 }
 
 // recallDown is the editor-edge fallback for downward navigation: it
-// walks forward through the submit history, clearing the input once it
-// moves past the newest entry. It reports whether anything was recalled.
+// walks forward through the submit history, restoring the draft that
+// was being composed once it moves past the newest entry. It reports
+// whether anything was recalled.
 func (s *dialogueHandler) recallDown() bool {
 	if s.historyIdx >= len(s.history) {
 		return false
 	}
 	s.historyIdx++
 	if s.historyIdx == len(s.history) {
-		s.comp.Input().Clear()
+		s.comp.RestoreDraft(s.scratch)
+		s.scratch = Draft{}
 	} else {
-		s.comp.Input().SetText(s.history[s.historyIdx])
+		s.comp.RestoreDraft(s.history[s.historyIdx])
 	}
 	return true
 }
@@ -771,7 +832,7 @@ func (s *dialogueHandler) drainQueue() {
 	msg := s.queue[0]
 	s.queue = s.queue[1:]
 	s.comp.PromoteFirstQueuedMessage()
-	s.comp.AddSendMessage(msg.Text)
+	s.comp.AddSendMessageAttachments(msg.Text, msg.Attachments)
 	s.mu.Unlock()
 	s.tx <- msg
 	s.mu.Lock()

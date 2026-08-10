@@ -87,7 +87,11 @@ func (testLocalExec) Close() error { return nil }
 // configurable hook. e2e tests use it to simulate a host where no
 // language server is running for a file's language.
 type stubLSP struct {
-	diagnosticFn func(semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error)
+	diagnosticFn      func(semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error)
+	definitionFn      func(semanticapi.DefinitionParams) (semanticapi.LocationResult, error)
+	referencesFn      func(semanticapi.ReferenceParams) ([]semanticapi.Location, error)
+	hoverFn           func(semanticapi.HoverParams) (*semanticapi.Hover, error)
+	workspaceSymbolFn func(semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error)
 }
 
 func (s stubLSP) Diagnostic(_ context.Context, p semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error) {
@@ -118,7 +122,10 @@ func (stubLSP) SignatureHelp(context.Context, semanticapi.SignatureHelpParams) (
 func (stubLSP) Declaration(context.Context, semanticapi.DeclarationParams) (semanticapi.LocationResult, error) {
 	return semanticapi.LocationResult{}, nil
 }
-func (stubLSP) Definition(context.Context, semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+func (s stubLSP) Definition(_ context.Context, p semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+	if s.definitionFn != nil {
+		return s.definitionFn(p)
+	}
 	return semanticapi.LocationResult{}, nil
 }
 func (stubLSP) TypeDefinition(context.Context, semanticapi.TypeDefinitionParams) (semanticapi.LocationResult, error) {
@@ -127,7 +134,10 @@ func (stubLSP) TypeDefinition(context.Context, semanticapi.TypeDefinitionParams)
 func (stubLSP) Implementation(context.Context, semanticapi.ImplementationParams) (semanticapi.LocationResult, error) {
 	return semanticapi.LocationResult{}, nil
 }
-func (stubLSP) References(context.Context, semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+func (s stubLSP) References(_ context.Context, p semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+	if s.referencesFn != nil {
+		return s.referencesFn(p)
+	}
 	return nil, nil
 }
 func (stubLSP) DocumentHighlight(context.Context, semanticapi.DocumentHighlightParams) ([]semanticapi.DocumentHighlight, error) {
@@ -136,7 +146,10 @@ func (stubLSP) DocumentHighlight(context.Context, semanticapi.DocumentHighlightP
 func (stubLSP) DocumentSymbol(context.Context, semanticapi.DocumentSymbolParams) (semanticapi.DocumentSymbolResult, error) {
 	return semanticapi.DocumentSymbolResult{}, nil
 }
-func (stubLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+func (s stubLSP) WorkspaceSymbol(_ context.Context, p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+	if s.workspaceSymbolFn != nil {
+		return s.workspaceSymbolFn(p)
+	}
 	return nil, nil
 }
 func (stubLSP) CodeAction(context.Context, semanticapi.CodeActionParams) ([]semanticapi.CodeActionResult, error) {
@@ -163,7 +176,10 @@ func (stubLSP) Rename(context.Context, semanticapi.RenameParams) (*semanticapi.W
 func (stubLSP) PrepareRename(context.Context, semanticapi.PrepareRenameParams) (*semanticapi.PrepareRenameResult, error) {
 	return nil, nil
 }
-func (stubLSP) Hover(context.Context, semanticapi.HoverParams) (*semanticapi.Hover, error) {
+func (s stubLSP) Hover(_ context.Context, p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+	if s.hoverFn != nil {
+		return s.hoverFn(p)
+	}
 	return nil, nil
 }
 func (stubLSP) FoldingRange(context.Context, semanticapi.FoldingRangeParams) ([]semanticapi.FoldingRange, error) {

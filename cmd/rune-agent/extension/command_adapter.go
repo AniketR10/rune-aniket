@@ -684,14 +684,13 @@ func (a *commandAdapter) openCommandFloating(items []component.Responsive) {
 		return
 	})
 
-	const floatingWidth = 90
 	var win browserapi.Window
 	bhandler := browserapi.FuncHandler(scrollHandler, func() error {
 		return a.wm.CloseWindow(win)
 	})
 	floating := browserapi.FuncFloating(bhandler, func() (int, int) {
 		h := list.Height(floatingWidth)
-		return floatingWidth, min(h, 45)
+		return floatingWidth, min(h, floatingHeight)
 	})
 	var err error
 	win, err = a.wm.Floating(floating, browserapi.FloatingConfig{

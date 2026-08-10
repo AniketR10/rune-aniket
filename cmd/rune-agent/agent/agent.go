@@ -281,9 +281,12 @@ func (a *Agent) resourceFiles() []string {
 type RunOption func(*runOptions)
 
 type runOptions struct {
-	skillName       string
-	toolCallResults []ToolCallResult
-	attachments     []llmapi.ContentPart
+	skillName         string
+	toolCallResults   []ToolCallResult
+	attachments       []llmapi.ContentPart
+	displayMessage    string
+	displaySet        bool
+	additionalContext string
 }
 
 // ToolCallResult represents a pre-computed tool call result that is
@@ -348,6 +351,37 @@ func WithAttachments(parts []llmapi.ContentPart) RunOption {
 	return func(o *runOptions) {
 		o.attachments = parts
 	}
+}
+
+// WithDisplayMessage sets the human-readable text persisted in Message.Content.
+// The message passed to Run remains the model-facing text.
+func WithDisplayMessage(message string) RunOption {
+	return func(o *runOptions) {
+		o.displayMessage = message
+		o.displaySet = true
+	}
+}
+
+// WithAdditionalContext prepends transient context to the provider request
+// without persisting it in the dialogue.
+func WithAdditionalContext(context string) RunOption {
+	return func(o *runOptions) {
+		o.additionalContext = context
+	}
+}
+
+func prependMessageText(msg llmapi.Message, prefix string) llmapi.Message {
+	if prefix == "" {
+		return msg
+	}
+	if len(msg.MultiContent) > 0 &&
+		msg.MultiContent[0].Type == llmapi.ContentPartTypeText {
+		msg.MultiContent = slices.Clone(msg.MultiContent)
+		msg.MultiContent[0].Text = prefix + "\n\n" + msg.MultiContent[0].Text
+		return msg
+	}
+	msg.Content = prefix + "\n\n" + msg.Content
+	return msg
 }
 
 // Run executes the agentic loop for the given dialogue and user message.
@@ -420,9 +454,8 @@ func (a *Agent) run(
 	}
 	hasPersistedDialogue := !isNew
 
-	// SessionStart hook: fire after dialogue is loaded/created. The
-	// result's AdditionalContext is prepended to the user message so
-	// it reaches the model on the very first turn.
+	// SessionStart context describes live session state, so it belongs in
+	// the provider request but not in the durable user-authored turn.
 	startRes := a.config.Hooks.Run(ctx, hooks.Payload{
 		SessionID:     dialogueID,
 		Cwd:           a.config.Workspace,
@@ -430,8 +463,14 @@ func (a *Agent) run(
 		Source:        sessionStartSource(isNew),
 		Model:         a.config.Model.Name,
 	})
+	requestAdditionalContext := opts.additionalContext
 	if startRes.AdditionalContext != "" {
-		userMessage = startRes.AdditionalContext + "\n\n" + userMessage
+		if requestAdditionalContext != "" {
+			requestAdditionalContext = startRes.AdditionalContext + "\n\n" +
+				requestAdditionalContext
+		} else {
+			requestAdditionalContext = startRes.AdditionalContext
+		}
 	}
 
 	// Gather context resources in deterministic order. sync.Map.Range
@@ -463,9 +502,14 @@ func (a *Agent) run(
 		log.Debug("added file to context", "uri", r.uri, "size", len(r.content))
 	}
 
-	// Append user message
-	userMsg := llmapi.Message{Role: llmapi.RoleUser, Content: userMessage}
-	if len(opts.attachments) > 0 {
+	// Content is the transcript representation. MultiContent is the model
+	// representation when the two texts differ or content parts are present.
+	displayMessage := userMessage
+	if opts.displaySet {
+		displayMessage = opts.displayMessage
+	}
+	userMsg := llmapi.Message{Role: llmapi.RoleUser, Content: displayMessage}
+	if displayMessage != userMessage || len(opts.attachments) > 0 {
 		// Providers that support content parts read MultiContent and
 		// ignore Content, so the text has to be repeated as a part.
 		userMsg.MultiContent = append(
@@ -537,7 +581,8 @@ func (a *Agent) run(
 	// (see below). Memory is recalled once per Run; "every turn" means
 	// every user message / Run() call.
 	recallStart := time.Now()
-	memories, memErr := a.memory.Recall(ctx, a.resourceFiles(), userMessage, a.config.Workspace.Path())
+	memories, memErr := a.memory.Recall(ctx, a.resourceFiles(), displayMessage,
+		a.config.Workspace.Path())
 	recallDuration := time.Since(recallStart)
 	if memErr != nil {
 		log.Warn("memory recall failed", "error", memErr)
@@ -635,11 +680,12 @@ func (a *Agent) run(
 			reqMessages = req
 		}
 
-		// Inject project instructions and memory context into the user
-		// message. Both are transient — NOT persisted. userMsgIdx
+		// Inject live context into the user message. It is transient — NOT
+		// persisted. userMsgIdx
 		// tracks the user message position and is updated after
 		// compaction; transient insertion shifts it uniformly.
-		if a.config.ProjectInstructions != "" || memoryContent != "" {
+		if a.config.ProjectInstructions != "" || memoryContent != "" ||
+			requestAdditionalContext != "" {
 			if len(reqMessages) == len(messages) {
 				reqMessages = slices.Clone(reqMessages)
 			}
@@ -647,19 +693,20 @@ func (a *Agent) run(
 			if len(transient) > 0 {
 				idx += len(transient)
 			}
-			content := reqMessages[idx].Content
-			if memoryContent != "" {
-				content = "<memory-context>\n" + memoryContent +
-					"\n</memory-context>\n\n" + content
-			}
+			var contextParts []string
 			if a.config.ProjectInstructions != "" {
-				content = "<project-instructions>\n" + a.config.ProjectInstructions +
-					"\n</project-instructions>\n\n" + content
+				contextParts = append(contextParts, "<project-instructions>\n"+
+					a.config.ProjectInstructions+"\n</project-instructions>")
 			}
-			reqMessages[idx] = llmapi.Message{
-				Role:    llmapi.RoleUser,
-				Content: content,
+			if memoryContent != "" {
+				contextParts = append(contextParts,
+					"<memory-context>\n"+memoryContent+"\n</memory-context>")
 			}
+			if requestAdditionalContext != "" {
+				contextParts = append(contextParts, requestAdditionalContext)
+			}
+			reqMessages[idx] = prependMessageText(reqMessages[idx],
+				strings.Join(contextParts, "\n\n"))
 		}
 
 		// Inject transient hint when approaching the context window limit.
