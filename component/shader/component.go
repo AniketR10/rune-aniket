@@ -82,6 +82,7 @@ func New(
 // Draw satisfies tui.Component.
 func (c *Component) Draw(w term.Writer) {
 	if c.done.Load() {
+		c.buf = nil
 		c.root.Draw(w)
 		return
 	}

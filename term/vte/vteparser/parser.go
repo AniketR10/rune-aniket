@@ -90,7 +90,6 @@ func (p *Parser) Init(handler Handler, timeout Timeout) {
 	p.handler = handler
 	p.state = parserState{
 		syncState: syncState{
-			buffer:  make([]byte, 0, syncBufferSize),
 			timeout: timeout,
 		},
 	}
@@ -190,6 +189,9 @@ func (p *Parser) SyncBytesCount() int {
 // keep the parser reasonable.
 func (p *Parser) advanceSync(buf []byte) int {
 	sync := &p.state.syncState
+	if sync.buffer == nil {
+		sync.buffer = make([]byte, 0, syncBufferSize)
+	}
 	prevLen := len(sync.buffer)
 	// The region is flushed as soon as it reaches syncBufferSize-1, so
 	// the buffer never outgrows its initial capacity.

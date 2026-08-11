@@ -147,6 +147,20 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 2, int(called.Load()))
 	})
 
+	t.Run("put rejects VTE above initial capacity", func(t *testing.T) {
+		t.Parallel()
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			return newTestVte(f), nil
+		})
+
+		borrowed, err := f.Get()
+		require.NoError(t, err)
+		require.Equal(t, 1, f.Capacity())
+
+		assert.False(t, f.put(borrowed))
+		require.Equal(t, 1, f.Capacity())
+	})
+
 	t.Run("VTE.Close does not put vte back into the pool, if used alternate buffer", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
@@ -170,28 +184,16 @@ func TestFacility(t *testing.T) {
 
 	t.Run("VTE.Close clears the primary buffer when put back into pool", func(t *testing.T) {
 		t.Parallel()
-		var tvte *testVte
-		var c atomic.Int32
-		var mu sync.Mutex
-		f := newTestFacility(1, func(f *Facility) (VTE, error) {
-			if c.CompareAndSwap(0, 1) {
-				mu.Lock()
-				defer mu.Unlock()
-				tvte = newTestVte(f)
-				return tvte, nil
-			}
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
 			return newTestVte(f), nil
 		})
 
-		vte, err := f.Get()
+		pooled, err := f.Get()
 		require.NoError(t, err)
+		tvte := pooled.(*testVte)
 
-		require.NoError(t, vte.Close())
+		require.NoError(t, pooled.Close())
 
-		mu.Lock()
-		defer mu.Unlock()
-
-		require.NotNil(t, 2, tvte)
 		assert.True(t, tvte.clearedPrimary)
 	})
 

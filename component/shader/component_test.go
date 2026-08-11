@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/goleak"
+	"unstable.build/go-tui/cell"
 )
 
 func TestShader(t *testing.T) {
@@ -85,6 +86,18 @@ AAAAAAAAAAAAAAAAAAAA
 
 		comptest.TestComponent(t, s, w, tests)
 		require.NoError(t, s.Close())
+	})
+
+	t.Run("releases frame buffer after shader is done", func(t *testing.T) {
+		s := &Component{
+			root: &component.TestComponent{Ch: 'A'},
+			buf:  cell.NewBufferWriter(context.Background(), 20, 10),
+		}
+		s.done.Store(true)
+
+		s.Draw(term.NewStringWriter(20, 10))
+
+		assert.Nil(t, s.buf)
 	})
 
 	t.Run("resizes underlying component", func(t *testing.T) {

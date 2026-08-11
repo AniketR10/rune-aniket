@@ -321,8 +321,6 @@ func (f *Facility) watchRemoteScheme(ch <-chan struct{}) {
 	}
 }
 
-const maxPoolSize = 10
-
 func (f *Facility) initCap(initialCapacity int) {
 	// pendingInit is normally seeded by New; ensure it is set when
 	// initCap is invoked directly (e.g. by the test helper).
@@ -366,7 +364,7 @@ func (f *Facility) put(v VTE) bool {
 		return false
 	}
 
-	if len(f.pool) == maxPoolSize {
+	if len(f.pool) >= f.initialCapacity {
 		return false
 	}
 

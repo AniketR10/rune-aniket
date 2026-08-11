@@ -680,6 +680,20 @@ func TestStopSyncTimeoutReplaysPartialMarker(t *testing.T) {
 	assert.Equal(t, 1, timeout.clears)
 }
 
+func TestSynchronizedUpdateBufferAllocatesLazily(t *testing.T) {
+	h := new(countingParserHandler)
+	timeout := new(recordingParserTimeout)
+	p := NewParser(h, timeout)
+
+	assert.Zero(t, cap(p.state.syncState.buffer))
+	p.AdvanceBytes([]byte("ordinary output"))
+	assert.Zero(t, cap(p.state.syncState.buffer))
+
+	p.AdvanceBytes(bsuCSI)
+	p.AdvanceBytes([]byte("buffered"))
+	assert.Equal(t, syncBufferSize, cap(p.state.syncState.buffer))
+}
+
 func TestSynchronizedUpdateBufferBoundaryTable(t *testing.T) {
 	tests := []struct {
 		name             string
