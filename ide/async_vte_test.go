@@ -56,6 +56,9 @@ func (r *replayVTE) Resize(width, height int) {
 
 func (r *replayVTE) RestoreFromSnapshot(s vte.Snapshot) error {
 	r.ops = append(r.ops, "restore")
+	// Mirror vte.Handler: a restore drives the snapshot's dimensions
+	// through the component's resize path.
+	r.width, r.height = max(1, s.Width), max(1, s.Height)
 	return r.testVte.RestoreFromSnapshot(s)
 }
 
@@ -175,7 +178,7 @@ func TestAsyncVTE(t *testing.T) {
 
 		require.NotNil(t, av.real)
 		assert.Equal(t, []string{
-			"resize", "restore", "attrs", "focus", "key", "key",
+			"restore", "resize", "attrs", "focus", "key", "key",
 		}, rv.ops, "unclaimed pre-ready keys must still replay")
 		assert.Equal(t, 42, rv.width)
 		assert.Equal(t, 17, rv.height)
@@ -185,6 +188,41 @@ func TestAsyncVTE(t *testing.T) {
 		require.Len(t, rv.events, 2)
 		assert.Equal(t, 'l', rv.events[0].Ch)
 		assert.Equal(t, 's', rv.events[1].Ch)
+		require.NoError(t, av.Close())
+	})
+
+	t.Run("restore precedes resize so the pane dimensions win", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor())
+		defer b.Close()
+
+		release := make(chan struct{})
+		rv := &replayVTE{testVte: newTestVte()}
+		av := newAsyncVTE(b.ex, func() (vtereservoir.VTE, error) {
+			<-release
+			return rv, nil
+		})
+
+		// The WM lays out the placeholder at the pane dimensions before
+		// the factory completes; the queued session restore carries the
+		// dimensions the snapshot was saved at.
+		av.Resize(100, 30)
+		require.NoError(t, av.RestoreFromSnapshot(vte.Snapshot{
+			Schema: 1, Width: 120, Height: 40,
+		}))
+
+		close(release)
+		b.waitAsyncVTELoads()
+		b.flushScheduled()
+
+		require.NotNil(t, av.real)
+		assert.Equal(t, []string{"restore", "resize"}, rv.ops,
+			"RestoreFromSnapshot drives the snapshot's dimensions through "+
+				"the resize path, so restoring after the pane resize leaves "+
+				"the terminal and its pty at the saved session's dimensions: "+
+				"a taller snapshot then keeps the shell cursor below the "+
+				"visible pane")
+		assert.Equal(t, 100, rv.width)
+		assert.Equal(t, 30, rv.height)
 		require.NoError(t, av.Close())
 	})
 

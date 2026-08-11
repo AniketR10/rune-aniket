@@ -210,15 +210,15 @@ func (av *asyncVTE) complete(v vtereservoir.VTE, err error) {
 	}
 	av.real = v
 	av.e.tabAliases.addAlias(v.URI(), av.uri)
-	if av.resized {
-		v.Resize(av.width, av.height)
-	}
 	if av.pendingSnapshot != nil {
 		if rerr := v.RestoreFromSnapshot(*av.pendingSnapshot); rerr != nil {
 			_, _ = av.e.notifications.Notify(browserapi.LevelError,
 				"restore terminal session: %v", rerr)
 		}
 		av.pendingSnapshot = nil
+	}
+	if av.resized {
+		v.Resize(av.width, av.height)
 	}
 	if av.pendingAttrs != nil {
 		v.SetDefaultAttributes(*av.pendingAttrs)
