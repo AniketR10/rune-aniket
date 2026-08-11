@@ -30,6 +30,7 @@ import (
 	"image"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -63,7 +64,18 @@ const (
 	// tick cost on very high refresh displays.
 	minTPS = 60
 	maxTPS = 240
+	// echoPollInterval is the sleep slice while awaiting a
+	// post-keystroke interrupt.
+	echoPollInterval = 50 * time.Microsecond
 )
+
+// echoWaitBudget bounds the once-per-tick wait for the focused
+// handler's asynchronous post-keystroke update (a pty echo), letting it
+// render in the keystroke's own frame instead of the next one. It must
+// stay well under a frame period: with vsync the present time is
+// unchanged as long as Update plus Draw still fit the frame. It is a
+// variable so tests can widen it for deterministic timing margins.
+var echoWaitBudget = 2 * time.Millisecond
 
 // GUI implements a graphical TUI runtime as an alternative runtime to what
 // the tui packages provides.
@@ -117,6 +129,13 @@ type GUI struct {
 	iteration     int64
 	deviceScale   float64
 	currentTPS    int
+	// echoLikely arms the once-per-tick echo wait. It is learned, not
+	// configured: an interrupt pending at tick entry right after a
+	// single-key tick means the focused handler echoes asynchronously
+	// (a terminal); a timed-out wait disarms it, so handlers that
+	// update synchronously (the editor) never pay the wait.
+	echoLikely  bool
+	prevTickKey bool
 
 	interruptPending atomic.Bool
 	// processWindowClosed turns a pending window close request into
@@ -331,6 +350,22 @@ func (g *GUI) applyTPS(m *ebiten.MonitorType) {
 	}
 }
 
+// awaitEchoInterrupt reports whether an interrupt was published within
+// the echo budget. It sleeps in short slices because interrupts arrive
+// on an atomic flag with no signalling channel; with vsync the sleep
+// shifts Draw later within the same frame rather than delaying the
+// present.
+func (g *GUI) awaitEchoInterrupt() bool {
+	deadline := time.Now().Add(echoWaitBudget)
+	for !g.interruptPending.Load() {
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(echoPollInterval)
+	}
+	return true
+}
+
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
 func (g *GUI) Update() error {
 	g.pendingEvents = append(g.pendingEvents, g.mouse.processMouse()...)
@@ -344,6 +379,9 @@ func (g *GUI) Update() error {
 	}
 	if interruptPending {
 		g.pendingEvents = append(g.pendingEvents, term.Event{Type: term.EventInterrupt})
+		if g.prevTickKey {
+			g.echoLikely = true
+		}
 	}
 
 	// set context with default iteration
@@ -356,9 +394,12 @@ func (g *GUI) Update() error {
 	// so it can safely update UI state
 	needsDraw = g.drag.poll() || needsDraw
 
+	keyEvents := 0
+	sawInterrupt := interruptPending
 	for _, ev := range g.pendingEvents {
 		switch ev.Type {
 		case term.EventInterrupt:
+			sawInterrupt = true
 			if ev.UserFunc != nil {
 				ev.UserFunc()
 				needsDraw = true
@@ -382,6 +423,9 @@ func (g *GUI) Update() error {
 		case term.EventError, term.EventResize:
 			/* not dispatched by GUI */
 		default:
+			if ev.Type == term.EventKey {
+				keyEvents++
+			}
 			needsDraw = true
 			exit, _ := g.handler.Handle(ev)
 			if exit {
@@ -390,6 +434,20 @@ func (g *GUI) Update() error {
 				}
 				return ErrHandlerExited
 			}
+		}
+	}
+	g.prevTickKey = keyEvents == 1
+	// A lone keystroke on an echoing handler misses its own frame by
+	// microseconds: the echo arrives right after this loop. Waiting is
+	// bounded per tick, never per event, so backlogged repeat bursts
+	// cannot compound it (the per-event wait removed in ff378cf3af froze
+	// under key repeat).
+	if keyEvents == 1 && !sawInterrupt && g.echoLikely && len(g.updateChan) == 0 {
+		if g.awaitEchoInterrupt() && g.interruptPending.Swap(false) {
+			needsDraw = false
+			g.drawHandler(context.Background())
+		} else {
+			g.echoLikely = false
 		}
 	}
 	if needsDraw {
