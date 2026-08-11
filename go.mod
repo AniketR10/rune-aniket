@@ -233,4 +233,4 @@ replace github.com/tree-sitter/go-tree-sitter => github.com/unstablebuild/go-tre
 
 replace github.com/unstablebuild/ox-api => ./cmd/ox-api
 
-replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.7.5-ub.24
+replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.7.5-ub.26

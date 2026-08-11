@@ -54,9 +54,15 @@ var (
 
 const (
 	defaultWidth, defaultHeight = 800, 600
+	// fallbackTPS is used when the monitor's refresh rate is unknown.
 	// 90 strikes a good balance between key repeat smoothness and
 	// not too taxing on the host's resources.
-	tps = 90
+	fallbackTPS = 90
+	// minTPS keeps input sampling responsive when the current video
+	// mode reports an unusually low refresh rate; maxTPS bounds the
+	// tick cost on very high refresh displays.
+	minTPS = 60
+	maxTPS = 240
 )
 
 // GUI implements a graphical TUI runtime as an alternative runtime to what
@@ -110,6 +116,7 @@ type GUI struct {
 	lastPositionY int
 	iteration     int64
 	deviceScale   float64
+	currentTPS    int
 
 	interruptPending atomic.Bool
 	// processWindowClosed turns a pending window close request into
@@ -185,7 +192,8 @@ func (g *GUI) Run(title string) error {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetRunnableOnUnfocused(true)
 	ebiten.SetVsyncEnabled(true)
-	ebiten.SetTPS(tps)
+	ebiten.SetMonitorChangedCallback(g.applyTPS)
+	g.applyTPS(ebiten.Monitor())
 
 	ebiten.SetWindowPosition(g.startPositionX, g.startPositionY)
 	width, height := g.defaultWidth, g.defaultHeight
@@ -295,6 +303,31 @@ func (g *GUI) PublishEvent(ev term.Event) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// tpsForRefreshRate maps a monitor refresh rate in Hz to the tick rate
+// so input sampling and interrupt folding stay in phase with vsync
+// presents, avoiding the frame-pacing beat a fixed tick rate produces
+// against displays it does not divide evenly into.
+func tpsForRefreshRate(hz int) int {
+	if hz <= 0 {
+		return fallbackTPS
+	}
+	return min(max(hz, minTPS), maxTPS)
+}
+
+// applyTPS aligns the tick rate with the given monitor's refresh rate.
+// It runs at startup and from ebiten's monitor-changed callback on the
+// main thread, so there is no per-tick cost.
+func (g *GUI) applyTPS(m *ebiten.MonitorType) {
+	tps := fallbackTPS
+	if m != nil {
+		tps = tpsForRefreshRate(m.RefreshRate())
+	}
+	if tps != g.currentTPS {
+		g.currentTPS = tps
+		ebiten.SetTPS(tps)
 	}
 }
 
