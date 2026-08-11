@@ -688,14 +688,14 @@ func TestE2ECtrlCDismissesRequiresInputPrompt(t *testing.T) {
 }
 
 // TestE2ESubAgentInheritsQualifiedModel drives the chat handler
-// end-to-end through the production "agent" command path: the parent
-// agent emits one `agent` tool call (no model override), which spawns a
-// sub-agent through a real agent.GoroutineSpawner. The sub-agent
-// inherits the parent model from context, and the spawner's service
-// factory resolves it through llmarg against a catalog that exposes the
-// same model name under two providers. A bare name would be ambiguous
-// and fail; the test asserts the factory received the provider-
-// qualified name and the sub-agent ran without surfacing an error.
+// end-to-end through the production "agent" command path after switching
+// the parent to a different model. The parent emits one `agent` tool call
+// without a model override, which spawns a sub-agent through a real
+// agent.GoroutineSpawner. The sub-agent inherits the parent's active
+// model from context, and the spawner's service factory resolves it
+// through llmarg against a catalog that exposes the same model name under
+// two providers. A bare name would be ambiguous and fail; the test
+// asserts the factory received the provider-qualified active model.
 func TestE2ESubAgentInheritsQualifiedModel(t *testing.T) {
 	const (
 		modelName = "claude-opus-4-8"
@@ -756,7 +756,9 @@ func TestE2ESubAgentInheritsQualifiedModel(t *testing.T) {
 		return subSvc, entry, nil
 	}
 
-	h := subAgentSpawnE2EHandler(t, parentSvc, serviceFactory,
+	h, parent := subAgentSpawnE2EHandler(t, parentSvc, serviceFactory,
+		llmapi.ModelEntry{Provider: "codex", Name: "gpt-5.6-sol", ContextWindow: 128_000})
+	parent.SwapService(parentSvc,
 		llmapi.ModelEntry{Provider: provider, Name: modelName, ContextWindow: 128_000})
 
 	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{

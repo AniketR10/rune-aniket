@@ -258,6 +258,17 @@ func loadMCPConfig(fs workspaceapi.FileSystem, root string) (runemcp.Config, boo
 	return cfg, len(cfg.MCPServers) > 0
 }
 
+func defaultAgentsConfig(systemPrompt string) *agent.Cfg {
+	return agent.NewConfig([]agent.Definition{
+		{
+			ID:           "default",
+			Name:         "Default Agent",
+			SystemPrompt: systemPrompt,
+			AllowAny:     true,
+		},
+	})
+}
+
 func newCommandEventHandler(
 	ctx context.Context, ed textapi.Editor, w *extensionapi.Workspace,
 	pconfig config.Config,
@@ -626,18 +637,7 @@ func newCommandEventHandler(
 		},
 	)
 
-	// Sub-agent configuration.
-	ret.agentsConfig = agent.NewConfig(
-		[]agent.Definition{
-			{
-				ID:           "default",
-				Name:         "Default Agent",
-				Model:        ret.defaultModel,
-				SystemPrompt: ret.systemPrompt,
-				AllowAny:     true,
-			},
-		},
-	)
+	ret.agentsConfig = defaultAgentsConfig(ret.systemPrompt)
 
 	// Starting an MCP server needs StartCommand authorization, which
 	// blocks until the user answers a prompt. Connect in the background

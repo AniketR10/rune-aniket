@@ -646,7 +646,7 @@ func subAgentSpawnE2EHandler(
 	svc *llmtest.Service,
 	serviceFactory agent.ServiceFactory,
 	model llmapi.ModelEntry,
-) tui.Handler {
+) (tui.Handler, *agent.Agent) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -669,9 +669,7 @@ func subAgentSpawnE2EHandler(
 	const dialogueID = "test-dialogue"
 	const agentID = "default"
 
-	cfg := agent.NewConfig([]agent.Definition{
-		{ID: agentID, Name: "Default Agent", AllowAny: true},
-	})
+	cfg := defaultAgentsConfig("test")
 	spawner := agent.NewGoroutineSpawner(
 		store, serviceFactory, cfg, skillReg, agent.NoMemory(), "",
 		dialogueID, agentID, dirURI(""), noopAgentPrompter{},
@@ -704,7 +702,7 @@ func subAgentSpawnE2EHandler(
 		inner:       wrapped,
 		interruptCh: interruptCh,
 		settle:      150 * time.Millisecond,
-	}
+	}, ag
 }
 
 // maxTokensE2EHandler wires the real floating chat handler with a
