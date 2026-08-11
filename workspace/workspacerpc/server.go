@@ -440,7 +440,11 @@ func (s *Server) Read(ctx context.Context, req *workspacerpc.ReadRequest) (*work
 	if f == nil {
 		return nil, errInvalidFd
 	}
-	buf := make([]byte, req.GetN())
+	requested := req.GetN()
+	if requested < 0 {
+		return nil, fmt.Errorf("invalid read size %d", requested)
+	}
+	buf := readBufs.get(int(requested))
 	n, err := f.Read(buf)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read error: %s", err)
@@ -467,7 +471,11 @@ func (s *Server) ReadAt(ctx context.Context, req *workspacerpc.ReadRequest) (*wo
 	if f == nil {
 		return nil, errInvalidFd
 	}
-	buf := make([]byte, req.GetN())
+	requested := req.GetN()
+	if requested < 0 {
+		return nil, fmt.Errorf("invalid read size %d", requested)
+	}
+	buf := readBufs.get(int(requested))
 	n, err := f.ReadAt(buf, req.GetOffset())
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read error: %s", err)

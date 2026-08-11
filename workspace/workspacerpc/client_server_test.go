@@ -528,6 +528,71 @@ func TestServerChrootErrorPropagation(t *testing.T) {
 	}
 }
 
+func TestServerReadHonorsRequestedSize(t *testing.T) {
+	t.Parallel()
+	const requested = 2 << 20
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	scheme := workspacetest.NewMockWorkspace(ctrl)
+	file := workspaceapitest.NewMockFile(ctrl)
+	scheme.EXPECT().NewFile(uintptr(1), "large").Return(file)
+	file.EXPECT().Read(gomock.Any()).DoAndReturn(func(buf []byte) (int, error) {
+		assert.Len(t, buf, requested)
+		copy(buf, "chunk")
+		return len("chunk"), nil
+	})
+	server := NewServer(scheme, CommandAuthorizerFunc(
+		func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+	resp, err := server.Read(ctx, &workspacerpc.ReadRequest{
+		Fd:       1,
+		Filename: "large",
+		N:        requested,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []byte("chunk"), resp.GetData())
+	assert.EqualValues(t, len("chunk"), resp.GetN())
+	assert.False(t, resp.GetIsEof())
+}
+
+func TestServerReadRejectsNegativeSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		call func(*Server, *workspacerpc.ReadRequest) error
+	}{
+		{"Read", func(s *Server, req *workspacerpc.ReadRequest) error {
+			_, err := s.Read(context.Background(), req)
+			return err
+		}},
+		{"ReadAt", func(s *Server, req *workspacerpc.ReadRequest) error {
+			_, err := s.ReadAt(context.Background(), req)
+			return err
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			scheme := workspacetest.NewMockWorkspace(ctrl)
+			file := workspaceapitest.NewMockFile(ctrl)
+			scheme.EXPECT().NewFile(uintptr(1), "negative").Return(file)
+			server := NewServer(scheme, CommandAuthorizerFunc(
+				func(context.Context, workspaceapi.Cmd) error { return nil }))
+
+			err := test.call(server, &workspacerpc.ReadRequest{
+				Fd:       1,
+				Filename: "negative",
+				N:        -1,
+			})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid read size")
+		})
+	}
+}
+
 // A scheme call that blocks (e.g. a slow remote Stat) must not prevent
 // unrelated requests from being served: schemes are goroutine safe and
 // the server must not serialize calls into them.
