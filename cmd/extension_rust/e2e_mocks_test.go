@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/debug"
 )
 
 // raCallback implements idelsp.Callback for e2e tests, recording applied
@@ -257,7 +258,7 @@ func (s *localScheme) StartCommand(
 		c.Dir = cmd.Dir
 	}
 	if cmd.Env != nil {
-		c.Env = cmd.Env
+		c.Env = append(c.Environ(), cmd.Env...)
 	}
 	c.Stdin = cmd.Stdin
 	c.Stdout = cmd.Stdout
@@ -279,12 +280,12 @@ func (s *localScheme) StartCommand(
 	s.mu.Unlock()
 	if cmd.Watcher != nil {
 		ch := cmd.Watcher.WatchProcess()
-		go func() {
+		go debug.CapturePanicReport(func() {
 			err := c.Wait()
 			if ch != nil {
 				ch <- err
 			}
-		}()
+		})
 	}
 	return pid, nil
 }

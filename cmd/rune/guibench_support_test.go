@@ -262,6 +262,7 @@ func newGUIBenchSession(tb testing.TB, cfg guiBenchConfig) *guiBenchSession {
 	if root.realIDE == nil {
 		tb.Fatal("bench session must build the configured IDE directly")
 	}
+	root.realIDE.WaitWorkspaces()
 
 	browser := root.browser()
 	guiCfg, ok, err := getGUIConfig(root.config())
@@ -320,15 +321,12 @@ func (s *guiBenchSession) frame() bool {
 	return rendered
 }
 
-// frameHash runs one production frame and returns the SHA-256 of the
-// resulting screen pixels. ReadPixels must run inside the benchdraw
-// frame window (between BeginFrame and EndFrame): the atlas only
-// services reads while inFrame, and reading enqueues a flush of the
-// pending draw commands through the nop graphics driver benchdraw
-// installs. The hash therefore reflects the fully rasterized frame,
-// including custom box-drawing and glyph masks, without a window. The
-// pixel buffer is reused across calls.
-func (s *guiBenchSession) frameHash() [sha256.Size]byte {
+// frameHashes renders the current cell buffer through both repaint paths.
+// ReadPixels must run inside the benchdraw frame window: the atlas only
+// services reads while inFrame, and reading flushes pending draw commands.
+func (s *guiBenchSession) frameHashes() (
+	optimized, reference [sha256.Size]byte,
+) {
 	if err := s.g.Update(); err != nil {
 		s.tb.Fatalf("gui update: %v", err)
 	}
@@ -339,11 +337,15 @@ func (s *guiBenchSession) frameHash() [sha256.Size]byte {
 	}
 	s.pixelBuf = s.pixelBuf[:need]
 
-	benchdraw.BeginFrame(s.tb)
-	s.g.Draw(s.screen)
-	s.screen.ReadPixels(s.pixelBuf)
-	benchdraw.EndFrame(s.tb)
-	return sha256.Sum256(s.pixelBuf)
+	renderHash := func(forceFullRepaint bool) [sha256.Size]byte {
+		s.g.SetForceFullRepaint(forceFullRepaint)
+		benchdraw.BeginFrame(s.tb)
+		s.g.Draw(s.screen)
+		s.screen.ReadPixels(s.pixelBuf)
+		benchdraw.EndFrame(s.tb)
+		return sha256.Sum256(s.pixelBuf)
+	}
+	return renderHash(false), renderHash(true)
 }
 
 // publish injects an event through the production GUI publisher; it

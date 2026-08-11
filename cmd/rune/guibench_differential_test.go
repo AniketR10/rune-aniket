@@ -25,6 +25,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"maps"
 	"testing"
 	"time"
 
@@ -35,15 +36,19 @@ import (
 // driven for in the correctness harness. It is small enough to keep the
 // test fast but large enough to exercise multi-frame damage evolution
 // (cursor moves, scroll direction reversals, theme cycling).
-const differentialFrames = 48
+const (
+	differentialFrames = 48
+	differentialWidth  = 960
+	differentialHeight = 540
+)
 
 func TestGUIBenchSettleWaitsForInterruptRenders(t *testing.T) {
 	if testing.Short() {
 		t.Skip("GUI bench session is not short-mode friendly")
 	}
 	s := newGUIBenchSession(t, guiBenchConfig{
-		pixelsW:           benchHDWidth,
-		pixelsH:           benchHDHeight,
+		pixelsW:           differentialWidth,
+		pixelsH:           differentialHeight,
 		disableAnimations: true,
 	})
 	defer s.close()
@@ -66,27 +71,22 @@ func TestGUIBenchSettleWaitsForInterruptRenders(t *testing.T) {
 	}
 }
 
-// collectFrameHashes builds a session for cfg, settles it, runs the
-// scenario's setup, then drives differentialFrames scripted frames.
+// collectFrameHashes renders each scripted state through both repaint paths.
 func collectFrameHashes(
-	t *testing.T, sc guiBenchScenario, cfg guiBenchConfig,
-) [][sha256.Size]byte {
+	t *testing.T, s *guiBenchSession, sc guiBenchScenario,
+) (optimized, reference [][sha256.Size]byte) {
 	t.Helper()
-	cfg.files = sc.files
-	cfg.workspaceFiles = sc.workspaceFiles
-	cfg.syntaxLangs = sc.syntaxLangs
-	s := newGUIBenchSession(t, cfg)
-	defer s.close()
-	s.settle(60 * time.Second)
-	s.prepareScenario(sc)
-	hashes := make([][sha256.Size]byte, 0, differentialFrames)
+	optimized = make([][sha256.Size]byte, 0, differentialFrames)
+	reference = make([][sha256.Size]byte, 0, differentialFrames)
 	for i := range differentialFrames {
 		if sc.step != nil {
 			sc.step(s, i)
 		}
-		hashes = append(hashes, s.frameHash())
+		optimizedHash, referenceHash := s.frameHashes()
+		optimized = append(optimized, optimizedHash)
+		reference = append(reference, referenceHash)
 	}
-	return hashes
+	return optimized, reference
 }
 
 // differentialScenarios is the subset of the battery used for pixel
@@ -99,14 +99,37 @@ func differentialScenarios() []guiBenchScenario {
 	return []guiBenchScenario{
 		idleScenario(),
 		cursorMoveScenario(),
-		typingScenario(),
 		scrollScenario(),
-		splitsScenario(),
 		selectionDragScenario(),
 		invalidateBurstScenario(),
 		unicodeStressScenario(),
 		worstCaseScenario(),
+		typingScenario(),
+		splitsScenario(),
 	}
+}
+
+func differentialConfig(transparent bool, scenarios []guiBenchScenario) guiBenchConfig {
+	cfg := guiBenchConfig{
+		pixelsW:           differentialWidth,
+		pixelsH:           differentialHeight,
+		transparent:       transparent,
+		disableAnimations: true,
+		workspaceFiles:    make(map[string]string),
+	}
+	languages := make(map[string]struct{})
+	for _, sc := range scenarios {
+		cfg.files = append(cfg.files, sc.files...)
+		maps.Copy(cfg.workspaceFiles, sc.workspaceFiles)
+		for _, lang := range sc.syntaxLangs {
+			if _, ok := languages[lang]; ok {
+				continue
+			}
+			languages[lang] = struct{}{}
+			cfg.syntaxLangs = append(cfg.syntaxLangs, lang)
+		}
+	}
+	return cfg
 }
 
 // TestGUIDamageDifferential is the primary Phase 2 correctness harness.
@@ -121,40 +144,36 @@ func TestGUIDamageDifferential(t *testing.T) {
 	if testing.Short() {
 		t.Skip("differential harness is not short-mode friendly")
 	}
-	for _, sc := range differentialScenarios() {
-		for _, transparent := range []bool{false, true} {
-			variant := "opaque"
-			if transparent {
-				variant = "transparent"
-			}
-			t.Run(sc.name+"/"+variant, func(t *testing.T) {
-				base := guiBenchConfig{
-					pixelsW:           benchHDWidth,
-					pixelsH:           benchHDHeight,
-					transparent:       transparent,
-					disableAnimations: true,
-				}
-
-				ref := base
-				ref.forceFullRepaint = true
-				refHashes := collectFrameHashes(t, sc, ref)
-
-				opt := base
-				opt.forceFullRepaint = false
-				optHashes := collectFrameHashes(t, sc, opt)
-
-				if len(refHashes) != len(optHashes) {
-					t.Fatalf("frame count mismatch: reference %d, optimized %d",
-						len(refHashes), len(optHashes))
-				}
-				for i := range refHashes {
-					if refHashes[i] != optHashes[i] {
-						t.Fatalf("frame %d differs: damage-tracked render does not "+
-							"match full-repaint reference (reference %x, optimized %x)",
-							i, refHashes[i][:8], optHashes[i][:8])
-					}
-				}
-			})
+	scenarios := differentialScenarios()
+	for _, transparent := range []bool{false, true} {
+		variant := "opaque"
+		if transparent {
+			variant = "transparent"
 		}
+		t.Run(variant, func(t *testing.T) {
+			s := newGUIBenchSession(t, differentialConfig(transparent, scenarios))
+			defer s.close()
+			s.settle(60 * time.Second)
+			for _, sc := range scenarios {
+				t.Run(sc.name, func(t *testing.T) {
+					s.tb = t
+					s.publish(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+					s.frame()
+					s.prepareScenario(sc)
+					optHashes, refHashes := collectFrameHashes(t, s, sc)
+					if len(refHashes) != len(optHashes) {
+						t.Fatalf("frame count mismatch: reference %d, optimized %d",
+							len(refHashes), len(optHashes))
+					}
+					for i := range refHashes {
+						if refHashes[i] != optHashes[i] {
+							t.Fatalf("frame %d differs: damage-tracked render does not "+
+								"match full-repaint reference (reference %x, optimized %x)",
+								i, refHashes[i][:8], optHashes[i][:8])
+						}
+					}
+				})
+			}
+		})
 	}
 }

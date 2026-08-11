@@ -340,6 +340,22 @@ func TestUpdate(t *testing.T) {
 	})
 }
 
+func TestSetForceFullRepaint(t *testing.T) {
+	mock := mockHandler{
+		assertDraw:  func(term.Writer) {},
+		assertEvent: func(term.Event) (bool, bool) { return false, false },
+	}
+	g, _ := newTestGUI(t, &mock)
+	g.Layout(640, 480)
+	g.needsRender = false
+
+	g.SetForceFullRepaint(true)
+
+	assert.True(t, g.forceFullRepaint)
+	assert.True(t, g.renderer.forceFullRepaint)
+	assert.True(t, g.NeedsRender())
+}
+
 func TestRootHandlerSynchronization(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

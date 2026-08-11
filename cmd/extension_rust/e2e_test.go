@@ -24,7 +24,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +41,36 @@ import (
 	"unstable.build/go-tui/extension/langext"
 	"unstable.build/go-tui/ide/idelsp"
 )
+
+func TestLocalSchemeStartCommandPreservesEnvironment(t *testing.T) {
+	t.Setenv("RUNE_RUST_E2E_INHERITED", "inherited")
+	t.Setenv("RUNE_RUST_E2E_OVERRIDE", "inherited")
+
+	var stdout bytes.Buffer
+	done := make(chan error, 1)
+	_, err := newLocalScheme("").StartCommand(t.Context(), workspaceapi.Cmd{
+		Path:    os.Args[0],
+		Args:    []string{"-test.run=^TestLocalSchemeEnvironmentHelper$"},
+		Env:     []string{"RUNE_RUST_E2E_HELPER=1", "RUNE_RUST_E2E_OVERRIDE=override"},
+		Stdout:  &stdout,
+		Watcher: workspaceapi.ChanProcessWatcher(done),
+	})
+	require.NoError(t, err)
+	require.NoError(t, <-done)
+	lines := strings.Split(stdout.String(), "\n")
+	require.GreaterOrEqual(t, len(lines), 2)
+	assert.Equal(t, []string{"inherited", "override"}, lines[:2])
+}
+
+func TestLocalSchemeEnvironmentHelper(t *testing.T) {
+	if os.Getenv("RUNE_RUST_E2E_HELPER") != "1" {
+		return
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "%s\n%s\n",
+		os.Getenv("RUNE_RUST_E2E_INHERITED"),
+		os.Getenv("RUNE_RUST_E2E_OVERRIDE"),
+	)
+}
 
 func TestE2ERustAnalyzerLogFilterReachesProcess(t *testing.T) {
 	raBin := findRustAnalyzer(t)

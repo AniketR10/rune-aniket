@@ -263,6 +263,17 @@ func (g *GUI) NeedsRender() bool {
 	return g.needsRender
 }
 
+// SetForceFullRepaint selects whether Draw repaints the entire retained frame.
+// Changing the mode schedules a render so callers can compare strategies for
+// the current cell buffer without dispatching another handler event.
+func (g *GUI) SetForceFullRepaint(force bool) {
+	g.forceFullRepaint = force
+	if g.renderer != nil {
+		g.renderer.forceFullRepaint = force
+	}
+	g.needsRender = true
+}
+
 // PublishEvent enqueues ev for the next Update tick. A client
 // interrupt (a bare EventInterrupt that only asks for a redraw of
 // asynchronously refreshed content) is collapsed onto an atomic flag
