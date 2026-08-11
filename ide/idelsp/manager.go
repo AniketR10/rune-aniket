@@ -350,6 +350,9 @@ func (m *Manager) handle(ev textapi.Event) error {
 	case textapi.EventTypeEdit:
 		srv, err := m.serverForURI(uri)
 		if err != nil {
+			if m.cfg.NoInitializeServer && m.hasPendingOpen(uri) {
+				return nil
+			}
 			return err
 		}
 		uriStr := convertURI(ev.URI)
@@ -391,6 +394,9 @@ func (m *Manager) handle(ev textapi.Event) error {
 	case textapi.EventTypeFlush:
 		srv, err := m.serverForURI(uri)
 		if err != nil {
+			if m.cfg.NoInitializeServer && m.refreshPendingOpen(uri, ev.Content) {
+				return nil
+			}
 			return err
 		}
 		f, err := m.ensureFile(ev.URI, ev.Content, srv.key())
@@ -463,6 +469,30 @@ func (m *Manager) handle(ev textapi.Event) error {
 	default:
 		return fmt.Errorf("extraneous event %v", ev.Type)
 	}
+}
+
+// Pending-open snapshots are refreshed only from events that carry the
+// full buffer content (open, flush). Edit deltas are deliberately
+// swallowed without replaying them: doing so would replicate the
+// editor's buffer semantics here, and any divergence would corrupt the
+// didOpen base the server pins once it initializes.
+func (m *Manager) hasPendingOpen(uri string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.pendingOpens[uri]
+	return ok
+}
+
+func (m *Manager) refreshPendingOpen(uri, content string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pending, ok := m.pendingOpens[uri]
+	if !ok {
+		return false
+	}
+	pending.Content = content
+	m.pendingOpens[uri] = pending
+	return true
 }
 
 func (m *Manager) fileDidChangeOOB(uri string) {

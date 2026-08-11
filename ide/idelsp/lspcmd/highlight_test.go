@@ -24,7 +24,10 @@
 package lspcmd
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/idelsp"
 )
 
 func testURI(t *testing.T, path string) workspaceapi.URI {
@@ -185,6 +189,42 @@ func TestHighlightHandler_SamePositionSkipped(t *testing.T) {
 
 	assert.Equal(t, int32(1), calls.Load(),
 		"duplicate position should not trigger a second RPC")
+}
+
+func TestHighlightHandler_NoServerDoesNotWarn(t *testing.T) {
+	t.Parallel()
+	uri := testURI(t, "/tmp/test.go")
+	var logs bytes.Buffer
+	h := &highlightHandler{
+		lsp: &mockLSP{documentHighlightFn: func(
+			context.Context, semanticapi.DocumentHighlightParams,
+		) ([]semanticapi.DocumentHighlight, error) {
+			return nil, idelsp.ErrNoServer
+		}},
+		log: slog.New(slog.NewTextHandler(&logs, nil)),
+	}
+
+	h.fetch(uri, URIToLSP(uri), semanticapi.Position{})
+
+	assert.Empty(t, logs.String())
+}
+
+func TestHighlightHandler_UnexpectedErrorWarns(t *testing.T) {
+	t.Parallel()
+	uri := testURI(t, "/tmp/test.go")
+	var logs bytes.Buffer
+	h := &highlightHandler{
+		lsp: &mockLSP{documentHighlightFn: func(
+			context.Context, semanticapi.DocumentHighlightParams,
+		) ([]semanticapi.DocumentHighlight, error) {
+			return nil, errors.New("broken transport")
+		}},
+		log: slog.New(slog.NewTextHandler(&logs, nil)),
+	}
+
+	h.fetch(uri, URIToLSP(uri), semanticapi.Position{})
+
+	assert.Contains(t, logs.String(), "broken transport")
 }
 
 func TestHighlightHandler_EditClearsHighlights(t *testing.T) {

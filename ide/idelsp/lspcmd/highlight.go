@@ -25,6 +25,7 @@ package lspcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -34,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/idelsp"
 )
 
 const highlightLocationID = "lsp-highlight"
@@ -198,7 +200,7 @@ func (h *highlightHandler) fetch(wsURI workspaceapi.URI, uri string, pos semanti
 	}
 	highlights, err := h.lsp.DocumentHighlight(ctx, req)
 	if err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !errors.Is(err, idelsp.ErrNoServer) {
 			h.log.Warn("document highlight", "err", err)
 		}
 		return

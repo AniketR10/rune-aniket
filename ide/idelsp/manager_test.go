@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // TestEventTypeClose_evictsFilesCache locks in the fix for RUNE-195:
@@ -70,6 +71,58 @@ func TestEventTypeClose_evictsFilesCache(t *testing.T) {
 	defer m.mu.Unlock()
 	assert.Empty(t, m.files,
 		"EventTypeClose must evict the cached file entry")
+}
+
+// Pending-open snapshots must be refreshed only from events that carry
+// the full buffer content. Replaying edit deltas would replicate the
+// editor's buffer semantics in the manager, and any divergence would
+// corrupt the didOpen base the server pins after initialization.
+func TestPendingOpenIgnoresEditsAndRefreshesOnFlush(t *testing.T) {
+	t.Parallel()
+	workspaceURI := makeURI(t, "file:///workspace")
+	m := New(workspaceURI, nil, nil, nil, nil, nil,
+		Config{NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	openURI := makeURI(t, "file:///workspace/open.go")
+	const opened = "package main\n\nfunc main() {}\n"
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeOpen,
+		URI:     openURI,
+		Content: opened,
+	}))
+
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeEdit,
+		URI:     openURI,
+		Start:   term.Coordinates{Y: 2, X: 13},
+		End:     term.Coordinates{Y: 2, X: 13},
+		Content: "println(\"ready\")",
+	}), "edit before server init must be swallowed, not logged as error")
+	m.mu.Lock()
+	pending := m.pendingOpens[openURI.String()]
+	m.mu.Unlock()
+	assert.Equal(t, opened, pending.Content,
+		"edit before server init must not mutate the snapshot")
+
+	const flushed = "package main\n\nfunc main() { println(\"ready\") }\n"
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeFlush,
+		URI:     openURI,
+		Content: flushed,
+	}))
+	m.mu.Lock()
+	pending = m.pendingOpens[openURI.String()]
+	m.mu.Unlock()
+	assert.Equal(t, flushed, pending.Content,
+		"flush carries the authoritative buffer and must refresh the snapshot")
+
+	notOpenURI := makeURI(t, "file:///workspace/never_opened.go")
+	require.Error(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeFlush,
+		URI:     notOpenURI,
+		Content: "package main\n",
+	}), "flush for a file with no pending open must still surface the error")
 }
 
 // TestManagerConcurrentStateAccess drives the file/server/pendingOpens
