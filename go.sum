@@ -454,6 +454,8 @@ github.com/unstablebuild/ebiten/v2 v2.7.5-ub.24 h1:RbN1K+TJEacNC763kcTyhyRHkK2gE
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.24/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.26 h1:3T2DoYqEGWBJ5fUXvRdshqFSCjo9Vuo9Vg3GrTCF5O0=
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.26/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.27 h1:6jGCjs7KXe/N8IUo9PLUso24jqrG69qJgFPvmuQv/zw=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.27/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1/go.mod h1:E3VhlS+AKkrq6ZNn1axE2/nDRJ87l1FJk9r5HT2vPX0=
 github.com/unstablebuild/go-git/v6 v6.0.1-ub.1 h1:xBomYWGQkSIm023lhJxu+F1uU4YjZlIZaKpnm+7nIak=

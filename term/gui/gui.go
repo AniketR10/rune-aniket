@@ -55,15 +55,6 @@ var (
 
 const (
 	defaultWidth, defaultHeight = 800, 600
-	// fallbackTPS is used when the monitor's refresh rate is unknown.
-	// 90 strikes a good balance between key repeat smoothness and
-	// not too taxing on the host's resources.
-	fallbackTPS = 90
-	// minTPS keeps input sampling responsive when the current video
-	// mode reports an unusually low refresh rate; maxTPS bounds the
-	// tick cost on very high refresh displays.
-	minTPS = 60
-	maxTPS = 240
 	// echoPollInterval is the sleep slice while awaiting a
 	// post-keystroke interrupt.
 	echoPollInterval = 50 * time.Microsecond
@@ -128,7 +119,6 @@ type GUI struct {
 	lastPositionY int
 	iteration     int64
 	deviceScale   float64
-	currentTPS    int
 	// echoLikely arms the once-per-tick echo wait. It is learned, not
 	// configured: an interrupt pending at tick entry right after a
 	// single-key tick means the focused handler echoes asynchronously
@@ -210,9 +200,11 @@ func (g *GUI) Run(title string) error {
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetRunnableOnUnfocused(true)
-	ebiten.SetVsyncEnabled(true)
-	ebiten.SetMonitorChangedCallback(g.applyTPS)
-	g.applyTPS(ebiten.Monitor())
+	// A frame only runs when an OS input event or ScheduleFrame arrives.
+	// TPS must stay synced to frames: a finite TPS would quantize event
+	// pickup back onto a tick grid.
+	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum)
+	ebiten.SetTPS(ebiten.SyncWithFPS)
 
 	ebiten.SetWindowPosition(g.startPositionX, g.startPositionY)
 	width, height := g.defaultWidth, g.defaultHeight
@@ -305,48 +297,25 @@ func (g *GUI) SetForceFullRepaint(force bool) {
 	g.needsRender = true
 }
 
-// PublishEvent enqueues ev for the next Update tick. A client
-// interrupt (a bare EventInterrupt that only asks for a redraw of
-// asynchronously refreshed content) is collapsed onto an atomic flag
-// instead of the channel so bursts of them cost no channel traffic;
-// Update folds it into a single repaint. All other events, including
-// interrupts carrying a Raw payload or UserFunc, keep their ordered
-// delivery through the channel.
+// PublishEvent enqueues ev for the next frame and wakes the run loop.
+// A client interrupt (a bare EventInterrupt that only asks for a
+// redraw of asynchronously refreshed content) is collapsed onto an
+// atomic flag instead of the channel so bursts of them cost no channel
+// traffic; Update folds it into a single repaint. All other events,
+// including interrupts carrying a Raw payload or UserFunc, keep their
+// ordered delivery through the channel.
 func (g *GUI) PublishEvent(ev term.Event) bool {
 	if ev.Type == term.EventInterrupt && ev.Raw == nil && ev.UserFunc == nil {
 		g.interruptPending.Store(true)
+		ebiten.ScheduleFrame()
 		return true
 	}
 	select {
 	case g.updateChan <- ev:
+		ebiten.ScheduleFrame()
 		return true
 	default:
 		return false
-	}
-}
-
-// tpsForRefreshRate maps a monitor refresh rate in Hz to the tick rate
-// so input sampling and interrupt folding stay in phase with vsync
-// presents, avoiding the frame-pacing beat a fixed tick rate produces
-// against displays it does not divide evenly into.
-func tpsForRefreshRate(hz int) int {
-	if hz <= 0 {
-		return fallbackTPS
-	}
-	return min(max(hz, minTPS), maxTPS)
-}
-
-// applyTPS aligns the tick rate with the given monitor's refresh rate.
-// It runs at startup and from ebiten's monitor-changed callback on the
-// main thread, so there is no per-tick cost.
-func (g *GUI) applyTPS(m *ebiten.MonitorType) {
-	tps := fallbackTPS
-	if m != nil {
-		tps = tpsForRefreshRate(m.RefreshRate())
-	}
-	if tps != g.currentTPS {
-		g.currentTPS = tps
-		ebiten.SetTPS(tps)
 	}
 }
 
