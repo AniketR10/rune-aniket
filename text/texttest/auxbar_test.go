@@ -615,6 +615,12 @@ func (d *eventDiffer) Diff(context.Context, workspaceapi.URI) (vctrl.FileDiff, e
 	return vctrl.FileDiff{}, nil
 }
 
+func (d *eventDiffer) WorkingDiff(
+	context.Context, workspaceapi.URI, int,
+) ([]vctrl.FileDiff, error) {
+	return nil, nil
+}
+
 func (d *eventDiffer) ListRemotes(context.Context, workspaceapi.URI) ([]string, error) {
 	return nil, nil
 }
@@ -954,6 +960,12 @@ func (d differ) ShortRef(ctx context.Context, file workspaceapi.URI) (string, er
 
 func (d differ) Diff(ctx context.Context, file workspaceapi.URI) (vctrl.FileDiff, error) {
 	return vctrl.FileDiff{Hunks: []vctrl.Hunk{{NewLines: 2, NewStartLine: 5}, {OrigStartLine: 10, OrigLines: 2}}}, nil
+}
+
+func (d differ) WorkingDiff(
+	ctx context.Context, file workspaceapi.URI, contextLines int,
+) ([]vctrl.FileDiff, error) {
+	panic("unimplemented")
 }
 
 func (d differ) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {

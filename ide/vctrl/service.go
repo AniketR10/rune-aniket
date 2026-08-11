@@ -38,6 +38,15 @@ type Service interface {
 	// Diff returns the differences between the given file in the worktree and HEAD.
 	Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error)
 
+	// WorkingDiff returns one FileDiff per file that differs between HEAD
+	// and the working tree of the repository containing path, untracked
+	// files included, with contextLines of surrounding source per hunk.
+	// File names are repository relative, except that a missing side is
+	// reported as "/dev/null".
+	WorkingDiff(
+		ctx context.Context, path workspaceapi.URI, contextLines int,
+	) ([]FileDiff, error)
+
 	// CurrentCommit returns the current commit hash.
 	CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error)
 
@@ -108,6 +117,8 @@ type Hunk struct {
 	NewStartLine int32
 	// number of lines the hunk applies to in the new file
 	NewLines int32
+	// optional section heading
+	Section string
 	// hunk body (lines prefixed with '-', '+', or ' ')
 	Body string
 }
@@ -115,6 +126,10 @@ type Hunk struct {
 var (
 	// ErrDiffNoChanges is returned when diff is run and returns no changes.
 	ErrDiffNoChanges = errors.New("diff no changes")
+
+	// ErrUnsupported is returned by a service that cannot serve an
+	// operation the backing implementation does not cover.
+	ErrUnsupported = errors.New("unsupported operation")
 )
 
 // NopService returns an implementation of Service that does nothing.
@@ -138,6 +153,12 @@ func (c nopService) ListRemotes(
 
 func (n nopService) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {
 	return FileDiff{}, nil
+}
+
+func (n nopService) WorkingDiff(
+	ctx context.Context, path workspaceapi.URI, contextLines int,
+) ([]FileDiff, error) {
+	return nil, nil
 }
 
 func (n nopService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
@@ -175,6 +196,14 @@ func (s syncService) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.root.Diff(ctx, file)
+}
+
+func (s syncService) WorkingDiff(
+	ctx context.Context, path workspaceapi.URI, contextLines int,
+) ([]FileDiff, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.WorkingDiff(ctx, path, contextLines)
 }
 
 func (s syncService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {

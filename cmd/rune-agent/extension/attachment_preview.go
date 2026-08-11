@@ -169,7 +169,7 @@ func (h *aiEditorHandler) attachmentContentParts(
 			// carry inline content directly and are never replayed as a
 			// chip from persisted content, so they skip the v1 envelope.
 			parts = append(parts, textPart(fmt.Sprintf("%s\n%s",
-				chatReviewHeading, a.Content)))
+				reviewAttachmentHeading(a.ID), a.Content)))
 			continue
 		}
 		if a.Kind == dialoguetui.AttachmentSymbol {

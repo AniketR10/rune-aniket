@@ -115,6 +115,13 @@ var (
 			Synopsis: "",
 		},
 		{
+			Name: commandReviewAll,
+			Summary: "Review everything uncommitted in the workspace repository " +
+				"as one editable diff, untracked files included. Edits are " +
+				"attached to the next message. Run from an open agent chat tab.",
+			Synopsis: "",
+		},
+		{
 			Name: commandExport,
 			Summary: "Export the focused agent chat or its audit log to a temp " +
 				"file. Run from an open agent chat tab.",

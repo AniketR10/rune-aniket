@@ -106,6 +106,14 @@ func (c *Cache) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, erro
 	return diff, err
 }
 
+// WorkingDiff is not cached: it is only ever requested by an explicit
+// user action that expects to see the working tree as it stands.
+func (c *Cache) WorkingDiff(
+	ctx context.Context, path workspaceapi.URI, contextLines int,
+) ([]FileDiff, error) {
+	return c.root.WorkingDiff(ctx, path, contextLines)
+}
+
 // CurrentCommit returns the current commit hash.
 func (c *Cache) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
 	c.mu.Lock()

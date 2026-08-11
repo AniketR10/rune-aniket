@@ -182,6 +182,15 @@ func (s svc) diff(ctx context.Context, path workspaceapi.URI, repo *git.Reposito
 	return
 }
 
+// WorkingDiff is served by the git CLI service instead: reviewing a whole
+// repository needs rename detection and per-hunk context that this
+// implementation would have to reconstruct file by file.
+func (s svc) WorkingDiff(
+	ctx context.Context, path workspaceapi.URI, contextLines int,
+) ([]vctrl.FileDiff, error) {
+	return nil, fmt.Errorf("gogit working tree diff: %w", vctrl.ErrUnsupported)
+}
+
 func (s svc) CurrentCommit(ctx context.Context, path workspaceapi.URI) (
 	ret string, err error,
 ) {

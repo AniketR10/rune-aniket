@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/component/markdown"
 	mdhandler "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/text"
 )
 
@@ -89,6 +90,8 @@ type commandAdapter struct {
 	parser      syntaxapi.Parser
 	fs          workspaceapi.FileSystem
 	cwd         workspaceapi.URI
+	// git backs /reviewall. It is nil when no version control is wired.
+	git vctrl.Service
 	// reviewContext is how many workspace lines are shown around each
 	// hunk (extensions.rune-agent.config.review_context_lines).
 	reviewContext int
@@ -116,6 +119,7 @@ type commandAdapterDeps struct {
 	parser        syntaxapi.Parser
 	fs            workspaceapi.FileSystem
 	cwd           workspaceapi.URI
+	git           vctrl.Service
 	reviewContext int
 
 	// mu guards comp / hintSlot writes; the closures below take it.
@@ -147,6 +151,7 @@ func newCommandAdapter(deps commandAdapterDeps) *commandAdapter {
 		parser:        deps.parser,
 		fs:            deps.fs,
 		cwd:           deps.cwd,
+		git:           deps.git,
 		reviewContext: deps.reviewContext,
 		resetFn: func() {
 			deps.mu.Lock()
@@ -238,6 +243,11 @@ func (a *commandAdapter) HandleCommand(
 			return dialoguetui.CommandResult{}, err
 		}
 		return a.handleReviewChanges(ctx)
+	case "reviewall":
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
+		}
+		return a.handleReviewAll(ctx)
 	}
 	it, err := a.handler.HandleCommand(
 		ctx, repl.Command{Name: name, Args: args}, repl.NopProgressWriter(),
@@ -546,7 +556,21 @@ const (
 	chatReviewAttachmentID   = "chatreviewchanges"
 	chatReviewAttachmentName = " changes review"
 	chatReviewHeading        = "Changes review from the user:"
+
+	chatReviewAllAttachmentID   = "chatreviewall"
+	chatReviewAllAttachmentName = " working tree"
+	chatReviewAllHeading        = "Working tree review from the user:"
 )
+
+// reviewAttachmentHeading introduces a review attachment to the model,
+// which otherwise cannot tell a conversation review from a working tree
+// one.
+func reviewAttachmentHeading(id string) string {
+	if id == chatReviewAllAttachmentID {
+		return chatReviewAllHeading
+	}
+	return chatReviewHeading
+}
 
 // handleReviewChanges opens every apply_patch invocation of this
 // conversation as a single editable diff in a centered floating window.
@@ -571,7 +595,43 @@ func (a *commandAdapter) handleReviewChanges(
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}
+	return a.openReview(ctx, review,
+		chatReviewAttachmentID, chatReviewAttachmentName)
+}
 
+// handleReviewAll opens everything uncommitted in the workspace
+// repository as one editable diff, in the same window /reviewchanges
+// uses.
+func (a *commandAdapter) handleReviewAll(
+	ctx context.Context,
+) (dialoguetui.CommandResult, error) {
+	if a.editor == nil || a.attachFn == nil {
+		return dialoguetui.CommandResult{},
+			errors.New("/reviewall requires a configured editor")
+	}
+	if a.git == nil {
+		return dialoguetui.CommandResult{},
+			errors.New("/reviewall requires version control")
+	}
+	diffs, err := a.git.WorkingDiff(ctx, a.cwd, a.reviewContext)
+	if err != nil {
+		return dialoguetui.CommandResult{},
+			fmt.Errorf("diff working tree: %w", err)
+	}
+	review, err := reviewWorkingTree(diffs)
+	if err != nil {
+		return dialoguetui.CommandResult{}, err
+	}
+	return a.openReview(ctx, review,
+		chatReviewAllAttachmentID, chatReviewAllAttachmentName)
+}
+
+// openReview renders a review into a centered floating editor and, on
+// close, attaches whatever the user left behind when it differs from
+// what was opened.
+func (a *commandAdapter) openReview(
+	ctx context.Context, review changesReview, attachID, attachName string,
+) (dialoguetui.CommandResult, error) {
 	// Each invocation opens its own resource: the editor indexes open
 	// handlers by URI, and a reopened diff must not collide with one the
 	// user has not closed yet.
@@ -601,8 +661,8 @@ func (a *commandAdapter) handleReviewChanges(
 			once.Do(func() {
 				if edited := buf.String(); edited != baseline {
 					a.attachFn(dialoguetui.Attachment{
-						ID:      chatReviewAttachmentID,
-						Name:    chatReviewAttachmentName,
+						ID:      attachID,
+						Name:    attachName,
 						Icon:    chatReviewAttachmentIcon,
 						Content: edited,
 					})

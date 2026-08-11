@@ -28,9 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sourcegraph/go-diff/diff"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -107,10 +110,163 @@ func (c *cmdGitService) Diff(ctx context.Context, file workspaceapi.URI) (FileDi
 			OrigLines:     hunk.OrigLines,
 			NewStartLine:  hunk.NewStartLine,
 			NewLines:      hunk.NewLines,
+			Section:       hunk.Section,
 			Body:          string(hunk.Body),
 		})
 	}
 	return ret, nil
+}
+
+// devNull is how a unified diff names the absent side of an added or
+// deleted file.
+const devNull = "/dev/null"
+
+func (c *cmdGitService) WorkingDiff(
+	ctx context.Context, p workspaceapi.URI, contextLines int,
+) ([]FileDiff, error) {
+	repoPath, err := c.repoPath(ctx, p.Path())
+	if err != nil {
+		return nil, fmt.Errorf("repo path: %w", err)
+	}
+
+	base, err := c.diffBase(ctx, repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// The base is a commit rather than the index: a review of
+	// "everything uncommitted" has to show staged and unstaged work
+	// alike. core.quotePath is off so non-ASCII paths arrive verbatim
+	// instead of octal-escaped and quoted.
+	out, err := c.gitOutput(ctx, repoPath, []string{
+		"-c", "core.quotePath=false",
+		"diff", fmt.Sprintf("-U%d", max(0, contextLines)),
+		"--no-ext-diff", "--no-color", "--find-renames", base,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("git cmd: %w", err)
+	}
+
+	var ret []FileDiff
+	if strings.TrimSpace(out) != "" {
+		parsed, err := diff.ParseMultiFileDiff([]byte(out))
+		if err != nil {
+			return nil, fmt.Errorf("parse multi file diff: %w", err)
+		}
+		for _, d := range parsed {
+			if d == nil {
+				continue
+			}
+			fd := FileDiff{
+				OrigName: trimDiffPrefix(d.OrigName),
+				NewName:  trimDiffPrefix(d.NewName),
+			}
+			for _, hunk := range d.Hunks {
+				fd.Hunks = append(fd.Hunks, Hunk{
+					OrigStartLine: hunk.OrigStartLine,
+					OrigLines:     hunk.OrigLines,
+					NewStartLine:  hunk.NewStartLine,
+					NewLines:      hunk.NewLines,
+					Section:       hunk.Section,
+					Body:          string(hunk.Body),
+				})
+			}
+			ret = append(ret, fd)
+		}
+	}
+
+	untracked, err := c.untrackedDiffs(ctx, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	return append(ret, untracked...), nil
+}
+
+// diffBase is HEAD, or the empty tree in a repository whose first
+// commit has not landed yet: work staged in an unborn branch is still
+// uncommitted work, and diffing against a missing HEAD only errors out.
+func (c *cmdGitService) diffBase(ctx context.Context, repoPath string) (string, error) {
+	if _, err := c.git(ctx, repoPath,
+		[]string{"rev-parse", "--verify", "--quiet", "HEAD"}); err == nil {
+		return "HEAD", nil
+	}
+	empty, err := c.git(ctx, repoPath,
+		[]string{"hash-object", "-t", "tree", "/dev/null"})
+	if err != nil {
+		return "", fmt.Errorf("git cmd: %w", err)
+	}
+	return empty, nil
+}
+
+// untrackedDiffs renders every file git does not track yet as an
+// all-additions diff. git itself will not diff them without staging, and
+// a review that hides brand new files is misleading.
+func (c *cmdGitService) untrackedDiffs(ctx context.Context, repoPath string) (
+	[]FileDiff, error,
+) {
+	out, err := c.gitOutput(ctx, repoPath,
+		[]string{"ls-files", "--others", "--exclude-standard", "-z"})
+	if err != nil {
+		return nil, fmt.Errorf("git cmd: %w", err)
+	}
+
+	var ret []FileDiff
+	for rel := range strings.SplitSeq(out, "\x00") {
+		if rel == "" {
+			continue
+		}
+		content, err := c.readFile(filepath.Join(repoPath, rel))
+		if err != nil || !utf8.Valid(content) ||
+			bytes.IndexByte(content, 0) >= 0 {
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		if n := len(lines); n > 0 && lines[n-1] == "" {
+			lines = lines[:n-1]
+		}
+		if len(lines) == 0 {
+			continue
+		}
+		var body strings.Builder
+		for _, line := range lines {
+			body.WriteString("+")
+			body.WriteString(line)
+			body.WriteString("\n")
+		}
+		ret = append(ret, FileDiff{
+			OrigName: devNull,
+			NewName:  rel,
+			Hunks: []Hunk{{
+				NewStartLine: 1,
+				NewLines:     int32(len(lines)),
+				Body:         body.String(),
+			}},
+		})
+	}
+	return ret, nil
+}
+
+func (c *cmdGitService) readFile(path string) ([]byte, error) {
+	f, err := c.fs.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+// trimDiffPrefix strips the a/ and b/ prefixes git puts on diff paths.
+func trimDiffPrefix(name string) string {
+	if name == devNull {
+		return name
+	}
+	if rest, ok := strings.CutPrefix(name, "a/"); ok {
+		return rest
+	}
+	if rest, ok := strings.CutPrefix(name, "b/"); ok {
+		return rest
+	}
+	return name
 }
 
 func (c *cmdGitService) CurrentCommit(
@@ -189,6 +345,15 @@ func (c *cmdGitService) RelPath(ctx context.Context, file string) (
 func (c *cmdGitService) git(ctx context.Context, workPath string, args []string) (
 	string, error,
 ) {
+	out, err := c.gitOutput(ctx, workPath, args)
+	return strings.TrimSpace(out), err
+}
+
+// gitOutput is git without the trailing whitespace trim, which would eat
+// the gutter of a diff line holding nothing but an empty context line.
+func (c *cmdGitService) gitOutput(
+	ctx context.Context, workPath string, args []string,
+) (string, error) {
 	if workPath == "" {
 		return "", errors.New("call git cmd on empty path")
 	}
@@ -228,7 +393,7 @@ func (c *cmdGitService) git(ctx context.Context, workPath string, args []string)
 		}
 	}
 
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout.String(), nil
 }
 
 // repoPath provides the local file path of the repository.

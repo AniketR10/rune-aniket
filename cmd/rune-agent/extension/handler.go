@@ -77,6 +77,7 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension/extutil"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/text"
 
 	tconfig "unstable.build/go-tui/api/config"
@@ -94,6 +95,7 @@ const (
 	commandCompact       = "chatcompact"
 	commandFork          = "chatfork"
 	commandReviewChanges = "chatreviewchanges"
+	commandReviewAll     = "chatreviewall"
 	commandExport        = "chatexport"
 	commandLog           = "chatlog"
 	commandAddSymbol     = "chataddsymbol"
@@ -416,6 +418,7 @@ func newCommandEventHandler(
 		slog.Warn("get 'auto_compact_ratio' from config", "error", err)
 	}
 	ret.reviewContextLines = resolveReviewContextLines(pconfig)
+	ret.git = vctrl.NewGitCommand(cwd, executor, fs)
 	// The host-provided llmapi.Service (w.LLM(ctx)) owns provider auth,
 	// llama.cpp, codex login, and custom_provider routing; rune-agent
 	// no longer constructs its own registry.
@@ -759,6 +762,7 @@ type aiEditorHandler struct {
 	cwd            workspaceapi.URI
 	fs             workspaceapi.FileSystem
 	executor       workspaceapi.Executor
+	git            vctrl.Service
 	gitID          gitIdentity
 
 	auditStore *audit.Store
@@ -997,7 +1001,7 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleChat(cmd)
 	case commandModel, commandEffort, commandMaxTokens, commandSkill,
 		commandClear, commandCompact, commandFork, commandReviewChanges,
-		commandExport, commandLog:
+		commandReviewAll, commandExport, commandLog:
 		return h.routeChatCommand(cmd)
 	case commandAddSymbol:
 		return h.handleChatAddSymbol(cmd)
@@ -1061,6 +1065,11 @@ func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
 			return err
 		}
 		name = "reviewchanges"
+	case commandReviewAll:
+		if err := rejectPositionalID("reviewall", cmd.Args); err != nil {
+			return err
+		}
+		name = "reviewall"
 	case commandExport:
 		if err := rejectPositionalID("export", cmd.Args); err != nil {
 			return err
@@ -1286,6 +1295,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		parser:        h.parser,
 		fs:            h.fs,
 		cwd:           h.cwd,
+		git:           h.git,
 		reviewContext: h.reviewContextLines,
 		mu:            mu,
 		comp:          &comp,

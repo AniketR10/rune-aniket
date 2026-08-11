@@ -387,6 +387,12 @@ func (noDiffDiffer) Diff(context.Context, workspaceapi.URI) (vctrl.FileDiff, err
 	return vctrl.FileDiff{}, nil
 }
 
+func (noDiffDiffer) WorkingDiff(
+	context.Context, workspaceapi.URI, int,
+) ([]vctrl.FileDiff, error) {
+	panic("unimplemented")
+}
+
 func (noDiffDiffer) CurrentCommit(context.Context, workspaceapi.URI) (string, error) {
 	panic("unimplemented")
 }

@@ -186,6 +186,12 @@ func (s cacheTestService) Diff(
 	return s.diff(ctx, file)
 }
 
+func (cacheTestService) WorkingDiff(
+	context.Context, workspaceapi.URI, int,
+) ([]FileDiff, error) {
+	return nil, nil
+}
+
 func (cacheTestService) CurrentCommit(context.Context, workspaceapi.URI) (string, error) {
 	return "", nil
 }
