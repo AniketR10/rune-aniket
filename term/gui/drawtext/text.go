@@ -100,6 +100,20 @@ func New() *Drawer {
 	}
 }
 
+// Deallocate releases the graphics storage owned by this drawer.
+func (d *Drawer) Deallocate() {
+	if d.atlas != nil {
+		d.atlas.deallocate()
+		d.atlas = nil
+	}
+	if d.colorAtlas != nil {
+		d.colorAtlas.deallocate()
+		d.colorAtlas = nil
+	}
+	d.vertices = nil
+	d.indices = nil
+}
+
 // Draw draws a given glyph on a given destination image dst. The draw is
 // batched; the caller flushes with Flush.
 func (d *Drawer) Draw(

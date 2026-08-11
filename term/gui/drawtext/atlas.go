@@ -197,3 +197,12 @@ func (a *glyphAtlas) page(i int) *ebiten.Image {
 func (a *glyphAtlas) pageCount() int {
 	return len(a.pages)
 }
+
+func (a *glyphAtlas) deallocate() {
+	for _, page := range a.pages {
+		page.Deallocate()
+	}
+	a.pages = nil
+	a.cache = nil
+	a.scratch = nil
+}

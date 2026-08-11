@@ -219,6 +219,10 @@ func (g *GUI) Run(title string) error {
 func (g *GUI) Close() error {
 	g.closeOnce.Do(func() {
 		g.cancelCtx()
+		if g.renderer != nil {
+			g.renderer.deallocate()
+			g.renderer = nil
+		}
 		tcell.SetColorValues(g.originalColorValues)
 	})
 	return nil
@@ -601,6 +605,9 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 	g.handler.Resize(cellsWidth, cellsHeight)
 	g.mouse.resize(cellsWidth, cellsHeight)
 	g.writer = cell.NewBufferWriter(g.ctx, cellsWidth, cellsHeight)
+	if g.renderer != nil {
+		g.renderer.deallocate()
+	}
 	g.renderer = newRenderer(g.width, g.height, g.deviceScale,
 		g.fontManager, g.bgOpacity, g.fgOpacity, g.enableLigatures,
 		g.cursorAttributes, g.defaultAttr)

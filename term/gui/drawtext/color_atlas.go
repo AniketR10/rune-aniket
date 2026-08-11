@@ -150,3 +150,11 @@ func (a *colorAtlas) page(i int) *ebiten.Image {
 func (a *colorAtlas) pageCount() int {
 	return len(a.pages)
 }
+
+func (a *colorAtlas) deallocate() {
+	for _, page := range a.pages {
+		page.Deallocate()
+	}
+	a.pages = nil
+	a.cache = nil
+}

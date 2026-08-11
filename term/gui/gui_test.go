@@ -411,12 +411,16 @@ func TestLayout(t *testing.T) {
 	t.Run("resizes underlying handler if width/height are different", func(t *testing.T) {
 		mock := mockHandler{}
 		gui, _ := newTestGUI(t, &mock)
+		previousRenderer := gui.renderer
 
 		mock.width = 0
 		mock.height = 0
 		gui.Layout(1200, 900)
 		assert.NotZero(t, mock.width)
 		assert.NotZero(t, mock.height)
+		assert.NotSame(t, previousRenderer, gui.renderer)
+		assert.Nil(t, previousRenderer.frame)
+		assert.Nil(t, previousRenderer.drawer)
 	})
 
 	t.Run("does not resize underlying handler if width/height are the same", func(t *testing.T) {
@@ -477,6 +481,7 @@ func TestCloseRestoresColorValues(t *testing.T) {
 
 	require.NoError(t, g.Close())
 	assert.Equal(t, original, tcell.GetColorValues())
+	assert.Nil(t, g.renderer)
 	require.NoError(t, g.Close(), "Close must be idempotent")
 }
 

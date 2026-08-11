@@ -66,6 +66,25 @@ func TestAtlasPacksManyGlyphsIntoFewPages(t *testing.T) {
 	assert.Equal(t, int('~'-' '+1), len(a.cache))
 }
 
+func TestDrawerDeallocateReleasesAtlasStorage(t *testing.T) {
+	d := New()
+	d.atlas.pages = []*ebiten.Image{ebiten.NewImage(32, 32)}
+	d.atlas.cache[glyphCacheKey{r: 'a'}] = atlasGlyph{}
+	d.atlas.scratch = make([]byte, 1024)
+	d.colorAtlas.pages = []*ebiten.Image{ebiten.NewImage(32, 32)}
+	d.colorAtlas.cache[colorGlyphKey{cluster: "a"}] = colorGlyph{}
+	d.vertices = make([]ebiten.Vertex, 4)
+	d.indices = make([]uint16, 6)
+
+	d.Deallocate()
+
+	assert.Nil(t, d.atlas)
+	assert.Nil(t, d.colorAtlas)
+	assert.Nil(t, d.vertices)
+	assert.Nil(t, d.indices)
+	assert.NotPanics(t, d.Deallocate)
+}
+
 // TestDrawerBatchesGlyphRun asserts a run of non-empty glyphs on the
 // same page and blend accumulates into one open run (four vertices per
 // glyph, no intermediate flush). flushRun issues exactly one

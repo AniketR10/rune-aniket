@@ -195,6 +195,17 @@ func resolveColorEmojiFace(fontManager *font.Manager) colorEmojiFace {
 	return face
 }
 
+func (r *renderer) deallocate() {
+	if r.frame != nil {
+		r.frame.Deallocate()
+		r.frame = nil
+	}
+	if r.drawer != nil {
+		r.drawer.Deallocate()
+		r.drawer = nil
+	}
+}
+
 func (r *renderer) Draw(
 	screen *ebiten.Image, cells [][]term.Cell,
 	drawCursor bool, cursorPos term.Coordinates,

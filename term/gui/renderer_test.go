@@ -30,10 +30,24 @@ import (
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/benchdraw"
+	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/gui/drawtext"
 	"unstable.build/go-tui/term/gui/font"
 )
+
+func TestRendererDeallocateReleasesGraphicsStorage(t *testing.T) {
+	r := &renderer{
+		frame:  ebiten.NewImage(32, 32),
+		drawer: drawtext.New(),
+	}
+
+	r.deallocate()
+
+	assert.Nil(t, r.frame)
+	assert.Nil(t, r.drawer)
+	assert.NotPanics(t, r.deallocate)
+}
 
 func BenchmarkRenderLigaturesHD(b *testing.B) {
 	benchmarkRenderLigatures(b, 1920, 1080)
