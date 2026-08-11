@@ -134,66 +134,73 @@ func (a *callbackAdapter) handleRequest(
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return a.cb.ShowDocument(ctx, p)
+		return requestResult(a.cb.ShowDocument(ctx, p))
 
 	case "window/showMessageRequest":
 		var p semanticapi.ShowMessageRequestParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return a.cb.ShowMessageRequest(ctx, p)
+		return requestResult(a.cb.ShowMessageRequest(ctx, p))
 
 	case "window/workDoneProgress/create":
 		var p semanticapi.WorkDoneProgressCreateParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return struct{}{}, a.cb.WorkDoneProgressCreate(ctx, p)
+		return requestResult(struct{}{}, a.cb.WorkDoneProgressCreate(ctx, p))
 
 	case "workspace/applyEdit":
 		var p semanticapi.ApplyWorkspaceEditParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return a.cb.ApplyEdit(ctx, p)
+		return requestResult(a.cb.ApplyEdit(ctx, p))
 
 	case "workspace/workspaceFolders":
-		return a.cb.WorkspaceFolders(ctx)
+		return requestResult(a.cb.WorkspaceFolders(ctx))
 
 	case "workspace/configuration":
 		var p semanticapi.ConfigurationParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return a.cb.Configuration(ctx, p)
+		return requestResult(a.cb.Configuration(ctx, p))
 
 	case "client/registerCapability":
 		var p semanticapi.RegistrationParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return struct{}{}, a.cb.RegisterCapability(ctx, p)
+		return requestResult(struct{}{}, a.cb.RegisterCapability(ctx, p))
 
 	case "client/unregisterCapability":
 		var p semanticapi.UnregistrationParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return struct{}{}, a.cb.UnregisterCapability(ctx, p)
+		return requestResult(struct{}{}, a.cb.UnregisterCapability(ctx, p))
 
 	case "workspace/codeLens/refresh":
-		return struct{}{}, a.cb.CodeLensRefresh(ctx)
+		return requestResult(struct{}{}, a.cb.CodeLensRefresh(ctx))
 
 	case "workspace/semanticTokens/refresh":
-		return struct{}{}, a.cb.SemanticTokensRefresh(ctx)
+		return requestResult(struct{}{}, a.cb.SemanticTokensRefresh(ctx))
 
 	case "workspace/inlayHint/refresh":
-		return struct{}{}, a.cb.InlayHintRefresh(ctx)
+		return requestResult(struct{}{}, a.cb.InlayHintRefresh(ctx))
 
 	case "workspace/diagnostic/refresh":
-		return struct{}{}, a.cb.DiagnosticRefresh(ctx)
+		return requestResult(struct{}{}, a.cb.DiagnosticRefresh(ctx))
 
 	default:
 		return nil, fmt.Errorf("unknown request method: %s", method)
 	}
+}
+
+func requestResult[T any](result T, err error) (any, error) {
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
