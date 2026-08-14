@@ -198,16 +198,33 @@ func handleTestCase(
 		}
 	}
 
-	h.Draw(w)
-
-	cursor, _, ok := h.Cursor()
-	if ok {
-		w.SetCursor(cursor)
+	render := func() string {
+		require.NoError(t, w.Clear(term.Attributes{}))
+		h.Draw(w)
+		if cursor, _, ok := h.Cursor(); ok {
+			w.SetCursor(cursor)
+		}
+		require.NoError(t, w.Flush())
+		return w.String()
 	}
 
-	err = w.Flush()
-	require.NoError(t, err)
-
-	out := w.String()
+	// Quiescence is a best-effort settle signal: a loaded host can
+	// echo the last keystrokes after drawTimeout has already elapsed,
+	// and sampling the screen once then asserts on a half-drawn
+	// frame. Converge on the expectation instead. A screen that never
+	// converges still fails with the same diff, just later.
+	out := render()
+	deadline := time.Now().Add(convergeTimeoutFactor * drawTimeout)
+	for out != tcase.Expected && time.Now().Before(deadline) {
+		select {
+		case <-interruptChan:
+		case <-time.After(drawTimeout):
+		}
+		out = render()
+	}
 	assert.Equal(t, tcase.Expected, out, "test case %d", i)
 }
+
+// convergeTimeoutFactor bounds how long a test case waits for the
+// screen to match its expectation, as a multiple of drawTimeout.
+const convergeTimeoutFactor = 20
