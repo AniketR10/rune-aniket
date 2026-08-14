@@ -404,6 +404,12 @@ func (h *CallbackHandler) Progress(
 		if err != nil {
 			return fmt.Errorf("unmarshal progress begin: %w", err)
 		}
+		if progressTitleIgnored(begin.Title) {
+			h.mu.Lock()
+			delete(h.progress, key)
+			h.mu.Unlock()
+			return nil
+		}
 		msg := begin.Title
 		if begin.Message != "" {
 			msg = begin.Title + ": " + begin.Message
@@ -928,6 +934,20 @@ func progressTokenKey(
 		return fmt.Sprintf("%d", token.IntegerValue)
 	}
 	return token.StringValue
+}
+
+// ignoredProgressTitles are $/progress begin titles that carry no
+// information worth a pop-up. rust-analyzer reruns flycheck on every
+// change, so its begin/end pair would notify on every edit.
+var ignoredProgressTitles = []string{"cargo clippy"}
+
+func progressTitleIgnored(title string) bool {
+	for _, ignored := range ignoredProgressTitles {
+		if strings.Contains(title, ignored) {
+			return true
+		}
+	}
+	return false
 }
 
 func messageTypeToNotificationLevel(

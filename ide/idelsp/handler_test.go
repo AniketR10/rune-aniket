@@ -1247,6 +1247,30 @@ func TestCallbackHandler_Progress(t *testing.T) {
 				)
 			},
 		},
+		{
+			name: "ignored title creates no notification",
+			token: semanticapi.ProgressToken{
+				StringValue: "rust-analyzer/flycheck/0",
+			},
+			value: `{"kind":"begin","title":"cargo clippy"}`,
+			checkNotif: func(
+				t *testing.T, n *mockNotifications,
+			) {
+				assert.Empty(t, n.notified)
+			},
+		},
+		{
+			name: "ignored title with disambiguator",
+			token: semanticapi.ProgressToken{
+				StringValue: "rust-analyzer/flycheck/1",
+			},
+			value: `{"kind":"begin","title":"cargo clippy (#2)"}`,
+			checkNotif: func(
+				t *testing.T, n *mockNotifications,
+			) {
+				assert.Empty(t, n.notified)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1275,6 +1299,34 @@ func TestCallbackHandler_Progress(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCallbackHandler_ProgressIgnoredAfterCreate covers the sequence a
+// server actually sends: workDoneProgress/create pre-registers the
+// token, so a suppressed begin must drop it or the later report/end
+// would update a notification that was never created.
+func TestCallbackHandler_ProgressIgnoredAfterCreate(t *testing.T) {
+	t.Parallel()
+	notif := &mockNotifications{}
+	h := NewCallbackHandler(
+		notif, nil, nil, nil, nil, "", CallbackHandlerConfig{},
+	)
+	token := semanticapi.ProgressToken{StringValue: "rust-analyzer/flycheck/0"}
+	require.NoError(t, h.WorkDoneProgressCreate(t.Context(),
+		semanticapi.WorkDoneProgressCreateParams{Token: token}))
+	for _, value := range []string{
+		`{"kind":"begin","title":"cargo clippy"}`,
+		`{"kind":"report","message":"checking"}`,
+		`{"kind":"end"}`,
+	} {
+		require.NoError(t, h.Progress(t.Context(),
+			semanticapi.ProgressParams{
+				Token: token,
+				Value: json.RawMessage(value),
+			}))
+	}
+	assert.Empty(t, notif.notified)
+	assert.Empty(t, notif.progUpds)
 }
 
 func TestCallbackHandler_LogTrace(t *testing.T) {
