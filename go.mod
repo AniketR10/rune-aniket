@@ -27,7 +27,7 @@ require (
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/rune-go-sdk v0.1.3
+	github.com/unstablebuild/rune-go-sdk v0.2.0
 	github.com/unstablebuild/tcell/v3 v3.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.52.0
@@ -81,7 +81,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
 	github.com/tree-sitter/go-tree-sitter v0.25.0
-	github.com/unstablebuild/blue v1.81.6
+	github.com/unstablebuild/blue v1.82.0
 	github.com/unstablebuild/notify v0.10.4
 	github.com/unstablebuild/ox-api v0.0.0-00010101000000-000000000000
 	github.com/unstablebuild/pty v1.3.1

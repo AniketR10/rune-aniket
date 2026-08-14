@@ -448,12 +448,8 @@ github.com/tree-sitter/tree-sitter-ruby v0.23.1 h1:T/NKHUA+iVbHM440hFx+lzVOzS4dV
 github.com/tree-sitter/tree-sitter-ruby v0.23.1/go.mod h1:kUS4kCCQloFcdX6sdpr8p6r2rogbM6ZjTox5ZOQy8cA=
 github.com/tree-sitter/tree-sitter-rust v0.23.2 h1:6AtoooCW5GqNrRpfnvl0iUhxTAZEovEmLKDbyHlfw90=
 github.com/tree-sitter/tree-sitter-rust v0.23.2/go.mod h1:hfeGWic9BAfgTrc7Xf6FaOAguCFJRo3RBbs7QJ6D7MI=
-github.com/unstablebuild/blue v1.81.6 h1:tgG64eX59pQYf4f0B5aqkj5DDnCSzze/4uyhj7b0qDU=
-github.com/unstablebuild/blue v1.81.6/go.mod h1:9yTwjlRwKO9rBPFiHCPb91jwM1GKf/+x5MJXS6tRN5I=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.24 h1:RbN1K+TJEacNC763kcTyhyRHkK2gEsUklk7y1paU1Nk=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.24/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.26 h1:3T2DoYqEGWBJ5fUXvRdshqFSCjo9Vuo9Vg3GrTCF5O0=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.26/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
+github.com/unstablebuild/blue v1.82.0 h1:eZ1w2ihV3gfLQW8U52aGQkW1DfpAbOiFR+fJGMQ5Yhc=
+github.com/unstablebuild/blue v1.82.0/go.mod h1:9yTwjlRwKO9rBPFiHCPb91jwM1GKf/+x5MJXS6tRN5I=
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.27 h1:6jGCjs7KXe/N8IUo9PLUso24jqrG69qJgFPvmuQv/zw=
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.27/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
@@ -466,8 +462,8 @@ github.com/unstablebuild/notify v0.10.4 h1:AStjrILfwMmW8RxnN656wtnTTAtXodVdyWdoQ
 github.com/unstablebuild/notify v0.10.4/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
 github.com/unstablebuild/pty v1.3.1/go.mod h1:BpzWw5G39oyDqoJhusXyOiTk9/bsAblSD4Js9K462Pw=
-github.com/unstablebuild/rune-go-sdk v0.1.3 h1:IurFNIRMAExJBZLBv0UAhv3dKZENPb735HztxZIm6s0=
-github.com/unstablebuild/rune-go-sdk v0.1.3/go.mod h1:NOvmmFvveXFC1AolJjwZfzA/EndgYoZ1fkt2RStmXsc=
+github.com/unstablebuild/rune-go-sdk v0.2.0 h1:EHRK5X6i58MQ2T7RQYCYKpeoO/JTpdNS03vHHOpp1iU=
+github.com/unstablebuild/rune-go-sdk v0.2.0/go.mod h1:NOvmmFvveXFC1AolJjwZfzA/EndgYoZ1fkt2RStmXsc=
 github.com/unstablebuild/tcell/v3 v3.6.5 h1:ZokqnobK5xMQud8uqRI0PjcWWnlWb2zR5kyhrhMpuW4=
 github.com/unstablebuild/tcell/v3 v3.6.5/go.mod h1:nfcmtlSfOVfBq07+ZeP4vcEmBRMDgYnPV1Yo67gORvw=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=
