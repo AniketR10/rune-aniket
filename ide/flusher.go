@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -71,15 +70,18 @@ type flusher struct {
 	notifications browserapi.Notifications
 	sched         func(func()) bool
 
-	// inflight counts awaiter goroutines that have not yet
-	// dispatched their completion callback. Reads from :q / :wq
-	// use this to refuse exit while saves are pending; tests use
-	// `wait` to drain it.
-	inflight atomic.Int64
-
-	// wg tracks awaiter goroutines so tests / shutdown can drain
-	// outstanding work.
-	wg sync.WaitGroup
+	// mu guards inflight, the count of awaiter goroutines that have
+	// not yet dispatched their completion callback. Reads from :q /
+	// :wq use it to refuse exit while saves are pending; `wait`
+	// drains it via idle.
+	//
+	// A sync.WaitGroup cannot express this: the FS watcher starts
+	// ops (0 -> 1 counter transitions) while another goroutine
+	// drains, and WaitGroup requires the first Add of a round to
+	// happen before Wait.
+	mu       sync.Mutex
+	idle     sync.Cond
+	inflight int
 }
 
 // flusherOp tags the kind of async op for notification formatting in
@@ -100,11 +102,13 @@ func newFlusher(
 	if sched == nil {
 		panic("ide.flusher: sched must not be nil")
 	}
-	return &flusher{
+	f := &flusher{
 		comp:          comp,
 		notifications: notifications,
 		sched:         sched,
 	}
+	f.idle.L = &f.mu
+	return f
 }
 
 // flush starts a non-force save for the tab at uri/h.
@@ -183,14 +187,20 @@ func (f *flusher) Reload(uri workspaceapi.URI) error {
 // pending. Used by :q / :wq to refuse exit while saves are pending.
 // Used by :q / :wq to refuse exit while saves are pending.
 func (f *flusher) inFlightCount() int {
-	return int(f.inflight.Load())
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.inflight
 }
 
 // wait blocks until every awaiter goroutine has delivered its
 // completion callback through sched. Intended for tests and graceful
 // shutdown.
 func (f *flusher) wait() {
-	f.wg.Wait()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for f.inflight > 0 {
+		f.idle.Wait()
+	}
 }
 
 // startWith adapts a (ctx, handler) -> chan method to the
@@ -218,11 +228,11 @@ func (f *flusher) startAsync(
 	if err != nil {
 		return err
 	}
-	f.inflight.Add(1)
-	f.wg.Add(1)
+	f.mu.Lock()
+	f.inflight++
+	f.mu.Unlock()
 	go debug.CapturePanicReport(func() {
-		defer f.wg.Done()
-		defer f.inflight.Add(-1)
+		defer f.done()
 		ferr := <-ch
 		// sched must dispatch onto the UI goroutine so
 		// notifications and onSuccess hooks happen on a single
@@ -230,6 +240,15 @@ func (f *flusher) startAsync(
 		f.sched(func() { f.onDone(uri, kind, ferr, onSuccess) })
 	})
 	return nil
+}
+
+func (f *flusher) done() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inflight--
+	if f.inflight == 0 {
+		f.idle.Broadcast()
+	}
 }
 
 func (f *flusher) onDone(
