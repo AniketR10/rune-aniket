@@ -37,6 +37,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -45,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // assertErr is a sentinel error scripted into the fake executor to
@@ -344,10 +346,14 @@ func (l *captureLSP) waitForInit(t *testing.T, timeout time.Duration) {
 
 // fakeEditor is a textapi.Editor that records the open-event
 // subscription so tests can deliver synthetic open events to the
-// extension's langext.Initializer. Every other method is an unused stub.
+// extension's langext.Initializer, and records the edits applied to any
+// resource registered with it.
 type fakeEditor struct {
-	mu       sync.Mutex
-	handlers []textapi.EventHandler
+	mu        sync.Mutex
+	handlers  []textapi.EventHandler
+	resources map[string]textapi.Handler
+	cells     map[textapi.Handler]*fakeCellEditor
+	cursors   map[textapi.Handler]term.Coordinates
 }
 
 var _ textapi.Editor = (*fakeEditor)(nil)
@@ -374,7 +380,60 @@ func (e *fakeEditor) open(t *testing.T, path string) {
 	}
 }
 
-func (e *fakeEditor) Editor(workspaceapi.URI) (textapi.Handler, error) { return nil, nil }
+// register makes h resolvable through Editor, so edits addressed to its
+// resource can be applied and recorded.
+func (e *fakeEditor) register(h textapi.Handler) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.resources == nil {
+		e.resources = make(map[string]textapi.Handler)
+	}
+	e.resources[h.Resource().String()] = h
+}
+
+func (e *fakeEditor) Editor(uri workspaceapi.URI) (textapi.Handler, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if h, ok := e.resources[uri.String()]; ok {
+		return h, nil
+	}
+	return nil, nil
+}
+
+// editsFor returns every edit applied to h, in order.
+func (e *fakeEditor) editsFor(h textapi.Handler) []fakeEdit {
+	e.mu.Lock()
+	ce, ok := e.cells[h]
+	e.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return ce.snapshot()
+}
+
+// seed gives h a starting buffer so edits applied to it can be asserted
+// as resulting text rather than as a list of ranges.
+func (e *fakeEditor) seed(h textapi.Handler, text string) {
+	ce, ok := e.CellEditor(h).(*fakeCellEditor)
+	if !ok {
+		return
+	}
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+	ce.text = text
+}
+
+// text returns h's buffer after every applied edit.
+func (e *fakeEditor) text(h textapi.Handler) string {
+	ce, ok := e.CellEditor(h).(*fakeCellEditor)
+	if !ok {
+		return ""
+	}
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+	return ce.text
+}
+
 func (e *fakeEditor) SetLocationList(
 	textapi.Handler, textapi.LocationPriority, string, textapi.LocationList,
 ) error {
@@ -382,14 +441,129 @@ func (e *fakeEditor) SetLocationList(
 }
 func (e *fakeEditor) MoveToNextLocation(textapi.Handler, string) error { return nil }
 func (e *fakeEditor) MoveToPrevLocation(textapi.Handler, string) error { return nil }
-func (e *fakeEditor) Cursor(textapi.Handler) (term.Coordinates, error) {
-	return term.Coordinates{}, nil
+func (e *fakeEditor) Cursor(h textapi.Handler) (term.Coordinates, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cursors[h], nil
 }
-func (e *fakeEditor) SetCursor(textapi.Handler, term.Coordinates) error { return nil }
-func (e *fakeEditor) CellView(textapi.Handler) textapi.CellView         { return nil }
-func (e *fakeEditor) CellEditor(textapi.Handler) textapi.CellEditor     { return nil }
+
+func (e *fakeEditor) SetCursor(h textapi.Handler, c term.Coordinates) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.cursors == nil {
+		e.cursors = make(map[textapi.Handler]term.Coordinates)
+	}
+	e.cursors[h] = c
+	return nil
+}
+func (e *fakeEditor) CellView(h textapi.Handler) textapi.CellView {
+	ce, ok := e.CellEditor(h).(*fakeCellEditor)
+	if !ok {
+		return nil
+	}
+	return fakeCellView{ce}
+}
+
+type fakeCellView struct {
+	ce *fakeCellEditor
+}
+
+func (v fakeCellView) RawCells() ([][]term.Cell, error) {
+	v.ce.mu.Lock()
+	defer v.ce.mu.Unlock()
+	lines := strings.Split(v.ce.text, "\n")
+	cells := make([][]term.Cell, len(lines))
+	for i, line := range lines {
+		row := make([]term.Cell, 0, len(line))
+		for _, r := range line {
+			row = append(row, term.Cell{
+				Ch: r, Width: 1, Bytes: uint8(utf8.RuneLen(r)),
+			})
+		}
+		cells[i] = row
+	}
+	return cells, nil
+}
+
+func (e *fakeEditor) CellEditor(h textapi.Handler) textapi.CellEditor {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.cells == nil {
+		e.cells = make(map[textapi.Handler]*fakeCellEditor)
+	}
+	if ce, ok := e.cells[h]; ok {
+		return ce
+	}
+	ce := &fakeCellEditor{}
+	e.cells[h] = ce
+	return ce
+}
 func (e *fakeEditor) SetDefaultAttributes(textapi.Handler, term.Attributes) error {
 	return nil
+}
+
+// fakeEdit records a single CellEditor.Edit call.
+type fakeEdit struct {
+	start, end term.Coordinates
+	text       string
+}
+
+// stubResource is a textapi.Handler that only reports the resource it
+// stands for, so a command sees a non-nil focused file.
+type stubResource struct {
+	uri workspaceapi.URI
+}
+
+var _ textapi.Handler = (*stubResource)(nil)
+
+func (s *stubResource) Handle(term.Event) (bool, bool) { return false, false }
+func (s *stubResource) Draw(term.Writer)               {}
+func (s *stubResource) Resize(int, int)                {}
+func (s *stubResource) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+func (s *stubResource) Selection() (string, bool)  { return "", false }
+func (s *stubResource) Close() error               { return nil }
+func (s *stubResource) Resource() workspaceapi.URI { return s.uri }
+
+// fakeCellEditor is a textapi.CellEditor that records the edits it is
+// asked to apply and mirrors them into a text buffer, so a test can
+// assert either the edit ranges or the resulting text.
+type fakeCellEditor struct {
+	mu    sync.Mutex
+	edits []fakeEdit
+	text  string
+}
+
+var _ textapi.CellEditor = (*fakeCellEditor)(nil)
+
+// offsetOf resolves cell coordinates to a byte offset into the buffer.
+func offsetOf(text string, c term.Coordinates) int {
+	lines := strings.SplitAfter(text, "\n")
+	off := 0
+	for i := 0; i < c.Y && i < len(lines); i++ {
+		off += len(lines[i])
+	}
+	return min(off+c.X, len(text))
+}
+
+func (c *fakeCellEditor) Edit(
+	_ context.Context, start, end term.Coordinates, str string,
+) (term.Coordinates, term.Coordinates, string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.edits = append(c.edits, fakeEdit{start: start, end: end, text: str})
+	s, e := offsetOf(c.text, start), offsetOf(c.text, end)
+	if s <= e {
+		c.text = c.text[:s] + str + c.text[e:]
+	}
+	return start, end, "", nil
+}
+
+func (c *fakeCellEditor) snapshot() []fakeEdit {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]fakeEdit(nil), c.edits...)
 }
 
 // fakeNotifications records notify and notify-once calls for assertions.
@@ -502,6 +676,7 @@ type zigEnv struct {
 	notify  *fakeNotifications
 	editor  *fakeEditor
 	manuals []textapi.CommandManual
+	cmds    []textapi.CommandManual
 }
 
 // runZigExtensionOnDir runs the extension's full bring-up against the
@@ -522,13 +697,73 @@ func runZigExtensionOnDir(t *testing.T, dir, dataDir string, cfg config.Config) 
 		notify,
 		lsp,
 		editor,
+		&fakeWM{},
 		fakeInstaller{fs: realFS{root: dir}, root: dataDir},
 		cfg,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil
 		},
+		func(m textapi.CommandManual, _ textapi.CommandHandler) error {
+			env.cmds = append(env.cmds, m)
+			return nil
+		},
 	)
 	require.NoError(t, err)
 	return env
 }
+
+// fakeWM is a browserapi.WindowManager that records the floating handler
+// it is asked to show, so tests can drive the code-action picker.
+type fakeWM struct {
+	mu       sync.Mutex
+	floating browserapi.Floating
+}
+
+var _ browserapi.WindowManager = (*fakeWM)(nil)
+
+// fakeWindow is the browserapi.Window fakeWM hands back.
+type fakeWindow struct{ id uint64 }
+
+func (w fakeWindow) WindowID() uint64 { return w.id }
+
+func (m *fakeWM) Floating(
+	h browserapi.Floating, _ browserapi.FloatingConfig,
+) (browserapi.Window, error) {
+	m.mu.Lock()
+	m.floating = h
+	m.mu.Unlock()
+	return fakeWindow{id: 1}, nil
+}
+
+// floated returns the most recently floated handler, if any.
+func (m *fakeWM) floated() browserapi.Floating {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.floating
+}
+
+// reset forgets the recorded handler, so a test that runs a command
+// twice waits for the second float instead of matching the first.
+func (m *fakeWM) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.floating = nil
+}
+
+func (m *fakeWM) Focus() (browserapi.Window, error) { return fakeWindow{id: 1}, nil }
+func (m *fakeWM) Split(
+	browserapi.Orientation, browserapi.Window, browserapi.Handler,
+) (browserapi.Window, error) {
+	return nil, errors.New("not implemented")
+}
+func (m *fakeWM) Bar(browserapi.BarConfig, tui.Handler) error {
+	return errors.New("not implemented")
+}
+func (m *fakeWM) Tab(
+	_ workspaceapi.URI, _ rune, _ string, h browserapi.Handler,
+) (browserapi.Handler, error) {
+	return h, nil
+}
+func (m *fakeWM) SetWindowContent(browserapi.Window, browserapi.Handler) error { return nil }
+func (m *fakeWM) CloseWindow(browserapi.Window) error                          { return nil }

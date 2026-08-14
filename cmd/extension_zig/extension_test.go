@@ -28,16 +28,19 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 func TestDetectZigProject(t *testing.T) {
@@ -333,11 +336,12 @@ func TestExtendWorkspaceNonZigRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		fakeInstaller{fs: fs, root: "/data"}, nil,
+		&fakeWM{}, fakeInstaller{fs: fs, root: "/data"}, nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
 			return nil
-		})
+		},
+		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
 	assert.True(t, registered)
 	_, count := lsp.captured()
@@ -352,17 +356,28 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	lsp := &captureLSP{}
 
 	var manuals []textapi.CommandManual
+	var cmds []textapi.CommandManual
 	ext := &zigExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		fakeInstaller{fs: fs, root: "/data"}, nil,
+		&fakeWM{}, fakeInstaller{fs: fs, root: "/data"}, nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
+			return nil
+		},
+		func(m textapi.CommandManual, _ textapi.CommandHandler) error {
+			cmds = append(cmds, m)
 			return nil
 		})
 	require.NoError(t, err)
 	require.Len(t, manuals, 1)
 	assert.Equal(t, zigCommandName, manuals[0].Name)
+
+	// The code-action command shares the `zig` word with the REPL
+	// command but lives in the command-prompt registry.
+	require.Len(t, cmds, 1)
+	assert.Equal(t, zigActionCmdName, cmds[0].Name)
+	assert.NotEmpty(t, cmds[0].Commands)
 
 	params, count := lsp.captured()
 	require.Equal(t, 1, count)
@@ -401,8 +416,9 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, editor,
-		fakeInstaller{fs: fs, root: "/data"}, nil,
-		func(textapi.CommandManual, textapi.REPLHandler) error { return nil })
+		&fakeWM{}, fakeInstaller{fs: fs, root: "/data"}, nil,
+		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
+		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
 
 	// No root manifest, so nothing is initialized on startup.
@@ -527,6 +543,56 @@ func TestNewExtensionMetadata(t *testing.T) {
 	_, meta := NewExtension()
 	assert.Equal(t, "zig", meta.ExtensionID)
 	assert.NotEmpty(t, meta.ExtensionName)
+	// The code-action picker floats a window.
+	assert.Contains(t, meta.Permissions, extensionapi.PermissionBrowserWindowManager)
+}
+
+func TestZigActionRouterUnknownCommand(t *testing.T) {
+	_, h := newTestZigActionRouter()
+	err := h.HandleCommand(context.Background(),
+		textapi.Command{Name: zigActionCmdName, Args: []string{"frobnicate"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown zig subcommand")
+}
+
+func TestZigActionRouterRejectsForeignCommand(t *testing.T) {
+	_, h := newTestZigActionRouter()
+	err := h.HandleCommand(context.Background(), textapi.Command{Name: "rust"})
+	require.Error(t, err)
+
+	err = h.HandleCommand(context.Background(), textapi.Command{Name: zigActionCmdName})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing subcommand")
+}
+
+// Every subcommand the manual documents must be routable, and the
+// completion order must be deterministic.
+func TestZigActionRouterComplete(t *testing.T) {
+	manual, h := newTestZigActionRouter()
+	ctx := context.Background()
+
+	it, err := h.Complete(ctx, zigActionCmdName, []string{""})
+	require.NoError(t, err)
+	got, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"fix-all", "list", "organize-imports", "quickfix", "refactor",
+	}, got)
+
+	documented := make([]string, 0, len(manual.Commands))
+	for _, c := range manual.Commands {
+		documented = append(documented, c.Name)
+	}
+	sort.Strings(documented)
+	assert.Equal(t, got, documented, "the manual must document every route")
+
+	_, err = h.Complete(ctx, "rust", []string{""})
+	require.Error(t, err)
+}
+
+func newTestZigActionRouter() (textapi.CommandManual, textapi.CommandHandler) {
+	return newZigActionHandler(&captureLSP{}, &fakeEditor{}, &fakeWM{},
+		newFakeNotifications(), lspcmd.NewSelectionTracker())
 }
 
 // TestE2E_ZigHandlerVersion runs `zig version` against a real zig.

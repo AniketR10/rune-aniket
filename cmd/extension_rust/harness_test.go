@@ -747,3 +747,66 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir str
 	require.NoError(t, err)
 	return env
 }
+
+// stubResource implements textapi.Handler so a code-action command sees a
+// non-nil focused resource.
+type stubResource struct {
+	uri workspaceapi.URI
+}
+
+func (s *stubResource) Handle(_ term.Event) (bool, bool) { return false, false }
+func (s *stubResource) Draw(_ term.Writer)               {}
+func (s *stubResource) Resize(_, _ int)                  {}
+func (s *stubResource) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, 0, false
+}
+func (s *stubResource) Selection() (string, bool)  { return "", false }
+func (s *stubResource) Close() error               { return nil }
+func (s *stubResource) Resource() workspaceapi.URI { return s.uri }
+
+var _ textapi.Handler = (*stubResource)(nil)
+
+// actionLSP is a semanticapi.LSP whose CodeAction returns a scripted set
+// of results and whose ExecuteCommand records the commands it receives.
+type actionLSP struct {
+	noopLSP
+	params   semanticapi.CodeActionParams
+	results  []semanticapi.CodeActionResult
+	executed []string
+}
+
+func (l *actionLSP) Initialize(
+	_ context.Context, _ semanticapi.InitializeParams,
+) (semanticapi.InitializeResult, error) {
+	return semanticapi.InitializeResult{}, nil
+}
+
+func (l *actionLSP) CodeAction(
+	_ context.Context, params semanticapi.CodeActionParams,
+) ([]semanticapi.CodeActionResult, error) {
+	l.params = params
+	return l.results, nil
+}
+
+func (l *actionLSP) ExecuteCommand(
+	_ context.Context, params semanticapi.ExecuteCommandParams,
+) (string, error) {
+	l.executed = append(l.executed, params.Command)
+	return "", nil
+}
+
+func cmdFor(uri workspaceapi.URI, name string, args []string) textapi.Command {
+	return textapi.Command{
+		Name:     name,
+		Args:     args,
+		URI:      uri,
+		Resource: &stubResource{uri: uri},
+	}
+}
+
+func newTestURI(t *testing.T) workspaceapi.URI {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file:///ws/src/main.rs")
+	require.NoError(t, err)
+	return uri
+}

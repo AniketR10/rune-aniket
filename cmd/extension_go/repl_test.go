@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -1743,9 +1744,16 @@ func (w fakeWindow) WindowID() uint64 { return w.id }
 
 // fakeWM is a minimal browserapi.WindowManager that records the tab it
 // is asked to create and the content set on its focused window.
+//
+// autoConfirm makes it answer a floated code-action picker by pressing
+// Enter, so tests that assert what gopls produced do not each have to
+// drive the confirmation UI.
 type fakeWM struct {
-	tabHandler browserapi.Handler
-	content    browserapi.Handler
+	mu          sync.Mutex
+	tabHandler  browserapi.Handler
+	content     browserapi.Handler
+	floating    browserapi.Floating
+	autoConfirm bool
 }
 
 func (m *fakeWM) Focus() (browserapi.Window, error) {
@@ -1771,9 +1779,24 @@ func (m *fakeWM) Split(
 }
 
 func (m *fakeWM) Floating(
-	browserapi.Floating, browserapi.FloatingConfig,
+	h browserapi.Floating, _ browserapi.FloatingConfig,
 ) (browserapi.Window, error) {
-	return nil, errors.New("not implemented")
+	m.mu.Lock()
+	m.floating = h
+	auto := m.autoConfirm
+	m.mu.Unlock()
+	if !auto {
+		return nil, errors.New("not implemented")
+	}
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	return fakeWindow{id: 2}, nil
+}
+
+// floated returns the most recently floated handler, if any.
+func (m *fakeWM) floated() browserapi.Floating {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.floating
 }
 
 func (m *fakeWM) Bar(browserapi.BarConfig, tui.Handler) error {

@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 // zigMarkers are the project-root markers that drive nested discovery.
@@ -62,6 +63,7 @@ func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 			extensionapi.PermissionEditor,
 			extensionapi.PermissionCommands,
 			extensionapi.PermissionConfig,
+			extensionapi.PermissionBrowserWindowManager,
 			extensionapi.PermissionNotifications,
 			extensionapi.PermissionExecute,
 			extensionapi.PermissionFileSystem,
@@ -81,9 +83,11 @@ func (e *zigExtension) ExtendWorkspace(
 		w.Notifications(ctx),
 		w.LSP(ctx),
 		w.Editor(ctx),
+		w.WindowManager(ctx),
 		w,
 		cfg,
 		w.RegisterREPLCommand,
+		w.RegisterCommand,
 	)
 }
 
@@ -94,9 +98,11 @@ func (e *zigExtension) extendWorkspaceWith(
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
 	editor textapi.Editor,
+	wm browserapi.WindowManager,
 	inst installer,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
+	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
 ) error {
 	cwd, err := fs.URI(".")
 	if err != nil {
@@ -128,6 +134,20 @@ func (e *zigExtension) extendWorkspaceWith(
 	manual, handler := newZigHandler(exec, notify, cwd.Path(), resolveBin, reload)
 	if err := registerREPL(manual, handler); err != nil {
 		return fmt.Errorf("register zig command: %w", err)
+	}
+
+	// The `zig` command-prompt handler exposes zls's code actions. Its
+	// selection/cursor subscriptions and lifetime are workspace-scoped,
+	// not project-scoped, so register it once up front regardless of
+	// whether a Zig project is ever discovered.
+	sel := lspcmd.NewSelectionTracker()
+	evs := []textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}
+	if err := editor.SubscribeEvents(evs, sel); err != nil {
+		return fmt.Errorf("subscribe selection events: %w", err)
+	}
+	actionManual, actionHandler := newZigActionHandler(lsp, editor, wm, notify, sel)
+	if err := registerCommand(actionManual, actionHandler); err != nil {
+		return fmt.Errorf("register zig action command: %w", err)
 	}
 
 	// Preserve the eager workspace-root behavior: if the workspace root

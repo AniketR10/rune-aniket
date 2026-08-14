@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 func TestIsTestFunc(t *testing.T) {
@@ -161,7 +162,7 @@ func TestHandlersRequireOpenFile(t *testing.T) {
 	mn := &mockNotifications{}
 	handlers := map[string]textapi.CommandHandler{
 		"codelens":   &codeLensCmd{notify: mn},
-		"codeaction": &codeActionCmd{notify: mn},
+		"codeaction": lspcmd.CodeActionHandler(nil, nil, mn, nil, nil, "", false, ""),
 		"vulncheck":  &vulncheckCmd{notify: mn},
 		"mod":        &modCmd{notify: mn},
 		"add-import": &addImportCmd{notify: mn},

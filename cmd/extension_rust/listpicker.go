@@ -33,14 +33,16 @@ import (
 
 // listPicker is a floating handler that presents a list of labels and
 // reports the selected index (or -1 on cancel) over a channel. It shares
-// the keyboard model of codeActionPicker but decouples selection from any
-// concrete item type so callers map the index back themselves.
+// the keyboard model of lspcmd.CodeActionPicker but decouples selection
+// from any concrete item type so callers map the index back themselves.
 type listPicker struct {
 	labels         []string
 	list           *component.FocusList
 	ch             chan<- int
 	idealW, idealH int
 }
+
+const maxPickerHeight = 15
 
 var _ browserapi.Floating = (*listPicker)(nil)
 

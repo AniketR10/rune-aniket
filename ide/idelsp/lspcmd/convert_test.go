@@ -27,6 +27,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -221,4 +222,132 @@ func TestApplyEdits_SingleEdit(t *testing.T) {
 	err := ApplyEdits(t.Context(), buf, edits)
 	require.NoError(t, err)
 	assert.Equal(t, "package main\n", buf.String())
+}
+
+func cellsOf(s string) [][]term.Cell {
+	lines := strings.Split(s, "\n")
+	cells := make([][]term.Cell, len(lines))
+	for i, line := range lines {
+		row := make([]term.Cell, 0, len(line))
+		for _, r := range line {
+			row = append(row, term.Cell{
+				Ch: r, Width: 1, Bytes: uint8(utf8.RuneLen(r)),
+			})
+		}
+		cells[i] = row
+	}
+	return cells
+}
+
+func replaceEdit(
+	startLine, startChar, endLine, endChar uint32, text string,
+) semanticapi.TextEdit {
+	return semanticapi.TextEdit{
+		Range: semanticapi.Range{
+			Start: pos(startLine, startChar),
+			End:   pos(endLine, endChar),
+		},
+		NewText: text,
+	}
+}
+
+func TestEditsChangeText(t *testing.T) {
+	t.Parallel()
+
+	// zls answers source.organizeImports with an insert of the whole
+	// rewritten import block plus one deletion per original import line,
+	// whether or not the imports are already in that order.
+	const src = "const std = @import(\"std\");\n" +
+		"const foo = @import(\"foo.zig\");\n" +
+		"\n" +
+		"pub fn main() void {}\n"
+	organizeNoop := []semanticapi.TextEdit{
+		insertAt(0, 0, "const std = @import(\"std\");\n"+
+			"const foo = @import(\"foo.zig\");\n"),
+		replaceEdit(0, 0, 1, 0, ""),
+		replaceEdit(1, 0, 2, 0, ""),
+	}
+
+	tests := []struct {
+		name  string
+		src   string
+		edits []semanticapi.TextEdit
+		want  bool
+	}{
+		{
+			name:  "organize imports rewrite that reorders nothing",
+			src:   src,
+			edits: organizeNoop,
+			want:  false,
+		},
+		{
+			name: "organize imports rewrite that reorders",
+			src:  src,
+			edits: []semanticapi.TextEdit{
+				insertAt(0, 0, "const foo = @import(\"foo.zig\");\n"+
+					"const std = @import(\"std\");\n"),
+				replaceEdit(0, 0, 1, 0, ""),
+				replaceEdit(1, 0, 2, 0, ""),
+			},
+			want: true,
+		},
+		{
+			name:  "no edits",
+			src:   src,
+			edits: nil,
+			want:  false,
+		},
+		{
+			name:  "replacement with identical text",
+			src:   src,
+			edits: []semanticapi.TextEdit{replaceEdit(3, 0, 3, 21, "pub fn main() void {}")},
+			want:  false,
+		},
+		{
+			name:  "out of bounds range is treated as a change",
+			src:   src,
+			edits: []semanticapi.TextEdit{replaceEdit(9, 0, 9, 1, "x")},
+			want:  true,
+		},
+		{
+			name:  "empty document is treated as a change",
+			src:   "",
+			edits: []semanticapi.TextEdit{insertAt(0, 0, "")},
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cells := cellsOf(tt.src)
+			if tt.src == "" {
+				cells = nil
+			}
+			assert.Equal(t, tt.want, EditsChangeText(cells, tt.edits))
+		})
+	}
+}
+
+// A no-op edit set must produce the text already in the buffer, so
+// applying it and simulating it have to agree.
+func TestEditsChangeTextMatchesApplyEdits(t *testing.T) {
+	t.Parallel()
+
+	const src = "const std = @import(\"std\");\n" +
+		"const foo = @import(\"foo.zig\");\n" +
+		"\n" +
+		"pub fn main() void {}\n"
+	edits := []semanticapi.TextEdit{
+		insertAt(0, 0, "const std = @import(\"std\");\n"+
+			"const foo = @import(\"foo.zig\");\n"),
+		replaceEdit(0, 0, 1, 0, ""),
+		replaceEdit(1, 0, 2, 0, ""),
+	}
+
+	buf := newBufCellEditor(src)
+	require.NoError(t, ApplyEdits(t.Context(), buf, edits))
+	assert.Equal(t, src, buf.String())
+	assert.False(t, EditsChangeText(cellsOf(src), edits))
 }

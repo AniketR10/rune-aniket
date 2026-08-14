@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -130,4 +131,87 @@ func reverseSameStartEdits(edits []semanticapi.TextEdit) {
 		}
 		i = j
 	}
+}
+
+// EditsChangeText reports whether applying edits to the document held in
+// cells produces different text. Edits that cannot be resolved against
+// cells -- out of bounds, overlapping, or in an empty document -- count
+// as a change, so a caller that is unsure applies them.
+//
+// Edit ranges address the document as it is now, so the result is
+// stitched together in document order without mutating anything.
+func EditsChangeText(cells [][]term.Cell, edits []semanticapi.TextEdit) bool {
+	if len(cells) == 0 {
+		return true
+	}
+	sorted := make([]semanticapi.TextEdit, len(edits))
+	copy(sorted, edits)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		si, sj := sorted[i].Range.Start, sorted[j].Range.Start
+		if si.Line != sj.Line {
+			return si.Line < sj.Line
+		}
+		return si.Character < sj.Character
+	})
+
+	eof := term.Coordinates{Y: len(cells) - 1, X: len(cells[len(cells)-1])}
+	var out strings.Builder
+	cur := term.Coordinates{}
+	for _, edit := range sorted {
+		start := PosToCoord(edit.Range.Start)
+		end := PosToCoord(edit.Range.End)
+		if !coordInDoc(cells, start) || !coordInDoc(cells, end) ||
+			coordLess(start, cur) || coordLess(end, start) {
+			return true
+		}
+		out.WriteString(textBetween(cells, cur, start))
+		out.WriteString(edit.NewText)
+		cur = end
+	}
+	out.WriteString(textBetween(cells, cur, eof))
+	return out.String() != textBetween(cells, term.Coordinates{}, eof)
+}
+
+func coordLess(a, b term.Coordinates) bool {
+	if a.Y != b.Y {
+		return a.Y < b.Y
+	}
+	return a.X < b.X
+}
+
+// coordInDoc also accepts the position one past the last row at column
+// zero, which is how servers spell "to the end of the document".
+func coordInDoc(cells [][]term.Cell, c term.Coordinates) bool {
+	if c.X < 0 || c.Y < 0 {
+		return false
+	}
+	if c.Y == len(cells) {
+		return c.X == 0
+	}
+	return c.Y < len(cells) && c.X <= len(cells[c.Y])
+}
+
+func textBetween(cells [][]term.Cell, from, to term.Coordinates) string {
+	var b strings.Builder
+	for y := from.Y; y <= to.Y && y < len(cells); y++ {
+		startX, endX := 0, len(cells[y])
+		if y == from.Y {
+			startX = from.X
+		}
+		if y == to.Y && to.X < endX {
+			endX = to.X
+		}
+		for x := startX; x < endX; x++ {
+			c := cells[y][x]
+			if comb := c.CombiningRunes(); comb != nil {
+				b.WriteString(string(append([]rune{c.Ch}, comb...)))
+			} else {
+				b.WriteRune(c.Ch)
+			}
+		}
+		if y != to.Y {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }

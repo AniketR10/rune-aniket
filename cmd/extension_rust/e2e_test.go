@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/extension/langext"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idelsp"
+	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 func TestLocalSchemeStartCommandPreservesEnvironment(t *testing.T) {
@@ -174,9 +175,9 @@ func TestE2E(t *testing.T) {
 		me.Register(resource)
 
 		// Cursor on the `>` operator in `    a > b` (line 1, col 6);
-		// "Flip comparison" swaps the operands and inverts the operator.
+		// this assist swaps the operands and inverts the operator.
 		cmd := rustCmdAt("rewrite", uri, resource, 1, 6)
-		runAction(t, handler, cmd, "Flip comparison")
+		runAction(t, handler, cmd, "Flip binary expression")
 
 		combined := allEdits(me, resource, env)
 		require.NotEmpty(t, combined, "expected a rewrite edit")
@@ -957,12 +958,10 @@ func TestE2E(t *testing.T) {
 	})
 }
 
-// runCommand runs a code-action command and applies the assist whose
-// title is wantTitle. rust-analyzer usually returns several assists for a
-// broad kind, so the command shows the picker; HandleCommand then blocks
-// on the user's choice. This runs it in the background, drives the picker
-// to the matching entry, and confirms it. When only one assist applies no
-// picker appears and HandleCommand returns on its own.
+// runAction runs a code-action command and applies the assist whose
+// title is wantTitle. Every assist is offered through the picker, which
+// blocks HandleCommand on the user's choice, so this runs it in the
+// background, drives the picker to the matching entry, and confirms it.
 func runAction(
 	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command, wantTitle string,
 ) {
@@ -976,15 +975,16 @@ func runAction(
 	for {
 		select {
 		case err := <-done:
-			// Single-action path: applied without a picker.
+			// Returning without a picker means rust-analyzer offered
+			// nothing, so the assist under test never ran.
 			require.NoError(t, err)
-			return
+			t.Fatalf("no picker was shown; assist %q was never offered", wantTitle)
 		default:
 		}
 		wm.mu.Lock()
 		f := wm.floating
 		wm.mu.Unlock()
-		if picker, ok := f.(*codeActionPicker); ok {
+		if picker, ok := f.(lspcmd.CodeActionPicker); ok {
 			selectPickerTitle(t, picker, wantTitle)
 			break
 		}
@@ -1004,18 +1004,19 @@ func runAction(
 
 // selectPickerTitle navigates the picker to the action titled wantTitle
 // and confirms it with Enter, failing if no such action is offered.
-func selectPickerTitle(t *testing.T, picker *codeActionPicker, wantTitle string) {
+func selectPickerTitle(t *testing.T, picker lspcmd.CodeActionPicker, wantTitle string) {
 	t.Helper()
+	actions := picker.Actions()
 	idx := -1
-	for i, a := range picker.actions {
+	for i, a := range actions {
 		if a.Title == wantTitle {
 			idx = i
 			break
 		}
 	}
 	if idx < 0 {
-		titles := make([]string, len(picker.actions))
-		for i, a := range picker.actions {
+		titles := make([]string, len(actions))
+		for i, a := range actions {
 			titles[i] = a.Title
 		}
 		t.Fatalf("assist %q not offered; got %v", wantTitle, titles)
@@ -1032,20 +1033,22 @@ func allEdits(me *mockEditor, resource textapi.Handler, env *rustEnvE2E) string 
 	return collectEditText(me.editsFor(resource)) + capturedEditText(env.capturedEdits())
 }
 
-// handlerWM extracts the fakeWM the handler's code-action commands were
-// wired with, so the picker it shows can be driven.
+// handlerWM extracts the fakeWM the handler's subcommands were wired
+// with, so the picker it shows can be driven.
 func handlerWM(t *testing.T, handler textapi.CommandHandler) *fakeWM {
 	t.Helper()
 	router, ok := handler.(*rustActionRouter)
 	require.True(t, ok, "handler must be a rustActionRouter")
 	for _, h := range router.handlers {
-		if ca, ok := h.(*codeActionCmd); ok {
-			wm, ok := ca.wm.(*fakeWM)
-			require.True(t, ok, "code action command must use a fakeWM")
-			return wm
+		lp, ok := h.(*listPickCmd)
+		if !ok {
+			continue
 		}
+		wm, ok := lp.wm.(*fakeWM)
+		require.True(t, ok, "list pick command must use a fakeWM")
+		return wm
 	}
-	t.Fatal("no code-action command found in router")
+	t.Fatal("no list pick command found in router")
 	return nil
 }
 

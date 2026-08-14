@@ -1,0 +1,485 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package lspcmd
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// codeActionLSP returns a scripted set of code actions and records the
+// request it answered plus every command it was asked to execute.
+type codeActionLSP struct {
+	stubLSP
+	mu       sync.Mutex
+	params   semanticapi.CodeActionParams
+	results  []semanticapi.CodeActionResult
+	executed []string
+}
+
+func (l *codeActionLSP) CodeAction(
+	_ context.Context, params semanticapi.CodeActionParams,
+) ([]semanticapi.CodeActionResult, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.params = params
+	return l.results, nil
+}
+
+func (l *codeActionLSP) ExecuteCommand(
+	_ context.Context, params semanticapi.ExecuteCommandParams,
+) (string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.executed = append(l.executed, params.Command)
+	return "", nil
+}
+
+func (l *codeActionLSP) request() semanticapi.CodeActionParams {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.params
+}
+
+func (l *codeActionLSP) commands() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.executed...)
+}
+
+// floatRecorder records the handler floated by the command under test.
+type floatRecorder struct {
+	mu       sync.Mutex
+	floating browserapi.Floating
+}
+
+func (r *floatRecorder) manager() *mockWindowManager {
+	return &mockWindowManager{
+		floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+			r.mu.Lock()
+			r.floating = h
+			r.mu.Unlock()
+			return &mockWindow{id: 1}, nil
+		},
+	}
+}
+
+// picker polls until the command floats its picker, failing otherwise.
+func (r *floatRecorder) picker(t *testing.T) *codeActionPicker {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		r.mu.Lock()
+		f := r.floating
+		r.mu.Unlock()
+		if p, ok := f.(*codeActionPicker); ok {
+			return p
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for code-action picker")
+	return nil
+}
+
+// floated returns whatever handler was floated, if any.
+func (r *floatRecorder) floated() browserapi.Floating {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.floating
+}
+
+// notifyRecorder collects the messages notified by the command.
+type notifyRecorder struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (n *notifyRecorder) notifications() *mockNotifications {
+	return &mockNotifications{
+		notifyFn: func(_ browserapi.NotificationLevel, msg string, _ ...any) (string, error) {
+			n.mu.Lock()
+			n.msgs = append(n.msgs, msg)
+			n.mu.Unlock()
+			return "", nil
+		},
+	}
+}
+
+func (n *notifyRecorder) messages() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.msgs...)
+}
+
+func codeActionResult(
+	title string, kind semanticapi.CodeActionKind, cmd *semanticapi.Command,
+) semanticapi.CodeActionResult {
+	return semanticapi.CodeActionResult{
+		CodeAction: &semanticapi.CodeAction{Title: title, Kind: kind, Command: cmd},
+	}
+}
+
+type mockCellView struct {
+	cells [][]term.Cell
+}
+
+func (m *mockCellView) RawCells() ([][]term.Cell, error) {
+	return m.cells, nil
+}
+
+func codeActionTestURI(t *testing.T) workspaceapi.URI {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file:///ws/src/main.go")
+	require.NoError(t, err)
+	return uri
+}
+
+func codeActionCommand(uri workspaceapi.URI, name string) textapi.Command {
+	return textapi.Command{
+		Name:     name,
+		URI:      uri,
+		Resource: &mockHandler{uri: uri},
+	}
+}
+
+func TestCodeActionRequiresOpenFile(t *testing.T) {
+	t.Parallel()
+
+	notify := &notifyRecorder{}
+	h := CodeActionHandler(&codeActionLSP{}, &mockEditor{}, notify.notifications(),
+		&mockWindowManager{}, NewSelectionTracker(), "refactor.rewrite", false, "hint")
+	err := h.HandleCommand(t.Context(), textapi.Command{Name: "rewrite"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no file open")
+}
+
+func TestCodeActionNoActionNotifiesHint(t *testing.T) {
+	t.Parallel()
+
+	uri := codeActionTestURI(t)
+	lsp := &codeActionLSP{}
+	notify := &notifyRecorder{}
+	floats := &floatRecorder{}
+	h := CodeActionHandler(lsp, &mockEditor{}, notify.notifications(),
+		floats.manager(), NewSelectionTracker(), "refactor.rewrite", false, "no rewrite here")
+
+	require.NoError(t, h.HandleCommand(t.Context(), codeActionCommand(uri, "rewrite")))
+
+	params := lsp.request()
+	assert.Equal(t, []semanticapi.CodeActionKind{"refactor.rewrite"}, params.Context.Only)
+	// Servers such as rust-analyzer reject a request whose
+	// context.diagnostics is null.
+	assert.NotNil(t, params.Context.Diagnostics)
+	assert.Equal(t, []string{"no rewrite here"}, notify.messages())
+}
+
+// A handler bound to a broad kind offers every action through the
+// picker and runs nothing until the user confirms, even when only one
+// action applies, because the command name does not say which of the
+// family it would be.
+func TestCodeActionConfirmsThroughPicker(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		kind      semanticapi.CodeActionKind
+		results   []semanticapi.CodeActionResult
+		wantOnly  []semanticapi.CodeActionKind
+		wantOffer []string
+		wantExec  []string
+	}{
+		{
+			// A broad kind is sent as the Only filter, and results whose
+			// kind does not share the requested prefix are dropped.
+			name: "filters results by kind prefix",
+			kind: "refactor.extract",
+			results: []semanticapi.CodeActionResult{
+				codeActionResult("Extract into variable", "refactor.extract",
+					&semanticapi.Command{Command: "extract"}),
+				codeActionResult("Invert if", "refactor.rewrite",
+					&semanticapi.Command{Command: "rewrite"}),
+			},
+			wantOnly:  []semanticapi.CodeActionKind{"refactor.extract"},
+			wantOffer: []string{"Extract into variable"},
+			wantExec:  []string{"extract"},
+		},
+		{
+			name: "executes the action command",
+			kind: "source.organizeImports",
+			results: []semanticapi.CodeActionResult{
+				codeActionResult("Organize imports", "source.organizeImports",
+					&semanticapi.Command{Command: "gopls.organize_imports"}),
+			},
+			wantOnly:  []semanticapi.CodeActionKind{"source.organizeImports"},
+			wantOffer: []string{"Organize imports"},
+			wantExec:  []string{"gopls.organize_imports"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			uri := codeActionTestURI(t)
+			lsp := &codeActionLSP{results: tt.results}
+			notify := &notifyRecorder{}
+			floats := &floatRecorder{}
+			h := CodeActionHandler(lsp, &mockEditor{}, notify.notifications(),
+				floats.manager(), NewSelectionTracker(), tt.kind, false, "hint")
+
+			done := make(chan error, 1)
+			go func() {
+				done <- h.HandleCommand(context.Background(), codeActionCommand(uri, "run"))
+			}()
+
+			picker := floats.picker(t)
+			offered := make([]string, 0, len(picker.Actions()))
+			for _, a := range picker.Actions() {
+				offered = append(offered, a.Title)
+			}
+			assert.Equal(t, tt.wantOffer, offered)
+			assert.Equal(t, tt.wantOnly, lsp.request().Context.Only)
+			// Nothing may run before the user confirms.
+			assert.Empty(t, lsp.commands())
+
+			picker.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			require.NoError(t, <-done)
+			assert.Equal(t, tt.wantExec, lsp.commands())
+		})
+	}
+}
+
+// An empty kind requests every kind (nil Only) and keeps every returned
+// action regardless of kind, which is how a "list everything" subcommand
+// browses the full menu.
+func TestCodeActionListRequestsAllKinds(t *testing.T) {
+	t.Parallel()
+
+	uri := codeActionTestURI(t)
+	lsp := &codeActionLSP{results: []semanticapi.CodeActionResult{
+		codeActionResult("Extract into variable", "refactor.extract", nil),
+		codeActionResult("Invert if", "refactor.rewrite", nil),
+	}}
+	notify := &notifyRecorder{}
+	floats := &floatRecorder{}
+	h := CodeActionHandler(lsp, &mockEditor{}, notify.notifications(),
+		floats.manager(), NewSelectionTracker(), "", false, "hint")
+
+	// Two applicable actions means the picker is shown and HandleCommand
+	// blocks on the user's choice. Run it in the background, wait for the
+	// picker, then cancel to unblock without selecting anything.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- h.HandleCommand(ctx, codeActionCommand(uri, "list")) }()
+
+	picker := floats.picker(t)
+	assert.Len(t, picker.Actions(), 2)
+	assert.Nil(t, lsp.request().Context.Only)
+
+	cancel()
+	require.Error(t, <-done)
+}
+
+// A handler bound to a kind that names exactly one operation runs a sole
+// result straight away: the picker would only echo the subcommand the
+// user just typed. More than one result still needs a choice.
+func TestCodeActionAppliesLoneAction(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sole action runs without the picker", func(t *testing.T) {
+		t.Parallel()
+
+		uri := codeActionTestURI(t)
+		lsp := &codeActionLSP{results: []semanticapi.CodeActionResult{
+			codeActionResult("organize @import", "source.organizeImports",
+				&semanticapi.Command{Command: "organize"}),
+		}}
+		notify := &notifyRecorder{}
+		floats := &floatRecorder{}
+		h := CodeActionHandler(lsp, &mockEditor{}, notify.notifications(),
+			floats.manager(), NewSelectionTracker(),
+			"source.organizeImports", true, "hint")
+
+		require.NoError(t, h.HandleCommand(
+			t.Context(), codeActionCommand(uri, "organize-imports")))
+
+		assert.Nil(t, floats.floated(), "no picker may be shown")
+		assert.Equal(t, []string{"organize"}, lsp.commands())
+	})
+
+	t.Run("several actions still need a choice", func(t *testing.T) {
+		t.Parallel()
+
+		uri := codeActionTestURI(t)
+		lsp := &codeActionLSP{results: []semanticapi.CodeActionResult{
+			codeActionResult("apply fix 1", "source.fixAll",
+				&semanticapi.Command{Command: "fix1"}),
+			codeActionResult("apply fix 2", "source.fixAll",
+				&semanticapi.Command{Command: "fix2"}),
+		}}
+		notify := &notifyRecorder{}
+		floats := &floatRecorder{}
+		h := CodeActionHandler(lsp, &mockEditor{}, notify.notifications(),
+			floats.manager(), NewSelectionTracker(), "source.fixAll", true, "hint")
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.HandleCommand(context.Background(), codeActionCommand(uri, "fix-all"))
+		}()
+
+		picker := floats.picker(t)
+		assert.Len(t, picker.Actions(), 2)
+		assert.Empty(t, lsp.commands())
+
+		picker.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+		require.NoError(t, <-done)
+		assert.Equal(t, []string{"fix1"}, lsp.commands())
+	})
+}
+
+// A one-line action would otherwise float a box barely wider than its
+// title, which reads as a rendering glitch rather than a menu.
+func TestCodeActionPickerHasMinimumSize(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan int, 1)
+	picker := newCodeActionPicker([]semanticapi.CodeAction{
+		{Title: "organize @import"},
+	}, ch)
+	w, h := picker.Dimensions()
+	assert.Equal(t, minPickerWidth, w)
+	assert.Equal(t, minPickerHeight, h)
+
+	long := strings.Repeat("x", minPickerWidth+10)
+	actions := make([]semanticapi.CodeAction, maxPickerHeight+5)
+	for i := range actions {
+		actions[i] = semanticapi.CodeAction{Title: long}
+	}
+	w, h = newCodeActionPicker(actions, ch).Dimensions()
+	assert.Equal(t, len(long), w, "a wider title still wins")
+	assert.Equal(t, maxPickerHeight, h, "the height cap still applies")
+}
+
+// zls answers source.organizeImports with a full rewrite of the import
+// block on every invocation, even when the imports are already sorted.
+// A confirmed action that produces the text already in the buffer must
+// not edit it.
+func TestCodeActionSkipsNoopWorkspaceEdit(t *testing.T) {
+	t.Parallel()
+
+	const src = "const std = @import(\"std\");\n" +
+		"const foo = @import(\"foo.zig\");\n" +
+		"\n" +
+		"pub fn main() void {}\n"
+	rewrite := func(block string) *semanticapi.WorkspaceEdit {
+		return &semanticapi.WorkspaceEdit{
+			Changes: map[string][]semanticapi.TextEdit{
+				"file:///ws/src/main.go": {
+					insertAt(0, 0, block),
+					replaceEdit(0, 0, 1, 0, ""),
+					replaceEdit(1, 0, 2, 0, ""),
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		edit      *semanticapi.WorkspaceEdit
+		wantEdits int
+	}{
+		{
+			name: "rewrite that reorders nothing is dropped",
+			edit: rewrite("const std = @import(\"std\");\n" +
+				"const foo = @import(\"foo.zig\");\n"),
+			wantEdits: 0,
+		},
+		{
+			name: "rewrite that reorders is applied",
+			edit: rewrite("const foo = @import(\"foo.zig\");\n" +
+				"const std = @import(\"std\");\n"),
+			wantEdits: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			uri := codeActionTestURI(t)
+			handler := &mockHandler{uri: uri}
+			view := &mockCellView{cells: cellsOf(src)}
+			applied := 0
+			editor := &mockEditor{
+				editorFn: func(workspaceapi.URI) (textapi.Handler, error) {
+					return handler, nil
+				},
+				cellViewFn: func(textapi.Handler) textapi.CellView { return view },
+				cellEditorFn: func(textapi.Handler) textapi.CellEditor {
+					return &mockCellEditor{editFn: func(
+						context.Context, term.Coordinates, term.Coordinates, string,
+					) (term.Coordinates, term.Coordinates, string, error) {
+						applied++
+						return term.Coordinates{}, term.Coordinates{}, "", nil
+					}}
+				},
+			}
+			lsp := &codeActionLSP{results: []semanticapi.CodeActionResult{{
+				CodeAction: &semanticapi.CodeAction{
+					Title: "Organize imports",
+					Kind:  "source.organizeImports",
+					Edit:  tt.edit,
+				},
+			}}}
+			notify := &notifyRecorder{}
+			floats := &floatRecorder{}
+			h := CodeActionHandler(lsp, editor, notify.notifications(),
+				floats.manager(), NewSelectionTracker(),
+				"source.organizeImports", false, "hint")
+
+			done := make(chan error, 1)
+			go func() {
+				done <- h.HandleCommand(
+					context.Background(), codeActionCommand(uri, "organize"))
+			}()
+
+			picker := floats.picker(t)
+			picker.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			require.NoError(t, <-done)
+			assert.Equal(t, tt.wantEdits, applied)
+		})
+	}
+}

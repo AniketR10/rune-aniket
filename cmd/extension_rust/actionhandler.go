@@ -67,24 +67,24 @@ func newRustActionHandler(
 	}
 	handlers := map[string]textapi.CommandHandler{
 		// Browse every assist applicable at the cursor or selection.
-		"list": codeActionHandler(lsp, editor, notify, wm, sel, "",
+		"list": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "", false,
 			"No assists available at the cursor. Place the cursor on a symbol or select an expression"),
 
 		// Broad assist families. rust-analyzer tags each assist with one
 		// of these kinds; the picker then narrows to the specific assist.
-		"extract": codeActionHandler(lsp, editor, notify, wm, sel, "refactor.extract",
+		"extract": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "refactor.extract", false,
 			"No extract assist here. Select an expression, statements, a module, or a type to extract"),
-		"inline": codeActionHandler(lsp, editor, notify, wm, sel, "refactor.inline",
+		"inline": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "refactor.inline", false,
 			"No inline assist here. Place the cursor on a call, local, type alias, or macro to inline"),
-		"rewrite": codeActionHandler(lsp, editor, notify, wm, sel, "refactor.rewrite",
+		"rewrite": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "refactor.rewrite", false,
 			"No rewrite assist here. Place the cursor on a construct rust-analyzer can rewrite in place"),
-		"refactor": codeActionHandler(lsp, editor, notify, wm, sel, "refactor",
+		"refactor": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "refactor", false,
 			"No refactoring available at the cursor"),
-		"quickfix": codeActionHandler(lsp, editor, notify, wm, sel, "quickfix",
+		"quickfix": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "quickfix", false,
 			"No quick fix available. Place the cursor on a diagnostic to see its fixes"),
 
 		// Whole-file source actions.
-		"organize-imports": codeActionHandler(lsp, editor, notify, wm, sel, "source.organizeImports",
+		"organize-imports": lspcmd.CodeActionHandler(lsp, editor, notify, wm, sel, "source.organizeImports", true,
 			"Imports are already organized"),
 
 		// View/status commands render server output in a floating,

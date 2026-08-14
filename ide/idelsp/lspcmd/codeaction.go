@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package lspcmd
 
 import (
 	"context"
@@ -37,31 +37,44 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
-func codeActionHandler(
+// CodeActionHandler creates a textapi.CommandHandler that requests
+// textDocument/codeAction of the given kind at the cursor or selection
+// and applies the chosen action. An empty kind requests every kind and
+// keeps every returned action, which is how a caller exposes a "list
+// everything" subcommand. noActionHint is notified when the server
+// offers nothing.
+//
+// applyLoneAction applies a sole result without confirmation, which
+// suits a subcommand whose name already states the one thing it does.
+// A caller that maps to a broad kind leaves it false, since there the
+// command name says nothing about which of the family will run.
+func CodeActionHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	notify browserapi.Notifications,
 	wm browserapi.WindowManager,
-	sel *lspcmd.SelectionTracker,
+	sel *SelectionTracker,
 	kind semanticapi.CodeActionKind,
+	applyLoneAction bool,
 	noActionHint string,
 ) textapi.CommandHandler {
 	return &codeActionCmd{lsp: lsp, editor: editor, notify: notify,
-		wm: wm, sel: sel, kind: kind, noActionHint: noActionHint}
+		wm: wm, sel: sel, kind: kind, applyLoneAction: applyLoneAction,
+		noActionHint: noActionHint}
 }
 
 var _ textapi.CommandHandler = (*codeActionCmd)(nil)
 
 type codeActionCmd struct {
-	lsp          semanticapi.LSP
-	editor       textapi.Editor
-	notify       browserapi.Notifications
-	wm           browserapi.WindowManager
-	sel          *lspcmd.SelectionTracker
-	kind         semanticapi.CodeActionKind
-	noActionHint string
+	lsp             semanticapi.LSP
+	editor          textapi.Editor
+	notify          browserapi.Notifications
+	wm              browserapi.WindowManager
+	sel             *SelectionTracker
+	kind            semanticapi.CodeActionKind
+	applyLoneAction bool
+	noActionHint    string
 }
 
 func (h *codeActionCmd) HandleCommand(
@@ -74,18 +87,29 @@ func (h *codeActionCmd) HandleCommand(
 	rng, ok := h.sel.Get(cmd.URI)
 	slog.Debug("handle code action command", "uri", cmd.URI, "selection-range", rng, "selection", ok)
 	if !ok {
-		cursorPos := lspcmd.CoordToPos(cmd.Cursor.Content)
+		cursorPos := CoordToPos(cmd.Cursor.Content)
 		rng = semanticapi.Range{Start: cursorPos, End: cursorPos}
 	} else {
-		rng = lspcmd.ClampRange(rng, h.editor, cmd.Resource)
+		rng = ClampRange(rng, h.editor, cmd.Resource)
 		slog.Debug("clamped selection range", "uri", cmd.URI, "selection-range", rng)
 	}
 
+	// An empty kind lists every action applicable at the cursor. Servers
+	// group many actions under a handful of broad kinds (refactor.rewrite,
+	// refactor.extract, ...), so a nil Only filter is how the user browses
+	// the full menu rather than pre-selecting a single kind.
+	var only []semanticapi.CodeActionKind
+	if h.kind != "" {
+		only = []semanticapi.CodeActionKind{h.kind}
+	}
 	params := semanticapi.CodeActionParams{
-		TextDocument: lspcmd.TextDocID(cmd.URI),
+		TextDocument: TextDocID(cmd.URI),
 		Range:        rng,
 		Context: semanticapi.CodeActionContext{
-			Only:        []semanticapi.CodeActionKind{h.kind},
+			// rust-analyzer rejects a request whose context.diagnostics is
+			// null, so always send an explicit (possibly empty) slice.
+			Diagnostics: []semanticapi.Diagnostic{},
+			Only:        only,
 			TriggerKind: semanticapi.CodeActionTriggerKindInvoked,
 		},
 	}
@@ -100,7 +124,7 @@ func (h *codeActionCmd) HandleCommand(
 		if r.CodeAction == nil {
 			continue
 		}
-		if strings.HasPrefix(string(r.CodeAction.Kind), string(h.kind)) {
+		if h.kind == "" || strings.HasPrefix(string(r.CodeAction.Kind), string(h.kind)) {
 			actions = append(actions, *r.CodeAction)
 		}
 	}
@@ -110,10 +134,13 @@ func (h *codeActionCmd) HandleCommand(
 		return nil
 	}
 
-	if len(actions) == 1 {
+	if len(actions) == 1 && h.applyLoneAction {
 		return h.applyAction(ctx, cmd.URI, actions[0])
 	}
 
+	// A code action rewrites the buffer, so anything the command name
+	// does not already pin down goes through the picker for the user to
+	// see and confirm rather than being applied out from under them.
 	ch := make(chan int, 1)
 	picker := newCodeActionPicker(actions, ch)
 	_, err = h.wm.Floating(picker, browserapi.FloatingConfig{
@@ -137,8 +164,8 @@ func (h *codeActionCmd) HandleCommand(
 func (h *codeActionCmd) applyAction(
 	ctx context.Context, base workspaceapi.URI, action semanticapi.CodeAction,
 ) error {
-	if action.Edit != nil {
-		err := lspcmd.ApplyWorkspaceEdit(ctx, h.editor, nil, base, action.Edit, nil)
+	if action.Edit != nil && h.editChangesText(base, action.Edit) {
+		err := ApplyWorkspaceEdit(ctx, h.editor, nil, base, action.Edit, nil)
 		if err != nil {
 			return err
 		}
@@ -156,10 +183,72 @@ func (h *codeActionCmd) applyAction(
 	return nil
 }
 
+// editChangesText reports whether edit rewrites any of the documents it
+// touches. Servers answer refactorings such as source.organizeImports
+// with a full rewrite of the affected region every time, even when the
+// region is already in the shape they want; applying that dirties the
+// buffer, pushes an undo entry and forces a re-parse for no change.
+func (h *codeActionCmd) editChangesText(
+	base workspaceapi.URI, edit *semanticapi.WorkspaceEdit,
+) bool {
+	if len(edit.DocumentChanges) > 0 {
+		for _, dc := range edit.DocumentChanges {
+			if dc.TextDocumentEdit == nil {
+				return true
+			}
+			if h.uriEditsChangeText(base,
+				dc.TextDocumentEdit.TextDocument.URI,
+				dc.TextDocumentEdit.Edits) {
+				return true
+			}
+		}
+		return false
+	}
+	for uriStr, edits := range edit.Changes {
+		if h.uriEditsChangeText(base, uriStr, edits) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *codeActionCmd) uriEditsChangeText(
+	base workspaceapi.URI, uriStr string, edits []semanticapi.TextEdit,
+) bool {
+	uri, err := LspToURI(base, uriStr)
+	if err != nil {
+		return true
+	}
+	handler, err := h.editor.Editor(uri)
+	if err != nil {
+		return true
+	}
+	cv := h.editor.CellView(handler)
+	if cv == nil {
+		return true
+	}
+	cells, err := cv.RawCells()
+	if err != nil {
+		return true
+	}
+	return EditsChangeText(cells, edits)
+}
+
 func (h *codeActionCmd) Complete(_ context.Context, _ string, _ []string) (
 	iterator.Iterator[string], error,
 ) {
 	return iterator.Empty[string](), nil
+}
+
+// CodeActionPicker is the floating handler CodeActionHandler shows when
+// several actions apply. A caller that observes floated windows can
+// type-assert to it to inspect and drive the offered actions.
+type CodeActionPicker interface {
+	browserapi.Floating
+
+	// Actions returns the code actions on offer, in the order they are
+	// listed.
+	Actions() []semanticapi.CodeAction
 }
 
 // codeActionPicker is a floating handler that presents a list of code
@@ -171,9 +260,13 @@ type codeActionPicker struct {
 	idealW, idealH int
 }
 
-const maxPickerHeight = 15
+const (
+	maxPickerHeight = 15
+	minPickerWidth  = 40
+	minPickerHeight = 3
+)
 
-var _ browserapi.Floating = (*codeActionPicker)(nil)
+var _ CodeActionPicker = (*codeActionPicker)(nil)
 
 func newCodeActionPicker(
 	actions []semanticapi.CodeAction, ch chan<- int,
@@ -188,14 +281,17 @@ func newCodeActionPicker(
 			maxW = w
 		}
 	}
-	idealH := min(len(actions), maxPickerHeight)
 	return &codeActionPicker{
 		actions: actions,
 		list:    list,
 		ch:      ch,
-		idealW:  maxW,
-		idealH:  idealH,
+		idealW:  max(maxW, minPickerWidth),
+		idealH:  min(max(len(actions), minPickerHeight), maxPickerHeight),
 	}
+}
+
+func (p *codeActionPicker) Actions() []semanticapi.CodeAction {
+	return p.actions
 }
 
 func (p *codeActionPicker) Resize(width, height int) {
