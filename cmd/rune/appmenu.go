@@ -290,7 +290,7 @@ func appMenus(
 			sep,
 			appmenu.Submenu{Title: "Start Tutorial", Items: tutorialItems},
 			cmd("Stop Tutorial", "tutorial", "stop"),
-			cmd("Check for Updates", "upgrade"),
+			cmd("Check for Updates", "console", "upgrade"),
 		}},
 	}
 }

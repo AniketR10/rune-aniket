@@ -25,6 +25,7 @@ package ideupgrade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
@@ -43,9 +44,65 @@ const (
 	skipVersionOpt = "   Skip This Version   "
 )
 
-// showPrompt renders the floating upgrade prompt for manifest. The
-// user's choice is persisted (remind / skip) and, when "Upgrade Now"
-// is chosen, runUpgrade is invoked on a background goroutine.
+// Choice is the user's answer to the upgrade prompt.
+type Choice int
+
+// The possible answers to the upgrade prompt. ChoiceDismissed covers
+// both an explicit dismissal and the case where no window manager is
+// available to render the prompt.
+const (
+	ChoiceDismissed Choice = iota
+	ChoiceUpgradeNow
+	ChoiceRemindLater
+	ChoiceSkipVersion
+)
+
+// PromptChoice renders the floating upgrade prompt and blocks until
+// the user answers it or ctx is cancelled. Remind/skip answers are
+// persisted before returning. It must not be called from the IDE
+// event loop: the prompt is scheduled onto that loop and the answer
+// arrives from it.
+func (m *Manager) PromptChoice(
+	ctx context.Context, manifest Manifest,
+) (Choice, error) {
+	if m.cfg.WindowManager == nil {
+		return ChoiceDismissed, nil
+	}
+	// Buffered so the first answer never blocks the event loop and a
+	// dismissal following a selection is simply dropped.
+	answer := make(chan Choice, 1)
+	reply := func(c Choice) {
+		select {
+		case answer <- c:
+		default:
+		}
+	}
+	prompt := m.newPrompt(manifest, reply)
+	scheduled := m.cfg.ScheduleNextTick(func() {
+		if _, err := m.cfg.WindowManager.Floating(prompt, browserapi.FloatingConfig{
+			Alignment: component.AlignmentCentered,
+		}); err != nil {
+			log.WithError(err).Warn("ideupgrade: show upgrade prompt")
+			reply(ChoiceDismissed)
+		}
+	})
+	if !scheduled {
+		return ChoiceDismissed, errors.New("could not schedule upgrade prompt")
+	}
+
+	select {
+	case <-ctx.Done():
+		return ChoiceDismissed, ctx.Err()
+	case c := <-answer:
+		m.persistChoice(ctx, c, manifest)
+		return c, nil
+	}
+}
+
+// showPrompt renders the floating upgrade prompt for manifest without
+// blocking. The user's choice is persisted (remind / skip) and, when
+// "Upgrade Now" is chosen, the upgrade runs on a background goroutine
+// reporting through notifications.
 func (m *Manager) showPrompt(ctx context.Context, manifest Manifest) {
 	if m.cfg.WindowManager == nil {
 		_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
@@ -53,13 +110,51 @@ func (m *Manager) showPrompt(ctx context.Context, manifest Manifest) {
 		return
 	}
 
+	prompt := m.newPrompt(manifest, func(c Choice) {
+		if c != ChoiceUpgradeNow {
+			m.persistChoice(ctx, c, manifest)
+			return
+		}
+		go debug.CapturePanicReport(func() {
+			if err := m.upgradeWithNotifications(ctx, manifest); err != nil {
+				log.WithError(err).Warn("ideupgrade: run upgrade")
+			}
+		})
+	})
+
+	m.cfg.ScheduleNextTick(func() {
+		if _, err := m.cfg.WindowManager.Floating(prompt, browserapi.FloatingConfig{
+			Alignment: component.AlignmentCentered,
+		}); err != nil {
+			log.WithError(err).Warn("ideupgrade: show upgrade prompt")
+		}
+	})
+}
+
+// persistChoice records a remind/skip answer. Upgrade and dismissal
+// leave the stored state untouched so the next check prompts again.
+func (m *Manager) persistChoice(ctx context.Context, c Choice, manifest Manifest) {
+	switch c {
+	case ChoiceRemindLater:
+		m.remindLater(ctx)
+	case ChoiceSkipVersion:
+		m.skipVersion(ctx, manifest.Version)
+	}
+}
+
+// newPrompt builds the floating upgrade prompt for manifest. onChoice
+// is invoked with the user's answer, or with ChoiceDismissed when the
+// prompt is closed without a selection.
+func (m *Manager) newPrompt(
+	manifest Manifest, onChoice func(Choice),
+) *handler.Prompt {
 	message := fmt.Sprintf("A new version of Rune is available: **%s** (current: %s).\n\nUpgrade now?",
 		manifest.Version, m.cfg.CurrentVersion)
 	if manifest.Changelog != "" {
 		message = manifest.Changelog + "\n\n---\n\n" + message
 	}
 
-	prompt := handler.NewPrompt(handler.PromptConfig{
+	return handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
 			Attrs: term.AttrBold,
 			Bg:    term.ColorBlue,
@@ -76,26 +171,17 @@ func (m *Manager) showPrompt(ctx context.Context, manifest Manifest) {
 		},
 		PromptHandler: handler.FuncPromptHandler(func(idx int, _ string) {
 			switch idx {
-			case 0: // Upgrade Now
-				go debug.CapturePanicReport(func() {
-					if err := m.runUpgrade(ctx, manifest); err != nil {
-						log.WithError(err).Warn("ideupgrade: run upgrade")
-					}
-				})
-			case 1: // Remind Me Later
-				m.remindLater(ctx)
-			case 2: // Skip This Version
-				m.skipVersion(ctx, manifest.Version)
+			case 0:
+				onChoice(ChoiceUpgradeNow)
+			case 1:
+				onChoice(ChoiceRemindLater)
+			case 2:
+				onChoice(ChoiceSkipVersion)
 			}
-		}, func() error { return nil }),
-	})
-
-	m.cfg.ScheduleNextTick(func() {
-		if _, err := m.cfg.WindowManager.Floating(prompt, browserapi.FloatingConfig{
-			Alignment: component.AlignmentCentered,
-		}); err != nil {
-			log.WithError(err).Warn("ideupgrade: show upgrade prompt")
-		}
+		}, func() error {
+			onChoice(ChoiceDismissed)
+			return nil
+		}),
 	})
 }
 

@@ -353,6 +353,22 @@ func TestAppMenusTutorialActions(t *testing.T) {
 	}, byTitle["Stop Tutorial"])
 }
 
+// TestAppMenuCheckForUpdatesOpensConsole pins the Help ▸ Check for
+// Updates entry to the console `upgrade` command: the ex-command it
+// used to dispatch no longer exists.
+func TestAppMenuCheckForUpdatesOpensConsole(t *testing.T) {
+	help := menuByTitle(t,
+		appMenus(map[string]term.KeyComb{}, nil,
+			appMenuTestModels, appMenuTestTutorials), "Help")
+	byTitle := map[string]appmenu.Command{}
+	for _, cmd := range itemCommands(help.Items) {
+		byTitle[cmd.Title] = cmd
+	}
+	assert.Equal(t, appmenu.Command{
+		Title: "Check for Updates", Command: "console", Args: []string{"upgrade"},
+	}, byTitle["Check for Updates"])
+}
+
 func TestAppMenuDirectChoicesAvailableFromHomeWorkspace(t *testing.T) {
 	b := newConfiguredBootstrapForEnvTest(t, configFilename,
 		"editor:\n  mode: modal\n", t.TempDir())

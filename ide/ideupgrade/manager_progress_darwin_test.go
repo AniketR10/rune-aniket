@@ -38,10 +38,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
-// TestManagerRunUpgrade_PostsDownloadProgress drives Manager.runUpgrade
-// against a fakePlatformOps (which invokes the download progress
-// callback) and asserts the anchored notification receives live
-// progress samples that culminate at total.
+// TestManagerRunUpgrade_PostsDownloadProgress drives
+// Manager.upgradeWithNotifications against a fakePlatformOps (which
+// invokes the download progress callback) and asserts the anchored
+// notification receives live progress samples that culminate at total.
 func TestManagerRunUpgrade_PostsDownloadProgress(t *testing.T) {
 	root := t.TempDir()
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
@@ -87,7 +87,7 @@ func TestManagerRunUpgrade_PostsDownloadProgress(t *testing.T) {
 		Size:     int64(len(fake.archiveContent)),
 	}
 
-	require.NoError(t, mgr.runUpgrade(context.Background(), manifest))
+	require.NoError(t, mgr.upgradeWithNotifications(context.Background(), manifest))
 
 	notifyN, samples := notifs.snapshot()
 	require.Equal(t, 2, notifyN,

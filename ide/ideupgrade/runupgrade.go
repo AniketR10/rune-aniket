@@ -33,6 +33,9 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 )
 
 // upgradeOpts is the per-call data needed by runUpgrade. Decoupling
@@ -48,10 +51,36 @@ type upgradeOpts struct {
 	cliBinaryRelPath string
 	backupRetention  int
 	ops              platformOps
-	notify           func(format string, args ...any)
-	// progress, when non-nil, receives byte-transfer samples from the
-	// artifact download. It may be nil for tests and non-IDE callers.
-	progress func(downloaded, total int64)
+	// pw receives phase markers and byte-transfer samples for the
+	// whole upgrade. It may be nil, in which case progress reporting
+	// is skipped.
+	pw repl.ProgressWriter
+}
+
+// progress forwards a sample to opts.pw when one is configured.
+func (o upgradeOpts) progress(n, total int64, units string) {
+	if o.pw == nil {
+		return
+	}
+	o.pw.Progress(n, total, units)
+}
+
+// byteSampler returns the byte-transfer callback handed to the
+// platform ops for verb ("downloaded", "extracted"). Samples are
+// scaled to a human-readable unit. The boundary sample is swallowed so
+// the host progress UI stays alive for the phases that follow:
+// reaching total is how a progress display learns work is over.
+func (o upgradeOpts) byteSampler(verb string) func(n, total int64) {
+	if o.pw == nil {
+		return nil
+	}
+	return func(n, total int64) {
+		if total <= 0 || n >= total {
+			return
+		}
+		scaledN, scaledTotal, unit := scaleBytes(n, total)
+		o.pw.Progress(scaledN, scaledTotal, unit+" "+verb)
+	}
 }
 
 // runUpgrade is the OS-agnostic orchestration of a manifest-driven
@@ -67,11 +96,6 @@ func runUpgrade(ctx context.Context, opts upgradeOpts) error {
 	}
 	if opts.manifest.URL == "" || opts.manifest.SHA256 == "" {
 		return errors.New("ideupgrade: manifest missing url or sha256")
-	}
-
-	notify := opts.notify
-	if notify == nil {
-		notify = func(string, ...any) {}
 	}
 
 	if err := os.MkdirAll(opts.cacheDir, 0o755); err != nil {
@@ -93,23 +117,55 @@ func runUpgrade(ctx context.Context, opts upgradeOpts) error {
 	}
 	artifactPath := filepath.Join(opts.cacheDir, artifactName)
 
-	notify("Downloading %s...", opts.manifest.Version)
-	if err := opts.ops.Download(ctx, opts.manifest.URL, artifactPath, opts.progress); err != nil {
+	if err := opts.ops.Download(
+		ctx, opts.manifest.URL, artifactPath, opts.byteSampler("downloaded"),
+	); err != nil {
 		return fmt.Errorf("download artifact: %w", err)
 	}
 	defer func() { _ = opts.ops.RemoveAll(artifactPath) }()
 
+	opts.progress(0, 1, "verifying download")
 	if err := opts.ops.VerifySHA256(artifactPath, opts.manifest.SHA256); err != nil {
 		return fmt.Errorf("verify sha256: %w", err)
 	}
 
+	var err error
 	switch runtime.GOOS {
 	case "darwin":
-		return runUpgradeDarwin(ctx, opts, artifactPath)
+		err = runUpgradeDarwin(ctx, opts, artifactPath)
 	case "linux":
-		return runUpgradeLinux(ctx, opts, artifactPath)
+		err = runUpgradeLinux(ctx, opts, artifactPath)
 	default:
 		return fmt.Errorf("ideupgrade: unsupported os %q", runtime.GOOS)
+	}
+	if err != nil {
+		return err
+	}
+	opts.progress(1, 1, "done")
+	return nil
+}
+
+// scaleBytes picks a human-readable byte unit based on total and
+// returns progress/total scaled to that unit. The unit is picked
+// from total so it stays stable across successive samples.
+func scaleBytes(progress, total int64) (int64, int64, string) {
+	const (
+		kib = 1024
+		mib = kib * 1024
+		gib = mib * 1024
+		tib = gib * 1024
+	)
+	switch {
+	case total >= tib:
+		return progress / tib, total / tib, "TiB"
+	case total >= gib:
+		return progress / gib, total / gib, "GiB"
+	case total >= mib:
+		return progress / mib, total / mib, "MiB"
+	case total >= kib:
+		return progress / kib, total / kib, "KiB"
+	default:
+		return progress, total, "B"
 	}
 }
 
@@ -148,6 +204,7 @@ func preflightFreeSpace(opts upgradeOpts) error {
 // in, re-verify the installed bundle, refresh symlink, retire old
 // backups, detach the DMG.
 func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) error {
+	opts.progress(0, 1, "mounting image")
 	mountpoint, detach, err := opts.ops.MountDMG(ctx, dmgPath)
 	if err != nil {
 		return fmt.Errorf("mount dmg: %w", err)
@@ -163,6 +220,7 @@ func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) err
 		return fmt.Errorf("find .app in dmg: %w", err)
 	}
 
+	opts.progress(0, 1, "verifying image")
 	if err := opts.ops.AssessGatekeeper(ctx, srcApp); err != nil {
 		return fmt.Errorf("gatekeeper assess: %w", err)
 	}
@@ -178,6 +236,7 @@ func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) err
 		}
 	}
 
+	opts.progress(0, 1, "installing")
 	if err := opts.ops.Ditto(ctx, srcApp, dstApp); err != nil {
 		if rbErr := rollbackDarwin(opts, dstApp, backup, hasExisting); rbErr != nil {
 			return fmt.Errorf("ditto failed: %w; rollback failed: %v", err, rbErr)
@@ -191,6 +250,7 @@ func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) err
 	// .zcompdump-style file inside the bundle). spctl re-checks the
 	// Gatekeeper policy at the on-disk path; codesign --verify
 	// checks the seal integrity of every signed component.
+	opts.progress(0, 1, "verifying install")
 	if err := opts.ops.AssessGatekeeper(ctx, dstApp); err != nil {
 		if rbErr := rollbackDarwin(opts, dstApp, backup, hasExisting); rbErr != nil {
 			return fmt.Errorf("post-install gatekeeper assess failed: %w; rollback failed: %v", err, rbErr)
@@ -233,7 +293,9 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 	backup := backupPath(dstApp, opts.currentVersion)
 
 	_ = opts.ops.RemoveAll(stagingDir)
-	if err := opts.ops.ExtractTarGz(ctx, archivePath, stagingDir); err != nil {
+	if err := opts.ops.ExtractTarGz(
+		ctx, archivePath, stagingDir, opts.byteSampler("extracted"),
+	); err != nil {
 		return fmt.Errorf("extract tarball: %w", err)
 	}
 
@@ -259,6 +321,7 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 	}
 
 	symlinkOwned := shouldRefreshCLISymlink(opts.cliSymlinkPath, dstApp)
+	opts.progress(0, 1, "installing")
 	if err := opts.ops.RenameAtomic(swapSrc, dstApp); err != nil {
 		// Restore previous app bundle.
 		_ = opts.ops.RemoveAll(stagingDir)
@@ -447,23 +510,23 @@ func shouldRefreshCLISymlink(symlinkPath, oldApp string) bool {
 //
 // A symlink-only failure is non-fatal: the bundle is already in
 // place and we don't want to roll the whole upgrade back over a
-// symlink that we couldn't write. We surface the error through the
-// upgradeOpts.notify channel and return nil.
+// symlink that we couldn't write. The outcome is surfaced as a
+// progress phase and logged, and the upgrade proceeds.
 func refreshCLISymlink(opts upgradeOpts, dstApp string, owned bool) error {
 	if !owned {
-		if opts.notify != nil && opts.cliSymlinkPath != "" {
-			opts.notify(
-				"Left existing CLI symlink at %s untouched", opts.cliSymlinkPath)
+		if opts.cliSymlinkPath != "" {
+			opts.progress(0, 1, fmt.Sprintf(
+				"left existing CLI symlink at %s untouched",
+				opts.cliSymlinkPath))
 		}
 		return nil
 	}
 	target := filepath.Join(dstApp, opts.cliBinaryRelPath)
 	if err := opts.ops.Symlink(target, opts.cliSymlinkPath); err != nil {
-		if opts.notify != nil {
-			opts.notify(
-				"Failed to refresh CLI symlink at %s: %v",
-				opts.cliSymlinkPath, err)
-		}
+		log.WithError(err).Warnf(
+			"ideupgrade: refresh CLI symlink at %s", opts.cliSymlinkPath)
+		opts.progress(0, 1, fmt.Sprintf(
+			"failed to refresh CLI symlink at %s", opts.cliSymlinkPath))
 		return nil
 	}
 	return nil

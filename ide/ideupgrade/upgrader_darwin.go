@@ -118,7 +118,9 @@ func (darwinPlatformOps) Ditto(ctx context.Context, src, dst string) error {
 	return nil
 }
 
-func (darwinPlatformOps) ExtractTarGz(_ context.Context, _, _ string) error {
+func (darwinPlatformOps) ExtractTarGz(
+	_ context.Context, _, _ string, _ func(n, total int64),
+) error {
 	return ErrUnsupported
 }
 

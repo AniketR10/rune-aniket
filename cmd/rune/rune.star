@@ -561,6 +561,10 @@ config = {
             "e":              {"command": "edit", "completer": "files"},
             "w":              "write",
             "save":           "write",
+            # `upgrade` lives in the console so the manifest check and
+            # the install can stream progress; keep the short prompt
+            # entry pointing at it.
+            "upgrade":        "console upgrade",
             "sed":            "!! gsed -i $1 $FILE",
             "gitnextchange":  "jumptolocation next gitchange",
             "gitprevchange":  "jumptolocation previous gitchange",

@@ -75,8 +75,13 @@ type platformOps interface {
 	Ditto(ctx context.Context, src, dst string) error
 
 	// ExtractTarGz (linux only) extracts archivePath into destDir.
+	// progress, when non-nil, receives the number of compressed bytes
+	// consumed so far and the total archive size.
 	// Implementations on non-linux must return ErrUnsupported.
-	ExtractTarGz(ctx context.Context, archivePath, destDir string) error
+	ExtractTarGz(
+		ctx context.Context, archivePath, destDir string,
+		progress func(n, total int64),
+	) error
 
 	// Symlink creates a symlink at linkPath pointing to target,
 	// replacing any existing symlink at linkPath.

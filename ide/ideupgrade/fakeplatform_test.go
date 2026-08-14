@@ -32,6 +32,43 @@ import (
 	"sync"
 )
 
+// progressSampleRecorder is a repl.ProgressWriter that records every
+// sample so tests can assert on the phase sequence reported by an
+// upgrade.
+type progressSampleRecorder struct {
+	mu      sync.Mutex
+	samples []upgradeSample
+}
+
+type upgradeSample struct {
+	progress int64
+	total    int64
+	units    string
+}
+
+func (r *progressSampleRecorder) Progress(progress, total int64, units string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.samples = append(r.samples, upgradeSample{progress, total, units})
+}
+
+func (r *progressSampleRecorder) snapshot() []upgradeSample {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]upgradeSample, len(r.samples))
+	copy(out, r.samples)
+	return out
+}
+
+// units returns the units string of every recorded sample, in order.
+func (r *progressSampleRecorder) units() []string {
+	out := []string{}
+	for _, s := range r.snapshot() {
+		out = append(out, s.units)
+	}
+	return out
+}
+
 // fakePlatformOps is a recording PlatformOps used to drive runUpgrade
 // from runupgrade_test.go. It implements darwin- and linux-style
 // operations against real files in t.TempDir() so the test asserts on
@@ -185,13 +222,22 @@ func (f *fakePlatformOps) Ditto(_ context.Context, src, dst string) error {
 	return copyDir(src, dst)
 }
 
-func (f *fakePlatformOps) ExtractTarGz(_ context.Context, _, destDir string) error {
+func (f *fakePlatformOps) ExtractTarGz(
+	_ context.Context, _, destDir string, progress func(int64, int64),
+) error {
 	f.record("ExtractTarGz")
 	if f.extractErr != nil {
 		return f.extractErr
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
+	}
+	if progress != nil {
+		n := int64(len(f.archiveContent))
+		if n > 1 {
+			progress(n/2, n)
+		}
+		progress(n, n)
 	}
 	for rel, content := range f.archiveLayout {
 		full := filepath.Join(destDir, rel)

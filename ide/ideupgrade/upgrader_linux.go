@@ -87,8 +87,11 @@ func (linuxPlatformOps) Ditto(ctx context.Context, src, dst string) error {
 	return nil
 }
 
-func (linuxPlatformOps) ExtractTarGz(ctx context.Context, archivePath, destDir string) error {
-	return extractTarGz(ctx, archivePath, destDir)
+func (linuxPlatformOps) ExtractTarGz(
+	ctx context.Context, archivePath, destDir string,
+	progress func(n, total int64),
+) error {
+	return extractTarGz(ctx, archivePath, destDir, progress)
 }
 
 func (linuxPlatformOps) Symlink(target, linkPath string) error {

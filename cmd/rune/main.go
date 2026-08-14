@@ -630,8 +630,8 @@ func runTUI(
 	defer upgradeCancel()
 	upgradeMgr := scheduleUpgradeCheck(upgradeCtx, i, apiclient.DefaultDownloadsHost,
 		scheduleNextTick)
-	if err := subscribeUpgradeCommands(i, upgradeMgr); err != nil {
-		log.Errorf("subscribe upgrade commands: %v", err)
+	if err := registerUpgradeCommand(i, upgradeMgr); err != nil {
+		log.Errorf("register upgrade command: %v", err)
 	}
 	defer func() {
 		_ = upgradeMgr.Close()

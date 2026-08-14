@@ -44,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"golang.org/x/mod/semver"
 	"unstable.build/go-tui/debug"
 )
@@ -72,9 +73,9 @@ const (
 	storageKeyState  = "state"
 )
 
-// upgradeProgressInterval throttles intermediate download progress
-// samples so a fast download does not peg the IDE event loop. The
-// boundary sample (downloaded == total) always emits regardless.
+// upgradeProgressInterval throttles intermediate progress samples so a
+// fast download does not peg the IDE event loop. Boundary samples
+// (progress == total) and phase changes always emit regardless.
 const upgradeProgressInterval = 50 * time.Millisecond
 
 // Config is the externally-provided configuration for a Manager.
@@ -288,21 +289,19 @@ func (m *Manager) Close() error {
 	return nil
 }
 
-// CheckNow performs a manifest fetch + prompt outside the regular
-// throttle. Used by the `:upgrade` command.
-func (m *Manager) CheckNow(ctx context.Context) error {
+// CurrentVersion returns the version of the running client.
+func (m *Manager) CurrentVersion() string { return m.cfg.CurrentVersion }
+
+// Check performs a manifest fetch outside the regular throttle and
+// reports whether the manifest describes an upgrade the user has not
+// already skipped or postponed.
+func (m *Manager) Check(ctx context.Context) (Manifest, bool, error) {
 	manifest, has, err := m.fetchManifest(ctx)
 	if err != nil {
-		return err
-	}
-	if !has {
-		_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
-			"Rune is up to date (%s)", m.cfg.CurrentVersion)
-		return nil
+		return Manifest{}, false, err
 	}
 	m.persistChecked(ctx)
-	m.showPrompt(ctx, manifest)
-	return nil
+	return manifest, has, nil
 }
 
 // run is the goroutine body for Start. It first waits InitialDelay,
@@ -530,64 +529,23 @@ func (m *Manager) saveState(ctx context.Context, st state) {
 	}
 }
 
-// runUpgrade kicks off the actual download/install dance and surfaces
-// progress through Notifications. It runs synchronously on the
-// caller's goroutine.
+// Upgrade downloads and installs manifest, reporting progress to pw.
+// It runs synchronously on the caller's goroutine.
 //
 // The install root targeted by the upgrade is *not* taken from
 // Config; it is derived from the path of the running binary via
 // detectRunningInstall so we upgrade the install that actually
 // produced this process. When the running binary is not part of a
-// managed install (dev build, sandbox, etc.) we surface a
-// notification and return ErrUpgradeNotSupported instead of
-// touching anything.
-func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
-	var (
-		notifID  string
-		lastEmit time.Time
-	)
-
-	notify := func(format string, args ...any) {
-		msg := fmt.Sprintf(format, args...)
-		if notifID == "" {
-			newID, err := m.cfg.Notifications.Notify(browserapi.LevelInfo, "%s", msg)
-			if err != nil {
-				log.WithError(err).Warn("ideupgrade: notify info: upgrade start")
-				return
-			}
-			notifID = newID
-			return
-		}
-		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, msg, 0, 1)
-	}
-
-	progress := func(downloaded, total int64) {
-		if total <= 0 || downloaded > total {
-			return
-		}
-		final := downloaded == total
-		if !final && time.Since(lastEmit) < upgradeProgressInterval {
-			return
-		}
-		lastEmit = time.Now()
-		if notifID == "" {
-			return
-		}
-		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", downloaded, total)
-	}
-
+// managed install (dev build, sandbox, etc.) it returns
+// ErrUpgradeNotSupported instead of touching anything.
+func (m *Manager) Upgrade(
+	ctx context.Context, manifest Manifest, pw repl.ProgressWriter,
+) error {
 	detected, err := detectRunningInstall(m.cfg)
 	if err != nil {
-		var notSupported *ErrUpgradeNotSupported
-		if errors.As(err, &notSupported) {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
-				"Rune cannot upgrade itself in place: %v",
-				notSupported.Reason)
-		}
 		return err
 	}
-
-	err = runUpgrade(ctx, upgradeOpts{
+	return runUpgrade(ctx, upgradeOpts{
 		manifest:         manifest,
 		currentVersion:   m.cfg.CurrentVersion,
 		cacheDir:         m.cfg.CacheDir,
@@ -597,19 +555,33 @@ func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
 		cliBinaryRelPath: detected.CLIBinaryRelPath,
 		backupRetention:  m.cfg.BackupRetention,
 		ops:              m.ops,
-		notify:           notify,
-		progress:         progress,
+		pw:               pw,
 	})
-	if err != nil {
-		if notifID != "" {
-			_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", 1, 1)
+}
+
+// upgradeWithNotifications runs Upgrade for the background auto-check
+// prompt, which has no console attached: progress is pinned to a
+// single notification and the outcome is surfaced as a toast.
+func (m *Manager) upgradeWithNotifications(
+	ctx context.Context, manifest Manifest,
+) error {
+	pw := &notificationProgressWriter{
+		n:       m.cfg.Notifications,
+		message: fmt.Sprintf("Upgrading to %s", manifest.Version),
+	}
+	defer pw.close()
+
+	if err := m.Upgrade(ctx, manifest, pw); err != nil {
+		var notSupported *ErrUpgradeNotSupported
+		if errors.As(err, &notSupported) {
+			_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
+				"Rune cannot upgrade itself in place: %v",
+				notSupported.Reason)
+			return err
 		}
 		_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
 			"Upgrade to %s failed: %v", manifest.Version, err)
 		return err
-	}
-	if notifID != "" {
-		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", 1, 1)
 	}
 	_, _ = m.cfg.Notifications.Notify(browserapi.LevelSuccess,
 		"Upgrade to %s complete — restart Rune to apply",

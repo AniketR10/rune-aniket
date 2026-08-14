@@ -44,7 +44,7 @@ import (
 )
 
 // TestDarwinE2E_HappyPath builds a real DMG with hdiutil from a
-// synthetic Rune.app and runs Manager.CheckNow against a temp install
+// synthetic Rune.app and runs a full upgrade against a temp install
 // root using a real darwinPlatformOps (with Gatekeeper assess
 // disabled — that step requires a notarized bundle).
 //
@@ -161,7 +161,7 @@ func TestDarwinE2E_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "v9.9.9", manifest.Version)
 
-	require.NoError(t, mgr.runUpgrade(context.Background(), manifest))
+	require.NoError(t, mgr.upgradeWithNotifications(context.Background(), manifest))
 
 	// Verify the new binary is installed.
 	got, err := os.ReadFile(filepath.Join(installRoot, "Rune.app", "Contents", "MacOS", "rune"))

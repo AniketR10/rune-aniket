@@ -31,12 +31,76 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestRunUpgradeLinux_ReportsExtractProgress covers the silent gap
+// between "download complete" and "install complete": extracting a
+// release tarball takes long enough on a spinning disk that the user
+// needs to see it happen. The archive is deliberately incompressible
+// so gzip streams it in many chunks, producing several samples.
+func TestRunUpgradeLinux_ReportsExtractProgress(t *testing.T) {
+	root := t.TempDir()
+	cache := t.TempDir()
+
+	files := map[string]string{"rune.app/bin/rune": "#!/bin/sh\necho new\n"}
+	rng := rand.New(rand.NewSource(1))
+	for i := range 32 {
+		buf := make([]byte, 8*1024)
+		_, err := rng.Read(buf)
+		require.NoError(t, err)
+		files[fmt.Sprintf("rune.app/share/rune/blob-%02d", i)] = string(buf)
+	}
+	tarball := filepath.Join(cache, "rune-v0.42.1.tar.gz")
+	writeReleaseTarGz(t, tarball, files)
+	info, err := os.Stat(tarball)
+	require.NoError(t, err)
+
+	rec := &progressSampleRecorder{}
+	opts := upgradeOpts{
+		manifest:         Manifest{Version: "v0.42.1"},
+		currentVersion:   "v0.42.0",
+		cacheDir:         cache,
+		installRoot:      root,
+		appName:          "rune.app",
+		cliBinaryRelPath: filepath.Join("bin", "rune"),
+		backupRetention:  1,
+		ops:              realLinuxOps{},
+		pw:               rec,
+	}
+	require.NoError(t, runUpgradeLinux(context.Background(), opts, tarball))
+
+	samples := rec.snapshot()
+	var extractSamples []upgradeSample
+	for _, s := range samples {
+		if strings.HasSuffix(s.units, " extracted") {
+			extractSamples = append(extractSamples, s)
+		}
+	}
+	require.GreaterOrEqual(t, len(extractSamples), 2,
+		"expected several extraction samples, got %+v", samples)
+	require.Contains(t, rec.units(), "installing")
+
+	scaled, scaledTotal, unit := scaleBytes(info.Size(), info.Size())
+	require.Equal(t, scaledTotal, scaled)
+	for i, s := range extractSamples {
+		require.Equal(t, unit+" extracted", s.units)
+		require.Equal(t, scaledTotal, s.total)
+		require.Less(t, s.progress, s.total,
+			"extraction must not report a boundary sample")
+		if i > 0 {
+			require.GreaterOrEqual(t, s.progress, extractSamples[i-1].progress,
+				"extraction progress must be monotonic")
+		}
+	}
+}
 
 func TestRunUpgradeLinux_HappyPath(t *testing.T) {
 	fake := &fakePlatformOps{
@@ -118,8 +182,11 @@ func (realLinuxOps) VerifyCodesign(context.Context, string) error {
 func (realLinuxOps) Ditto(context.Context, string, string) error {
 	panic("Ditto not used by runUpgradeLinux test")
 }
-func (realLinuxOps) ExtractTarGz(ctx context.Context, archivePath, destDir string) error {
-	return extractTarGz(ctx, archivePath, destDir)
+func (realLinuxOps) ExtractTarGz(
+	ctx context.Context, archivePath, destDir string,
+	progress func(n, total int64),
+) error {
+	return extractTarGz(ctx, archivePath, destDir, progress)
 }
 func (realLinuxOps) Symlink(target, linkPath string) error { return replaceSymlink(target, linkPath) }
 func (realLinuxOps) RenameAtomic(src, dst string) error    { return os.Rename(src, dst) }

@@ -388,8 +388,8 @@ func (b *bootstrapHandler) setupConfiguredIDE(
 	b.upgradeCancel = upgradeCancel
 	b.upgradeMgr = scheduleUpgradeCheck(upgradeCtx, i,
 		apiclient.DefaultDownloadsHost, b.scheduleNextTick)
-	if err := subscribeUpgradeCommands(i, b.upgradeMgr); err != nil {
-		errs = append(errs, fmt.Errorf("subscribe upgrade commands: %w", err))
+	if err := registerUpgradeCommand(i, b.upgradeMgr); err != nil {
+		errs = append(errs, fmt.Errorf("register upgrade command: %w", err))
 	}
 	return errors.Join(errs...)
 }

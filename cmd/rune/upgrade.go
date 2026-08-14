@@ -33,11 +33,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/ideupgrade"
-	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/ide/upgradeshell"
 )
 
 // upgradeConfig captures the values read from the "upgrade" stanza of
@@ -84,7 +83,7 @@ func loadUpgradeConfig(i *ide.IDE) upgradeConfig {
 
 // scheduleUpgradeCheck wires up an ideupgrade.Manager and starts its
 // background check loop. When auto-check is disabled the manager is
-// still constructed so the `:upgrade` command continues to work.
+// still constructed so the `upgrade` command continues to work.
 //
 // Returns the Manager (which may be nil if construction failed or the
 // manifest URL is unavailable) so the caller can register commands
@@ -120,89 +119,23 @@ func scheduleUpgradeCheck(
 	return mgr
 }
 
-// subscribeUpgradeCommands registers `:upgrade` against the given
-// IDE. The command checks for a new release and, if one is
-// available, prompts the user to install it. The user can decline
-// at the prompt, so a single command serves both "check" and
+// registerUpgradeCommand registers the `upgrade` console command
+// against the given IDE. The command checks for a new release and, if
+// one is available, prompts the user to install it. The user can
+// decline at the prompt, so a single command serves both "check" and
 // "upgrade" intents.
-func subscribeUpgradeCommands(i *ide.IDE, mgr *ideupgrade.Manager) error {
+//
+// It is a console command rather than an ex-command so the manifest
+// fetch, the confirmation prompt and the install all run off the
+// editor's event loop, and so the install can stream its progress into
+// the console.
+func registerUpgradeCommand(i *ide.IDE, mgr *ideupgrade.Manager) error {
 	if mgr == nil {
 		return nil
 	}
-	man := textapi.CommandManual{
-		Name: "upgrade",
-		Summary: "Check for a new Rune release and prompt to upgrade in place. " +
-			"If no new release is available, a notification is shown instead.",
-	}
-	h := text.FuncCommandHandler(
-		upgradeCommandHandler(mgr, i.Notifications()), nil)
-	if err := i.SubscribeCommand(man, h); err != nil {
-		return fmt.Errorf("subscribe '%s': %w", man.Name, err)
+	h := upgradeshell.New(upgradeshell.Config{Manager: mgr})
+	if err := i.RegisterREPLCommand(upgradeshell.Manual(), h); err != nil {
+		return fmt.Errorf("register '%s': %w", upgradeshell.CommandName, err)
 	}
 	return nil
-}
-
-// upgradeCommandHandler returns the func body installed into the
-// `:upgrade` command handler. It dispatches the manifest check to a
-// background goroutine so the editor's event loop stays responsive:
-// the manifest fetch performs network I/O, and showing the upgrade
-// prompt requires posting work *back* to the event loop via
-// ScheduleNextTick — work that can never run if the very same
-// goroutine that handles input is parked here waiting on a socket.
-//
-// The handler returns nil immediately after posting an "in
-// progress" notification so the user has visual feedback that the
-// check is running. When CheckNow completes:
-//   - on success, the progress notification is closed (`2/2`) and
-//     CheckNow itself posts the "Rune is up to date" / upgrade
-//     prompt notification.
-//   - on failure, the progress notification is closed and a
-//     **separate** error notification is posted. Closing the
-//     progress notification dismisses it from the progress UI, so
-//     the error message would otherwise vanish with it and the
-//     user would see no resolution at all.
-func upgradeCommandHandler(
-	mgr *ideupgrade.Manager, n browserapi.Notifications,
-) func(context.Context, textapi.Command) error {
-	return func(_ context.Context, _ textapi.Command) error {
-		// Post the "running" notification before we spawn the
-		// goroutine so the user has feedback the moment the command
-		// returns. Progress 1/2 anchors the notification in the
-		// progress UI; closing it with 2/2 below dismisses it.
-		notifID, nerr := n.Notify(browserapi.LevelInfo,
-			"Checking for updates...")
-		if nerr != nil {
-			log.WithError(nerr).Warn("ideupgrade: notify check start")
-		} else if perr := n.UpdateNotificationProgress(
-			notifID, "", 1, 2); perr != nil {
-			log.WithError(perr).Warn("ideupgrade: progress check start")
-		}
-
-		go debug.CapturePanicReport(func() {
-			err := mgr.CheckNow(context.Background())
-			if err != nil {
-				log.WithError(err).Warn("ideupgrade: check now")
-			}
-			if notifID != "" {
-				// Close the progress notification regardless of outcome.
-				// CheckNow already posted any user-visible success
-				// notification (up-to-date / upgrade prompt); on
-				// failure we surface the error as a fresh notification
-				// below so it isn't dismissed alongside the progress UI.
-				if perr := n.UpdateNotificationProgress(
-					notifID, "", 2, 2); perr != nil {
-					log.WithError(perr).Warn(
-						"ideupgrade: progress check end")
-				}
-			}
-			if err != nil {
-				if _, nerr := n.Notify(browserapi.LevelError,
-					"Upgrade check failed: %v", err); nerr != nil {
-					log.WithError(nerr).Warn(
-						"ideupgrade: notify check failure")
-				}
-			}
-		})
-		return nil
-	}
 }

@@ -40,7 +40,16 @@ import (
 // calls, so it is deliberately kept free of build tags: the Linux
 // upgrade path uses it in production, and cross-platform tests exercise
 // it directly against real tarball bytes.
-func extractTarGz(ctx context.Context, archivePath, destDir string) error {
+//
+// progress, when non-nil, is called after every archive entry with the
+// number of compressed bytes consumed so far and the total archive
+// size. Compressed bytes are used rather than extracted bytes because
+// the uncompressed size is not known until the archive has been fully
+// read.
+func extractTarGz(
+	ctx context.Context, archivePath, destDir string,
+	progress func(n, total int64),
+) error {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", destDir, err)
 	}
@@ -49,7 +58,12 @@ func extractTarGz(ctx context.Context, archivePath, destDir string) error {
 		return fmt.Errorf("open archive: %w", err)
 	}
 	defer f.Close()
-	gz, err := gzip.NewReader(f)
+	var total int64
+	if info, err := f.Stat(); err == nil {
+		total = info.Size()
+	}
+	counted := &countingReader{r: f}
+	gz, err := gzip.NewReader(counted)
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
 	}
@@ -67,6 +81,9 @@ func extractTarGz(ctx context.Context, archivePath, destDir string) error {
 		}
 		if err != nil {
 			return fmt.Errorf("read tar: %w", err)
+		}
+		if progress != nil {
+			progress(counted.n, total)
 		}
 		// Reject path traversal attempts.
 		clean := filepath.Clean(hdr.Name)
@@ -106,4 +123,18 @@ func extractTarGz(ctx context.Context, archivePath, destDir string) error {
 		}
 	}
 	return nil
+}
+
+// countingReader tallies the bytes read from the underlying reader so
+// extractTarGz can report how much of the compressed archive it has
+// consumed.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }

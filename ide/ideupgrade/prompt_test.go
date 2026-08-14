@@ -151,3 +151,70 @@ func TestPromptShowFallsBackToNotificationWithoutWM(t *testing.T) {
 	require.Empty(t, st.SkippedVersions)
 	require.True(t, st.RemindAfter.IsZero())
 }
+
+// TestPromptChoiceBlocksUntilAnswered covers the console `upgrade`
+// path: the caller runs off the event loop and must block on the
+// user's answer, which is then persisted before it returns.
+func TestPromptChoiceBlocksUntilAnswered(t *testing.T) {
+	manifest := Manifest{Version: "v9.9.9", URL: "u", SHA256: "s"}
+	for _, tc := range []struct {
+		name   string
+		key    rune
+		want   Choice
+		assert func(t *testing.T, st state)
+	}{
+		{
+			name: "upgrade now",
+			key:  'y',
+			want: ChoiceUpgradeNow,
+			assert: func(t *testing.T, st state) {
+				require.Empty(t, st.SkippedVersions)
+				require.True(t, st.RemindAfter.IsZero())
+			},
+		},
+		{
+			name: "remind later",
+			key:  'l',
+			want: ChoiceRemindLater,
+			assert: func(t *testing.T, st state) {
+				require.False(t, st.RemindAfter.IsZero())
+			},
+		},
+		{
+			name: "skip version",
+			key:  's',
+			want: ChoiceSkipVersion,
+			assert: func(t *testing.T, st state) {
+				require.Contains(t, st.SkippedVersions, manifest.Version)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := newPromptTestManager(t, func(h browserapi.Floating) {
+				resizeAndType(h, term.Event{Type: term.EventKey, Ch: tc.key})
+			})
+			got, err := mgr.PromptChoice(context.Background(), manifest)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+			tc.assert(t, mgr.loadState(context.Background()))
+		})
+	}
+}
+
+// TestPromptChoiceWithoutWindowManager covers the headless case: with
+// nowhere to render the prompt there is no answer to wait for, so the
+// caller must not block.
+func TestPromptChoiceWithoutWindowManager(t *testing.T) {
+	mgr, err := newWithPlatformOps(Config{
+		CurrentVersion:   "v1",
+		ManifestURL:      "https://example.invalid",
+		Storage:          storagestub.NewInMemoryService(),
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	}, &fakePlatformOps{})
+	require.NoError(t, err)
+
+	got, err := mgr.PromptChoice(context.Background(),
+		Manifest{Version: "v9", URL: "u", SHA256: "s"})
+	require.NoError(t, err)
+	require.Equal(t, ChoiceDismissed, got)
+}

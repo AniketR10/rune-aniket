@@ -30,11 +30,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -246,24 +244,23 @@ func TestRunUpgradeDarwin_SymlinkFailureDoesNotRollBack(t *testing.T) {
 	writeExistingApp(t, root, "old")
 
 	// Symlink failures are non-fatal now: the bundle is already in
-	// place, so runUpgrade surfaces the symlink error via notify and
-	// returns nil rather than rolling the whole upgrade back.
-	var notified []string
-	opts.notify = func(format string, args ...any) {
-		notified = append(notified, fmt.Sprintf(format, args...))
-	}
+	// place, so runUpgrade surfaces the symlink error as a progress
+	// phase and returns nil rather than rolling the whole upgrade back.
+	rec := &progressSampleRecorder{}
+	opts.pw = rec
 	err := runUpgrade(context.Background(), opts)
 	require.NoError(t, err)
-	require.NotEmpty(t, notified)
+	phases := rec.units()
+	require.NotEmpty(t, phases)
 	var sawSymlinkWarning bool
-	for _, msg := range notified {
+	for _, msg := range phases {
 		if strings.Contains(msg, "CLI symlink") {
 			sawSymlinkWarning = true
 			break
 		}
 	}
 	require.True(t, sawSymlinkWarning,
-		"expected a notify message about the failed CLI symlink, got %v", notified)
+		"expected a progress phase about the failed CLI symlink, got %v", phases)
 
 	// New bundle is still in place; backup snapshot is preserved.
 	got, err := os.ReadFile(filepath.Join(root, "Rune.app", "Contents", "MacOS", "rune"))
@@ -340,28 +337,36 @@ func TestRunUpgrade_AcceptsWhenSizeUnknown(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunUpgrade_InvokesProgressCallback(t *testing.T) {
+func TestRunUpgrade_ReportsPhasedProgress(t *testing.T) {
 	fake := &fakePlatformOps{}
 	opts, root := newDarwinFixture(t, fake)
 	writeExistingApp(t, root, "old")
 
-	var (
-		mu      sync.Mutex
-		samples [][2]int64
-	)
-	opts.progress = func(downloaded, total int64) {
-		mu.Lock()
-		samples = append(samples, [2]int64{downloaded, total})
-		mu.Unlock()
-	}
+	rec := &progressSampleRecorder{}
+	opts.pw = rec
 
 	err := runUpgrade(context.Background(), opts)
 	require.NoError(t, err)
 
-	mu.Lock()
-	defer mu.Unlock()
+	samples := rec.snapshot()
 	require.NotEmpty(t, samples, "expected at least one progress sample")
+	require.Subset(t, rec.units(), []string{
+		"B downloaded",
+		"verifying download",
+		"mounting image",
+		"verifying image",
+		"installing",
+		"verifying install",
+		"done",
+	})
+
+	// Only the terminal sample may reach total: an intermediate
+	// boundary sample would dismiss the host's progress display
+	// before the later phases are reported.
+	for _, s := range samples[:len(samples)-1] {
+		require.Less(t, s.progress, s.total,
+			"non-terminal sample %+v must not reach total", s)
+	}
 	last := samples[len(samples)-1]
-	require.Greater(t, last[1], int64(0), "total must be positive")
-	require.Equal(t, last[1], last[0], "final sample must reach total")
+	require.Equal(t, upgradeSample{1, 1, "done"}, last)
 }
