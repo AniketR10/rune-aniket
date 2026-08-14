@@ -826,3 +826,314 @@ func TestAnyServerRunning(t *testing.T) {
 		assert.False(t, m.AnyServerRunning())
 	})
 }
+
+// pullClientCaps is the client half of the pull-diagnostics gate: raw
+// InitializeParams.Capabilities advertising textDocument.diagnostic.
+var pullClientCaps = json.RawMessage(`{"textDocument":{"diagnostic":{}}}`)
+
+// pullServerCaps is the server half of the gate: an initialize result
+// advertising diagnosticProvider.
+func pullServerCaps() semanticapi.InitializeResult {
+	return semanticapi.InitializeResult{
+		Capabilities: semanticapi.ServerCapabilities{
+			DiagnosticProvider: &semanticapi.DiagnosticOptions{},
+		},
+	}
+}
+
+const testPullDebounce = 30 * time.Millisecond
+
+// newPullTestManager builds a Manager rooted at a temp dir with srv
+// registered as the python backend and a short pull debounce, and
+// returns the manager, the recording callback and a python file URI
+// inside the root.
+func newPullTestManager(
+	t *testing.T, srv *fakeChild,
+) (*Manager, *testCallback, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	rootURI := "file://" + tmpDir
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1\n"), 0o644))
+
+	callback := &testCallback{}
+	m := New(makeURI(t, rootURI), newTestScheme(), nil, nil, nil, nil,
+		Config{
+			NoInitializeServer:      true,
+			Callback:                callback,
+			PullDiagnosticsDebounce: testPullDebounce,
+		})
+	t.Cleanup(func() { _ = m.Close() })
+
+	srv.rootURI = rootURI
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: rootURI}] = srv
+	m.mu.Unlock()
+	return m, callback, "file://" + filePath
+}
+
+// openPullFile drives the open event so the file is tracked in m.files
+// and waits for the open-triggered pull to settle.
+func openPullFile(t *testing.T, m *Manager, fileURI string) {
+	t.Helper()
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeOpen,
+		URI:     makeURI(t, fileURI),
+		Content: "x = 1\n",
+	}))
+}
+
+func pullCount(srv *fakeChild) int {
+	n := 0
+	for _, c := range srv.callMethods() {
+		if c == "textDocument/diagnostic" {
+			n++
+		}
+	}
+	return n
+}
+
+func publishedDiagnostics(cb *testCallback) []publishedDiagnostic {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return append([]publishedDiagnostic(nil), cb.publishes...)
+}
+
+// TestPullDiagnosticsBridge_PublishesReport locks in RUNE-332:
+// rust-analyzer never computes native semantic diagnostics on the push
+// path when build scripts / proc macros are enabled, so a pull-capable
+// server's textDocument/diagnostic report must be republished through
+// the push pipeline. The publish carries a ":pull" server-name suffix
+// so it occupies its own slot in CallbackHandler.diagnostics and merges
+// with the server's own pushes instead of overwriting them.
+func TestPullDiagnosticsBridge_PublishesReport(t *testing.T) {
+	t.Parallel()
+	diag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 3, Character: 4},
+			End:   semanticapi.Position{Line: 3, Character: 9},
+		},
+		Severity: semanticapi.DiagnosticSeverityError,
+		Source:   "rust-analyzer",
+		Message:  "expected u32, found &str",
+	}
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{
+			Kind:  "full",
+			Items: []semanticapi.Diagnostic{diag},
+		},
+	}
+	m, cb, fileURI := newPullTestManager(t, srv)
+	openPullFile(t, m, fileURI)
+
+	require.Eventually(t, func() bool {
+		return len(publishedDiagnostics(cb)) > 0
+	}, time.Second, 5*time.Millisecond,
+		"open must schedule a pull and republish its report")
+
+	got := publishedDiagnostics(cb)[0]
+	assert.Equal(t, fileURI, got.params.URI)
+	assert.Equal(t, []semanticapi.Diagnostic{diag}, got.params.Diagnostics)
+	assert.Equal(t, int32(firstFileVersion), got.params.Version,
+		"the publish must carry the file's current version so the "+
+			"callback's version tracking settles")
+	assert.Equal(t, "python:pull", got.metadata.ServerName,
+		"the bridge must publish under its own server slot")
+	assert.Equal(t, srv.key().rootURI, got.metadata.RootURI)
+}
+
+// TestPullDiagnosticsBridge_DebouncesEdits asserts that a burst of
+// edits collapses into a single pull: rust-analyzer recomputes the
+// whole crate per pull, so one request per keystroke would be
+// prohibitively expensive.
+func TestPullDiagnosticsBridge_DebouncesEdits(t *testing.T) {
+	t.Parallel()
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{Kind: "full"},
+	}
+	m, cb, fileURI := newPullTestManager(t, srv)
+	openPullFile(t, m, fileURI)
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 1
+	}, time.Second, 5*time.Millisecond)
+
+	const edits = 5
+	for range edits {
+		require.NoError(t, m.handle(textapi.Event{
+			Type:    textapi.EventTypeEdit,
+			URI:     makeURI(t, fileURI),
+			Content: "y",
+		}))
+	}
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 2
+	}, time.Second, 5*time.Millisecond,
+		"a burst of edits must collapse into one additional pull")
+	time.Sleep(4 * testPullDebounce)
+	assert.Equal(t, 2, pullCount(srv),
+		"no further pulls may fire after the burst settles")
+
+	// The publish must reflect the version the edits produced, not the
+	// version at the time the timer was armed.
+	publishes := publishedDiagnostics(cb)
+	require.NotEmpty(t, publishes)
+	assert.Equal(t, int32(firstFileVersion+edits),
+		publishes[len(publishes)-1].params.Version)
+}
+
+// TestPullDiagnosticsBridge_SaveTriggersPull asserts didSave also
+// re-pulls, so a save that changes cross-file inference refreshes the
+// location list.
+func TestPullDiagnosticsBridge_SaveTriggersPull(t *testing.T) {
+	t.Parallel()
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{Kind: "full"},
+	}
+	m, _, fileURI := newPullTestManager(t, srv)
+	openPullFile(t, m, fileURI)
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 1
+	}, time.Second, 5*time.Millisecond)
+
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeFlush,
+		URI:     makeURI(t, fileURI),
+		Content: "x = 2\n",
+	}))
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 2
+	}, time.Second, 5*time.Millisecond)
+}
+
+// TestPullDiagnosticsBridge_Gates asserts the bridge stays dormant
+// unless both halves of the capability handshake are present, so
+// push-only backends (gopls, zls, ty) are unaffected.
+func TestPullDiagnosticsBridge_Gates(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		clientCaps json.RawMessage
+		initRes    semanticapi.InitializeResult
+	}{
+		{
+			name:       "server omits diagnosticProvider",
+			clientCaps: pullClientCaps,
+			initRes:    semanticapi.InitializeResult{},
+		},
+		{
+			name:       "client omits textDocument.diagnostic",
+			clientCaps: json.RawMessage(`{"textDocument":{"hover":{}}}`),
+			initRes:    pullServerCaps(),
+		},
+		{
+			name:    "no capabilities at all",
+			initRes: semanticapi.InitializeResult{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := &fakeChild{
+				childName:  "python",
+				clientCaps: tt.clientCaps,
+				initRes:    tt.initRes,
+				diagReport: semanticapi.DocumentDiagnosticReport{Kind: "full"},
+			}
+			m, cb, fileURI := newPullTestManager(t, srv)
+			openPullFile(t, m, fileURI)
+			time.Sleep(4 * testPullDebounce)
+			assert.Zero(t, pullCount(srv),
+				"a server without the full handshake must never be pulled")
+			assert.Empty(t, publishedDiagnostics(cb))
+		})
+	}
+}
+
+// TestPullDiagnosticsBridge_UnchangedReportSkipsPublish asserts an
+// "unchanged" report carries no items and must not clear the location
+// list by publishing an empty set.
+func TestPullDiagnosticsBridge_UnchangedReportSkipsPublish(t *testing.T) {
+	t.Parallel()
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{
+			Kind: "unchanged", ResultID: "abc",
+		},
+	}
+	m, cb, fileURI := newPullTestManager(t, srv)
+	openPullFile(t, m, fileURI)
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 1
+	}, time.Second, 5*time.Millisecond)
+	time.Sleep(2 * testPullDebounce)
+	assert.Empty(t, publishedDiagnostics(cb),
+		"an unchanged report must leave the cached diagnostics alone")
+}
+
+// TestPullDiagnosticsBridge_RefreshRePullsOpenFiles asserts that a
+// workspace/diagnostic/refresh request (which rust-analyzer sends when
+// flycheck finishes) re-pulls every open file owned by a pull-capable
+// server. The request arrives on the Manager's decorated callback,
+// which must both act on it and forward it to the configured callback.
+func TestPullDiagnosticsBridge_RefreshRePullsOpenFiles(t *testing.T) {
+	t.Parallel()
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{Kind: "full"},
+	}
+	m, cb, fileURI := newPullTestManager(t, srv)
+	openPullFile(t, m, fileURI)
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 1
+	}, time.Second, 5*time.Millisecond)
+
+	require.NoError(t, m.callback.DiagnosticRefresh(t.Context()))
+	require.Eventually(t, func() bool {
+		return pullCount(srv) == 2
+	}, time.Second, 5*time.Millisecond)
+
+	cb.mu.Lock()
+	forwarded := cb.diagnosticRefreshCount
+	cb.mu.Unlock()
+	assert.Equal(t, 1, forwarded,
+		"the decorator must forward the refresh to the configured callback")
+}
+
+// TestPullDiagnosticsBridge_CloseCancelsPending asserts a pending
+// debounce timer is dropped when the file closes, so a pull is never
+// issued for a document the server no longer tracks.
+func TestPullDiagnosticsBridge_CloseCancelsPending(t *testing.T) {
+	t.Parallel()
+	srv := &fakeChild{
+		childName:  "python",
+		clientCaps: pullClientCaps,
+		initRes:    pullServerCaps(),
+		diagReport: semanticapi.DocumentDiagnosticReport{Kind: "full"},
+	}
+	m, _, fileURI := newPullTestManager(t, srv)
+	require.NoError(t, m.handle(textapi.Event{
+		Type:    textapi.EventTypeOpen,
+		URI:     makeURI(t, fileURI),
+		Content: "x = 1\n",
+	}))
+	require.NoError(t, m.handle(textapi.Event{
+		Type: textapi.EventTypeClose,
+		URI:  makeURI(t, fileURI),
+	}))
+	time.Sleep(4 * testPullDebounce)
+	assert.Zero(t, pullCount(srv),
+		"closing the document must cancel the pending pull")
+}

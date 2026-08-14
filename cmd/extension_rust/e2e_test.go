@@ -28,6 +28,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1308,5 +1311,87 @@ func dismissPicker(
 			t.Fatalf("timed out waiting for the %v picker", cmd.Args)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestE2ESavedFileDiagnosticsPush reproduces the RUNE-332 user report
+// (observed in ~/src/alacritty): a semantic error in a *saved* file
+// produced no location-list markers at all. Markers are driven by
+// textDocument/publishDiagnostics pushes, so this test drives the
+// extension's real rustInitializeParams through a real rust-analyzer,
+// opens src/diagbin.rs (whose E0308 is committed on disk), saves it,
+// and requires the push pipeline to deliver the error twice over:
+//
+//   - source "rust-analyzer": native semantic diagnostics, restored by
+//     the pull-diagnostics bridge (rust-analyzer's push path never
+//     computes them once build scripts/proc macros are on);
+//   - source "rustc"/"clippy": checkOnSave flycheck output, proving
+//     the didSave -> cargo clippy -> publish path works end to end.
+func TestE2ESavedFileDiagnosticsPush(t *testing.T) {
+	t.Parallel()
+	raBin := findRustAnalyzer(t)
+	requireClippy(t)
+
+	env := initRustAnalyzer(t, raBin, []string{"src/diagbin.rs"})
+	fileURI := env.fileURIs["src/diagbin.rs"]
+	wsURI := parseTestURI(t, fileURI)
+
+	content, err := os.ReadFile(filepath.Join(env.dir, "src", "diagbin.rs"))
+	require.NoError(t, err)
+
+	// The user's flow: the file is open and its error is saved to disk;
+	// :write emits a flush (didSave), which must trigger flycheck.
+	env.mgr.Handle(context.Background(), textapi.Event{
+		Type:    textapi.EventTypeFlush,
+		URI:     wsURI,
+		Content: strings.TrimSuffix(string(content), "\n"),
+	})
+
+	hasSource := func(sources ...string) bool {
+		for _, p := range env.cb.publishedDiagnostics() {
+			if p.URI != fileURI {
+				continue
+			}
+			for _, d := range p.Diagnostics {
+				if !strings.Contains(strings.ToLower(d.Message), "expected") {
+					continue
+				}
+				if slices.Contains(sources, d.Source) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// The first cargo clippy run compiles the crate, so give the whole
+	// pipeline a generous bound. Native semantic reports may have been
+	// pulled before rust-analyzer finished loading, so keep re-pulling
+	// the way production does when the server sends
+	// workspace/diagnostic/refresh after each flycheck run.
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		if hasSource("rust-analyzer") && hasSource("rustc", "clippy") {
+			return
+		}
+		require.NoError(t, env.mgr.RefreshDiagnostics(context.Background()))
+		time.Sleep(time.Second)
+	}
+	assert.True(t, hasSource("rust-analyzer"),
+		"native semantic diagnostics must reach the push pipeline for a "+
+			"saved file (pull bridge)")
+	assert.True(t, hasSource("rustc", "clippy"),
+		"checkOnSave flycheck diagnostics must reach the push pipeline "+
+			"after didSave")
+	t.Fatalf("saved-file diagnostics never published; got %+v",
+		env.cb.publishedDiagnostics())
+}
+
+// requireClippy skips when the clippy cargo subcommand is unavailable,
+// since the extension configures flycheck as `cargo clippy`.
+func requireClippy(t *testing.T) {
+	t.Helper()
+	if err := exec.Command("cargo", "clippy", "--version").Run(); err != nil {
+		t.Skipf("cargo clippy unavailable: %v", err)
 	}
 }

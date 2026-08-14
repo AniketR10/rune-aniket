@@ -115,6 +115,10 @@ type Config struct {
 	EventHandleTimeout time.Duration
 	NoInitializeServer bool
 	WorkDoneProgress   bool
+	// PullDiagnosticsDebounce is the quiet period a document must stay
+	// idle before the pull-diagnostics bridge issues a
+	// textDocument/diagnostic request for it.
+	PullDiagnosticsDebounce time.Duration
 	// ScheduleNextTick hops onto the host event loop. When nil,
 	// notifications fire directly from background goroutines, which
 	// races workspaceManagerHandler.focus reads in notis.inFocus.
@@ -146,6 +150,7 @@ type Manager struct {
 	servers       map[serverKey]server
 	files         map[string]*file
 	pendingOpens  map[string]textapi.Event
+	pullTimers    map[string]*time.Timer
 	fallback      lspFallback
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -193,6 +198,9 @@ func New(
 	if cfg.EventHandleTimeout == 0 {
 		cfg.EventHandleTimeout = 1 * time.Second
 	}
+	if cfg.PullDiagnosticsDebounce == 0 {
+		cfg.PullDiagnosticsDebounce = defaultPullDiagnosticsDebounce
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ret := &Manager{
 		cfg:           cfg,
@@ -207,6 +215,7 @@ func New(
 		servers:       make(map[serverKey]server),
 		files:         make(map[string]*file),
 		pendingOpens:  make(map[string]textapi.Event),
+		pullTimers:    make(map[string]*time.Timer),
 		ctx:           ctx,
 		cancel:        cancel,
 		evs:           make(chan textapi.Event, eventsBufferSize),
@@ -214,6 +223,12 @@ func New(
 	go debug.CapturePanicReport(func() {
 		ret.handleEvs()
 	})
+	// Decorate the callback so server-driven workspace refresh requests
+	// reach the Manager (see refreshingCallback). A nil callback stays
+	// nil: such Managers never start servers that could send refreshes.
+	if cfg.Callback != nil {
+		ret.callback = &refreshingCallback{Callback: cfg.Callback, m: ret}
+	}
 	ret.fallback = noFallback{}
 	if cfg.Parser != nil {
 		ret.fallback = newSyntaxFallback(
@@ -226,6 +241,7 @@ func New(
 // Close shuts down all active language servers.
 func (m *Manager) Close() error {
 	defer m.cancel()
+	m.cancelAllPullDiagnostics()
 	m.mu.Lock()
 	servers := make([]server, 0, len(m.servers))
 	for _, s := range m.servers {
@@ -310,7 +326,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		if err != nil {
 			return err
 		}
-		return srv.notify(openCtx, "textDocument/didOpen",
+		err = srv.notify(openCtx, "textDocument/didOpen",
 			semanticapi.DidOpenTextDocumentParams{
 				TextDocument: semanticapi.TextDocumentItem{
 					URI:        uri,
@@ -319,8 +335,13 @@ func (m *Manager) handle(ev textapi.Event) error {
 					Text:       f.content,
 				},
 			})
+		if err == nil {
+			m.schedulePullDiagnostics(uri)
+		}
+		return err
 
 	case textapi.EventTypeClose:
+		m.cancelPullDiagnostics(uri)
 		srv, err := m.serverForURI(uri)
 		if err != nil {
 			if m.cfg.NoInitializeServer {
@@ -388,6 +409,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 			})
 		if err == nil {
 			m.callback.FileDidChange(uri, version, true, false)
+			m.schedulePullDiagnostics(uri)
 		}
 		return err
 
@@ -403,13 +425,17 @@ func (m *Manager) handle(ev textapi.Event) error {
 		if err != nil {
 			return err
 		}
-		return srv.notify(ctx, "textDocument/didSave",
+		err = srv.notify(ctx, "textDocument/didSave",
 			semanticapi.DidSaveTextDocumentParams{
 				TextDocument: semanticapi.TextDocumentIdentifier{
 					URI: uri,
 				},
 				Text: f.content,
 			})
+		if err == nil {
+			m.schedulePullDiagnostics(uri)
+		}
+		return err
 
 	case textapi.EventTypeCreate:
 		m.fileDidChangeOOB(uri)
@@ -502,6 +528,161 @@ func (m *Manager) fileDidChangeOOB(uri string) {
 		version = f.version
 	}
 	m.callback.FileDidChange(uri, version, open, true)
+}
+
+const (
+	// defaultPullDiagnosticsDebounce is the quiet period the pull
+	// bridge waits for before requesting diagnostics. rust-analyzer
+	// recomputes the whole crate per pull, so a request per keystroke
+	// would be prohibitively expensive.
+	defaultPullDiagnosticsDebounce = 200 * time.Millisecond
+	// pullDiagnosticsTimeout bounds a single bridged pull so a wedged
+	// server cannot leak the request goroutine.
+	pullDiagnosticsTimeout = 30 * time.Second
+)
+
+// schedulePullDiagnostics arms (or re-arms) the per-URI debounce timer
+// that drives the pull-diagnostics bridge. rust-analyzer stopped
+// computing native semantic diagnostics on the push path once build
+// scripts and proc macros are enabled, regardless of whether the buffer
+// is saved. Flycheck output is a different diagnostic set from a
+// different tool and does not substitute for it, so for pull-capable
+// servers the only way to get native semantic diagnostics is to pull
+// them and feed the reports back into the push pipeline.
+func (m *Manager) schedulePullDiagnostics(uri string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ctx.Err() != nil {
+		return
+	}
+	if t, ok := m.pullTimers[uri]; ok {
+		t.Stop()
+	}
+	m.pullTimers[uri] = time.AfterFunc(m.cfg.PullDiagnosticsDebounce, func() {
+		debug.CapturePanicReport(func() { m.pullDiagnostics(uri) })
+	})
+}
+
+// cancelPullDiagnostics drops a pending debounce timer, so a pull is
+// never issued for a document the server no longer tracks.
+func (m *Manager) cancelPullDiagnostics(uri string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t, ok := m.pullTimers[uri]; ok {
+		t.Stop()
+		delete(m.pullTimers, uri)
+	}
+}
+
+func (m *Manager) cancelAllPullDiagnostics() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for uri, t := range m.pullTimers {
+		t.Stop()
+		delete(m.pullTimers, uri)
+	}
+}
+
+// pullDiagnostics issues one textDocument/diagnostic request and
+// republishes the report through the callback. It deliberately bypasses
+// Manager.Diagnostic: that entry point waits for diagnostics to settle,
+// and the publishes it would wait on are the very ones this bridge
+// produces.
+func (m *Manager) pullDiagnostics(uri string) {
+	if _, open := m.fileVersion(uri); !open {
+		return
+	}
+	srv, err := m.serverForURI(uri)
+	if err != nil || !srv.supportsPullDiagnostics() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(m.ctx, pullDiagnosticsTimeout)
+	defer cancel()
+	report, err := srv.pullDiagnostics(ctx, semanticapi.DocumentDiagnosticParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: uri},
+	})
+	if err != nil {
+		m.log.Debug("pull diagnostics", "file", uri, "error", err)
+		return
+	}
+	// An unchanged report carries no items; publishing it would clear
+	// the diagnostics the previous full report established.
+	if report.Kind != "full" {
+		return
+	}
+
+	// Re-read the version after the round trip: edits made while the
+	// pull was in flight must not be reported as processed by this
+	// publish, and a document closed meanwhile must not be published at
+	// all.
+	version, open := m.fileVersion(uri)
+	if !open {
+		return
+	}
+
+	// The ":pull" suffix gives the bridge its own slot in the callback's
+	// per-server diagnostics cache, so bridged reports merge with the
+	// server's own pushes (flycheck) instead of overwriting them.
+	ctx = ContextWithMetadata(ctx, Metadata{
+		ServerName: srv.name() + ":pull",
+		RootURI:    srv.key().rootURI,
+	})
+	err = m.callback.PublishDiagnostics(ctx, semanticapi.PublishDiagnosticsParams{
+		URI:         uri,
+		Version:     version,
+		Diagnostics: report.Items,
+	})
+	if err != nil {
+		m.log.Warn("publish pulled diagnostics", "file", uri, "error", err)
+	}
+}
+
+func (m *Manager) fileVersion(uri string) (int32, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f, ok := m.files[uri]
+	if !ok {
+		return 0, false
+	}
+	return f.version, true
+}
+
+// RefreshDiagnostics re-pulls every open file owned by a pull-capable
+// server. It is driven by workspace/diagnostic/refresh through the
+// Manager's callback decorator: rust-analyzer sends the request when
+// flycheck finishes, which is exactly when its cached reports become
+// stale.
+func (m *Manager) RefreshDiagnostics(_ context.Context) error {
+	m.mu.Lock()
+	uris := make([]string, 0, len(m.files))
+	for uri := range m.files {
+		uris = append(uris, uri)
+	}
+	m.mu.Unlock()
+	for _, uri := range uris {
+		m.schedulePullDiagnostics(uri)
+	}
+	return nil
+}
+
+// refreshingCallback decorates the configured Callback with the
+// Manager's reaction to workspace refresh requests. The Manager
+// installs the callback into every server it starts, so decorating it
+// here lets server-driven refreshes reach the Manager without the
+// callback implementation needing a reference back to it.
+type refreshingCallback struct {
+	Callback
+	m *Manager
+}
+
+// DiagnosticRefresh schedules pulls for the Manager's open files, then
+// forwards the request to the decorated callback.
+func (c *refreshingCallback) DiagnosticRefresh(ctx context.Context) error {
+	if err := c.m.RefreshDiagnostics(ctx); err != nil {
+		return err
+	}
+	return c.Callback.DiagnosticRefresh(ctx)
 }
 
 func (m *Manager) getFile(uriStr string) (*file, bool) {

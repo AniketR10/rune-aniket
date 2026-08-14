@@ -240,6 +240,16 @@ func TestRustInitializeCapabilities(t *testing.T) {
 	hover, _ := textDocument["hover"].(map[string]any)
 	assert.Contains(t, hover["contentFormat"], "markdown",
 		"hover must request markdown so `rust hover` can render it")
+
+	// rust-analyzer gates native semantic diagnostics on the client
+	// advertising pull support once build scripts and proc macros are
+	// enabled; without this Rune only ever sees clippy flycheck output,
+	// which is a different diagnostic set and only runs on save
+	// (RUNE-332).
+	_, hasDiagnostic := textDocument["diagnostic"]
+	assert.True(t, hasDiagnostic,
+		"textDocument.diagnostic must be advertised so rust-analyzer "+
+			"computes native semantic diagnostics")
 }
 
 // With the experimental flag set, localDocs is advertised so external-docs

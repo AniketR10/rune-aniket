@@ -122,6 +122,12 @@ func rustInitializeParams(
 			"callHierarchy":     map[string]any{},
 			"inlayHint":         map[string]any{},
 			"codeLens":          map[string]any{},
+			// Once build scripts and proc macros are enabled,
+			// rust-analyzer computes native semantic diagnostics only
+			// for pull-capable clients; without this Rune sees clippy
+			// flycheck output only, which is a different diagnostic set
+			// and only runs on save (RUNE-332).
+			"diagnostic": map[string]any{},
 			"codeAction": map[string]any{
 				"codeActionLiteralSupport": map[string]any{
 					"codeActionKind": map[string]any{

@@ -424,10 +424,11 @@ func (f *fakeChildServer) pullDiagnostics(
 func (f *fakeChildServer) initialize(context.Context) (semanticapi.InitializeResult, error) {
 	return semanticapi.InitializeResult{}, nil
 }
-func (f *fakeChildServer) stop(context.Context) error { return nil }
-func (f *fakeChildServer) config() langConfig         { return langConfig{} }
-func (f *fakeChildServer) key() serverKey             { return serverKey{} }
-func (f *fakeChildServer) name() string               { return "fake" }
+func (f *fakeChildServer) stop(context.Context) error    { return nil }
+func (f *fakeChildServer) supportsPullDiagnostics() bool { return false }
+func (f *fakeChildServer) config() langConfig            { return langConfig{} }
+func (f *fakeChildServer) key() serverKey                { return serverKey{} }
+func (f *fakeChildServer) name() string                  { return "fake" }
 func (f *fakeChildServer) initResult() semanticapi.InitializeResult {
 	return semanticapi.InitializeResult{}
 }

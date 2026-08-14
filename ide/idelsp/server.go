@@ -59,6 +59,11 @@ type server interface {
 	// findings from all backends (e.g. ty type errors and ruff lint)
 	// are returned together rather than only the default child's.
 	pullDiagnostics(ctx context.Context, params semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error)
+	// supportsPullDiagnostics reports whether both halves of the
+	// pull-diagnostics handshake are in place: the client advertised
+	// textDocument.diagnostic and the server answered with a
+	// diagnosticProvider capability.
+	supportsPullDiagnostics() bool
 	initialize(ctx context.Context) (semanticapi.InitializeResult, error)
 	stop(ctx context.Context) error
 	start(ctx context.Context) error
@@ -93,6 +98,29 @@ type langServer struct {
 	alive      bool
 	log        *slog.Logger
 	init       semanticapi.InitializeResult
+	pullDiags  bool
+}
+
+// pullDiagnosticsSupported reports whether a server can serve
+// textDocument/diagnostic pulls for a client with the given raw
+// capabilities. Both halves are required: servers only advertise
+// diagnosticProvider when the client declared textDocument.diagnostic,
+// and a client that never declared it must not issue pulls.
+func pullDiagnosticsSupported(
+	clientCaps json.RawMessage, res semanticapi.InitializeResult,
+) bool {
+	if res.Capabilities.DiagnosticProvider == nil || len(clientCaps) == 0 {
+		return false
+	}
+	var parsed struct {
+		TextDocument struct {
+			Diagnostic json.RawMessage `json:"diagnostic"`
+		} `json:"textDocument"`
+	}
+	if err := json.Unmarshal(clientCaps, &parsed); err != nil {
+		return false
+	}
+	return len(parsed.TextDocument.Diagnostic) > 0
 }
 
 // pipeCloser wraps read and write pipes to close them together.
@@ -253,6 +281,7 @@ func (s *langServer) start(ctx context.Context) error {
 		return fmt.Errorf("initialize %s: %w", s.cfg.command, err)
 	}
 	s.init = resp
+	s.pullDiags = pullDiagnosticsSupported(s.params.Capabilities, resp)
 	return nil
 }
 
@@ -386,6 +415,12 @@ func (s *langServer) name() string {
 
 func (s *langServer) initResult() semanticapi.InitializeResult {
 	return s.init
+}
+
+func (s *langServer) supportsPullDiagnostics() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pullDiags
 }
 
 func (s *langServer) isAlive() bool {

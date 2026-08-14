@@ -482,3 +482,120 @@ func symbolNames(res semanticapi.DocumentSymbolResult) []string {
 	walk(res.DocumentSymbols)
 	return names
 }
+
+// withPullDiagnosticsCapability adds the textDocument.diagnostic client
+// capability to params, which is what makes rust-analyzer advertise
+// diagnosticProvider and answer textDocument/diagnostic pulls.
+func withPullDiagnosticsCapability(
+	t *testing.T, params semanticapi.InitializeParams,
+) semanticapi.InitializeParams {
+	t.Helper()
+	var caps map[string]any
+	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
+	td, ok := caps["textDocument"].(map[string]any)
+	require.True(t, ok, "capabilities must carry a textDocument object")
+	td["diagnostic"] = map[string]any{}
+	raw, err := json.Marshal(caps)
+	require.NoError(t, err)
+	params.Capabilities = raw
+	return params
+}
+
+// TestRustE2E_PullDiagnosticsPublish is the RUNE-332 regression guard.
+// rust-analyzer builds >= 2026-05-11 never compute native semantic
+// diagnostics on the push path when build scripts and proc macros are
+// enabled, so native semantic diagnostics never reach the location
+// list. The error below is appended to the open buffer but never
+// written to disk: that isolates the assertion from clippy flycheck,
+// which compiles the on-disk crate and would otherwise report the same
+// error, so a pass here can only come from the pull bridge.
+func TestRustE2E_PullDiagnosticsPublish(t *testing.T) {
+	// Deliberately not parallel: TestE2ERust already drives a
+	// rust-analyzer against the same fixture, and two concurrent
+	// workspace loads make its readiness probes flaky under load.
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+
+	raBin := findRustAnalyzer(t)
+	tmpDir := setupTestWorkspace(t, filepath.Join("testdata", "rs"))
+	mainPath := filepath.Join(tmpDir, "src", "main.rs")
+	mainContent, err := os.ReadFile(mainPath)
+	require.NoError(t, err)
+	mainURI := "file://" + mainPath
+
+	uri := makeURI(t, "file://"+tmpDir)
+	scheme := newTestScheme()
+	callback := &testCallback{}
+	mgr := New(uri, scheme, scheme,
+		&stubPkgManager{bin: raBin},
+		nil, nil,
+		Config{
+			Callback:                callback,
+			MaxRetries:              1,
+			NoInitializeServer:      true,
+			InitializeTimeout:       30 * time.Second,
+			PullDiagnosticsDebounce: 100 * time.Millisecond,
+		})
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	params := withPullDiagnosticsCapability(t, autoInitParams(uri.String()))
+	initOpts, err := json.Marshal(map[string]any{
+		"langID":  "rust",
+		"command": raBin,
+		"cargo": map[string]any{
+			"buildScripts": map[string]any{"enable": true},
+		},
+		"procMacro": map[string]any{"enable": true},
+	})
+	require.NoError(t, err)
+	params.InitializeOptions = initOpts
+
+	_, err = mgr.Initialize(ctx, params)
+	require.NoError(t, err)
+
+	broken := string(mainContent) +
+		"\nfn __broken() { let _x: u32 = \"oops\"; }\n"
+	require.NoError(t, mgr.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
+		TextDocument: semanticapi.TextDocumentItem{
+			URI:        mainURI,
+			LanguageID: "rust",
+			Version:    1,
+			Text:       broken,
+		},
+	}))
+
+	found := func() bool {
+		callback.mu.Lock()
+		defer callback.mu.Unlock()
+		for _, p := range callback.publishes {
+			if p.params.URI != mainURI ||
+				!strings.HasSuffix(p.metadata.ServerName, ":pull") {
+				continue
+			}
+			for _, d := range p.params.Diagnostics {
+				if strings.Contains(d.Message, "expected u32") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// rust-analyzer answers pulls with an empty report until the
+	// workspace finishes loading, so keep re-pulling until the semantic
+	// error shows up or the bound expires.
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		if found() {
+			return
+		}
+		require.NoError(t, mgr.RefreshDiagnostics(ctx))
+		select {
+		case <-ctx.Done():
+			t.Fatalf("context cancelled waiting for pull diagnostics: %v", ctx.Err())
+		case <-time.After(time.Second):
+		}
+	}
+	t.Fatal("timed out waiting for a bridged pull-diagnostics publish " +
+		"carrying the overlay-only semantic error")
+}

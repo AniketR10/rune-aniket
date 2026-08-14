@@ -2771,7 +2771,16 @@ type testCallback struct {
 	onDiagnostics  func(semanticapi.PublishDiagnosticsParams)
 
 	invalidateAllPendingCount int
+	diagnosticRefreshCount    int
 	fileDidChangeCalls        []fileDidChangeCall
+	publishes                 []publishedDiagnostic
+}
+
+// publishedDiagnostic pairs a publish with the LSP metadata carried on
+// its context, which identifies the publishing server slot.
+type publishedDiagnostic struct {
+	params   semanticapi.PublishDiagnosticsParams
+	metadata Metadata
 }
 
 type fileDidChangeCall struct {
@@ -2803,10 +2812,13 @@ func (c *testCallback) LogMessage(
 }
 
 func (c *testCallback) PublishDiagnostics(
-	_ context.Context, params semanticapi.PublishDiagnosticsParams,
+	ctx context.Context, params semanticapi.PublishDiagnosticsParams,
 ) error {
+	md, _ := metadataFromContext(ctx)
 	c.mu.Lock()
 	c.diagnostics = append(c.diagnostics, params)
+	c.publishes = append(c.publishes,
+		publishedDiagnostic{params: params, metadata: md})
 	cb := c.onDiagnostics
 	c.mu.Unlock()
 	if cb != nil {
@@ -2912,6 +2924,9 @@ func (c *testCallback) InlayHintRefresh(_ context.Context) error {
 }
 
 func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
+	c.mu.Lock()
+	c.diagnosticRefreshCount++
+	c.mu.Unlock()
 	return nil
 }
 func (c *testCallback) HandleNotification(_ context.Context, _ string, _ json.RawMessage) error {

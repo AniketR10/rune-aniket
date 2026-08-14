@@ -40,6 +40,7 @@ import (
 // without spawning real language-server processes.
 type fakeChild struct {
 	childName string
+	rootURI   string
 
 	mu      sync.Mutex
 	calls   []string
@@ -59,6 +60,12 @@ type fakeChild struct {
 	// multi-server merge can be exercised without a real server.
 	diagReport semanticapi.DocumentDiagnosticReport
 	diagErr    error
+
+	// clientCaps and initRes drive supportsPullDiagnostics through the
+	// same gate langServer applies, so tests exercise the real
+	// capability handshake rather than a hand-set boolean.
+	clientCaps json.RawMessage
+	initRes    semanticapi.InitializeResult
 }
 
 func (f *fakeChild) call(_ context.Context, method string, _, result any) error {
@@ -127,7 +134,7 @@ func (f *fakeChild) config() langConfig {
 }
 
 func (f *fakeChild) key() serverKey {
-	return serverKey{languageID: f.childName}
+	return serverKey{languageID: f.childName, rootURI: f.rootURI}
 }
 
 func (f *fakeChild) name() string {
@@ -135,7 +142,11 @@ func (f *fakeChild) name() string {
 }
 
 func (f *fakeChild) initResult() semanticapi.InitializeResult {
-	return semanticapi.InitializeResult{}
+	return f.initRes
+}
+
+func (f *fakeChild) supportsPullDiagnostics() bool {
+	return pullDiagnosticsSupported(f.clientCaps, f.initRes)
 }
 
 func (f *fakeChild) isAlive() bool {

@@ -291,6 +291,7 @@ func (m *Manager) DidOpen(
 	m.mu.Lock()
 	m.files[params.TextDocument.URI] = f
 	m.mu.Unlock()
+	m.schedulePullDiagnostics(params.TextDocument.URI)
 	return nil
 }
 
@@ -309,6 +310,7 @@ func (m *Manager) DidChange(
 	)
 	if err == nil {
 		m.callback.FileDidChange(params.TextDocument.URI, params.TextDocument.Version, true, false)
+		m.schedulePullDiagnostics(params.TextDocument.URI)
 	}
 	return err
 }
@@ -323,6 +325,7 @@ func (m *Manager) DidClose(
 		return err
 	}
 	err = srv.notify(ctx, "textDocument/didClose", params)
+	m.cancelPullDiagnostics(params.TextDocument.URI)
 	m.mu.Lock()
 	delete(m.files, params.TextDocument.URI)
 	m.mu.Unlock()
@@ -338,9 +341,13 @@ func (m *Manager) DidSave(
 	if err != nil {
 		return err
 	}
-	return srv.notify(
+	err = srv.notify(
 		ctx, "textDocument/didSave", params,
 	)
+	if err == nil {
+		m.schedulePullDiagnostics(params.TextDocument.URI)
+	}
+	return err
 }
 
 // WillSave forwards the notification to the owning server.

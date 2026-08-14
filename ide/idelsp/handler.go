@@ -56,14 +56,6 @@ var errCouldNotSchedule = errors.New(
 	"could not schedule operation",
 )
 
-// Refresher handles LSP server refresh requests.
-type Refresher interface {
-	RefreshCodeLens(ctx context.Context) error
-	RefreshSemanticTokens(ctx context.Context) error
-	RefreshInlayHints(ctx context.Context) error
-	RefreshDiagnostics(ctx context.Context) error
-}
-
 // WindowManager provides floating window management for
 // LSP callback prompts.
 type WindowManager interface {
@@ -84,7 +76,6 @@ type Editor interface {
 // CallbackHandler.
 type CallbackHandlerConfig struct {
 	Config           config.Config
-	Refresher        Refresher
 	Interrupter      term.Interrupter
 	ScheduleNextTick func(fn func()) bool
 	Icons            IconSet
@@ -127,7 +118,6 @@ type CallbackHandler struct {
 	fileSystem       schemeapi.FileSystem
 	rootURI          string
 	config           config.Config
-	refresher        Refresher
 	interrupter      term.Interrupter
 	scheduleNextTick func(fn func()) bool
 	icons            IconSet
@@ -187,10 +177,6 @@ func NewCallbackHandler(
 	rootURI string,
 	cfg CallbackHandlerConfig,
 ) *CallbackHandler {
-	r := cfg.Refresher
-	if r == nil {
-		r = nopRefresher{}
-	}
 	interrupter := cfg.Interrupter
 	if interrupter == nil {
 		interrupter = term.NopInterrupter()
@@ -210,7 +196,6 @@ func NewCallbackHandler(
 		fileSystem:       fileSystem,
 		rootURI:          rootURI,
 		config:           cfg.Config,
-		refresher:        r,
 		interrupter:      interrupter,
 		scheduleNextTick: sched,
 		icons:            iconSetWithDefaults(cfg.Icons),
@@ -737,32 +722,39 @@ func (h *CallbackHandler) UnregisterCapability(
 	return nil
 }
 
-// CodeLensRefresh delegates to the Refresher.
+// The workspace refresh requests below are no-ops on the handler side.
+// Refreshes that require server interaction (re-pulling diagnostics)
+// are intercepted by the Manager's callback decorator before the
+// callback chain reaches this handler; lenses, tokens and hints are
+// re-requested on demand as the editor renders, so the notifications
+// need no action here.
+
+// CodeLensRefresh implements semanticapi.LSPCallback.
 func (h *CallbackHandler) CodeLensRefresh(
-	ctx context.Context,
+	_ context.Context,
 ) error {
-	return h.refresher.RefreshCodeLens(ctx)
+	return nil
 }
 
-// SemanticTokensRefresh delegates to the Refresher.
+// SemanticTokensRefresh implements semanticapi.LSPCallback.
 func (h *CallbackHandler) SemanticTokensRefresh(
-	ctx context.Context,
+	_ context.Context,
 ) error {
-	return h.refresher.RefreshSemanticTokens(ctx)
+	return nil
 }
 
-// InlayHintRefresh delegates to the Refresher.
+// InlayHintRefresh implements semanticapi.LSPCallback.
 func (h *CallbackHandler) InlayHintRefresh(
-	ctx context.Context,
+	_ context.Context,
 ) error {
-	return h.refresher.RefreshInlayHints(ctx)
+	return nil
 }
 
-// DiagnosticRefresh delegates to the Refresher.
+// DiagnosticRefresh implements semanticapi.LSPCallback.
 func (h *CallbackHandler) DiagnosticRefresh(
-	ctx context.Context,
+	_ context.Context,
 ) error {
-	return h.refresher.RefreshDiagnostics(ctx)
+	return nil
 }
 
 // FileDidChange records that a file changed and how the next
@@ -899,32 +891,6 @@ func (h *CallbackHandler) fileDidProcess(uri string, version int32) {
 		state.pendingUnversioned = false
 	}
 	h.versionCond.Broadcast()
-}
-
-type nopRefresher struct{}
-
-func (nopRefresher) RefreshCodeLens(
-	_ context.Context,
-) error {
-	return nil
-}
-
-func (nopRefresher) RefreshSemanticTokens(
-	_ context.Context,
-) error {
-	return nil
-}
-
-func (nopRefresher) RefreshInlayHints(
-	_ context.Context,
-) error {
-	return nil
-}
-
-func (nopRefresher) RefreshDiagnostics(
-	_ context.Context,
-) error {
-	return nil
 }
 
 func progressTokenKey(

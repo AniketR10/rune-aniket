@@ -71,6 +71,12 @@ func (c *raCallback) PublishDiagnostics(
 	return nil
 }
 
+func (c *raCallback) publishedDiagnostics() []semanticapi.PublishDiagnosticsParams {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]semanticapi.PublishDiagnosticsParams(nil), c.diagnostics...)
+}
+
 func (c *raCallback) Progress(_ context.Context, params semanticapi.ProgressParams) error {
 	c.mu.Lock()
 	cb := c.onProgress

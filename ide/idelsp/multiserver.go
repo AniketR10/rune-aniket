@@ -206,6 +206,14 @@ func (m *multiLangServer) initResult() semanticapi.InitializeResult {
 	return m.init
 }
 
+// supportsPullDiagnostics follows the default child, whose initialize
+// result already defines the language's reported capabilities.
+func (m *multiLangServer) supportsPullDiagnostics() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.children[0].supportsPullDiagnostics()
+}
+
 func (m *multiLangServer) isAlive() bool {
 	for _, c := range m.allChildren() {
 		if c.isAlive() {

@@ -488,6 +488,75 @@ func TestCallbackHandler_PublishDiagnostics_BySource(t *testing.T) {
 	assert.Equal(t, []textapi.Location{wantRuffLoc}, mergedAfterClear)
 }
 
+// TestCallbackHandler_PublishDiagnostics_PushAndPullCoexist locks in
+// the cache side of RUNE-332: the pull bridge republishes under a
+// ":pull" server name so rust-analyzer's flycheck pushes (server name
+// "rust") and the bridged pull reports occupy distinct slots and merge
+// into one location list, instead of one clearing the other on every
+// update.
+func TestCallbackHandler_PublishDiagnostics_PushAndPullCoexist(t *testing.T) {
+	t.Parallel()
+	uri, err := workspaceapi.ParseURI("file:///tmp/main.rs")
+	require.NoError(t, err)
+	ed := &mockEditor{handler: &mockEditorHandler{uri: uri}}
+	h := NewCallbackHandler(nil, nil, nil, ed, nil, "", CallbackHandlerConfig{})
+
+	pushDiag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 4, Character: 0},
+			End:   semanticapi.Position{Line: 4, Character: 5},
+		},
+		Severity: semanticapi.DiagnosticSeverityWarning,
+		Source:   "clippy",
+		Message:  "unused variable",
+	}
+	pullDiag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 7, Character: 8},
+			End:   semanticapi.Position{Line: 7, Character: 12},
+		},
+		Severity: semanticapi.DiagnosticSeverityError,
+		Source:   "rust-analyzer",
+		Message:  "expected u32, found &str",
+	}
+
+	const root = "file:///tmp"
+	pushCtx := ContextWithMetadata(t.Context(),
+		Metadata{ServerName: "rust", RootURI: root})
+	pullCtx := ContextWithMetadata(t.Context(),
+		Metadata{ServerName: "rust:pull", RootURI: root})
+
+	require.NoError(t, h.PublishDiagnostics(pushCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.rs",
+		Diagnostics: []semanticapi.Diagnostic{pushDiag},
+	}))
+	require.NoError(t, h.PublishDiagnostics(pullCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.rs",
+		Diagnostics: []semanticapi.Diagnostic{pullDiag},
+	}))
+
+	got := h.Diagnostics()
+	assert.ElementsMatch(t,
+		[]semanticapi.Diagnostic{pushDiag, pullDiag},
+		got["file:///tmp/main.rs"])
+
+	ed.mu.Lock()
+	merged := ed.locationsByID["lsp-diagnostics"]
+	ed.mu.Unlock()
+	assert.Len(t, merged, 2,
+		"push and pull diagnostics must merge into one location list")
+
+	// A flycheck run that clears its findings must not drop the native
+	// semantic errors the bridge contributed.
+	require.NoError(t, h.PublishDiagnostics(pushCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.rs",
+		Diagnostics: nil,
+	}))
+	got = h.Diagnostics()
+	require.Len(t, got["file:///tmp/main.rs"], 1)
+	assert.Equal(t, pullDiag, got["file:///tmp/main.rs"][0])
+}
+
 // TestCallbackHandler_PublishDiagnostics_FileNotOpen asserts that
 // diagnostics published for a file with no open editor tab are cached
 // silently: LSP servers routinely publish workspace-wide diagnostics
@@ -2080,75 +2149,9 @@ func TestCallbackHandler_RegisterUnregister(
 	))
 }
 
-func TestCallbackHandler_Refresh(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name  string
-		call  func(context.Context, *CallbackHandler) error
-		check func(*testing.T, *mockRefresher)
-	}{
-		{
-			name: "CodeLensRefresh",
-			call: func(
-				ctx context.Context, h *CallbackHandler,
-			) error {
-				return h.CodeLensRefresh(ctx)
-			},
-			check: func(t *testing.T, r *mockRefresher) {
-				assert.Equal(t, 1, r.codeLens)
-			},
-		},
-		{
-			name: "SemanticTokensRefresh",
-			call: func(
-				ctx context.Context, h *CallbackHandler,
-			) error {
-				return h.SemanticTokensRefresh(ctx)
-			},
-			check: func(t *testing.T, r *mockRefresher) {
-				assert.Equal(t, 1, r.semantic)
-			},
-		},
-		{
-			name: "InlayHintRefresh",
-			call: func(
-				ctx context.Context, h *CallbackHandler,
-			) error {
-				return h.InlayHintRefresh(ctx)
-			},
-			check: func(t *testing.T, r *mockRefresher) {
-				assert.Equal(t, 1, r.inlayHints)
-			},
-		},
-		{
-			name: "DiagnosticRefresh",
-			call: func(
-				ctx context.Context, h *CallbackHandler,
-			) error {
-				return h.DiagnosticRefresh(ctx)
-			},
-			check: func(t *testing.T, r *mockRefresher) {
-				assert.Equal(t, 1, r.diagnostics)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			r := &mockRefresher{}
-			h := NewCallbackHandler(
-				nil, nil, nil, nil, nil,
-				"",
-				CallbackHandlerConfig{Refresher: r},
-			)
-			err := tt.call(t.Context(), h)
-			require.NoError(t, err)
-			tt.check(t, r)
-		})
-	}
-}
-
-func TestCallbackHandler_NopRefresherDefault(
+// Refresh requests are no-ops on the handler: the Manager's callback
+// decorator intercepts the ones that need server interaction.
+func TestCallbackHandler_RefreshNoOps(
 	t *testing.T,
 ) {
 	t.Parallel()
@@ -2486,48 +2489,4 @@ func (m *mockResourceOpener) Open(
 		m.openFn(uri)
 	}
 	return nil, nil
-}
-
-type mockRefresher struct {
-	mu          sync.Mutex
-	codeLens    int
-	semantic    int
-	inlayHints  int
-	diagnostics int
-}
-
-func (m *mockRefresher) RefreshCodeLens(
-	_ context.Context,
-) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.codeLens++
-	return nil
-}
-
-func (m *mockRefresher) RefreshSemanticTokens(
-	_ context.Context,
-) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.semantic++
-	return nil
-}
-
-func (m *mockRefresher) RefreshInlayHints(
-	_ context.Context,
-) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.inlayHints++
-	return nil
-}
-
-func (m *mockRefresher) RefreshDiagnostics(
-	_ context.Context,
-) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.diagnostics++
-	return nil
 }
