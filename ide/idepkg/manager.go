@@ -2099,6 +2099,14 @@ func (m *Manager) VerifyExtensionEntrypoint(path string) (string, bool) {
 			!strings.HasPrefix(rel, ".."+string(filepath.Separator)):
 			entryPath = filepath.ToSlash(rel)
 		case sharedBin != "" && filepath.Dir(resolved) == sharedBin:
+			// The install step that writes the shared copy also
+			// repoints the package's lib symlink, so only the
+			// lib-linked version can vouch for the copy; superseded
+			// versions still installed must not veto it.
+			if _, _, inUse, uerr := m.isPackageVersionInUse(
+				installed.Package, installed.Version); uerr != nil || !inUse {
+				continue
+			}
 			entryPath = "bin/" + filepath.Base(resolved)
 			sharedCopy = true
 		default:

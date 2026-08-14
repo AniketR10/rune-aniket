@@ -4380,9 +4380,40 @@ func installVerifyPackages(t *testing.T) (*Manager, string) {
 	return manager, dataDir
 }
 
+// TestVerifyExtensionEntrypointAfterUpgrade pins that the shared bin copy is
+// vouched for by the version the lib symlink records — the same install step
+// writes both — not by whichever installed record happens to list first.
+// After an upgrade the superseded version stays on disk, and its stale
+// manifest hash must not veto the copy the newer version produced.
+func TestVerifyExtensionEntrypointAfterUpgrade(t *testing.T) {
+	t.Parallel()
+	manager, _, rm, dataDir := newTestManager(t,
+		idepkgtest.MakePackages(release.Package{Name: dotPkgID, Latest: "2"}),
+		idepkgtest.MakeBundles([]release.Bundle{
+			{Package: dotPkgID, Version: "1"},
+			{Package: dotPkgID, Version: "2"},
+		}))
+	rm.SetTarball(dotPkgID, pkgTarballScript(t, dotEntrypoint, "./", entrypointScript))
+	require.NoError(t, manager.InstallPackageVersion(
+		context.Background(), dotPkgID, "1", repl.NopProgressWriter()))
+	rm.SetTarball(dotPkgID, pkgTarballScript(t, dotEntrypoint, "./", "#!/bin/sh\nexit 2\n"))
+	require.NoError(t, manager.InstallPackageVersion(
+		context.Background(), dotPkgID, "2", repl.NopProgressWriter()))
+
+	fingerprint, ok := manager.VerifyExtensionEntrypoint(
+		filepath.Join(makeBinDirname(dataDir), dotEntrypoint))
+	assert.True(t, ok)
+	assert.NotEmpty(t, fingerprint)
+}
+
 // pkgTarball builds a gzipped tar holding an extension entrypoint under bin/,
 // which is where package configs point through $RUNE_DATADIR/bin/<name>.
 func pkgTarball(t *testing.T, entrypoint, prefix string) []byte {
+	t.Helper()
+	return pkgTarballScript(t, entrypoint, prefix, entrypointScript)
+}
+
+func pkgTarballScript(t *testing.T, entrypoint, prefix, script string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	gzw := gzip.NewWriter(&buf)
@@ -4403,7 +4434,7 @@ func pkgTarball(t *testing.T, entrypoint, prefix string) []byte {
 		mode    int64
 	}{
 		{name: prefix + "config.yaml", content: config, mode: 0o644},
-		{name: prefix + "bin/" + entrypoint, content: entrypointScript, mode: 0o755},
+		{name: prefix + "bin/" + entrypoint, content: script, mode: 0o755},
 	} {
 		require.NoError(t, tw.WriteHeader(&tar.Header{
 			Name: file.name, Mode: file.mode, Size: int64(len(file.content)),
