@@ -162,7 +162,7 @@ func TestE2EPythonLoggingConfigReachesServers(t *testing.T) {
 	})
 	installer := e2eInstaller{"ty": tyBin, "ruff": ruffBin, "uv": "uv"}
 	err = initializeProjectRoot(t.Context(), scheme, &successfulExecutor{}, newFakeNotifications(),
-		mgr, installer, cfg, langext.Root{Dir: dir, URI: rootURI})
+		mgr, installer, cfg, "", langext.Root{Dir: dir, URI: rootURI})
 	require.NoError(t, err)
 
 	ty, ok := scheme.startedProcess(tyBin)
