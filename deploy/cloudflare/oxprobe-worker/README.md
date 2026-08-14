@@ -84,6 +84,23 @@ Deferred:
   peer certificate from `fetch()`.
 - gRPC, matching the RFC003 deferral.
 
+## Failure confirmation
+
+A critical layer must fail twice before PagerDuty is triggered. When a probe
+reports a failing critical layer, that probe alone is re-run after
+`CONFIRM_DELAY_SECONDS` (default 30) and only the second result is reported,
+paged, and served. At a one-minute cadence, a single failure is usually a
+transient blip that is gone by the next run, and paging on it wakes on-call for
+a system that is already healthy.
+
+Non-critical layers are not re-run: they only affect the `degraded` status,
+never paging. Layers that failed the first pass but passed the re-check are
+listed under `unconfirmed` in the log line the cron handler emits, so blips stay
+visible in Workers observability without paging. `cmd/oxprobe` behaves
+identically, exporting the same information as
+`oxprobe_layer_unconfirmed_failures_total`; its delay is set with
+`--confirm-delay`, and `0` restores paging on the first failure.
+
 ## Deploy
 
 The repository root Makefile deploys both probe implementations for an

@@ -62,6 +62,7 @@ func main() {
 		daemon           bool
 		interval         time.Duration
 		perProbeTimeout  time.Duration
+		confirmDelay     time.Duration
 		metricsAddr      string
 		projectID        string
 		credsFile        string
@@ -86,6 +87,7 @@ func main() {
 	boolVar(&daemon, "daemon", "d", false, "Run continuously: probe on an interval, export Prometheus metrics, and page PagerDuty on critical-layer failures. Without it, probe once, print the report, and exit (non-zero on critical failure).")
 	durVar(&interval, "interval", "i", time.Minute, "Daemon probe interval")
 	durVar(&perProbeTimeout, "probe-timeout", "t", 15*time.Second, "Per-probe timeout")
+	durVar(&confirmDelay, "confirm-delay", "r", defaultConfirmDelay, "Wait this long and re-run a probe whose critical layer failed; only a second failure pages. Zero pages on the first failure.")
 	strVar(&metricsAddr, "metrics-addr", "m", ":9106", "Address for the Prometheus /metrics endpoint (daemon mode)")
 	strVar(&projectID, "project", "p", "", "Override the GCP project for Secret Manager (probe secret + PagerDuty routing key). Defaults to the selected environment's project.")
 	strVar(&credsFile, "creds", "c", "", "GCP credentials file for Secret Manager")
@@ -108,7 +110,10 @@ func main() {
 
 	probeSecret := loadProbeSecret(secretStore, probeSecretID)
 	client := &http.Client{Timeout: perProbeTimeout}
-	r := newRunner(cfg, client, probeSecret, runnerConfig{SkipDownloadsCDN: skipDownloadsCDN})
+	r := newRunner(cfg, client, probeSecret, runnerConfig{
+		SkipDownloadsCDN: skipDownloadsCDN,
+		ConfirmDelay:     confirmDelay,
+	})
 
 	if !daemon {
 		os.Exit(runOnce(context.Background(), r, perProbeTimeout, cfg.Name))
@@ -138,7 +143,7 @@ func loadProbeSecret(store blueauth.SecretStore, id string) string {
 // runOnce runs the probe set once, prints the JSON report, and returns
 // the process exit code (1 on any critical-layer failure).
 func runOnce(ctx context.Context, r *runner, timeout time.Duration, env string) int {
-	report := r.run(ctx, timeout)
+	report, _ := r.run(ctx, timeout)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(report); err != nil {
@@ -170,9 +175,12 @@ func runDaemon(r *runner, interval, timeout time.Duration, metricsAddr, env stri
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// probeOnce is synchronous, so a run that confirms a failure delays the
+	// next tick by confirmDelay. time.Ticker coalesces missed ticks, so the
+	// cadence recovers without accumulating drift.
 	probeOnce := func() {
-		report := r.run(ctx, timeout)
-		m.observe(env, report.Checks)
+		report, unconfirmed := r.run(ctx, timeout)
+		m.observe(env, report.Checks, unconfirmed)
 		if err := reconcile(ctx, pgr, env, report); err != nil {
 			fmt.Fprintf(os.Stderr, "reconcile: %v\n", err)
 		}

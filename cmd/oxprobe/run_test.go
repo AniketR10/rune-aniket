@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +55,27 @@ func (c *capturePager) Page(ctx context.Context, p pager.Page) error {
 	return nil
 }
 
+// flakyProbe fails its first failUntil runs and succeeds afterwards.
+type flakyProbe struct {
+	layer     string
+	critical  bool
+	failUntil int
+	runs      atomic.Int64
+}
+
+func (f *flakyProbe) Layer() string  { return f.layer }
+func (f *flakyProbe) Critical() bool { return f.critical }
+
+func (f *flakyProbe) Run(ctx context.Context) oxapi.CheckResult {
+	n := f.runs.Add(1)
+	res := oxapi.CheckResult{Layer: f.layer, Status: oxapi.CheckOK, Critical: f.critical}
+	if int(n) <= f.failUntil {
+		res.Status = oxapi.CheckFail
+		res.Detail = "flaky"
+	}
+	return res
+}
+
 func TestNewRunnerCanSkipDownloadsCDN(t *testing.T) {
 	cfg := EnvConfig{
 		Name:             "test",
@@ -68,6 +90,122 @@ func TestNewRunnerCanSkipDownloadsCDN(t *testing.T) {
 	for _, p := range r.probes {
 		require.NotEqual(t, "downloads_cdn", p.Layer())
 	}
+}
+
+func TestCriticalFailuresSelectsPagingGroups(t *testing.T) {
+	tests := []struct {
+		name    string
+		results [][]oxapi.CheckResult
+		want    []int
+	}{
+		{
+			name: "all ok",
+			results: [][]oxapi.CheckResult{
+				{{Layer: "dns_api", Status: oxapi.CheckOK, Critical: true}},
+				{{Layer: "auth0", Status: oxapi.CheckOK}},
+			},
+		},
+		{
+			name: "non-critical failure is not selected",
+			results: [][]oxapi.CheckResult{
+				{{Layer: "auth0", Status: oxapi.CheckFail, Critical: false}},
+			},
+		},
+		{
+			name: "critical failure selects its group",
+			results: [][]oxapi.CheckResult{
+				{{Layer: "dns_api", Status: oxapi.CheckOK, Critical: true}},
+				{{Layer: "tls_api", Status: oxapi.CheckFail, Critical: true}},
+			},
+			want: []int{1},
+		},
+		{
+			name: "critical failure anywhere in the deep group selects it once",
+			results: [][]oxapi.CheckResult{
+				{
+					{Layer: "deep.stripe", Status: oxapi.CheckFail, Critical: false},
+					{Layer: "deep", Status: oxapi.CheckFail, Critical: true},
+					{Layer: "pkg_download", Status: oxapi.CheckFail, Critical: true},
+				},
+			},
+			want: []int{0},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, criticalFailures(tt.results))
+		})
+	}
+}
+
+func TestRunnerConfirmsCriticalFailures(t *testing.T) {
+	tests := []struct {
+		name            string
+		probe           *flakyProbe
+		confirmDelay    time.Duration
+		wantStatus      string
+		wantRuns        int64
+		wantUnconfirmed []string
+	}{
+		{
+			name:            "transient critical failure does not fail the report",
+			probe:           &flakyProbe{layer: "dns_api", critical: true, failUntil: 1},
+			confirmDelay:    time.Millisecond,
+			wantStatus:      oxapi.StatusOK,
+			wantRuns:        2,
+			wantUnconfirmed: []string{"dns_api"},
+		},
+		{
+			name:         "persistent critical failure fails the report",
+			probe:        &flakyProbe{layer: "dns_api", critical: true, failUntil: 2},
+			confirmDelay: time.Millisecond,
+			wantStatus:   oxapi.StatusFail,
+			wantRuns:     2,
+		},
+		{
+			name:         "non-critical failure is not re-run",
+			probe:        &flakyProbe{layer: "auth0", critical: false, failUntil: 1},
+			confirmDelay: time.Millisecond,
+			wantStatus:   oxapi.StatusDegraded,
+			wantRuns:     1,
+		},
+		{
+			name:         "zero delay pages on the first failure",
+			probe:        &flakyProbe{layer: "dns_api", critical: true, failUntil: 1},
+			confirmDelay: 0,
+			wantStatus:   oxapi.StatusFail,
+			wantRuns:     1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &runner{
+				env:          EnvConfig{Name: "test"},
+				probes:       []probe.Probe{tt.probe},
+				confirmDelay: tt.confirmDelay,
+			}
+			report, unconfirmed := r.run(context.Background(), time.Second)
+			require.Equal(t, tt.wantStatus, report.Status)
+			require.Equal(t, tt.wantRuns, tt.probe.runs.Load())
+			require.Equal(t, tt.wantUnconfirmed, unconfirmed)
+		})
+	}
+}
+
+func TestRunnerSkipsConfirmationOnCanceledContext(t *testing.T) {
+	p := &flakyProbe{layer: "dns_api", critical: true, failUntil: 1}
+	r := &runner{
+		env:          EnvConfig{Name: "test"},
+		probes:       []probe.Probe{p},
+		confirmDelay: time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	report, unconfirmed := r.run(ctx, time.Second)
+	require.Equal(t, oxapi.StatusFail, report.Status)
+	require.Empty(t, unconfirmed)
+	require.Equal(t, int64(1), p.runs.Load())
 }
 
 func TestReconcileTriggersAndResolvesPerLayer(t *testing.T) {
@@ -144,7 +282,7 @@ func TestRunnerFansDeepIntoAggregate(t *testing.T) {
 		client:    srv.Client(),
 		arch:      probeArch(),
 	}
-	report := r.run(context.Background(), 5*time.Second)
+	report, _ := r.run(context.Background(), 5*time.Second)
 	require.Equal(t, oxapi.StatusDegraded, report.Status)
 	var found bool
 	for _, c := range report.Checks {

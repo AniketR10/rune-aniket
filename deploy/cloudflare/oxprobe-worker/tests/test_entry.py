@@ -157,7 +157,90 @@ def published(version, language=False):
     return {"latest": version, "blobs": [version], "language": language}
 
 
+class fake_probe:
+    """A zero-argument probe factory whose first fail_until runs fail."""
+
+    def __init__(self, layer, critical, fail_until=0):
+        self.layer = layer
+        self.critical = critical
+        self.fail_until = fail_until
+        self.runs = 0
+
+    def __call__(self):
+        return self._run()
+
+    async def _run(self):
+        self.runs += 1
+        if self.runs <= self.fail_until:
+            return [
+                entry.check_result(self.layer, entry.CHECK_FAIL, self.critical, "flaky")
+            ]
+        return [entry.check_result(self.layer, entry.CHECK_OK, self.critical)]
+
+
 class EntryTest(unittest.IsolatedAsyncioTestCase):
+    async def confirm(self, probes, delay):
+        """Runs probes once and confirms, with the delay awaited but not slept."""
+        slept = []
+        old_sleep = entry.asyncio.sleep
+        entry.asyncio.sleep = lambda seconds: slept.append(seconds) or old_sleep(0)
+        try:
+            groups = list(await entry.asyncio.gather(*(probe() for probe in probes)))
+            groups, unconfirmed = await entry.confirm_failures(probes, groups, delay)
+        finally:
+            entry.asyncio.sleep = old_sleep
+        return groups, unconfirmed, slept
+
+    async def test_confirm_reruns_only_the_failing_critical_probe(self):
+        dns = fake_probe("dns_api", True, fail_until=1)
+        auth0 = fake_probe("auth0", False)
+
+        groups, unconfirmed, slept = await self.confirm([dns, auth0], 30.0)
+
+        self.assertEqual([30.0], slept)
+        self.assertEqual(2, dns.runs)
+        self.assertEqual(1, auth0.runs)
+        self.assertEqual(["dns_api"], unconfirmed)
+        self.assertEqual(entry.STATUS_OK, entry.aggregate(groups[0] + groups[1])["status"])
+
+    async def test_confirm_keeps_persistent_critical_failure(self):
+        dns = fake_probe("dns_api", True, fail_until=2)
+
+        groups, unconfirmed, _ = await self.confirm([dns], 30.0)
+
+        self.assertEqual(2, dns.runs)
+        self.assertEqual([], unconfirmed)
+        self.assertTrue(entry.has_critical_failure(entry.aggregate(groups[0])))
+
+    async def test_confirm_skips_noncritical_failure(self):
+        auth0 = fake_probe("auth0", False, fail_until=1)
+
+        groups, unconfirmed, slept = await self.confirm([auth0], 30.0)
+
+        self.assertEqual([], slept)
+        self.assertEqual(1, auth0.runs)
+        self.assertEqual([], unconfirmed)
+        self.assertEqual(entry.STATUS_DEGRADED, entry.aggregate(groups[0])["status"])
+
+    async def test_confirm_disabled_by_zero_delay(self):
+        dns = fake_probe("dns_api", True, fail_until=1)
+
+        groups, unconfirmed, slept = await self.confirm([dns], 0)
+
+        self.assertEqual([], slept)
+        self.assertEqual(1, dns.runs)
+        self.assertEqual([], unconfirmed)
+        self.assertTrue(entry.has_critical_failure(entry.aggregate(groups[0])))
+
+    async def test_confirm_skipped_when_healthy(self):
+        dns = fake_probe("dns_api", True)
+
+        _, unconfirmed, slept = await self.confirm([dns], 30.0)
+
+        self.assertEqual([], slept)
+        self.assertEqual(1, dns.runs)
+        self.assertEqual([], unconfirmed)
+
     async def test_scheduled_accepts_cloudflare_runtime_arguments(self):
         calls = []
         old_run_worker_probe = entry.run_worker_probe

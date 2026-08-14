@@ -54,6 +54,13 @@ LANGUAGE_METADATA_KEY = "language"
 # finishes inside the worker's request budget.
 PKG_LATEST_CONCURRENCY = 8
 
+# How long to wait before re-running a probe whose critical layer failed.
+# At a one-minute cron cadence, single-run failures are dominated by
+# transient blips (a dropped packet, a CDN edge hiccup, a cold start) that
+# are gone by the next tick, so a page is only worth sending once a layer
+# has failed twice. Overridable via the CONFIRM_DELAY_SECONDS binding.
+CONFIRM_DELAY_SECONDS = 30.0
+
 ENVIRONMENTS = {
     "staging": {
         "api_host": "api.unstable.build",
@@ -92,7 +99,10 @@ class Default(WorkerEntrypoint):
     async def scheduled(self, controller, env=None, ctx=None):
         env = env if env is not None else self.env
         report = await run_worker_probe(env)
-        print(json.dumps(public_report(report), separators=(",", ":")))
+        logged = public_report(report)
+        if report.get("unconfirmed"):
+            logged["unconfirmed"] = report["unconfirmed"]
+        print(json.dumps(logged, separators=(",", ":")))
         await reconcile_pages(env, report)
 
     async def fetch(self, request):
@@ -122,25 +132,66 @@ async def run_worker_probe(env: Any) -> dict[str, Any]:
 
     timeout = float(env_value(env, "PROBE_TIMEOUT_SECONDS", "15"))
     probe_secret = env_value(env, "OXPROBE_SECRET", "").strip()
+    confirm_delay = float(
+        env_value(env, "CONFIRM_DELAY_SECONDS", str(CONFIRM_DELAY_SECONDS))
+    )
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        tasks = [
-            run_check("dns_api", True, lambda: probe_dns(client, cfg)),
-            run_check("oauth_config", True, lambda: probe_oauth_config(client, cfg)),
-            run_check("auth0", False, lambda: probe_auth0(client, cfg)),
-            run_check("downloads_cdn", False, lambda: probe_downloads(client, cfg)),
-            run_check("pkg_latest", True, lambda: probe_pkg_latest(client, cfg)),
-            probe_deep(client, cfg, probe_secret),
+        # Zero-argument factories rather than coroutines so a probe whose
+        # critical layer failed can be invoked a second time.
+        probes = [
+            lambda: run_check_group("dns_api", True, lambda: probe_dns(client, cfg)),
+            lambda: run_check_group("oauth_config", True, lambda: probe_oauth_config(client, cfg)),
+            lambda: run_check_group("auth0", False, lambda: probe_auth0(client, cfg)),
+            lambda: run_check_group("downloads_cdn", False, lambda: probe_downloads(client, cfg)),
+            lambda: run_check_group("pkg_latest", True, lambda: probe_pkg_latest(client, cfg)),
+            lambda: probe_deep(client, cfg, probe_secret),
         ]
-        groups = await asyncio.gather(*tasks)
+        groups = list(await asyncio.gather(*(probe() for probe in probes)))
+        groups, unconfirmed = await confirm_failures(probes, groups, confirm_delay)
 
     checks: list[dict[str, Any]] = []
     for group in groups:
-        if isinstance(group, list):
-            checks.extend(group)
-        else:
-            checks.append(group)
+        checks.extend(group)
     checks.sort(key=lambda c: c["layer"])
-    return aggregate(checks)
+    report = aggregate(checks)
+    if unconfirmed:
+        report["unconfirmed"] = unconfirmed
+    return report
+
+
+async def confirm_failures(probes, groups, delay):
+    """Re-runs the probes that would page and reports the second result.
+
+    Only probes holding a failing critical layer are re-run: non-critical
+    layers merely degrade the report, so a second run doubles cost without
+    changing who gets woken up. Returns the groups with the re-run results
+    substituted in, plus the layers that failed the first pass but passed
+    the re-check, which would otherwise leave no trace of the blip.
+    """
+    if delay <= 0:
+        return groups, []
+    retry = [i for i, group in enumerate(groups) if group_has_critical_failure(group)]
+    if not retry:
+        return groups, []
+
+    failed = {
+        check["layer"]
+        for i in retry
+        for check in groups[i]
+        if check["status"] == CHECK_FAIL
+    }
+    await asyncio.sleep(delay)
+    rerun = await asyncio.gather(*(probes[i]() for i in retry))
+
+    unconfirmed = []
+    for i, group in zip(retry, rerun):
+        groups[i] = group
+        unconfirmed.extend(
+            check["layer"]
+            for check in group
+            if check["layer"] in failed and check["status"] != CHECK_FAIL
+        )
+    return groups, sorted(unconfirmed)
 
 
 async def run_check(layer: str, critical: bool, fn) -> dict[str, Any]:
@@ -150,6 +201,10 @@ async def run_check(layer: str, critical: bool, fn) -> dict[str, Any]:
         return check_result(layer, CHECK_OK, critical, detail, started)
     except Exception as exc:
         return check_result(layer, CHECK_FAIL, critical, str(exc), started)
+
+
+async def run_check_group(layer: str, critical: bool, fn) -> list[dict[str, Any]]:
+    return [await run_check(layer, critical, fn)]
 
 
 def check_result(
@@ -186,6 +241,13 @@ def aggregate(checks: list[dict[str, Any]]) -> dict[str, Any]:
 
 def has_critical_failure(report: dict[str, Any]) -> bool:
     return report["status"] == STATUS_FAIL
+
+
+def group_has_critical_failure(group: list[dict[str, Any]]) -> bool:
+    return any(
+        check["status"] == CHECK_FAIL and check.get("critical", False)
+        for check in group
+    )
 
 
 async def probe_dns(client: httpx.AsyncClient, cfg: dict[str, Any]) -> str:

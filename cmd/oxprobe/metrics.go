@@ -30,8 +30,9 @@ import (
 
 // metrics holds the Prometheus collectors exported by the daemon.
 type metrics struct {
-	up      *prometheus.GaugeVec
-	latency *prometheus.HistogramVec
+	up          *prometheus.GaugeVec
+	latency     *prometheus.HistogramVec
+	unconfirmed *prometheus.CounterVec
 }
 
 func newMetrics(reg prometheus.Registerer) *metrics {
@@ -45,12 +46,19 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 			Help:    "Probe latency per layer in seconds.",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"env", "layer"}),
+		// oxprobe_layer_up reports the confirmed result, so a blip that
+		// recovers on the re-check leaves no trace there. This counter keeps
+		// flapping visible and alertable without paging on it.
+		unconfirmed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "oxprobe_layer_unconfirmed_failures_total",
+			Help: "Failures that passed the confirmation re-check and so did not page.",
+		}, []string{"env", "layer"}),
 	}
-	reg.MustRegister(m.up, m.latency)
+	reg.MustRegister(m.up, m.latency, m.unconfirmed)
 	return m
 }
 
-func (m *metrics) observe(env string, results []oxapi.CheckResult) {
+func (m *metrics) observe(env string, results []oxapi.CheckResult, unconfirmed []string) {
 	for _, r := range results {
 		up := 0.0
 		if r.Status == oxapi.CheckOK {
@@ -58,5 +66,8 @@ func (m *metrics) observe(env string, results []oxapi.CheckResult) {
 		}
 		m.up.WithLabelValues(env, r.Layer).Set(up)
 		m.latency.WithLabelValues(env, r.Layer).Observe(float64(r.LatencyMS) / 1000)
+	}
+	for _, layer := range unconfirmed {
+		m.unconfirmed.WithLabelValues(env, layer).Inc()
 	}
 }
