@@ -1838,6 +1838,240 @@ command:
 		"terminal did not receive pasted secret; screen was:\n%s", resultText)
 }
 
+// TestE2ETerminalSearchCopiesHighlightedMatch drives the terminal
+// scrollback search the way a reader does: <meta-f> over a live shell,
+// a query that lands on a match, <esc> to put the box away, and then
+// clipboardcopy, which must yield the match that is still highlighted
+// on screen.
+func TestE2ETerminalSearchCopiesHighlightedMatch(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := t.TempDir()
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+  key_bindings:
+    <m-c>: clipboardcopy
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil),
+		newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			ev := term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key}
+			if ev.Key == term.KeySpace {
+				ev.Key, ev.Ch = 0, ' '
+			}
+			// the event loop fills Raw for printable keys, and the
+			// terminal writes exactly that to the shell
+			if ev.Ch != 0 && ev.Mod == 0 {
+				ev.Raw = []byte(string(ev.Ch))
+			}
+			mu.Lock()
+			root.Handle(ev)
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	terminalText := func() (string, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		var text string
+		var ok bool
+		i.workspaceHandler.focusEx().comp.Browser().IterateWindows(func(win browser.Window) {
+			if ok {
+				return
+			}
+			content, err := win.Content()
+			if err != nil {
+				return
+			}
+			emulator, isVTE := content.(vtereservoir.VTE)
+			if !isVTE {
+				return
+			}
+			snap, err := emulator.Snapshot()
+			if err != nil {
+				return
+			}
+			text, ok = term.CellsToString(snap.ActiveCells()), true
+		})
+		return text, ok
+	}
+
+	sendKeys("<c-\\\\>terminalnew<space>sh<enter>")
+	sendKeys("echo<space>needle<enter>")
+	var screen string
+	require.Eventually(t, func() bool {
+		text, ok := terminalText()
+		screen = text
+		return ok && strings.Count(text, "needle") >= 2
+	}, 10*time.Second, 50*time.Millisecond,
+		"terminal never printed the searched word; screen was:\n%s", screen)
+
+	// search the scrollback, then dismiss the box to read the match
+	sendKeys("<m-f>needle<esc>")
+	sendKeys("<m-c>")
+
+	data, err := i.workspaceHandler.clip.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "needle", data.Text,
+		"clipboardcopy must copy the highlighted match; screen was:\n%s", screen)
+}
+
+// TestE2ETerminalSearchCopiesMatchWhileBoxStaysOpen pins the other half
+// of the same flow: pressing <meta-c> while the find box is still open
+// (no <esc> yet), with nothing selected inside the box itself, must copy
+// the highlighted match on the terminal — not the query text, and not
+// whatever used to be in the clipboard before the box opened.
+func TestE2ETerminalSearchCopiesMatchWhileBoxStaysOpen(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := t.TempDir()
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+  key_bindings:
+    <m-c>: clipboardcopy
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil),
+		newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			ev := term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key}
+			if ev.Key == term.KeySpace {
+				ev.Key, ev.Ch = 0, ' '
+			}
+			if ev.Ch != 0 && ev.Mod == 0 {
+				ev.Raw = []byte(string(ev.Ch))
+			}
+			mu.Lock()
+			root.Handle(ev)
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	// stale selection made before the box ever opens, which must not be
+	// what ends up in the clipboard
+	pasteStale := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		require.NoError(t, i.workspaceHandler.clip.Copy(
+			clipboard.DefaultRegisterID, clipboard.Data{Text: "stale"}))
+	}
+	pasteStale()
+
+	terminalText := func() (string, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		var text string
+		var ok bool
+		i.workspaceHandler.focusEx().comp.Browser().IterateWindows(func(win browser.Window) {
+			if ok {
+				return
+			}
+			content, err := win.Content()
+			if err != nil {
+				return
+			}
+			emulator, isVTE := content.(vtereservoir.VTE)
+			if !isVTE {
+				return
+			}
+			snap, err := emulator.Snapshot()
+			if err != nil {
+				return
+			}
+			text, ok = term.CellsToString(snap.ActiveCells()), true
+		})
+		return text, ok
+	}
+
+	sendKeys("<c-\\\\>terminalnew<space>sh<enter>")
+	sendKeys("echo<space>needle<enter>")
+	var screen string
+	require.Eventually(t, func() bool {
+		text, ok := terminalText()
+		screen = text
+		return ok && strings.Count(text, "needle") >= 2
+	}, 10*time.Second, 50*time.Millisecond,
+		"terminal never printed the searched word; screen was:\n%s", screen)
+
+	// open the box and search, but leave it open (no <esc>)
+	sendKeys("<m-f>needle")
+
+	sendKeys("<m-c>")
+
+	data, err := i.workspaceHandler.clip.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "needle", data.Text,
+		"clipboardcopy while the box is still open must copy the highlighted "+
+			"match, not the stale clipboard entry, and not be swallowed by the "+
+			"query input's own empty-selection-copies-the-line shortcut; "+
+			"screen was:\n%s", screen)
+}
+
 // stageTreeSitterGo installs the committed Go tree-sitter artifacts
 // into the idepkg layout (<dataDir>/lib/go) so the syntax parser can
 // load the language without a package download.

@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/searchbox"
 )
 
 // DefaultConfig returns a sane default Config.
@@ -111,6 +112,20 @@ type Config struct {
 	// the vte (e.g. the host event loop). Zero disables the bound.
 	// It does not limit the lifetime of the spawned command.
 	SpawnTimeout time.Duration
+
+	// Search enables searching the scrollback of the primary buffer.
+	// A nil Search.Editor disables the feature.
+	Search SearchConfig
+}
+
+// SearchConfig configures the terminal's scrollback search. The box is
+// drawn as an overlay on the terminal itself, so no window manager is
+// involved.
+type SearchConfig struct {
+	searchbox.Config
+
+	MatchAttr        term.Attributes
+	CurrentMatchAttr term.Attributes
 }
 
 // CommandExpander resolves a vte command line before the foreign

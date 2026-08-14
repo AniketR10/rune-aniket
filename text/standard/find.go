@@ -43,18 +43,6 @@ type findState struct {
 	matchIdx     int
 }
 
-type searchController interface {
-	beginSearch([]rune, term.Coordinates)
-	setSearchQuery(string)
-	advanceSearch()
-	replaceNext(string)
-	replaceAll(string)
-	finishSearch()
-	searchQuery() string
-	searchLast() string
-	searchOrigin() term.Coordinates
-}
-
 func (h *standardHandler) searchLocations() []textapi.Location {
 	for _, list := range h.cursor.LocationLists() {
 		if list.ID == searchListID {
@@ -90,7 +78,8 @@ func orderedCoordinates(a, b term.Coordinates) (term.Coordinates, term.Coordinat
 	return a, b
 }
 
-func (h *standardHandler) beginSearch(query []rune, origin term.Coordinates) {
+// BeginSearch satisfies searchbox.Controller.
+func (h *standardHandler) BeginSearch(query []rune, origin term.Coordinates) {
 	h.find.active = true
 	h.find.legacyPrompt = false
 	h.find.origin = origin
@@ -99,29 +88,30 @@ func (h *standardHandler) beginSearch(query []rune, origin term.Coordinates) {
 	h.researchFind()
 }
 
-func (h *standardHandler) setSearchQuery(query string) {
+// SetSearchQuery satisfies searchbox.Controller.
+func (h *standardHandler) SetSearchQuery(query string) {
 	h.find.query = append(h.find.query[:0], []rune(query)...)
 	h.find.matchIdx = -1
 	h.researchFind()
 }
 
-func (h *standardHandler) advanceSearch() {
+// AdvanceSearch satisfies searchbox.Controller.
+func (h *standardHandler) AdvanceSearch() {
 	h.advanceFind(true)
 }
 
-func (h *standardHandler) searchQuery() string {
-	return string(h.find.query)
-}
-
-func (h *standardHandler) searchLast() string {
+// SearchLast satisfies searchbox.Controller.
+func (h *standardHandler) SearchLast() string {
 	return string(h.find.last)
 }
 
-func (h *standardHandler) searchOrigin() term.Coordinates {
+// SearchOrigin satisfies searchbox.Controller.
+func (h *standardHandler) SearchOrigin() term.Coordinates {
 	return h.cursor.CursorAtScroll()
 }
 
-func (h *standardHandler) finishSearch() {
+// FinishSearch satisfies searchbox.Controller.
+func (h *standardHandler) FinishSearch() {
 	if !h.find.active {
 		return
 	}
@@ -133,7 +123,8 @@ func (h *standardHandler) finishSearch() {
 	h.acceptFind()
 }
 
-func (h *standardHandler) replaceNext(replacement string) {
+// ReplaceNext satisfies searchbox.ReplaceController.
+func (h *standardHandler) ReplaceNext(replacement string) {
 	if len(h.find.query) == 0 {
 		return
 	}
@@ -151,7 +142,8 @@ func (h *standardHandler) replaceNext(replacement string) {
 	h.researchFind()
 }
 
-func (h *standardHandler) replaceAll(replacement string) {
+// ReplaceAll satisfies searchbox.ReplaceController.
+func (h *standardHandler) ReplaceAll(replacement string) {
 	if len(h.find.query) == 0 {
 		return
 	}

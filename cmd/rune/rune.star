@@ -777,6 +777,12 @@ config = {
         "selection_attr":     attr(flags = "reverse"),
         # Tab attributes used when a bell arrives while the window is unfocused.
         "needs_attention_attr": attr(fg = "red", flags = "blink"),
+        # Scrollback search, opened over the terminal itself. Its theme
+        # follows editor.standard.search; only the key that opens it can be
+        # overridden here.
+        "search": {
+            "find_key": "<m-f>",
+        },
         # Configuration for programs executed via the `!` command.
         "plugin": {
             # Layout of the plugin status bar. Available components include:

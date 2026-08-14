@@ -58,6 +58,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/handler/searchbox"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
@@ -3808,6 +3809,60 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell
 	ret.MinWidth = defaultMinWidth
+	ret.Search = c.terminalSearchConfig()
+	return ret
+}
+
+// terminalSearchConfig derives the terminal's scrollback search from
+// the standard editor's search theme so both prompts look alike.
+// terminal.search.find_key overrides the key that opens it, defaulting
+// to the standard editor's find_key when not set.
+func (c ideConfig) terminalSearchConfig() vte.SearchConfig {
+	// the terminal draws the box as an overlay of its own, so it has no
+	// window manager to hand over: only the theme is reused
+	std := c.standardSearchConfig(nil)
+	ret := vte.SearchConfig{
+		Config: searchbox.Config{
+			Editor:  standard.Editor(),
+			FindKey: std.FindKey,
+			// flush against the top edge, since the terminal draws the box
+			// itself rather than centering it in a floating window
+			PaddingTop:      0,
+			Attr:            std.Attr,
+			InputAttr:       std.InputAttr,
+			PlaceholderAttr: std.PlaceholderAttr,
+			FrameAttr:       std.FrameAttr,
+			FocusFrameAttr:  std.FocusFrameAttr,
+			ButtonAttr:      std.ButtonAttr,
+			ButtonHoverAttr: std.ButtonHoverAttr,
+		},
+		MatchAttr:        std.MatchAttr,
+		CurrentMatchAttr: c.terminalSelectionAttr(),
+	}
+	cfg, ok := c.terminal()
+	if !ok {
+		return ret
+	}
+	searchCfg, err := cfg.GetConfig("search")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.search"] = err
+		}
+		return ret
+	}
+	configured, err := searchCfg.GetString("find_key")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.search.find_key"] = err
+		}
+		return ret
+	}
+	parsed, err := term.ParseKey(configured)
+	if err != nil {
+		c.errors["terminal.search.find_key"] = err
+		return ret
+	}
+	ret.FindKey = parsed
 	return ret
 }
 

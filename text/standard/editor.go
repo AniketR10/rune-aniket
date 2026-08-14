@@ -133,7 +133,7 @@ func (e *editor) Edit(
 		}
 	}
 	if e.search.WindowManager != nil {
-		ret = &searchHandler{Handler: ret, controller: root, config: e.search}
+		ret = newSearchHandler(ret, root, e.search)
 	}
 	return ret, nil
 }

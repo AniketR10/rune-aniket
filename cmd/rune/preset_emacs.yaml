@@ -64,6 +64,11 @@ editor:
 # ---------------------------------------------------------------------------
 terminal:
   modal: false
+  # C-s is isearch-forward's key everywhere else in this preset (see
+  # command.key_bindings and the editor's own incremental search), so
+  # scrollback search reuses it instead of the default <meta-f>.
+  search:
+    find_key: "<ctrl-s>"
 #   max_lines:         1000
 #   initial_reservoir: 0           # set to non-zero to speed up terminal initialization
 #   plugin:

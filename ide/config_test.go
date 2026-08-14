@@ -427,6 +427,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.NotNil(t, vteConfig.ScheduleNextTick)
 	vteConfig.ScheduleNextTick = nil
 	vteConfig.RingBell = nil
+	assertTerminalSearchConfig(t, &vteConfig, cfg.standardResultAttr(), selectAttr)
 	assert.Equal(t, vte.Config{
 		Clipboard:                cfg.clipboard(),
 		SelectionAttributes:      selectAttr,
@@ -471,6 +472,20 @@ func TestConfigDefault(t *testing.T) {
 	initDefaultConfig(ret, browser.NopWallpaper(),
 		term.RingBell, term.ScheduleNextTick, "", "")
 	assertDefaultConfig(t, ret)
+}
+
+// assertTerminalSearchConfig pins the terminal's scrollback search and
+// clears it, so callers can compare the rest of the config as a literal.
+func assertTerminalSearchConfig(t *testing.T, cfg *vte.Config, match, current term.Attributes) {
+	t.Helper()
+	search := cfg.Search
+	cfg.Search = vte.SearchConfig{}
+	assert.NotNil(t, search.Editor, "search is enabled")
+	assert.Nil(t, search.WindowManager, "the terminal draws the box itself")
+	assert.Equal(t, term.KeyComb{Mod: term.ModMeta, Ch: 'f'}, search.FindKey)
+	assert.Zero(t, search.ReplaceKey, "terminals cannot replace")
+	assert.Equal(t, match, search.MatchAttr)
+	assert.Equal(t, current, search.CurrentMatchAttr)
 }
 
 func TestStandardSearchConfigDefaults(t *testing.T) {
@@ -636,6 +651,52 @@ func TestStandardSearchConfigMalformedPaths(t *testing.T) {
 }
 
 var _ standard.SearchWindowManager = currentWorkspaceWindowManager{}
+
+func TestTerminalSearchConfigDefaultsToStandardFindKey(t *testing.T) {
+	cfg := &ideConfig{cfg: map[string]any{"editor": map[string]any{
+		"standard": map[string]any{"search": map[string]any{"find_key": "<c-g>"}},
+	}}, errors: map[string]error{}}
+
+	actual := cfg.terminalSearchConfig()
+
+	assert.Equal(t, term.KeyComb{Mod: term.ModCtrl, Ch: 'g'}, actual.FindKey,
+		"terminal.search.find_key is not set, so it follows the standard editor's")
+	assert.Empty(t, cfg.errors)
+}
+
+func TestTerminalSearchConfigFindKeyOverride(t *testing.T) {
+	cfg := &ideConfig{cfg: map[string]any{
+		"editor":   map[string]any{"standard": map[string]any{"search": map[string]any{"find_key": "<c-g>"}}},
+		"terminal": map[string]any{"search": map[string]any{"find_key": "<c-p>"}},
+	}, errors: map[string]error{}}
+
+	actual := cfg.terminalSearchConfig()
+
+	assert.Equal(t, term.KeyComb{Mod: term.ModCtrl, Ch: 'p'}, actual.FindKey,
+		"terminal.search.find_key overrides the standard editor's find_key")
+	assert.Empty(t, cfg.errors)
+}
+
+func TestTerminalSearchConfigMalformedFindKey(t *testing.T) {
+	tests := []struct {
+		name, path string
+		search     any
+	}{
+		{name: "search", path: "terminal.search", search: "bad"},
+		{name: "find key type", path: "terminal.search.find_key", search: map[string]any{"find_key": true}},
+		{name: "find key syntax", path: "terminal.search.find_key", search: map[string]any{"find_key": "<not-a-key>"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ideConfig{cfg: map[string]any{
+				"terminal": map[string]any{"search": tt.search},
+			}, errors: map[string]error{}}
+			_ = cfg.terminalSearchConfig()
+			assert.Error(t, cfg.errors[tt.path])
+			assert.Len(t, cfg.errors, 1)
+		})
+	}
+}
 
 func TestUpdatesAutoInstall(t *testing.T) {
 	for _, tc := range []struct {
@@ -1317,6 +1378,8 @@ func TestConfigSetting(t *testing.T) {
 	vteConfig.ScheduleNextTick = nil
 	assert.NotNil(t, vteConfig.RingBell)
 	vteConfig.RingBell = nil
+	assertTerminalSearchConfig(t, &vteConfig, cfg.standardResultAttr(),
+		term.Attributes{Fg: term.ColorGreen, Bg: term.ColorTeal})
 	expectedEmulatorConfig := vte.Config{
 		CommandAndArgs:           []string{"sh"},
 		Attributes:               term.Attributes{Fg: term.ColorWhite, Bg: term.ColorYellow},

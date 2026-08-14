@@ -38,11 +38,13 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/handler/searchbox"
 )
 
 var _ tui.Handler = (*Handler)(nil)
@@ -73,6 +75,13 @@ type Handler struct {
 	viMode       bool
 	mouse        *mouse.Mouse
 	mouseDriver  *mouseDriver
+
+	// viEnabled tracks whether the vi handler was initialized: both modal
+	// mode and the scrollback search render through it.
+	viEnabled     bool
+	searchBox     *searchbox.Box
+	searchCtl     *searchController
+	searchOverlay handler.Virtual[browserapi.Floating]
 
 	bracketedPaste    bool
 	bracketedPasteBuf bytes.Buffer
@@ -114,9 +123,16 @@ func (e *Handler) Init(
 	}
 	e.comp = comp
 
-	if config.Modal {
-		e.modalEnabled = true
+	e.modalEnabled = config.Modal
+	if config.Modal || config.Search.Editor != nil {
+		e.viEnabled = true
 		e.vi.init(e.comp, config)
+	}
+	if config.Search.Editor != nil {
+		e.searchCtl = &searchController{
+			vi: &e.vi, cfg: config.Search, viModeActive: func() bool { return e.viMode },
+		}
+		e.searchBox = searchbox.New(e.searchCtl, config.Search.Config)
 	}
 
 	// set size hint before running firsrt program so output is correctly captured
@@ -204,7 +220,7 @@ func (e *Handler) RestoreFromSnapshot(snapshot Snapshot) error {
 	if err != nil {
 		return err
 	}
-	if e.modalEnabled {
+	if e.viEnabled {
 		e.vi.setCursorAtScroll(cursor)
 	}
 	return nil
@@ -230,7 +246,7 @@ func (e *Handler) ClearPrimaryBuffer() (ok bool) {
 // SetDefaultAttributes sets the background and foreground attributes
 // of the underlying buffer.
 func (e *Handler) SetDefaultAttributes(attr term.Attributes) {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		e.vi.setDefaultAttributes(attr)
 	}
 	e.comp.SetDefaultAttributes(attr)
@@ -247,8 +263,8 @@ func (e *Handler) Resize(width, height int) {
 	// primary buffer resets the offset to max offset after every resize
 	// so we need to, reset the cursor position
 	var modalCursorPos term.Coordinates
-	if e.modalEnabled {
-		if e.viMode {
+	if e.viEnabled {
+		if e.viMode || e.searchViewing() {
 			modalCursorPos = e.vi.cursorAtScroll()
 		}
 		e.vi.Resize(width, height)
@@ -265,15 +281,16 @@ func (e *Handler) Resize(width, height int) {
 		return
 	}
 
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		e.vi.setCursorAtScroll(modalCursorPos)
 	}
 }
 
 // Draw satisfies tui.Component.
 func (e *Handler) Draw(w term.Writer) {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		e.vi.Draw(w)
+		e.drawSearch(w)
 		return
 	}
 	e.comp.Draw(w)
@@ -285,6 +302,16 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if exit {
 		e.log(log.DebugLevel, "Handle: exit")
 		return
+	}
+	if e.handleSearch(ev) {
+		return false, true
+	}
+	if !e.viMode && e.searchViewing() && ev.Type == term.EventMouse {
+		// selection and scrolling must follow what is drawn; while
+		// actually in vi mode this is already covered below, since
+		// every event reaches e.vi.Handle regardless of the box
+		_, handled = e.vi.Handle(ev)
+		return false, handled
 	}
 	if e.modalEnabled {
 		if e.viMode {
@@ -343,6 +370,11 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 	handled = true
+	if e.searchViewing() {
+		// the shell is about to echo at the bottom of the scrollback, so
+		// the reader is done with the results
+		e.searchCtl.exitView()
+	}
 
 	// do not scroll to bottom in all cases or it could
 	// interfere with interactive program that uses primary buffer
@@ -366,7 +398,10 @@ func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 	if e.exit.Load() {
 		return
 	}
-	if e.viMode {
+	if e.searchOpen() {
+		return e.searchOverlay.Cursor()
+	}
+	if e.viMode || e.searchViewing() {
 		return e.vi.Cursor()
 	}
 	if !e.comp.CursorVisible() {
@@ -388,6 +423,12 @@ func (e *Handler) Selection() (data string, ok bool) {
 	if e.exit.Load() {
 		return
 	}
+	if e.searchOpen() {
+		return e.searchOverlay.Selection()
+	}
+	if e.searchViewing() {
+		return e.searchCtl.Selection()
+	}
 	if e.viMode {
 		return e.vi.Selection()
 	}
@@ -396,7 +437,7 @@ func (e *Handler) Selection() (data string, ok bool) {
 
 // SeekUp satisfies component.Scrollable.
 func (e *Handler) SeekUp() bool {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		return e.vi.SeekUp()
 	}
 	return e.comp.ScrollUp(1)
@@ -404,7 +445,7 @@ func (e *Handler) SeekUp() bool {
 
 // SeekDown satisfies component.Scrollable.
 func (e *Handler) SeekDown() bool {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		return e.vi.SeekDown()
 	}
 	return e.comp.ScrollDown(1)
@@ -412,7 +453,7 @@ func (e *Handler) SeekDown() bool {
 
 // SeekOffset satisfies component.Scrollable.
 func (e *Handler) SeekOffset() int {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		return e.vi.SeekOffset()
 	}
 	return e.comp.ScrollOffset()
@@ -420,7 +461,7 @@ func (e *Handler) SeekOffset() int {
 
 // MaxSeekOffset satisfies component.Scrollable.
 func (e *Handler) MaxSeekOffset() int {
-	if e.viMode {
+	if e.viMode || e.searchViewing() {
 		return e.vi.MaxSeekOffset()
 	}
 	return e.comp.MaxScrollOffset()
@@ -442,6 +483,12 @@ func (e *Handler) Close() error {
 	e.cancelCtx()
 
 	var ret error
+	if e.searchBox != nil {
+		if err := e.searchBox.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+			e.log(log.ErrorLevel, "close search: %s", err)
+		}
+	}
 	if err := e.comp.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 		e.log(log.ErrorLevel, "terminal close: %s", err)
@@ -547,4 +594,115 @@ func (e *Handler) enterViMode(cursor term.Coordinates) {
 
 func (e *Handler) exitViMode() {
 	e.viMode = false
+}
+
+// searchViewing reports whether the scrollback search results are on
+// screen instead of the live terminal view.
+func (e *Handler) searchViewing() bool {
+	return e.searchCtl != nil && e.searchCtl.viewing
+}
+
+// searchOpen reports whether the search box is taking input.
+func (e *Handler) searchOpen() bool {
+	return e.searchBox != nil && e.searchBox.Active()
+}
+
+// searchOverlayMargin keeps the box clear of the top-right corner, on
+// top of the box's own one cell of built-in side padding (its
+// PaddingTop is 0 here, see terminalSearchConfig, so the frame sits
+// flush with the top edge).
+const (
+	searchOverlayMarginTop   = 0
+	searchOverlayMarginRight = 1
+)
+
+// layoutSearch parks the box on the top-right corner of the terminal,
+// resizing it to the size it asks for as the query grows.
+func (e *Handler) layoutSearch() {
+	content := e.searchBox.Content()
+	if content == nil {
+		return
+	}
+	e.searchOverlay.C = content
+	width, height := e.searchOverlay.C.Dimensions()
+	width, height = min(width, e.width), min(height, e.height)
+	e.searchOverlay.Resize(width, height)
+	e.searchOverlay.Move(term.Coordinates{
+		X: max(0, e.width-width-searchOverlayMarginRight),
+		Y: searchOverlayMarginTop,
+	})
+}
+
+func (e *Handler) drawSearch(w term.Writer) {
+	if !e.searchOpen() {
+		return
+	}
+	e.layoutSearch()
+	// the box only tints the cells it draws on, so the results view
+	// underneath has to be cleared for it to read as an overlay
+	var blank term.Cell
+	blank.SetAttributes(e.searchCtl.cfg.Attr)
+	pos := e.searchOverlay.Position()
+	for y := range e.searchOverlay.Height() {
+		for x := range e.searchOverlay.Width() {
+			w.SetCell(term.Coordinates{X: pos.X + x, Y: pos.Y + y}, blank)
+		}
+	}
+	e.searchOverlay.Draw(w)
+}
+
+// handleSearch routes the search key to the find box and puts the live
+// view back on <esc>. Keys that reach the shell dismiss the results too,
+// but only once they are actually written to the pty: shortcuts the
+// terminal drops, such as copying the selection, must leave the results
+// and their selection alone.
+func (e *Handler) handleSearch(ev term.Event) (handled bool) {
+	if e.searchBox == nil {
+		return false
+	}
+	if e.searchOpen() {
+		return e.handleSearchInput(ev)
+	}
+	// full-screen programs paint their own view over a buffer that has no
+	// scrollback to search
+	if !e.comp.IsAltBuffer() && e.searchBox.HandleKey(ev) {
+		// the box must be laid out before anything asks it for a cursor
+		// or a selection, which can happen before the first draw
+		e.layoutSearch()
+		return true
+	}
+	if !e.searchViewing() || ev.Type != term.EventKey ||
+		ev.Key != term.KeyEsc || ev.Mod != 0 {
+		return false
+	}
+	e.searchCtl.exitView()
+	return true
+}
+
+// handleSearchInput gives the open box the keyboard, while mouse events
+// outside of it keep reaching the results so they can be selected. A key
+// the box does not understand only stays claimed when it could otherwise
+// reach the shell (a plain key or a ctrl/shift combo); alt/meta keys
+// never reach the shell regardless (see the modifier gate below in
+// Handle), so letting them fall through is what lets IDE shortcuts such
+// as <meta-c> for clipboardcopy work while the box is open.
+func (e *Handler) handleSearchInput(ev term.Event) (handled bool) {
+	e.layoutSearch()
+	if ev.Type == term.EventMouse && !e.searchOverlayContains(ev.MouseX, ev.MouseY) {
+		return false
+	}
+	exit, handled := e.searchOverlay.Handle(ev)
+	if exit {
+		_ = e.searchBox.Close()
+	}
+	if handled || ev.Type != term.EventKey {
+		return handled
+	}
+	return ev.Mod&^term.ModCtrlShift == 0
+}
+
+func (e *Handler) searchOverlayContains(x, y int) bool {
+	pos := e.searchOverlay.Position()
+	x, y = x-pos.X, y-pos.Y
+	return x >= 0 && y >= 0 && x < e.searchOverlay.Width() && y < e.searchOverlay.Height()
 }

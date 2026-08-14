@@ -1084,6 +1084,12 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
 	require.Equal(t, editorModeEmacs, c.editorMode())
 
+	// The terminal's scrollback find reuses isearch-forward's key instead
+	// of the default <meta-f>, which this preset keeps live for
+	// windowfocus right (see the wantLive table below).
+	require.Equal(t, term.KeyComb{Mod: term.ModCtrl, Ch: 's'},
+		c.terminalSearchConfig().FindKey)
+
 	// The command prompt opens with M-x (execute-extended-command) on the
 	// authentic Meta layer (<alt>).
 	require.Equal(t, term.KeyComb{Mod: term.ModAlt, Ch: 'x'}, c.commandKey())
