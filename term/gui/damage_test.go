@@ -243,6 +243,55 @@ func TestComputeDirtyRowsOffsetSpillCascades(t *testing.T) {
 	assert.False(t, r.dirtyRows[1], "cascade stops at a row without offsets")
 }
 
+// TestComputeDirtyRowsRepaintedRowReceivesSpillFromAbove asserts that
+// when a row is repainted, a clean row above it whose offset cells
+// paint down into it is repainted too: clearing the strip erases the
+// spilled glyph halves, so without a repaint of the source row its
+// glyphs are left cut in half (e.g. the editor status bar above a
+// periodically updating bottom bar).
+func TestComputeDirtyRowsRepaintedRowReceivesSpillFromAbove(t *testing.T) {
+	r, cols, rows := newTestRenderer(t, 12, 8)
+	grid := filledGrid(rows, cols, 'x')
+	for x := range grid[3] {
+		grid[3][x].Attrs = term.AttrVerticalRenderOffset
+	}
+	r.snapshot(grid, cursorState{})
+
+	// A change two rows below the offset row dirties rows 4-6 but not
+	// the offset row itself.
+	next := cloneGrid(grid)
+	next[5][0].Ch = 'q'
+	require.False(t, r.computeDirtyRows(next, cursorState{}))
+	assert.True(t, r.dirtyRows[3], "offset row spilling into a repainted row")
+	assert.True(t, r.dirtyRows[4])
+	assert.True(t, r.dirtyRows[5])
+	assert.True(t, r.dirtyRows[6])
+	assert.False(t, r.dirtyRows[2], "no repaint beyond the spill source")
+}
+
+// TestComputeDirtyRowsRepaintedRowReceivesSpillFromBelow mirrors the
+// spill-from-above case: a clean row below a repainted row whose offset
+// cells paint up into it must be repainted too.
+func TestComputeDirtyRowsRepaintedRowReceivesSpillFromBelow(t *testing.T) {
+	r, cols, rows := newTestRenderer(t, 12, 8)
+	grid := filledGrid(rows, cols, 'x')
+	for x := range grid[5] {
+		grid[5][x].Attrs = term.AttrNegativeVerticalRenderOffset
+	}
+	r.snapshot(grid, cursorState{})
+
+	// A change two rows above the offset row dirties rows 2-4 but not
+	// the offset row itself.
+	next := cloneGrid(grid)
+	next[3][0].Ch = 'q'
+	require.False(t, r.computeDirtyRows(next, cursorState{}))
+	assert.True(t, r.dirtyRows[5], "offset row spilling into a repainted row")
+	assert.True(t, r.dirtyRows[2])
+	assert.True(t, r.dirtyRows[3])
+	assert.True(t, r.dirtyRows[4])
+	assert.False(t, r.dirtyRows[6], "no repaint beyond the spill source")
+}
+
 // TestDrawPartialRepaintAfterFull drives the renderer through the real
 // Draw path (headless via benchdraw semantics is not needed here since
 // DrawTriangles/DrawImage only enqueue) and asserts the counters

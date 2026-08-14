@@ -239,7 +239,10 @@ func (r *renderer) Draw(
 // paint half a cell outside their own row, so the spill target must be
 // cleared and repainted too or the spill re-composites there on every
 // repaint). The spill rule is closed transitively: a spill target that
-// itself carries an offset spills onward.
+// itself carries an offset spills onward. The rule also runs inward:
+// clearing a dirty row erases whatever a clean neighbour's offset
+// cells painted into it, so that neighbour must repaint as well or its
+// glyphs are left cut in half.
 func (r *renderer) computeDirtyRows(cells [][]term.Cell, cursor cursorState) (full bool) {
 	height := len(cells)
 	if r.forceFullRepaint || !r.prevValid || len(r.prevCells) != height {
@@ -285,6 +288,18 @@ func (r *renderer) computeDirtyRows(cells [][]term.Cell, cursor cursorState) (fu
 			if down && y+1 < height && !r.dirtyRows[y+1] {
 				r.dirtyRows[y+1] = true
 				changed = true
+			}
+			if y > 0 && !r.dirtyRows[y-1] {
+				if _, spillsDown := rowSpill(cells[y-1]); spillsDown {
+					r.dirtyRows[y-1] = true
+					changed = true
+				}
+			}
+			if y+1 < height && !r.dirtyRows[y+1] {
+				if spillsUp, _ := rowSpill(cells[y+1]); spillsUp {
+					r.dirtyRows[y+1] = true
+					changed = true
+				}
 			}
 		}
 	}
