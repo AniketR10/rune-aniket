@@ -45,11 +45,11 @@ import (
 // unexported.
 const conversationAuditPrefix = "audit:"
 
-// sessionScanBufferSize is the per-file scan buffer used by
+// sessionScanBufferSize caps the per-line scan buffer used by
 // search_conversations when calling walkdir.ReadLines. Session JSON files
 // are serialized on a single line; the largest observed session on disk
-// is ~34 MB, so 64 MiB leaves comfortable headroom while keeping a hard
-// upper bound on memory growth.
+// is ~34 MB, so 64 MiB leaves comfortable headroom. The scanner grows
+// toward this cap only for the lines that need it.
 const sessionScanBufferSize = 64 * 1024 * 1024
 
 type listConversationsTool struct {

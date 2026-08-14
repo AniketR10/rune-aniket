@@ -43,7 +43,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	iterator.Iterator[string], error,
 ) {
 	workers := workerCountFromContext(ctx)
-	bufSize := max(scanBufferSizeFromContext(ctx), bufio.MaxScanTokenSize)
+	maxTokenSize := max(scanBufferSizeFromContext(ctx), bufio.MaxScanTokenSize)
 	files := make(chan string)
 	lines := make(chan string)
 	closeWaitCh := make(chan struct{})
@@ -57,7 +57,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 		go debug.CapturePanicReport(func() {
 
 			defer wg.Done()
-			readFileWorker(ctx, w, bufSize, lines, files, err)
+			readFileWorker(ctx, w, maxTokenSize, lines, files, err)
 
 		})
 	}
@@ -108,7 +108,10 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	return it, nil
 }
 
-func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines chan string) (retErr error) {
+func readFile(
+	ctx context.Context, w Reader, buffer []byte, maxTokenSize int,
+	file string, lines chan string,
+) (retErr error) {
 	f, err := w.OpenFile(file, os.O_RDONLY, 0)
 	if err != nil {
 		return err
@@ -119,7 +122,7 @@ func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines c
 		}
 	}()
 	r := bufio.NewScanner(f)
-	r.Buffer(buffer, len(buffer))
+	r.Buffer(buffer, maxTokenSize)
 	var i int
 	for r.Scan() {
 		i++
@@ -145,11 +148,17 @@ func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines c
 }
 
 func readFileWorker(
-	ctx context.Context, w Reader, bufSize int,
+	ctx context.Context, w Reader, maxTokenSize int,
 	lines chan string, files chan string,
 	err *error,
 ) {
-	buffer := make([]byte, bufSize)
+	// The buffer starts at the scanner default and only lines that
+	// need more grow it (per file, transiently): a read's size is the
+	// buffer's free space, and over the workspace RPC that size becomes
+	// the file server's allocation, so sizing every buffer to a raised
+	// cap turns a scan of many small files into a stream of cap-sized
+	// server allocations.
+	buffer := make([]byte, min(maxTokenSize, bufio.MaxScanTokenSize))
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,7 +167,7 @@ func readFileWorker(
 			if !ok {
 				return
 			}
-			readErr := readFile(ctx, w, buffer, path, lines)
+			readErr := readFile(ctx, w, buffer, maxTokenSize, path, lines)
 			if readErr != nil {
 				*err = multierr.Append(*err, readErr)
 			}

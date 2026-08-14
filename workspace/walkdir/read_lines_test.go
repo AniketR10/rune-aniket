@@ -312,6 +312,115 @@ func TestReadLinesClosesOpenedFiles(t *testing.T) {
 	}
 }
 
+// A raised scan-buffer cap must not size every read to the cap: over
+// the workspace RPC the read size the scanner passes becomes the
+// server-side buffer allocation, so scanning thousands of small files
+// with a 64 MiB cap had the file server allocating 64 MiB per read
+// (~2 GiB retained by its buffer pool, 39% of all editor allocations).
+// The scanner must start small and grow only for lines that need it.
+func TestReadLinesGrowsScanBufferOnDemand(t *testing.T) {
+	longLine := strings.Repeat("x", 3*bufio.MaxScanTokenSize)
+	fs := &readSizeRecordingReader{
+		files: map[string]string{
+			"small.txt": "one\ntwo\n",
+			"large.txt": longLine + "\n",
+		},
+	}
+
+	ctx := ContextWithWorkerCount(context.Background(), 1)
+	ctx = ContextWithScanBufferSize(ctx, 64<<20)
+	lines, err := ReadLines(ctx, fs, newStringIterator(
+		[]string{"small.txt", "large.txt"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for {
+		line, ok := lines.Next(ctx)
+		if !ok {
+			break
+		}
+		got = append(got, line)
+	}
+	if err := lines.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lines.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("lines = %d, want 3 (long line must fit the raised cap)", len(got))
+	}
+	found := false
+	for _, line := range got {
+		if strings.Contains(line, longLine) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("long line was not returned; buffer growth is broken")
+	}
+
+	small := fs.maxReadSize["small.txt"]
+	if small > bufio.MaxScanTokenSize {
+		t.Fatalf("small file read size = %d, want <= %d: reads must not "+
+			"be sized to the scan cap", small, bufio.MaxScanTokenSize)
+	}
+	large := fs.maxReadSize["large.txt"]
+	if large > 8*bufio.MaxScanTokenSize {
+		t.Fatalf("large file read size = %d, want proportional to its "+
+			"line (~%d), not the %d cap", large, len(longLine), 64<<20)
+	}
+}
+
+type readSizeRecordingReader struct {
+	files       map[string]string
+	maxReadSize map[string]int
+}
+
+func (r *readSizeRecordingReader) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file:///" + path)
+}
+
+func (r *readSizeRecordingReader) OpenFile(
+	path string, _ int, _ os.FileMode,
+) (workspaceapi.File, error) {
+	content, ok := r.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if r.maxReadSize == nil {
+		r.maxReadSize = make(map[string]int)
+	}
+	return &readSizeRecordingFile{
+		nopFile: nopFile{Reader: bytes.NewBufferString(content)},
+		record: func(n int) {
+			if n > r.maxReadSize[path] {
+				r.maxReadSize[path] = n
+			}
+		},
+	}, nil
+}
+
+func (r *readSizeRecordingReader) Stat(string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
+}
+
+func (r *readSizeRecordingReader) ReadDir(string) ([]os.DirEntry, error) {
+	return nil, os.ErrNotExist
+}
+
+type readSizeRecordingFile struct {
+	nopFile
+	record func(int)
+}
+
+func (f *readSizeRecordingFile) Read(p []byte) (int, error) {
+	f.record(len(p))
+	return f.nopFile.Reader.Read(p)
+}
+
 type stringIterator struct {
 	values []string
 	idx    int
