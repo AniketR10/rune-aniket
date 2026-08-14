@@ -206,6 +206,24 @@ func (p *partitionService) Drop(ctx context.Context) error {
 	})
 }
 
+// ApplyBatch satisfies storageapi.BatchWriter.
+func (p *partitionService) ApplyBatch(
+	ctx context.Context, ops []storageapi.BatchOp,
+) (results []storageapi.BatchOpResult, err error) {
+	err = p.withActive(ctx, func(ctx context.Context, target storageapi.Service) error {
+		writer, ok := target.(storageapi.BatchWriter)
+		if !ok {
+			return errors.New("firstmover: target service does not support batching")
+		}
+		results, err = writer.ApplyBatch(ctx, ops)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 func (p *partitionService) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,
 ) {

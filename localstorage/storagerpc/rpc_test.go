@@ -47,8 +47,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func tcpListener() (net.Listener, error) {
@@ -305,6 +307,121 @@ func TestDrop(t *testing.T) {
 		require.ErrorIs(t, store.(storageapi.DroppableService).Drop(ctx),
 			storageapi.ErrPreconditionFailed)
 	})
+}
+
+func TestBatch(t *testing.T) {
+	marshaler := docbson.Marshaler()
+	ctx := context.Background()
+
+	t.Run("applies every operation of the batch", func(t *testing.T) {
+		backing := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+		addr, teardown := runDatastoreServer(t, backing, marshaler)
+		defer teardown()
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer store.Close()
+
+		part, err := store.Partition("p")
+		require.NoError(t, err)
+		type rec struct{ V string }
+		require.NoError(t, part.Create(ctx, "taken", rec{V: "1"}))
+		require.NoError(t, part.Create(ctx, "doomed", rec{V: "1"}))
+		require.NoError(t, part.Create(ctx, "bumped", rec{V: "1"}))
+
+		writer, ok := part.(storageapi.BatchWriter)
+		require.True(t, ok, "the rpc client must support batching")
+		results, err := writer.ApplyBatch(ctx, []storageapi.BatchOp{
+			{Type: storageapi.BatchCreate, ID: "fresh", Doc: rec{V: "1"}},
+			{Type: storageapi.BatchCreate, ID: "taken", Doc: rec{V: "2"}},
+			{Type: storageapi.BatchSet, ID: "taken", Doc: rec{V: "2"}},
+			{Type: storageapi.BatchDelete, ID: "doomed"},
+			{Type: storageapi.BatchUpdate, ID: "bumped", Updates: []storageapi.Update{
+				{FieldPath: []string{"V"}, Value: "2"},
+			}, Preconditions: []storageapi.Precondition{
+				{FieldPath: []string{"V"}, Value: "1"},
+			}},
+			{Type: storageapi.BatchUpdate, ID: "bumped", Updates: []storageapi.Update{
+				{FieldPath: []string{"V"}, Value: "3"},
+			}, Preconditions: []storageapi.Precondition{
+				{FieldPath: []string{"V"}, Value: "1"},
+			}},
+			{Type: storageapi.BatchUpdate, ID: "ghost", Updates: []storageapi.Update{
+				{FieldPath: []string{"V"}, Value: "1"},
+			}},
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 7)
+		assert.NoError(t, results[0].Err)
+		assert.ErrorIs(t, results[1].Err, storageapi.ErrAlreadyExists)
+		assert.NoError(t, results[2].Err)
+		assert.NoError(t, results[3].Err)
+		assert.NoError(t, results[4].Err)
+		assert.ErrorIs(t, results[5].Err, storageapi.ErrPreconditionFailed)
+		assert.ErrorIs(t, results[6].Err, storageapi.ErrNotFound)
+
+		var doc map[string]any
+		require.NoError(t, part.Get(ctx, "fresh", &doc))
+		assert.Equal(t, "1", doc["v"])
+		require.NoError(t, part.Get(ctx, "taken", &doc))
+		assert.Equal(t, "2", doc["v"])
+		require.NoError(t, part.Get(ctx, "bumped", &doc))
+		assert.Equal(t, "2", doc["v"])
+		assert.ErrorIs(t, part.Get(ctx, "doomed", &doc), storageapi.ErrNotFound)
+	})
+
+	t.Run("documents larger than a chunk", func(t *testing.T) {
+		backing := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+		addr, teardown := runDatastoreServer(t, backing, marshaler)
+		defer teardown()
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer store.Close()
+
+		big := strings.Repeat("x", 3<<20)
+		type rec struct{ V string }
+		writer := store.(storageapi.BatchWriter)
+		results, err := writer.ApplyBatch(ctx, []storageapi.BatchOp{
+			{Type: storageapi.BatchSet, ID: "big", Doc: rec{V: big}},
+			{Type: storageapi.BatchSet, ID: "small", Doc: rec{V: "s"}},
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 2)
+		require.NoError(t, results[0].Err)
+		require.NoError(t, results[1].Err)
+
+		var doc rec
+		require.NoError(t, store.Get(ctx, "big", &doc))
+		assert.Equal(t, big, doc.V)
+		require.NoError(t, store.Get(ctx, "small", &doc))
+		assert.Equal(t, "s", doc.V)
+	})
+
+	t.Run("service that cannot batch", func(t *testing.T) {
+		backing := nonBatchingService{
+			storagestub.NewInMemoryServiceWithMarshaler(marshaler),
+		}
+		addr, teardown := runDatastoreServer(t, backing, marshaler)
+		defer teardown()
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer store.Close()
+
+		_, err = store.(storageapi.BatchWriter).ApplyBatch(ctx,
+			[]storageapi.BatchOp{{Type: storageapi.BatchDelete, ID: "x"}})
+		require.Equal(t, codes.Unimplemented, status.Code(err))
+	})
+}
+
+// nonBatchingService hides the ApplyBatch method of the service it wraps,
+// since embedding an interface only promotes that interface's methods.
+type nonBatchingService struct {
+	storageapi.Service
 }
 
 func (h interopHelper) Create(ctx context.Context, ID string, doc any) error {

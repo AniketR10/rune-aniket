@@ -121,6 +121,57 @@ func TestPartitionDrop(t *testing.T) {
 	require.NoError(t, dropped.Get(ctx, "doc", &got))
 }
 
+// The symbol indexer writes every symbol of a file in one batch, which
+// is a single bolt transaction — and a single fsync — only if batching
+// survives the whole local chain down to the bolt store.
+func TestPartitionApplyBatch(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	svc, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = svc.Close() })
+
+	type rec struct {
+		Name    string
+		Version int
+	}
+
+	part, err := svc.Partition("p")
+	require.NoError(t, err)
+	require.NoError(t, part.Create(ctx, "taken", &rec{Name: "v", Version: 1}))
+
+	writer, ok := part.(storageapi.BatchWriter)
+	require.True(t, ok, "bolt partitions must support batching")
+	results, err := writer.ApplyBatch(ctx, []storageapi.BatchOp{
+		{Type: storageapi.BatchCreate, ID: "fresh",
+			Doc: &rec{Name: "w", Version: 1}},
+		{Type: storageapi.BatchCreate, ID: "taken",
+			Doc: &rec{Name: "w", Version: 1}},
+		{Type: storageapi.BatchUpdate, ID: "taken", Updates: []storageapi.Update{
+			{FieldPath: []string{"Version"}, Value: 2},
+		}, Preconditions: []storageapi.Precondition{
+			{FieldPath: []string{"Version"}, Value: 1},
+		}},
+		{Type: storageapi.BatchUpdate, ID: "taken", Updates: []storageapi.Update{
+			{FieldPath: []string{"Version"}, Value: 3},
+		}, Preconditions: []storageapi.Precondition{
+			{FieldPath: []string{"Version"}, Value: 1},
+		}},
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 4)
+	assert.NoError(t, results[0].Err)
+	assert.ErrorIs(t, results[1].Err, storageapi.ErrAlreadyExists)
+	assert.NoError(t, results[2].Err)
+	assert.ErrorIs(t, results[3].Err, storageapi.ErrPreconditionFailed)
+
+	var got rec
+	require.NoError(t, part.Get(ctx, "fresh", &got))
+	assert.Equal(t, "w", got.Name)
+	require.NoError(t, part.Get(ctx, "taken", &got))
+	assert.Equal(t, 2, got.Version)
+}
+
 // TestConsistentUpdate verifies that two goroutines racing to bump a
 // Version field via storageapi.ConsistentUpdate both succeed, with the
 // final Version reflecting both increments. This is the central

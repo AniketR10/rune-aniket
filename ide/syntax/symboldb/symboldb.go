@@ -106,6 +106,9 @@ type Parser struct {
 	symbols storageapi.Service
 	names   storageapi.Service
 	meta    storageapi.Service
+	// batch is the symbols partition's batching interface when the
+	// storage chain provides one; nil once it turns out not to.
+	batch storageapi.BatchWriter
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -172,6 +175,9 @@ func New(
 		updated:  make(chan struct{}),
 		wake:     make(chan struct{}, 1),
 		done:     make(chan struct{}),
+	}
+	if writer, ok := symbols.(storageapi.BatchWriter); ok {
+		p.batch = writer
 	}
 	// A marker written by another schema version must not enable
 	// index-served listing: the derived tables it vouches for may not
@@ -836,10 +842,14 @@ func (p *Parser) applyFile(ctx context.Context, u fileUpdate) {
 	if ctx.Err() != nil {
 		return
 	}
+	// Symbol and name records are derived from the file records, so
+	// their writes skip the per-commit fsync: the file record written
+	// below (synced outside the bulk scan) restores durability for
+	// everything this call wrote before it, and a crash in between only
+	// costs a re-index of this file.
+	nctx := bluebolt.ContextWithNoSync(ctx)
 	if u.removed {
-		for _, name := range u.oldNames {
-			p.upsertSymbol(ctx, name, u.us, nil, false)
-		}
+		p.upsertSymbols(nctx, u.us, u.oldNames, nil, false)
 		if err := p.files.Delete(ctx, u.us); err != nil {
 			log.Errorf("symboldb: delete file record %q: %v", u.us, err)
 		}
@@ -860,15 +870,7 @@ func (p *Parser) applyFile(ctx context.Context, u fileUpdate) {
 			URI: u.us, X: s.Pos.X, Y: s.Pos.Y, Kind: kind,
 		})
 	}
-	for _, name := range u.oldNames {
-		if _, ok := symbols[name]; ok {
-			continue
-		}
-		p.upsertSymbol(ctx, name, u.us, nil, u.force)
-	}
-	for name, locs := range symbols {
-		p.upsertSymbol(ctx, name, u.us, locs, u.force)
-	}
+	p.upsertSymbols(nctx, u.us, u.oldNames, symbols, u.force)
 	doc := fileDoc{
 		URI:     u.us,
 		Path:    u.rel,
@@ -879,6 +881,31 @@ func (p *Parser) applyFile(ctx context.Context, u fileUpdate) {
 	}
 	if err := p.files.Set(ctx, u.us, doc); err != nil {
 		log.Errorf("symboldb: persist file record %q: %v", u.us, err)
+	}
+}
+
+// upsertSymbols writes every symbol record one file contributes to:
+// the names it now defines, plus the names it used to define and no
+// longer does, which lose this file's locations.
+func (p *Parser) upsertSymbols(
+	ctx context.Context, us string, oldNames []string,
+	symbols map[string][]symbolLoc, force bool,
+) {
+	if p.batch != nil {
+		p.upsertSymbolBatch(ctx, us, oldNames, symbols, force)
+		return
+	}
+	stored := make(map[string]struct{}, len(oldNames))
+	for _, name := range oldNames {
+		stored[name] = struct{}{}
+		if _, ok := symbols[name]; ok {
+			continue
+		}
+		p.upsertSymbol(ctx, name, us, nil, force, true)
+	}
+	for name, locs := range symbols {
+		_, existing := stored[name]
+		p.upsertSymbol(ctx, name, us, locs, force, existing)
 	}
 }
 
@@ -894,7 +921,8 @@ func (p *Parser) indexFile(
 }
 
 func (p *Parser) upsertSymbol(
-	ctx context.Context, name, us string, locs []symbolLoc, force bool,
+	ctx context.Context, name, us string, locs []symbolLoc,
+	force, existing bool,
 ) {
 	if ctx.Err() != nil {
 		return
@@ -905,13 +933,7 @@ func (p *Parser) upsertSymbol(
 	callback := func() ([]storageapi.Update, []storageapi.Precondition) {
 		wrote = false
 		wasListed = listed(doc.Locs)
-		kept := make([]symbolLoc, 0, len(doc.Locs)+len(locs))
-		for _, l := range doc.Locs {
-			if l.URI != us {
-				kept = append(kept, l)
-			}
-		}
-		kept = append(kept, locs...)
+		kept := mergeLocs(doc.Locs, us, locs)
 		merged = kept
 		if sameLocs(doc.Locs, kept) {
 			return nil, nil
@@ -933,9 +955,10 @@ func (p *Parser) upsertSymbol(
 	// Try the one-operation Create first: a cold scan over an empty
 	// database — the longest scan there is — mostly inserts brand-new
 	// symbols. Dropping locations never creates: a tombstone for a
-	// symbol that was never stored would be noise.
+	// symbol that was never stored would be noise, and neither does a
+	// name this file already contributed, whose document must exist.
 	created := false
-	if len(locs) > 0 {
+	if len(locs) > 0 && !existing {
 		err := p.symbols.Create(ctx, name,
 			symbolDoc{Name: name, Locs: locs, Version: 1})
 		switch {
@@ -952,9 +975,18 @@ func (p *Parser) upsertSymbol(
 	if !created {
 		err := storageapi.ConsistentUpdate(
 			ctx, p.symbols, name, &doc, retryStrategy, callback)
-		if errors.Is(err, storageapi.ErrNotFound) && len(locs) == 0 {
-			// Nothing stored and nothing to store.
-			return
+		if errors.Is(err, storageapi.ErrNotFound) {
+			if len(locs) == 0 {
+				// Nothing stored and nothing to store.
+				return
+			}
+			// The document a previously indexed name vouched for is
+			// gone; insert it rather than dropping the locations.
+			err = p.symbols.Create(ctx, name,
+				symbolDoc{Name: name, Locs: locs, Version: 1})
+			if err == nil {
+				merged, wrote, wasListed = locs, true, false
+			}
 		}
 		if err != nil {
 			if ctx.Err() == nil {
@@ -963,7 +995,30 @@ func (p *Parser) upsertSymbol(
 			return
 		}
 	}
-	if !wrote || force {
+	p.syncNameIndex(ctx, name, merged, wrote && !force, wasListed)
+}
+
+// mergeLocs replaces the locations us contributed to a stored symbol
+// with locs, leaving every other file's locations in place.
+func mergeLocs(stored []symbolLoc, us string, locs []symbolLoc) []symbolLoc {
+	kept := make([]symbolLoc, 0, len(stored)+len(locs))
+	for _, l := range stored {
+		if l.URI != us {
+			kept = append(kept, l)
+		}
+	}
+	return append(kept, locs...)
+}
+
+// syncNameIndex reflects a symbol write in the name markers. When the
+// write's before-state is trustworthy — wrote reports a write this call
+// made, off a document it read — only the listed transitions need a
+// name write; otherwise the marker is reconciled against storage.
+func (p *Parser) syncNameIndex(
+	ctx context.Context, name string, merged []symbolLoc,
+	wrote, wasListed bool,
+) {
+	if !wrote {
 		p.syncName(ctx, name, merged)
 		return
 	}

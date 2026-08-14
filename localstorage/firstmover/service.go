@@ -287,6 +287,31 @@ func (s *Service) Drop(ctx context.Context) error {
 	})
 }
 
+// ApplyBatch satisfies storageapi.BatchWriter.
+func (s *Service) ApplyBatch(
+	ctx context.Context, ops []storageapi.BatchOp,
+) (results []storageapi.BatchOpResult, err error) {
+	if err := s.waitReady(ctx); err != nil {
+		return nil, err
+	}
+	err = s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
+		s.mu.Lock()
+		active := s.active
+		s.mu.Unlock()
+		writer, ok := active.(storageapi.BatchWriter)
+		if !ok {
+			return false, errors.New(
+				"firstmover: active service does not support batching")
+		}
+		results, err = writer.ApplyBatch(ctx, ops)
+		return s.isRetriableError(ctx, err), err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 // List satisfies storageapi.Service.
 func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,

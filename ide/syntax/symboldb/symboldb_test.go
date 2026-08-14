@@ -25,6 +25,7 @@ package symboldb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +49,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/goleak"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 	"unstable.build/go-tui/workspace"
 )
@@ -1006,9 +1009,87 @@ func (c *opCountingStorage) Partition(name string) (storageapi.Service, error) {
 	}, nil
 }
 
+// batchingStorage forwards batches to a batch-capable backend, counting
+// the round trips and letting a test intercept them.
+type batchingStorage struct {
+	storageapi.Service
+	path  string
+	calls *sync.Map // path → *atomic.Int64
+	sizes *sync.Map // path → *atomic.Int64
+	// intercept answers a batch itself when it returns non-nil.
+	intercept func(
+		path string, call int64, ops []storageapi.BatchOp,
+	) *batchOutcome
+}
+
+type batchOutcome struct {
+	results []storageapi.BatchOpResult
+	err     error
+}
+
+func newBatchingStorage(svc storageapi.Service) *batchingStorage {
+	return &batchingStorage{
+		Service: svc, calls: new(sync.Map), sizes: new(sync.Map),
+	}
+}
+
+func (b *batchingStorage) Partition(name string) (storageapi.Service, error) {
+	child, err := b.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &batchingStorage{
+		Service: child, path: b.path + "/" + name,
+		calls: b.calls, sizes: b.sizes, intercept: b.intercept,
+	}, nil
+}
+
+func (b *batchingStorage) counter(m *sync.Map) *atomic.Int64 {
+	v, _ := m.LoadOrStore(b.path, new(atomic.Int64))
+	return v.(*atomic.Int64)
+}
+
+func (b *batchingStorage) callCount(path string) int64 {
+	v, ok := b.calls.Load(path)
+	if !ok {
+		return 0
+	}
+	return v.(*atomic.Int64).Load()
+}
+
+func (b *batchingStorage) opCount(path string) int64 {
+	v, ok := b.sizes.Load(path)
+	if !ok {
+		return 0
+	}
+	return v.(*atomic.Int64).Load()
+}
+
+func (b *batchingStorage) ApplyBatch(
+	ctx context.Context, ops []storageapi.BatchOp,
+) ([]storageapi.BatchOpResult, error) {
+	call := b.counter(b.calls).Add(1)
+	b.counter(b.sizes).Add(int64(len(ops)))
+	if b.intercept != nil {
+		if out := b.intercept(b.path, call, ops); out != nil {
+			return out.results, out.err
+		}
+	}
+	writer, ok := b.Service.(storageapi.BatchWriter)
+	if !ok {
+		return nil, errors.New("backend does not support batching")
+	}
+	return writer.ApplyBatch(ctx, ops)
+}
+
 func (c *opCountingStorage) Set(ctx context.Context, id string, doc any) error {
 	c.count("set")
 	return c.Service.Set(ctx, id, doc)
+}
+
+func (c *opCountingStorage) Create(ctx context.Context, id string, doc any) error {
+	c.count("create")
+	return c.Service.Create(ctx, id, doc)
 }
 
 func (c *opCountingStorage) Delete(ctx context.Context, id string) error {
@@ -1067,6 +1148,139 @@ func TestMigrationRestampAvoidsRedundantWrites(t *testing.T) {
 		listReferenced(t, p2))
 }
 
+// Re-indexing a file only inserts symbol documents for names it did not
+// contribute before: a Create for a known name is a guaranteed
+// ErrAlreadyExists, and on the production backend that failed insert
+// still costs a bolt write transaction.
+func TestReindexSkipsCreateForKnownNames(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	counting := &opCountingStorage{Service: e.db, ops: new(sync.Map)}
+	e.db = counting
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget"},
+		refs: [][2]string{{"iterator", "Iterator"}},
+	})
+	p := e.start(t)
+	require.NoError(t, p.Wait(ctx))
+
+	inserts := counting.opCount("/symbols", "create")
+	require.Positive(t, inserts, "a cold scan inserts brand-new symbols")
+
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget", "Gadget"},
+		refs: [][2]string{{"iterator", "Iterator"}},
+	})
+	e.touch(t, "a.go")
+	p.Handle(ctx, textapi.Event{Type: textapi.EventTypeFlush, URI: uri})
+	require.NoError(t, p.Wait(ctx))
+
+	assert.Equal(t, inserts+1, counting.opCount("/symbols", "create"),
+		"only the name the file had never contributed is inserted")
+}
+
+// Every symbol a file contributes is written in one round trip when the
+// store supports batching: on the production backend that is one bolt
+// transaction per file instead of one per symbol.
+func TestBatchWritesSymbolsOfFileInOneRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	batching := newBatchingStorage(e.db)
+	e.db = batching
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget", "Gadget", "Sprocket"},
+		refs: [][2]string{{"iterator", "Iterator"}},
+	})
+	p := e.start(t)
+	require.NoError(t, p.Wait(ctx))
+
+	assert.Equal(t, int64(1), batching.callCount("/symbols"),
+		"one file's symbols must cost a single batch")
+	assert.Greater(t, batching.opCount("/symbols"), int64(1),
+		"that batch must carry every symbol the file defines")
+	assert.Equal(t,
+		[]string{"iterator.Iterator", "mypkg.Gadget",
+			"mypkg.Sprocket", "mypkg.Widget"},
+		listReferenced(t, p))
+}
+
+// A concurrent writer invalidates the version a batched update was
+// staged against. Only the rejected operations are re-read and retried;
+// the ones that landed must not be applied twice.
+func TestBatchRetriesOnlyStaleOperations(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	batching := newBatchingStorage(e.db)
+	var retried []string
+	batching.intercept = func(
+		path string, call int64, ops []storageapi.BatchOp,
+	) *batchOutcome {
+		if path != "/symbols" {
+			return nil
+		}
+		if call == 1 {
+			results := make([]storageapi.BatchOpResult, len(ops))
+			results[0].Err = storageapi.ErrPreconditionFailed
+			return &batchOutcome{results: results}
+		}
+		for _, op := range ops {
+			retried = append(retried, op.ID)
+		}
+		return nil
+	}
+	e.db = batching
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget", "Gadget"},
+	})
+	p := e.start(t)
+	require.NoError(t, p.Wait(ctx))
+
+	assert.Equal(t, int64(2), batching.callCount("/symbols"),
+		"the rejected operation must be retried in a second batch")
+	assert.Len(t, retried, 1,
+		"only the rejected operation is retried: %v", retried)
+	assert.Equal(t,
+		[]string{"mypkg.Gadget", "mypkg.Widget"}, listReferenced(t, p))
+}
+
+// A leader that predates the Batch RPC answers Unimplemented. The
+// indexer must fall back to per-operation writes rather than losing the
+// file's symbols.
+func TestBatchFallsBackWhenUnimplemented(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	batching := newBatchingStorage(e.db)
+	batching.intercept = func(
+		path string, _ int64, _ []storageapi.BatchOp,
+	) *batchOutcome {
+		if path != "/symbols" {
+			return nil
+		}
+		return &batchOutcome{err: status.Error(
+			codes.Unimplemented, "method Batch not implemented")}
+	}
+	e.db = batching
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget", "Gadget"},
+	})
+	p := e.start(t)
+	require.NoError(t, p.Wait(ctx))
+
+	assert.Equal(t, int64(1), batching.callCount("/symbols"),
+		"a store without batching must not be asked twice")
+	assert.Equal(t,
+		[]string{"mypkg.Gadget", "mypkg.Widget"}, listReferenced(t, p))
+}
+
 // A symbol doc written before the Version counter existed stores no
 // Version field, and a 0-valued precondition would not match its
 // absence. The merge must stamp the counter through a nil precondition
@@ -1093,7 +1307,7 @@ func TestUpsertMergesIntoVersionlessDoc(t *testing.T) {
 	p := &Parser{files: files, symbols: symbols, names: names,
 		meta: e.db, ctx: ctx}
 	p.upsertSymbol(ctx, legacy.Name, "file:///ws/b.go",
-		[]symbolLoc{{URI: "file:///ws/b.go", Y: 2, Kind: kindRef}}, false)
+		[]symbolLoc{{URI: "file:///ws/b.go", Y: 2, Kind: kindRef}}, false, false)
 
 	var doc symbolDoc
 	require.NoError(t, symbols.Get(ctx, legacy.Name, &doc))
@@ -1163,7 +1377,9 @@ func (d *durabilityRecordingStorage) Delete(ctx context.Context, id string) erro
 // The initial scan bulk-loads rebuildable records, so its writes ask
 // the bolt backend to skip per-commit fsync; the completion marker is
 // written synced, after every relaxed write, so its durability implies
-// theirs. Event-driven updates are steady-state and stay synced.
+// theirs. Event-driven updates apply the same rule per file: the
+// derived symbol and name records are relaxed and the file record that
+// vouches for them is the synced barrier.
 func TestScanRelaxesDurabilityUntilMarker(t *testing.T) {
 	e := newEnv(t)
 	rec := newDurabilityRecordingStorage(e.db)
@@ -1188,7 +1404,6 @@ func TestScanRelaxesDurabilityUntilMarker(t *testing.T) {
 			"scan write %s %q must request relaxed durability", op.path, op.id)
 	}
 
-	// Steady state: a flushed file is re-indexed with synced writes.
 	e.fake.setGoFile(uri, goFile{pkg: "mypkg", defs: []string{"Gadget"}})
 	e.touch(t, "a.go")
 	before := len(ops)
@@ -1198,9 +1413,16 @@ func TestScanRelaxesDurabilityUntilMarker(t *testing.T) {
 	require.NoError(t, p.Wait(context.Background()))
 	ops = rec.snapshot()
 	require.Greater(t, len(ops), before, "the flush must write")
-	for _, op := range ops[before:] {
-		assert.Falsef(t, op.noSync,
-			"event-path write %s %q must stay synced", op.path, op.id)
+	reindex := ops[before:]
+	fileRecord := reindex[len(reindex)-1]
+	assert.Equal(t, uri.String(), fileRecord.id,
+		"the file record must be the last write of a re-index")
+	assert.False(t, fileRecord.noSync,
+		"the file record is the durability barrier of a re-index")
+	for _, op := range reindex[:len(reindex)-1] {
+		assert.Truef(t, op.noSync,
+			"derived write %s %q must request relaxed durability",
+			op.path, op.id)
 	}
 }
 

@@ -413,6 +413,135 @@ func (s *Server) Drop(
 	return new(docpb.DropResponse), nil
 }
 
+// Batch satisfies proto.DocumentStoreServer. The request is streamed with
+// the same chunked framing as Create/Set/Update: an op entry marked as a
+// continuation carries further chunks of the op that precedes it.
+func (s *Server) Batch(stream docpb.DocumentStore_BatchServer) error {
+	entries, err := recvBatchStream(stream)
+	if err != nil {
+		return err
+	}
+	ops, err := s.makeModelBatchOps(entries)
+	if err != nil {
+		return err
+	}
+
+	ctx := noSyncIncomingContext(stream.Context())
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return err
+	}
+	writer, ok := svc.(storageapi.BatchWriter)
+	if !ok {
+		return status.Error(codes.Unimplemented,
+			"underlying service does not support batching")
+	}
+	results, err := writer.ApplyBatch(ctx, ops)
+	if err != nil {
+		if errors.Is(err, storageapi.ErrPermissionDenied) {
+			return status.Error(codes.PermissionDenied, "")
+		}
+		return err
+	}
+
+	res := docpb.BatchResponse{
+		Results: make([]*docpb.BatchResponse_OpResult, len(results)),
+	}
+	for i, result := range results {
+		entry := new(docpb.BatchResponse_OpResult)
+		switch {
+		case errors.Is(result.Err, storageapi.ErrAlreadyExists):
+			entry.AlreadyExists = true
+		case errors.Is(result.Err, storageapi.ErrNotFound):
+			entry.NotFound = true
+		case errors.Is(result.Err, storageapi.ErrPreconditionFailed):
+			entry.PreconditionFailed = true
+		case result.Err != nil:
+			return result.Err
+		}
+		res.Results[i] = entry
+	}
+	return stream.SendAndClose(&res)
+}
+
+// recvBatchStream reassembles the operations of a Batch stream, merging
+// every continuation entry into the operation it continues.
+func recvBatchStream(
+	stream docpb.DocumentStore_BatchServer,
+) ([]*docpb.BatchRequest_Op, error) {
+	var ops []*docpb.BatchRequest_Op
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return ops, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range req.GetOps() {
+			if !entry.GetContinuation() {
+				ops = append(ops, entry)
+				continue
+			}
+			if len(ops) == 0 {
+				return nil, errors.New(
+					"invalid request: batch continuation without operation")
+			}
+			last := ops[len(ops)-1]
+			last.Data = append(last.Data, entry.GetData()...)
+			last.Updates = appendFieldChunks(last.Updates, entry.GetUpdates())
+			last.Preconditions = appendFieldChunks(
+				last.Preconditions, entry.GetPreconditions())
+		}
+	}
+}
+
+func (s *Server) makeModelBatchOps(
+	entries []*docpb.BatchRequest_Op,
+) ([]storageapi.BatchOp, error) {
+	ops := make([]storageapi.BatchOp, len(entries))
+	for i, entry := range entries {
+		op := storageapi.BatchOp{ID: entry.GetId()}
+		switch entry.GetType() {
+		case docpb.BatchRequest_Create, docpb.BatchRequest_Set:
+			op.Type = storageapi.BatchCreate
+			if entry.GetType() == docpb.BatchRequest_Set {
+				op.Type = storageapi.BatchSet
+			}
+			var doc map[string]any
+			err := storageapi.SafeDecode(s.marshaler, &doc, entry.GetData())
+			if err != nil {
+				return nil, err
+			}
+			op.Doc = doc
+		case docpb.BatchRequest_Update:
+			op.Type = storageapi.BatchUpdate
+			updates, err := makeModelUpdates(s.marshaler, entry.GetUpdates())
+			if err != nil {
+				return nil, err
+			}
+			// client should panic if no updates are passed, so the
+			// following is to avoid potential DOS from a malicious client.
+			if len(updates) == 0 {
+				return nil, errors.New("invalid request: no paths to update")
+			}
+			preconds, err := makeModelPreconds(
+				s.marshaler, entry.GetPreconditions())
+			if err != nil {
+				return nil, err
+			}
+			op.Updates = updates
+			op.Preconditions = preconds
+		case docpb.BatchRequest_Delete:
+			op.Type = storageapi.BatchDelete
+		default:
+			return nil, errors.New("invalid request: unknown batch operation")
+		}
+		ops[i] = op
+	}
+	return ops, nil
+}
+
 func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.Iterator, fields []string) (err error) {
 	var fieldSet map[string]struct{}
 	if len(fields) > 0 {

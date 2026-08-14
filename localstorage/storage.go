@@ -131,6 +131,20 @@ func (d *delayedLoadingService) Drop(ctx context.Context) error {
 	return droppable.Drop(ctx)
 }
 
+// ApplyBatch satisfies storageapi.BatchWriter.
+func (d *delayedLoadingService) ApplyBatch(
+	ctx context.Context, ops []storageapi.BatchOp,
+) ([]storageapi.BatchOpResult, error) {
+	if err := d.waitReady(ctx); err != nil {
+		return nil, err
+	}
+	writer, ok := d.service.(storageapi.BatchWriter)
+	if !ok {
+		return nil, errors.New("storage service does not support batching")
+	}
+	return writer.ApplyBatch(ctx, ops)
+}
+
 func (d *delayedLoadingService) List(ctx context.Context, filters []storageapi.Filter) (
 	storageapi.Iterator, error,
 ) {

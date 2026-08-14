@@ -640,7 +640,7 @@ func BenchmarkListReferencedSymbols(b *testing.B) {
 						Kind: kind,
 					}
 				}
-				p.upsertSymbol(ctx, name, "", locs, false)
+				p.upsertSymbol(ctx, name, "", locs, false, false)
 			}
 			b.ResetTimer()
 			for range b.N {

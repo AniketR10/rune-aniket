@@ -90,6 +90,36 @@ func TestPartitionDropForwardsToTarget(t *testing.T) {
 	assert.ErrorIs(t, part.Get(ctx, "k", &got), storageapi.ErrNotFound)
 }
 
+// The symbol indexer writes a file's symbols in a single batch, so a
+// partitioned view must forward batches to the resolved target rather
+// than falling back to one transaction per symbol.
+func TestPartitionApplyBatchForwardsToTarget(t *testing.T) {
+	ctx := context.Background()
+	lockFile := makeTempLockFile(t)
+	cfg := testConfig()
+	leader := New(factoryFor(storagestub.NewInMemoryService()), lockFile, cfg)
+	t.Cleanup(func() { _ = leader.Close() })
+
+	part, err := leader.Partition("p")
+	require.NoError(t, err)
+	require.NoError(t, part.Set(ctx, "taken", &testStruct{A: "v"}))
+
+	writer, ok := part.(storageapi.BatchWriter)
+	require.True(t, ok, "partitioned views must support batching")
+	results, err := writer.ApplyBatch(ctx, []storageapi.BatchOp{
+		{Type: storageapi.BatchSet, ID: "fresh", Doc: &testStruct{A: "w"}},
+		{Type: storageapi.BatchCreate, ID: "taken", Doc: &testStruct{A: "w"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.NoError(t, results[0].Err)
+	assert.ErrorIs(t, results[1].Err, storageapi.ErrAlreadyExists)
+
+	var got testStruct
+	require.NoError(t, part.Get(ctx, "fresh", &got))
+	assert.Equal(t, "w", got.A)
+}
+
 // TestPartitionCacheInvalidatesOnLeadershipChange verifies that when
 // the active backend swaps (leadership transition), the cached
 // leader-side handle is closed exactly once and the new backend is
