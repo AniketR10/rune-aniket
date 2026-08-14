@@ -11,5 +11,6 @@ pub mod onenter;
 pub mod ssr;
 pub mod types;
 pub mod predicate;
+pub mod mirprobe;
 
 // child-modules test anchor: a non-module line at the crate root.

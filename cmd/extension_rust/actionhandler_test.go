@@ -32,18 +32,19 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 func newTestActionRouter(lsp semanticapi.LSP, notify *fakeNotifications) textapi.CommandHandler {
 	_, h := newRustActionHandler(lsp, &fakeEditor{}, &fakeWM{}, notify, nil,
-		lspcmd.NewSelectionTracker(), newFakeExecutor(), "/ws", true)
+		lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true)
 	return h
 }
 
 func TestRustActionManualListsSubcommands(t *testing.T) {
 	manual, _ := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
-		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), newFakeExecutor(), "/ws", true)
+		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true)
 	assert.Equal(t, actionCmdName, manual.Name)
 	names := make(map[string]bool)
 	for _, c := range manual.Commands {
@@ -67,7 +68,7 @@ func TestRustActionExperimentalGating(t *testing.T) {
 	manualNames := func(experimental bool) map[string]bool {
 		manual, h := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
 			newFakeNotifications(), nil, lspcmd.NewSelectionTracker(),
-			newFakeExecutor(), "/ws", experimental)
+			newFakeExecutor(), newFakeFS(), nil, nil, "/ws", experimental)
 		names := make(map[string]bool)
 		for _, c := range manual.Commands {
 			names[c.Name] = true
@@ -133,5 +134,48 @@ func TestRustActionRouterCompletesSubcommands(t *testing.T) {
 	// Completion of the subcommand list is sorted.
 	for i := 1; i < len(got); i++ {
 		assert.LessOrEqual(t, got[i-1], got[i])
+	}
+}
+
+// A zero cursor snapshot is refreshed from the live editor before the
+// subcommand runs; a captured snapshot and a command without a
+// resource pass through untouched.
+func TestRustActionRouterRefreshesZeroCursor(t *testing.T) {
+	live := term.Coordinates{X: 4, Y: 270}
+	cases := []struct {
+		name     string
+		cursor   term.Coordinates
+		resource bool
+		want     term.Coordinates
+	}{
+		{name: "zero snapshot uses live cursor", resource: true, want: live},
+		{name: "captured snapshot wins", cursor: term.Coordinates{X: 2, Y: 7}, resource: true, want: term.Coordinates{X: 2, Y: 7}},
+		{name: "no resource stays zero", want: term.Coordinates{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			me := newMockEditor()
+			var got textapi.Command
+			router := &rustActionRouter{
+				editor: me,
+				handlers: map[string]textapi.CommandHandler{
+					"probe": textapi.FuncCommandHandler(
+						func(_ context.Context, cmd textapi.Command) error {
+							got = cmd
+							return nil
+						}, nil),
+				},
+			}
+			cmd := textapi.Command{Name: actionCmdName, Args: []string{"probe"}}
+			cmd.Cursor.Content = tc.cursor
+			if tc.resource {
+				resource := &stubResource{uri: newTestURI(t)}
+				me.Register(resource)
+				require.NoError(t, me.SetCursor(resource, live))
+				cmd.Resource = resource
+			}
+			require.NoError(t, router.HandleCommand(context.Background(), cmd))
+			assert.Equal(t, tc.want, got.Cursor.Content)
+		})
 	}
 }

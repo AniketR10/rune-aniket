@@ -30,9 +30,10 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
@@ -41,10 +42,12 @@ import (
 // the hover request's position field. It falls back to the cursor
 // position when nothing is selected.
 type hoverRangeCmd struct {
-	lsp    semanticapi.LSP
-	wm     browserapi.WindowManager
-	notify browserapi.Notifications
-	sel    *lspcmd.SelectionTracker
+	lsp       semanticapi.LSP
+	wm        browserapi.WindowManager
+	notify    browserapi.Notifications
+	parser    syntaxapi.Parser
+	interrupt term.Interrupter
+	sel       *lspcmd.SelectionTracker
 }
 
 var _ textapi.CommandHandler = (*hoverRangeCmd)(nil)
@@ -75,12 +78,7 @@ func (c *hoverRangeCmd) HandleCommand(ctx context.Context, cmd textapi.Command) 
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "No type information for the selection")
 		return nil
 	}
-	if _, err := c.wm.Floating(newTextView(res.Contents.Value), browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	}); err != nil {
-		return fmt.Errorf("show viewer: %w", err)
-	}
-	return nil
+	return showMarkdown(c.wm, c.parser, c.interrupt, res.Contents.Value)
 }
 
 func (c *hoverRangeCmd) Complete(_ context.Context, _ string, _ []string) (
@@ -94,16 +92,17 @@ func (c *hoverRangeCmd) Complete(_ context.Context, _ string, _ []string) (
 // dependencies). The query and an optional scope keyword come from the
 // command args: `rust symbols <query> [deps]`.
 type workspaceSymbolCmd struct {
-	lsp    semanticapi.LSP
-	editor textapi.Editor
-	wm     browserapi.WindowManager
-	opener browserapi.ResourceOpener
-	notify browserapi.Notifications
+	pickDeps
+	lsp semanticapi.LSP
 }
 
 var _ textapi.CommandHandler = (*workspaceSymbolCmd)(nil)
 
 func (c *workspaceSymbolCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error {
+	win, err := c.wm.Focus()
+	if err != nil {
+		return err
+	}
 	args := append([]string(nil), cmd.Args...)
 	scope := "workspace"
 	if n := len(args); n > 0 && (args[n-1] == "deps" || args[n-1] == "dependencies") {
@@ -123,24 +122,15 @@ func (c *workspaceSymbolCmd) HandleCommand(ctx context.Context, cmd textapi.Comm
 	if err != nil {
 		return err
 	}
-	if len(symbols) == 0 {
-		_, _ = c.notify.Notify(browserapi.LevelInfo, "No matching workspace symbols")
-		return nil
+	entries := make([]pickEntry, len(symbols))
+	for i, s := range symbols {
+		entries[i] = pickEntry{
+			loc: s.Location,
+			display: fmt.Sprintf("%s\t%s:%d", s.Name,
+				c.relPath(cmd.URI, s.Location.URI), s.Location.Range.Start.Line+1),
+		}
 	}
-	if len(symbols) == 1 {
-		return openLocation(c.editor, c.wm, c.opener, cmd.URI, symbols[0].Location)
-	}
-	var b strings.Builder
-	for _, s := range symbols {
-		fmt.Fprintf(&b, "%s\t%s:%d\n", s.Name,
-			trimFileURI(s.Location.URI), s.Location.Range.Start.Line+1)
-	}
-	if _, err := c.wm.Floating(newTextView(b.String()), browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	}); err != nil {
-		return fmt.Errorf("show viewer: %w", err)
-	}
-	return nil
+	return c.present(ctx, win, cmd.URI, entries, "No matching workspace symbols")
 }
 
 func (c *workspaceSymbolCmd) Complete(_ context.Context, _ string, _ []string) (

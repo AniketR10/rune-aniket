@@ -34,10 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	mdcomp "unstable.build/go-tui/component/markdown"
-	mdhandler "unstable.build/go-tui/handler/markdown"
 )
 
 // hoverCmd is a rust-specific hover: it renders rust-analyzer's hover
@@ -52,11 +49,8 @@ import (
 // that opt-in, rust-analyzer suppresses every action link and this command
 // degrades to a plain markdown hover.
 type hoverCmd struct {
-	lsp    semanticapi.LSP
-	editor textapi.Editor
-	wm     browserapi.WindowManager
-	opener browserapi.ResourceOpener
-	notify browserapi.Notifications
+	pickDeps
+	lsp semanticapi.LSP
 	// runner executes the runnable carried by a runSingle/debugSingle hover
 	// action. Debug has no adapter here, so it runs the target like Run.
 	runner *runCmd
@@ -94,6 +88,12 @@ func (c *hoverCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error
 	if err := requireFile(cmd); err != nil {
 		return err
 	}
+	// Capture the invoking window before the markdown float (and any
+	// action picker) takes the focus: hover actions jump into it.
+	win, err := c.wm.Focus()
+	if err != nil {
+		return err
+	}
 	res, err := execRequest[*hoverResult](ctx, c.lsp, "textDocument/hover", posParams(cmd))
 	if err != nil {
 		return err
@@ -102,47 +102,21 @@ func (c *hoverCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "No hover information at the cursor")
 		return nil
 	}
-	if err := c.showMarkdown(res.Contents.Value); err != nil {
+	if err := showMarkdown(c.wm, c.parser, c.interrupt, res.Contents.Value); err != nil {
 		return err
 	}
 	links := flattenHoverActions(res.Actions)
 	if len(links) == 0 {
 		return nil
 	}
-	return c.pickAction(ctx, cmd.URI, links)
-}
-
-// showMarkdown floats a scrollable, dismiss-on-key markdown view of the
-// hover documentation, reusing the same rendering stack as `lsp hover`.
-func (c *hoverCmd) showMarkdown(value string) error {
-	comp, err := mdcomp.NewWithConfig(value, mdcomp.DefaultConfig())
-	if err != nil {
-		return fmt.Errorf("render hover markdown: %w", err)
-	}
-	mdh := mdhandler.New(comp)
-	span := handler.NewSpan(mdh, component.SpanConfig{
-		PadHorizontal:    2,
-		ContentAlignment: component.AlignmentCentered,
-	})
-	var win browserapi.Window
-	floating := browserapi.FuncFloatingHandler(span, func() error {
-		defer c.wm.CloseWindow(win) //nolint:errcheck
-		return mdh.Close()
-	})
-	w, err := c.wm.Floating(floating, browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	})
-	if err != nil {
-		return fmt.Errorf("show hover: %w", err)
-	}
-	win = w
-	return nil
+	return c.pickAction(ctx, win, cmd.URI, links)
 }
 
 // pickAction floats a picker of the available hover actions and dispatches
 // the chosen one.
 func (c *hoverCmd) pickAction(
-	ctx context.Context, base workspaceapi.URI, links []hoverCommandLink,
+	ctx context.Context, win browserapi.Window,
+	base workspaceapi.URI, links []hoverCommandLink,
 ) error {
 	ch := make(chan int, 1)
 	titles := make([]string, len(links))
@@ -163,7 +137,7 @@ func (c *hoverCmd) pickAction(
 		if idx < 0 || idx >= len(links) {
 			return nil
 		}
-		return c.dispatch(ctx, base, links[idx])
+		return c.dispatch(ctx, win, base, links[idx])
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -173,7 +147,8 @@ func (c *hoverCmd) pickAction(
 // gotoLocation and showReferences navigate the buffer; runSingle/debugSingle
 // execute the carried runnable (debug lacks an adapter, so it runs like run).
 func (c *hoverCmd) dispatch(
-	ctx context.Context, base workspaceapi.URI, link hoverCommandLink,
+	ctx context.Context, win browserapi.Window,
+	base workspaceapi.URI, link hoverCommandLink,
 ) error {
 	switch link.Command {
 	case "rust-analyzer.gotoLocation":
@@ -182,17 +157,10 @@ func (c *hoverCmd) dispatch(
 			_, _ = c.notify.Notify(browserapi.LevelInfo, "No location for %q", link.Title)
 			return nil
 		}
-		return openLocation(c.editor, c.wm, c.opener, base, loc)
+		return openLocation(c.editor, c.wm, c.opener, win, base, loc)
 	case "rust-analyzer.showReferences":
 		locs := parseShowReferences(link.Arguments)
-		if len(locs) == 0 {
-			_, _ = c.notify.Notify(browserapi.LevelInfo, "No references for %q", link.Tooltip)
-			return nil
-		}
-		if len(locs) == 1 {
-			return openLocation(c.editor, c.wm, c.opener, base, locs[0])
-		}
-		return c.showLocations(locs)
+		return c.showLocations(ctx, win, base, locs, link.Tooltip)
 	case "rust-analyzer.runSingle", "rust-analyzer.debugSingle":
 		r, ok := parseRunnable(link.Arguments)
 		if !ok {
@@ -210,19 +178,21 @@ func (c *hoverCmd) dispatch(
 	}
 }
 
-// showLocations floats a read-only viewer listing reference locations.
-func (c *hoverCmd) showLocations(locs []semanticapi.Location) error {
-	var b strings.Builder
-	for _, l := range locs {
-		fmt.Fprintf(&b, "%s:%d:%d\n",
-			trimFileURI(l.URI), l.Range.Start.Line+1, l.Range.Start.Character+1)
+// showLocations offers the reference locations in a picker and jumps to
+// the chosen one.
+func (c *hoverCmd) showLocations(
+	ctx context.Context, win browserapi.Window,
+	base workspaceapi.URI, locs []semanticapi.Location, label string,
+) error {
+	entries := make([]pickEntry, len(locs))
+	for i, l := range locs {
+		entries[i] = pickEntry{
+			loc: l,
+			display: fmt.Sprintf("%s:%d:%d", c.relPath(base, l.URI),
+				l.Range.Start.Line+1, l.Range.Start.Character+1),
+		}
 	}
-	if _, err := c.wm.Floating(newTextView(b.String()), browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	}); err != nil {
-		return fmt.Errorf("show references: %w", err)
-	}
-	return nil
+	return c.present(ctx, win, base, entries, fmt.Sprintf("No references for %q", label))
 }
 
 func (c *hoverCmd) Complete(_ context.Context, _ string, _ []string) (

@@ -31,6 +31,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"google.golang.org/grpc/status"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
@@ -69,7 +70,7 @@ func execRequest[T any](
 		Params: raw,
 	})
 	if err != nil {
-		return zero, fmt.Errorf("%s: %w", method, err)
+		return zero, fmt.Errorf("%s: %s", method, lspErrorMessage(err))
 	}
 	if len(result) == 0 || string(result) == "null" {
 		return zero, nil
@@ -79,6 +80,17 @@ func execRequest[T any](
 		return zero, fmt.Errorf("decode %s result: %w", method, err)
 	}
 	return out, nil
+}
+
+// lspErrorMessage extracts the server-reported message from a request
+// error. Extension requests travel over gRPC, whose status rendering
+// ("rpc error: code = Unknown desc = ...") buries the rust-analyzer
+// error the user needs to see (e.g. "request handler panicked: ...").
+func lspErrorMessage(err error) string {
+	if s, ok := status.FromError(err); ok {
+		return s.Message()
+	}
+	return err.Error()
 }
 
 // sendNotification forwards a notification method with params to the

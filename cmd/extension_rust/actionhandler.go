@@ -31,9 +31,11 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
@@ -54,9 +56,15 @@ func newRustActionHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	wm browserapi.WindowManager, notify browserapi.Notifications,
 	opener browserapi.ResourceOpener, sel *lspcmd.SelectionTracker,
-	exec workspaceapi.Executor, cwd string, experimental bool,
+	exec workspaceapi.Executor, fs workspaceapi.FileSystem,
+	parser syntaxapi.Parser, interrupt term.Interrupter,
+	cwd string, experimental bool,
 ) (textapi.CommandManual, textapi.CommandHandler) {
 	edit := editDeps{lsp: lsp, editor: editor, opener: opener, notify: notify, sel: sel}
+	picks := pickDeps{
+		editor: editor, wm: wm, opener: opener, notify: notify,
+		fs: fs, parser: parser, interrupt: interrupt,
+	}
 	handlers := map[string]textapi.CommandHandler{
 		// Browse every assist applicable at the cursor or selection.
 		"list": codeActionHandler(lsp, editor, notify, wm, sel, "",
@@ -81,23 +89,34 @@ func newRustActionHandler(
 
 		// View/status commands render server output in a floating,
 		// scrollable read-only viewer.
-		"status":       stringViewCmd(lsp, wm, notify, analyzerStatusView(lsp), "rust-analyzer reported no status"),
-		"syntax-tree":  stringViewCmd(lsp, wm, notify, docTextView(lsp, "rust-analyzer/viewSyntaxTree"), "No syntax tree for this file"),
-		"hir":          stringViewCmd(lsp, wm, notify, posTextView(lsp, "rust-analyzer/viewHir"), "No HIR at the cursor"),
-		"mir":          stringViewCmd(lsp, wm, notify, posTextView(lsp, "rust-analyzer/viewMir"), "No MIR at the cursor"),
-		"interpret":    stringViewCmd(lsp, wm, notify, posTextView(lsp, "rust-analyzer/interpretFunction"), "Place the cursor on a const-evaluable function to interpret"),
-		"file-text":    stringViewCmd(lsp, wm, notify, fileTextView(lsp), "No file text available"),
-		"item-tree":    stringViewCmd(lsp, wm, notify, docTextView(lsp, "rust-analyzer/viewItemTree"), "No item tree for this file"),
-		"expand-macro": stringViewCmd(lsp, wm, notify, expandMacroView(lsp), "Place the cursor on a macro invocation to expand it"),
-		"memory-usage": stringViewCmd(lsp, wm, notify, noParamsView(lsp, "rust-analyzer/memoryUsage", nil), "rust-analyzer reported no memory usage"),
-		"crate-graph": stringViewCmd(lsp, wm, notify, noParamsView(lsp, "rust-analyzer/viewCrateGraph", struct {
+		"status":      stringViewCmd(lsp, wm, notify, parser, interrupt, analyzerStatusView(lsp), "rust-analyzer reported no status"),
+		"syntax-tree": stringViewCmd(lsp, wm, notify, parser, interrupt, docTextView(lsp, "rust-analyzer/viewSyntaxTree"), "No syntax tree for this file"),
+		// HIR and MIR are rendered by rust-analyzer as Rust-like source,
+		// so they highlight as Rust.
+		"hir":          stringViewCmd(lsp, wm, notify, parser, interrupt, posTextView(lsp, "rust-analyzer/viewHir"), "No HIR at the cursor").withLang("rust"),
+		"mir":          stringViewCmd(lsp, wm, notify, parser, interrupt, posTextView(lsp, "rust-analyzer/viewMir"), "No MIR at the cursor").withLang("rust"),
+		"interpret":    stringViewCmd(lsp, wm, notify, parser, interrupt, posTextView(lsp, "rust-analyzer/interpretFunction"), "Place the cursor on a const-evaluable function to interpret"),
+		"file-text":    stringViewCmd(lsp, wm, notify, parser, interrupt, fileTextView(lsp), "No file text available").withLang("rust"),
+		"item-tree":    stringViewCmd(lsp, wm, notify, parser, interrupt, docTextView(lsp, "rust-analyzer/viewItemTree"), "No item tree for this file"),
+		"expand-macro": stringViewCmd(lsp, wm, notify, parser, interrupt, expandMacroView(lsp), "Place the cursor on a macro invocation to expand it").withLang("rust"),
+		"memory-usage": stringViewCmd(lsp, wm, notify, parser, interrupt, noParamsView(lsp, "rust-analyzer/memoryUsage", nil), "rust-analyzer reported no memory usage"),
+		"crate-graph": stringViewCmd(lsp, wm, notify, parser, interrupt, noParamsView(lsp, "rust-analyzer/viewCrateGraph", struct {
 			Full bool `json:"full"`
-		}{Full: false}), "No crate graph available"),
-		"dependencies":            stringViewCmd(lsp, wm, notify, dependenciesView(lsp), "No dependencies reported"),
-		"related-tests":           stringViewCmd(lsp, wm, notify, relatedTestsView(lsp), "No related tests for the symbol at the cursor"),
-		"recursive-memory-layout": stringViewCmd(lsp, wm, notify, recursiveMemoryLayoutView(lsp), "No memory layout for the type at the cursor"),
-		"failed-obligations":      stringViewCmd(lsp, wm, notify, failedObligationsView(lsp), "No failed trait obligations at the cursor"),
-		"diagnostics":             stringViewCmd(lsp, wm, notify, diagnosticsView(lsp), "No diagnostics for this file"),
+		}{Full: false}), "No crate graph available").withLang("dot"),
+		"dependencies": &listPickCmd{
+			pickDeps: picks, produce: dependenciesPick(lsp, fs),
+			emptyMsg: "No dependencies reported",
+		},
+		"related-tests": &listPickCmd{
+			pickDeps: picks, produce: relatedTestsPick(lsp),
+			emptyMsg: "No related tests for the symbol at the cursor",
+		},
+		"recursive-memory-layout": stringViewCmd(lsp, wm, notify, parser, interrupt, recursiveMemoryLayoutView(lsp), "No memory layout for the type at the cursor"),
+		"failed-obligations":      stringViewCmd(lsp, wm, notify, parser, interrupt, failedObligationsView(lsp), "No failed trait obligations at the cursor"),
+		"diagnostics": &listPickCmd{
+			pickDeps: picks, produce: diagnosticsPick(lsp),
+			emptyMsg: "No diagnostics for this file",
+		},
 
 		// Workspace/flycheck commands.
 		"reload-workspace":    &wsRequestCmd{lsp: lsp, notify: notify, method: "rust-analyzer/reloadWorkspace", done: "Reloaded the Cargo workspace"},
@@ -129,11 +148,11 @@ func newRustActionHandler(
 			{Name: "expand-macro", Summary: "Expand the macro invocation at the cursor"},
 			{Name: "memory-usage", Summary: "Show rust-analyzer's memory usage"},
 			{Name: "crate-graph", Summary: "Show the crate dependency graph (DOT)"},
-			{Name: "dependencies", Summary: "List the crates in the workspace dependency graph"},
-			{Name: "related-tests", Summary: "List the tests related to the symbol at the cursor"},
+			{Name: "dependencies", Summary: "List the crates in the workspace dependency graph and open one"},
+			{Name: "related-tests", Summary: "List the tests related to the symbol at the cursor and jump to one"},
 			{Name: "recursive-memory-layout", Summary: "Show the recursive memory layout of the type at the cursor"},
 			{Name: "failed-obligations", Summary: "Show failed trait obligations at the cursor"},
-			{Name: "diagnostics", Summary: "List rust-analyzer's diagnostics for the current file"},
+			{Name: "diagnostics", Summary: "List rust-analyzer's diagnostics for the current file and jump to one"},
 			{Name: "reload-workspace", Summary: "Reload the Cargo workspace"},
 			{Name: "rebuild-proc-macros", Summary: "Rebuild the workspace proc macros"},
 			{Name: "run-flycheck", Summary: "Run flycheck (cargo check/clippy) for the current file"},
@@ -147,7 +166,7 @@ func newRustActionHandler(
 	// views, so they register only when the extension's `experimental`
 	// config flag is set.
 	if experimental {
-		runner := &runCmd{lsp: lsp, exec: exec, wm: wm, notify: notify, cwd: cwd}
+		runner := &runCmd{lsp: lsp, exec: exec, wm: wm, notify: notify, parser: parser, cwd: cwd}
 		experimentalHandlers := map[string]textapi.CommandHandler{
 			"parent-module":   &navCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, method: "experimental/parentModule", posArg: true, notFound: "No parent module for this file"},
 			"child-modules":   &navCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, method: "experimental/childModules", posArg: true, notFound: "No child modules for this file"},
@@ -161,12 +180,15 @@ func newRustActionHandler(
 			"move-item-down": &snippetEditCmd{editDeps: edit, method: "experimental/moveItem", direction: "Down", emptyMsg: "Cannot move the item down"},
 			"ssr":            &ssrCmd{editDeps: edit},
 
-			"runnables": stringViewCmd(lsp, wm, notify, runnablesView(lsp), "No runnables at the cursor"),
-			"run":       runner,
-			"type":      &hoverRangeCmd{lsp: lsp, wm: wm, notify: notify, sel: sel},
-			"symbols":   &workspaceSymbolCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify},
-			"hover":     &hoverCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, runner: runner},
-			"eval-predicate": stringViewCmd(lsp, wm, notify, evalPredicateView(lsp),
+			"runnables": &listPickCmd{
+				pickDeps: picks, produce: runnablesPick(lsp),
+				emptyMsg: "No runnables at the cursor",
+			},
+			"run":     runner,
+			"type":    &hoverRangeCmd{lsp: lsp, wm: wm, notify: notify, parser: parser, sel: sel},
+			"symbols": &workspaceSymbolCmd{pickDeps: picks, lsp: lsp},
+			"hover":   &hoverCmd{pickDeps: picks, lsp: lsp, runner: runner},
+			"eval-predicate": stringViewCmd(lsp, wm, notify, parser, interrupt, evalPredicateView(lsp),
 				"rust-analyzer returned no predicate evaluation"),
 		}
 		maps.Copy(handlers, experimentalHandlers)
@@ -181,7 +203,7 @@ func newRustActionHandler(
 			textapi.CommandManual{Name: "move-item-up", Summary: "Move the item at the cursor up"},
 			textapi.CommandManual{Name: "move-item-down", Summary: "Move the item at the cursor down"},
 			textapi.CommandManual{Name: "ssr", Summary: "Run a structural search and replace query (pattern ==>> replacement)"},
-			textapi.CommandManual{Name: "runnables", Summary: "List the runnable cargo targets at the cursor"},
+			textapi.CommandManual{Name: "runnables", Summary: "List the runnable cargo targets at the cursor and jump to one"},
 			textapi.CommandManual{Name: "run", Summary: "Run the cargo target at the cursor (pick one when several apply)"},
 			textapi.CommandManual{Name: "type", Summary: "Show the type of the current selection"},
 			textapi.CommandManual{Name: "symbols", Summary: "Search workspace symbols (types-only, workspace or with dependencies)"},
@@ -190,13 +212,14 @@ func newRustActionHandler(
 		)
 	}
 
-	return manual, &rustActionRouter{handlers: handlers}
+	return manual, &rustActionRouter{handlers: handlers, editor: editor}
 }
 
 var _ textapi.CommandHandler = (*rustActionRouter)(nil)
 
 type rustActionRouter struct {
 	handlers map[string]textapi.CommandHandler
+	editor   textapi.Editor
 }
 
 func (r *rustActionRouter) HandleCommand(
@@ -214,7 +237,24 @@ func (r *rustActionRouter) HandleCommand(
 	if !ok {
 		return fmt.Errorf("unknown rust subcommand: %s", cmd.Name)
 	}
+	r.refreshCursor(&cmd)
 	return h.HandleCommand(ctx, cmd)
+}
+
+// refreshCursor replaces a zero cursor snapshot with the live editor
+// cursor. Dispatch paths that cannot capture a cursor (a non-text
+// window in focus, a stale tab handler) deliver {0,0} alongside a
+// valid resource; trusting it would run every position-based
+// subcommand against the top of the file and apply the resulting
+// edits there. When the cursor genuinely sits at 0,0 the live lookup
+// returns the same position, so the refresh is a no-op.
+func (r *rustActionRouter) refreshCursor(cmd *textapi.Command) {
+	if cmd.Resource == nil || cmd.Cursor.Content != (term.Coordinates{}) {
+		return
+	}
+	if live, err := r.editor.Cursor(cmd.Resource); err == nil {
+		cmd.Cursor.Content = live
+	}
 }
 
 func (r *rustActionRouter) Complete(

@@ -43,8 +43,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 )
@@ -183,6 +185,89 @@ func (f *fakeFS) ReadDir(p string) ([]os.DirEntry, error) {
 		return f.entries, nil
 	}
 	return nil, &iofs.PathError{Op: "readdir", Path: p, Err: os.ErrNotExist}
+}
+
+// recordingParser is a syntaxapi.Parser that records the URIs it is
+// asked to highlight and returns no spans, so tests can assert that
+// viewers and picker previews request syntax highlighting.
+type recordingParser struct {
+	mu   sync.Mutex
+	uris []string
+}
+
+var _ syntaxapi.Parser = (*recordingParser)(nil)
+
+func (p *recordingParser) Highlight(
+	uri workspaceapi.URI, _ string,
+) (iterator.Iterator[textapi.Location], error) {
+	p.mu.Lock()
+	p.uris = append(p.uris, uri.String())
+	p.mu.Unlock()
+	return iterator.Empty[textapi.Location](), nil
+}
+
+func (p *recordingParser) highlighted() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.uris...)
+}
+
+func (p *recordingParser) Search(string, []string, ...string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+
+func (p *recordingParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+
+func (p *recordingParser) Query(workspaceapi.URI, string, []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+
+func (p *recordingParser) QueryNode(workspaceapi.URI, syntaxapi.NodeCaptureName) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+
+func (p *recordingParser) ResolveSymbol(
+	context.Context, string, syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	return iterator.Empty[syntaxapi.Match](), nil
+}
+
+func (p *recordingParser) ListReferencedSymbols(context.Context) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.Empty[string](), nil
+}
+
+// recordingInterrupter counts redraw requests, so tests can assert
+// that asynchronous highlight passes wake the IDE event loop.
+type recordingInterrupter struct {
+	mu    sync.Mutex
+	count int
+}
+
+var _ term.Interrupter = (*recordingInterrupter)(nil)
+
+func (i *recordingInterrupter) Interrupt(context.Context) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.count++
+	return nil
+}
+
+func (i *recordingInterrupter) interrupts() int {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.count
 }
 
 // scriptedCmd records the stdout/stderr payload and exit error returned
@@ -362,18 +447,35 @@ type fakeWindow struct{ id uint64 }
 
 func (w fakeWindow) WindowID() uint64 { return w.id }
 
+// editorWinID and floatingWinID are the window IDs fakeWM hands out,
+// mirroring production where a floating window and the editor window
+// underneath it are distinct.
+const (
+	editorWinID   = 1
+	floatingWinID = 2
+)
+
 // fakeWM is a browserapi.WindowManager that records the floating handler
-// it is asked to show. The code-action picker path is exercised
-// separately in codeaction_test.go; here Floating simply records the
-// handler and returns a window so callers do not block.
+// it is asked to show and the target of SetWindowContent. Focus mirrors
+// production: while a floating window is up, it holds the focus, so a
+// jump that resolves its target window too late lands in the float.
 type fakeWM struct {
 	mu       sync.Mutex
 	floating browserapi.Floating
+	winSet   browserapi.Window
+	content  browserapi.Handler
 }
 
 var _ browserapi.WindowManager = (*fakeWM)(nil)
 
-func (m *fakeWM) Focus() (browserapi.Window, error) { return fakeWindow{id: 1}, nil }
+func (m *fakeWM) Focus() (browserapi.Window, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.floating != nil {
+		return fakeWindow{id: floatingWinID}, nil
+	}
+	return fakeWindow{id: editorWinID}, nil
+}
 
 func (m *fakeWM) Tab(
 	_ workspaceapi.URI, _ rune, _ string, h browserapi.Handler,
@@ -381,7 +483,20 @@ func (m *fakeWM) Tab(
 	return h, nil
 }
 
-func (m *fakeWM) SetWindowContent(browserapi.Window, browserapi.Handler) error { return nil }
+func (m *fakeWM) SetWindowContent(w browserapi.Window, h browserapi.Handler) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.winSet, m.content = w, h
+	return nil
+}
+
+// lastContent returns the window and handler of the most recent
+// SetWindowContent call.
+func (m *fakeWM) lastContent() (browserapi.Window, browserapi.Handler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.winSet, m.content
+}
 
 func (m *fakeWM) Split(
 	browserapi.Orientation, browserapi.Window, browserapi.Handler,
@@ -395,7 +510,7 @@ func (m *fakeWM) Floating(
 	m.mu.Lock()
 	m.floating = h
 	m.mu.Unlock()
-	return fakeWindow{id: 2}, nil
+	return fakeWindow{id: floatingWinID}, nil
 }
 
 func (m *fakeWM) Bar(browserapi.BarConfig, tui.Handler) error {
@@ -494,8 +609,8 @@ func (f realFS) Stat(p string) (os.FileInfo, error)      { return os.Stat(f.reso
 func (f realFS) ReadDir(p string) ([]os.DirEntry, error) { return os.ReadDir(f.resolve(p)) }
 func (f realFS) MkdirAll(p string, m os.FileMode) error  { return os.MkdirAll(f.resolve(p), m) }
 
-func (f realFS) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
-	return nil, errors.New("realFS: OpenFile not supported")
+func (f realFS) OpenFile(p string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	return os.OpenFile(f.resolve(p), flag, mode)
 }
 func (f realFS) Remove(string) error { return errors.New("realFS: Remove not supported") }
 
@@ -615,6 +730,8 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir str
 		lsp,
 		editor,
 		&fakeWM{},
+		nil,
+		nil,
 		nil,
 		fakeInstaller{fs: realFS{root: dir}, root: dataDir},
 		rustupHome, cargoHome, nil,

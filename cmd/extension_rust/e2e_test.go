@@ -34,11 +34,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idelsp"
 )
 
@@ -220,6 +222,59 @@ func TestE2E(t *testing.T) {
 		combined := allEdits(me, resource, env)
 		require.NotEmpty(t, combined, "expected an edit from the picked assist in list mode")
 		assert.Contains(t, combined, "var_name")
+
+		// The assist rewrites the `let` statement on line 1 and inserts
+		// the new binding before line 2's `value`; no edit may touch
+		// line 0. An edit at 0,0 means a layer between rust-analyzer
+		// and the editor dropped the coordinates.
+		for _, e := range me.editsFor(resource) {
+			assert.GreaterOrEqual(t, e.Start.Y, 1,
+				"edit %q applied at %v-%v must not touch line 0", e.NewText, e.Start, e.End)
+			assert.GreaterOrEqual(t, e.End.Y, 1,
+				"edit %q applied at %v-%v must not touch line 0", e.NewText, e.Start, e.End)
+		}
+		for _, ae := range env.capturedEdits() {
+			for _, dc := range ae.Edit.DocumentChanges {
+				if dc.TextDocumentEdit == nil {
+					continue
+				}
+				for _, te := range dc.TextDocumentEdit.Edits {
+					assert.GreaterOrEqual(t, int(te.Range.Start.Line), 1,
+						"applyEdit %q at %+v must not touch line 0", te.NewText, te.Range)
+				}
+			}
+		}
+	})
+
+	// A command dispatched from a context that cannot capture the editor
+	// cursor (a non-text window in focus, a stale tab handler) arrives
+	// with a valid resource but a zero cursor snapshot. The handler must
+	// resolve the live editor cursor instead of running the request
+	// against 0,0 — which offers top-of-file assists and applies the
+	// picked edit at the top of the file.
+	t.Run("ListLiveCursorFallback", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/inline.rs"})
+		handler, me, _ := newTestActionHandler(t, env)
+
+		uri := parseTestURI(t, env.fileURIs["src/inline.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// Live cursor on the `x` usage in `    x * 4` (line 2, col 4).
+		require.NoError(t, me.SetCursor(resource, term.Coordinates{X: 4, Y: 2}))
+
+		// rustCmd carries no cursor: the dispatch snapshot was lost.
+		cmd := rustCmd("list", uri, resource)
+		runAction(t, handler, cmd, "Inline variable")
+
+		combined := allEdits(me, resource, env)
+		require.NotEmpty(t, combined, "expected an inline edit at the live cursor")
+		assert.Contains(t, combined, "1 + 2", "inlining x should substitute its initializer")
+		for _, e := range me.editsFor(resource) {
+			assert.GreaterOrEqual(t, e.Start.Y, 1,
+				"edit %q applied at %v-%v must not touch line 0", e.NewText, e.Start, e.End)
+		}
 	})
 
 	t.Run("OrganizeImports", func(t *testing.T) {
@@ -274,7 +329,7 @@ func TestE2E(t *testing.T) {
 	t.Run("Hir", func(t *testing.T) {
 		t.Parallel()
 		env := initRustAnalyzer(t, raBin, []string{"src/extract_var.rs"})
-		handler, me, _ := newTestActionHandler(t, env)
+		handler, me, _, _, parser := newTestActionHandlerParser(t, env)
 		uri := parseTestURI(t, env.fileURIs["src/extract_var.rs"])
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
@@ -282,18 +337,47 @@ func TestE2E(t *testing.T) {
 		// Cursor inside compute's body.
 		text := runViewer(t, handler, rustCmdAt("hir", uri, resource, 1, 8))
 		assert.NotEmpty(t, text, "hir should return the lowered body")
+		// HIR is fenced as Rust, so the viewer requests highlighting.
+		requireHighlightRequested(t, parser, ".rs")
 	})
 
 	t.Run("Mir", func(t *testing.T) {
 		t.Parallel()
 		env := initRustAnalyzer(t, raBin, []string{"src/extract_var.rs"})
-		handler, me, _ := newTestActionHandler(t, env)
+		handler, me, _, _, parser := newTestActionHandlerParser(t, env)
 		uri := parseTestURI(t, env.fileURIs["src/extract_var.rs"])
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
 
 		text := runViewer(t, handler, rustCmdAt("mir", uri, resource, 0, 7))
 		assert.NotEmpty(t, text, "mir should return the lowered function")
+		// MIR is fenced as Rust, so the viewer requests highlighting.
+		requireHighlightRequested(t, parser, ".rs")
+	})
+
+	// rust-analyzer's MIR lowering panics on functions with a
+	// conditionally reborrowed &mut (mirprobe.rs mirrors the alacritty
+	// function that surfaced this). The extension cannot compute MIR for
+	// it, but the failure must arrive as the server's own message, not
+	// as gRPC status noise, and must not crash the command.
+	t.Run("MirServerPanicSurfacesServerError", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/mirprobe.rs"})
+		handler, me, _ := newTestActionHandler(t, env)
+		uri := parseTestURI(t, env.fileURIs["src/mirprobe.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// Cursor on the `for` loop inside generate_hint_bindings.
+		err := handler.HandleCommand(t.Context(), rustCmdAt("mir", uri, resource, 28, 23))
+		if err == nil {
+			// A future rust-analyzer may lower this function; the viewer
+			// floating instead of an error is the desired outcome then.
+			return
+		}
+		assert.ErrorContains(t, err, "rust-analyzer/viewMir")
+		assert.NotContains(t, err.Error(), "rpc error",
+			"gRPC status noise must not reach the user")
 	})
 
 	t.Run("ItemTree", func(t *testing.T) {
@@ -348,7 +432,9 @@ func TestE2E(t *testing.T) {
 		err := handler.HandleCommand(t.Context(), rustCmdAt("memory-usage", uri, resource, 0, 0))
 		if err != nil {
 			assert.Contains(t, err.Error(), "Memory profiling is not enabled")
+			return
 		}
+		renderViewer(t, handlerWM(t, handler))
 	})
 
 	t.Run("CrateGraph", func(t *testing.T) {
@@ -371,8 +457,12 @@ func TestE2E(t *testing.T) {
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
 
-		text := runViewer(t, handler, rustCmdAt("dependencies", uri, resource, 0, 0))
-		assert.Contains(t, text, "std", "the dependency list includes std")
+		displays, frame := runPicker(t, handler, rustCmdAt("dependencies", uri, resource, 0, 0))
+		assert.Contains(t, strings.Join(displays, "\n"), "std",
+			"the dependency list includes std")
+		// The first crate the server reports (core) is always within the
+		// visible rows, so the rendered list must show it.
+		assert.Contains(t, frame, "core", "the rendered picker lists the crates")
 	})
 
 	t.Run("ParentModule", func(t *testing.T) {
@@ -553,14 +643,34 @@ func TestE2E(t *testing.T) {
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
 
+		// runnables and related-tests present a picker when the server
+		// locates several targets, so they must be driven to dismissal
+		// rather than awaited inline.
+		for _, sub := range []string{"runnables", "related-tests"} {
+			_, _, err := dismissPicker(t, handler, rustCmdAt(sub, uri, resource, 0, 7))
+			if err != nil {
+				assert.NotContains(t, err.Error(), "Failed to deserialize",
+					"%s must send valid params", sub)
+			}
+		}
+		wm := handlerWM(t, handler)
 		for _, sub := range []string{
-			"runnables", "related-tests", "interpret",
-			"recursive-memory-layout", "failed-obligations",
+			"interpret", "recursive-memory-layout", "failed-obligations",
 		} {
+			wm.mu.Lock()
+			wm.floating = nil
+			wm.mu.Unlock()
 			err := handler.HandleCommand(t.Context(), rustCmdAt(sub, uri, resource, 0, 7))
 			if err != nil {
 				assert.NotContains(t, err.Error(), "Failed to deserialize",
 					"%s must send valid params", sub)
+				continue
+			}
+			wm.mu.Lock()
+			view, floated := wm.floating.(*markdownView)
+			wm.mu.Unlock()
+			if floated {
+				renderFloating(t, view, renderW, renderH)
 			}
 		}
 	})
@@ -635,6 +745,33 @@ func TestE2E(t *testing.T) {
 			"workspace/symbol with searchScope/searchKind must be accepted")
 		assert.False(t, mn.hasMessage("No matching"), "Widget resolves with dependency scope")
 		assert.NotEmpty(t, opener.openedURIs())
+	})
+
+	// A query matching several types takes the picker path: the entries
+	// carry workspace-relative displays and the picker renders with a
+	// preview of the focused symbol's file.
+	t.Run("SymbolsPicker", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/predicate.rs"})
+		handler, me, _, _, parser := newTestActionHandlerParser(t, env)
+		uri := parseTestURI(t, env.fileURIs["src/predicate.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// "Mark" matches both the Marker trait and the Marked struct.
+		cmd := rustCmd("symbols", uri, resource)
+		cmd.Args = []string{"symbols", "Mark"}
+		displays, frame := runPicker(t, handler, cmd)
+		joined := strings.Join(displays, "\n")
+		require.Contains(t, joined, "Marker", "the trait matches; got %q", joined)
+		require.Contains(t, joined, "Marked", "the struct matches; got %q", joined)
+		assert.Contains(t, joined, "src/predicate.rs",
+			"entries display workspace-relative paths; got %q", joined)
+		assert.Contains(t, frame, "Marker", "the rendered picker lists the symbols")
+		assert.Contains(t, frame, "pub trait Marker",
+			"the preview pane shows the focused symbol's source; got frame %q", frame)
+		// The preview pane hands the focused file to the parser.
+		requireHighlightRequested(t, parser, "predicate.rs")
 	})
 
 	t.Run("TypeOfSelection", func(t *testing.T) {
@@ -734,10 +871,11 @@ func TestE2E(t *testing.T) {
 			"Marked: Marker holds because impl Marker for Marked exists; got %q", text)
 	})
 
-	// diagnostics pulls rust-analyzer's diagnostics for the current file.
-	// diag.rs assigns a &str to a u32 binding, so rust-analyzer reports a
-	// mismatched-types error. Diagnostics are computed asynchronously after
-	// the file opens, so poll until the error shows up.
+	// diagnostics pulls rust-analyzer's diagnostics for the current file and
+	// offers them in a location picker. diagbin.rs has two mismatched-types
+	// errors, so a picker (rather than a direct jump) is shown. Diagnostics
+	// are computed asynchronously after the file opens, so poll until they
+	// show up.
 	t.Run("Diagnostics", func(t *testing.T) {
 		t.Parallel()
 		env := initRustAnalyzer(t, raBin, []string{"src/diagbin.rs"})
@@ -746,10 +884,11 @@ func TestE2E(t *testing.T) {
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
 
-		var text string
+		var text, frame string
 		deadline := time.Now().Add(30 * time.Second)
 		for time.Now().Before(deadline) {
-			text = runViewerOrEmpty(t, handler, rustCmdAt("diagnostics", uri, resource, 1, 0))
+			displays, f := runPicker(t, handler, rustCmdAt("diagnostics", uri, resource, 1, 0))
+			text, frame = strings.Join(displays, "\n"), f
 			if strings.Contains(text, "E0308") {
 				break
 			}
@@ -761,6 +900,10 @@ func TestE2E(t *testing.T) {
 			"diagnostics should report the type-mismatch error code; got %q", text)
 		assert.Contains(t, strings.ToLower(text), "expected u32",
 			"diagnostics should include the diagnostic message; got %q", text)
+		assert.Contains(t, frame, "E0308",
+			"the rendered picker lists the diagnostics; got frame %q", frame)
+		assert.Contains(t, frame, "not a number",
+			"the preview pane shows the diagnosed source line; got frame %q", frame)
 	})
 
 	// run fetches the runnable at the cursor and hands the reconstructed
@@ -903,39 +1046,48 @@ func handlerWM(t *testing.T, handler textapi.CommandHandler) *fakeWM {
 	return nil
 }
 
-// runViewer runs a viewer subcommand and returns the text of the floating
-// textView it displays, failing if no viewer appears.
-func runViewer(t *testing.T, handler textapi.CommandHandler, cmd textapi.Command) string {
+// renderW/renderH size the terminal frame every floated handler is
+// rendered into during e2e verification.
+const (
+	renderW = 100
+	renderH = 40
+)
+
+// renderFloating drives a floated handler through the real draw
+// pipeline — resize, draw, and a redraw-stability pass via
+// handlertest.RunHandlerSequence — and returns the rendered frame.
+func renderFloating(t *testing.T, f browserapi.Floating, w, h int) string {
 	t.Helper()
-	wm := handlerWM(t, handler)
-	require.NoError(t, handler.HandleCommand(context.Background(), cmd))
-	wm.mu.Lock()
-	f := wm.floating
-	wm.mu.Unlock()
-	view, ok := f.(*textView)
-	require.True(t, ok, "expected a textView to be shown")
-	return view.text
+	f.Resize(w, h)
+	frame := handlertest.DrawHandler(f, w, h)
+	require.NotEmpty(t, strings.TrimSpace(frame), "floated %T rendered a blank frame", f)
+	handlertest.RunHandlerSequence(t, f, w, h,
+		[]handlertest.SequenceTestCase{{InputSequence: "", Expected: frame}})
+	return frame
 }
 
-// runViewerOrEmpty runs a viewer subcommand and returns the floating
-// textView's text, or "" when the command showed no viewer (e.g. an empty
-// result reported via a notification). It clears any previously recorded
-// floating handler first so repeated polling calls do not observe a stale
-// viewer from an earlier iteration.
-func runViewerOrEmpty(t *testing.T, handler textapi.CommandHandler, cmd textapi.Command) string {
+// runViewer runs a viewer subcommand, renders the floating viewer it
+// displays through the draw pipeline, and returns the rendered frame.
+func runViewer(t *testing.T, handler textapi.CommandHandler, cmd textapi.Command) string {
 	t.Helper()
 	wm := handlerWM(t, handler)
 	wm.mu.Lock()
 	wm.floating = nil
 	wm.mu.Unlock()
 	require.NoError(t, handler.HandleCommand(context.Background(), cmd))
+	return renderViewer(t, wm)
+}
+
+// renderViewer renders the markdown viewer currently floated on wm and
+// returns the frame.
+func renderViewer(t *testing.T, wm *fakeWM) string {
+	t.Helper()
 	wm.mu.Lock()
 	f := wm.floating
 	wm.mu.Unlock()
-	if view, ok := f.(*textView); ok {
-		return view.text
-	}
-	return ""
+	view, ok := f.(*markdownView)
+	require.True(t, ok, "expected a markdown viewer to be shown, got %T", f)
+	return renderFloating(t, view, renderW, renderH)
 }
 
 // runHoverAction runs a `rust hover` command, waits for the hover-action
@@ -982,19 +1134,45 @@ func runHoverAction(
 		wm.mu.Unlock()
 		if picker, ok := f.(*listPicker); ok {
 			labels := append([]string(nil), picker.labels...)
+			renderFloating(t, picker, renderW, renderH)
 			selectListPicker(picker, want)
-			select {
-			case err := <-done:
-				require.NoError(t, err)
-			case <-time.After(20 * time.Second):
-				t.Fatalf("timed out completing hover action for %q", want)
-			}
+			awaitCommand(t, wm, done, fmt.Sprintf("hover action for %q", want))
 			return labels
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for hover-action picker for %q", want)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// awaitCommand waits for a command goroutine to finish, rendering and
+// dismissing any location picker it floats along the way. A
+// showReferences hover action blocks on such a picker until the user
+// chooses or cancels.
+func awaitCommand(t *testing.T, wm *fakeWM, done <-chan error, what string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+			return
+		case <-time.After(20 * time.Millisecond):
+		}
+		wm.mu.Lock()
+		view, isPicker := wm.floating.(*pickerView)
+		wm.mu.Unlock()
+		if isPicker {
+			renderFloating(t, view, renderW, renderH)
+			require.NoError(t, view.Close())
+			wm.mu.Lock()
+			wm.floating = nil
+			wm.mu.Unlock()
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out completing %s", what)
+		}
 	}
 }
 
@@ -1018,7 +1196,8 @@ func selectListPicker(picker *listPicker, want string) {
 
 // runRunAction runs a `rust run` command, waits for the runnables picker,
 // selects the entry whose label contains want, drives the command to
-// completion, and returns the text of the output viewer it then shows.
+// completion, and returns the rendered frame of the output viewer it
+// then shows.
 func runRunAction(
 	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command, want string,
 ) string {
@@ -1036,13 +1215,14 @@ func runRunAction(
 		select {
 		case err := <-done:
 			require.NoError(t, err)
-			return viewerText(wm)
+			return renderViewer(t, wm)
 		default:
 		}
 		wm.mu.Lock()
 		picker, isPicker := wm.floating.(*listPicker)
 		wm.mu.Unlock()
 		if isPicker {
+			renderFloating(t, picker, renderW, renderH)
 			selectListPicker(picker, want)
 			select {
 			case err := <-done:
@@ -1050,7 +1230,7 @@ func runRunAction(
 			case <-time.After(20 * time.Second):
 				t.Fatalf("timed out completing run action for %q", want)
 			}
-			return viewerText(wm)
+			return renderViewer(t, wm)
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for runnables picker for %q", want)
@@ -1059,13 +1239,74 @@ func runRunAction(
 	}
 }
 
-// viewerText returns the text of the floating textView currently recorded on
-// wm, or "" when the latest floating handler is not a textView.
-func viewerText(wm *fakeWM) string {
+// pickerDisplays returns the display strings of the floating location
+// picker currently recorded on wm, or nil when none is shown.
+func pickerDisplays(wm *fakeWM) []string {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
-	if view, ok := wm.floating.(*textView); ok {
-		return view.text
+	view, ok := wm.floating.(*pickerView)
+	if !ok {
+		return nil
 	}
-	return ""
+	entries := view.Entries()
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Display
+	}
+	return out
+}
+
+// runPicker is dismissPicker with the command required to succeed.
+func runPicker(
+	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command,
+) ([]string, string) {
+	t.Helper()
+	displays, frame, err := dismissPicker(t, handler, cmd)
+	require.NoError(t, err)
+	return displays, frame
+}
+
+// dismissPicker runs a location-list subcommand and returns the
+// displays and rendered frame of the floating picker it shows, after
+// dismissing it. Both are empty when the command completed without a
+// picker (nothing to show, or a single result it jumped to directly).
+func dismissPicker(
+	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command,
+) ([]string, string, error) {
+	t.Helper()
+	wm := handlerWM(t, handler)
+	wm.mu.Lock()
+	wm.floating = nil
+	wm.mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() { done <- handler.HandleCommand(context.Background(), cmd) }()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		select {
+		case err := <-done:
+			return nil, "", err
+		default:
+		}
+		wm.mu.Lock()
+		view, isPicker := wm.floating.(*pickerView)
+		wm.mu.Unlock()
+		if isPicker {
+			displays := pickerDisplays(wm)
+			frame := renderFloating(t, view, renderW, renderH)
+			require.NoError(t, view.Close())
+			select {
+			case err := <-done:
+				return displays, frame, err
+			case <-time.After(20 * time.Second):
+				t.Fatalf("timed out dismissing the %v picker", cmd.Args)
+			}
+			return displays, frame, nil
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for the %v picker", cmd.Args)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }

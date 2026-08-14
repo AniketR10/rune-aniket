@@ -337,7 +337,7 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		&fakeWM{}, nil, fakeInstaller{fs: fs, root: "/data"},
+		&fakeWM{}, nil, nil, nil, fakeInstaller{fs: fs, root: "/data"},
 		"/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
@@ -364,7 +364,7 @@ func TestExtendWorkspaceWithoutCargoHome(t *testing.T) {
 
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
-		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{}, nil,
+		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{}, nil, nil, nil,
 		fakeInstaller{fs: fs, root: "/data"}, "/rustup", "", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
 		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
@@ -407,7 +407,7 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, newFakeNotifications(), lsp, editor,
-		&fakeWM{}, nil, fakeInstaller{fs: fs, root: "/data"},
+		&fakeWM{}, nil, nil, nil, fakeInstaller{fs: fs, root: "/data"},
 		"/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
 		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
@@ -445,7 +445,7 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{},
-		nil, fakeInstaller{fs: fs, root: "/data"}, "/rustup", "/cargo", nil,
+		nil, nil, nil, fakeInstaller{fs: fs, root: "/data"}, "/rustup", "/cargo", nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
 			return nil

@@ -32,10 +32,12 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // runnable is rust-analyzer's experimental/runnables result item. It is a
@@ -68,11 +70,13 @@ type runnableArgsJSON struct {
 // the VS Code client's command reconstruction (createTaskFromRunnable) so
 // the executed cargo/shell command matches what rust-analyzer intends.
 type runCmd struct {
-	lsp    semanticapi.LSP
-	exec   workspaceapi.Executor
-	wm     browserapi.WindowManager
-	notify browserapi.Notifications
-	cwd    string
+	lsp       semanticapi.LSP
+	exec      workspaceapi.Executor
+	wm        browserapi.WindowManager
+	notify    browserapi.Notifications
+	parser    syntaxapi.Parser
+	interrupt term.Interrupter
+	cwd       string
 }
 
 var _ textapi.CommandHandler = (*runCmd)(nil)
@@ -148,12 +152,7 @@ func (c *runCmd) run(ctx context.Context, r runnable) error {
 	if runErr != nil {
 		out = strings.TrimSpace(out + "\n\n" + runErr.Error())
 	}
-	if _, err := c.wm.Floating(newTextView(header+out), browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	}); err != nil {
-		return fmt.Errorf("show output: %w", err)
-	}
-	return nil
+	return showMarkdown(c.wm, c.parser, c.interrupt, fencedCode(header+out, ""))
 }
 
 func (c *runCmd) Complete(_ context.Context, _ string, _ []string) (

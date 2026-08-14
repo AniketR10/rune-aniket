@@ -72,43 +72,46 @@ func (c *navCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "%s", c.notFound)
 		return nil
 	}
-	return c.open(cmd.URI, entries[0])
-}
-
-func (c *navCmd) open(base workspaceapi.URI, loc semanticapi.Location) error {
-	return openLocation(c.editor, c.wm, c.opener, base, loc)
+	win, err := c.wm.Focus()
+	if err != nil {
+		return err
+	}
+	return openLocation(c.editor, c.wm, c.opener, win, cmd.URI, entries[0])
 }
 
 // openLocation opens the file at loc, focuses it, and moves the cursor to
 // the start of loc's range. It is shared by the navigation and
-// workspace-symbol commands. base is any URI of the workspace, used to
-// rebase the server's file:// location onto the workspace scheme.
+// workspace-symbol commands. win is the window the file lands in; it
+// must be captured before any floating window opens, since the float
+// holds the focus while it is up. base is any URI of the workspace,
+// used to rebase the server's file:// location onto the workspace
+// scheme.
 func openLocation(
 	editor textapi.Editor, wm browserapi.WindowManager,
-	opener browserapi.ResourceOpener, base workspaceapi.URI,
-	loc semanticapi.Location,
+	opener browserapi.ResourceOpener, win browserapi.Window,
+	base workspaceapi.URI, loc semanticapi.Location,
 ) error {
 	uri, err := lspcmd.LspToURI(base, loc.URI)
 	if err != nil {
 		return err
 	}
-	if _, err := opener.Open(uri); err != nil {
+	h, err := opener.Open(uri)
+	if err != nil {
 		return fmt.Errorf("open %s: %w", uri.Name(), err)
 	}
-	w, err := wm.Focus()
-	if err != nil {
+	// The window content must be the opener's handler: the browser
+	// recognizes only its own tokens, and streaming the symbolic editor
+	// handle below panics the extension on the IDE's first Resize.
+	if err := wm.SetWindowContent(win, h); err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
 	}
-	h, err := editor.Editor(uri)
+	eh, err := editor.Editor(uri)
 	if err != nil {
-		return err
-	}
-	if err := wm.SetWindowContent(w, h); err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
 	}
 	target := lspcmd.PosToCoord(loc.Range.Start)
-	if err := editor.SetCursor(h, target); err != nil {
-		if cur, curErr := editor.Cursor(h); curErr == nil && cur == target {
+	if err := editor.SetCursor(eh, target); err != nil {
+		if cur, curErr := editor.Cursor(eh); curErr == nil && cur == target {
 			return nil
 		}
 		return err

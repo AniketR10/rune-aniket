@@ -36,8 +36,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/extension/langext"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
@@ -87,6 +89,8 @@ func (e *rustExtension) ExtendWorkspace(
 		w.Editor(ctx),
 		w.WindowManager(ctx),
 		w.ResourceOpener(ctx),
+		w.Parser(ctx),
+		w.Interrupter(ctx),
 		w,
 		os.Getenv("RUSTUP_HOME"),
 		os.Getenv("CARGO_HOME"),
@@ -105,6 +109,8 @@ func (e *rustExtension) extendWorkspaceWith(
 	editor textapi.Editor,
 	wm browserapi.WindowManager,
 	opener browserapi.ResourceOpener,
+	parser syntaxapi.Parser,
+	interrupt term.Interrupter,
 	inst installer,
 	rustupHome, cargoHome string,
 	cfg config.Config,
@@ -156,7 +162,8 @@ func (e *rustExtension) extendWorkspaceWith(
 		return fmt.Errorf("subscribe selection events: %w", err)
 	}
 	actionManual, actionHandler := newRustActionHandler(
-		lsp, editor, wm, notify, opener, sel, exec, cwd.Path(), experimental)
+		lsp, editor, wm, notify, opener, sel, exec, fs, parser, interrupt,
+		cwd.Path(), experimental)
 	if err := registerCommand(actionManual, actionHandler); err != nil {
 		return fmt.Errorf("register rust action command: %w", err)
 	}

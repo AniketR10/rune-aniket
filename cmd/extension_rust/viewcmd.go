@@ -25,15 +25,15 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // viewResult builds the text a viewer command displays from the raw
@@ -45,11 +45,18 @@ type viewResult func(ctx context.Context, cmd textapi.Command) (string, error)
 // scrollable read-only viewer. The empty-output case reports a hint
 // instead of floating an empty window.
 type viewCmd struct {
-	lsp      semanticapi.LSP
-	wm       browserapi.WindowManager
-	notify   browserapi.Notifications
-	produce  viewResult
-	emptyMsg string
+	lsp    semanticapi.LSP
+	wm     browserapi.WindowManager
+	notify browserapi.Notifications
+	parser syntaxapi.Parser
+	// interrupt wakes the IDE event loop when asynchronous highlight
+	// results land, so the repaint is not deferred to the next input.
+	interrupt term.Interrupter
+	produce   viewResult
+	emptyMsg  string
+	// lang tags the fenced code block the output is wrapped in, so the
+	// viewer can highlight it. Server output is never markdown.
+	lang string
 }
 
 var _ textapi.CommandHandler = (*viewCmd)(nil)
@@ -63,12 +70,7 @@ func (c *viewCmd) HandleCommand(ctx context.Context, cmd textapi.Command) error 
 		_, _ = c.notify.Notify(browserapi.LevelInfo, "%s", c.emptyMsg)
 		return nil
 	}
-	if _, err := c.wm.Floating(newTextView(text), browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	}); err != nil {
-		return fmt.Errorf("show viewer: %w", err)
-	}
-	return nil
+	return showMarkdown(c.wm, c.parser, c.interrupt, fencedCode(text, c.lang))
 }
 
 func (c *viewCmd) Complete(_ context.Context, _ string, _ []string) (
@@ -90,9 +92,20 @@ func requireFile(cmd textapi.Command) error {
 // JSON string (or an object rust-analyzer renders as one).
 func stringViewCmd(
 	lsp semanticapi.LSP, wm browserapi.WindowManager,
-	notify browserapi.Notifications, produce viewResult, emptyMsg string,
+	notify browserapi.Notifications, parser syntaxapi.Parser,
+	interrupt term.Interrupter, produce viewResult, emptyMsg string,
 ) *viewCmd {
-	return &viewCmd{lsp: lsp, wm: wm, notify: notify, produce: produce, emptyMsg: emptyMsg}
+	return &viewCmd{
+		lsp: lsp, wm: wm, notify: notify, parser: parser,
+		interrupt: interrupt, produce: produce, emptyMsg: emptyMsg,
+	}
+}
+
+// withLang tags the viewer's fenced output with a language so the
+// markdown renderer highlights it.
+func (c *viewCmd) withLang(lang string) *viewCmd {
+	c.lang = lang
+	return c
 }
 
 // posTextView requests a position-based rust-analyzer method returning a
@@ -179,86 +192,6 @@ func noParamsView(lsp semanticapi.LSP, method string, params any) viewResult {
 	}
 }
 
-// dependenciesView requests fetchDependencyList and renders one crate per
-// line as "name version".
-func dependenciesView(lsp semanticapi.LSP) viewResult {
-	return func(ctx context.Context, cmd textapi.Command) (string, error) {
-		res, err := execRequest[struct {
-			Crates []struct {
-				Name    string `json:"name"`
-				Version string `json:"version"`
-				Path    string `json:"path"`
-			} `json:"crates"`
-		}](ctx, lsp, "rust-analyzer/fetchDependencyList", struct{}{})
-		if err != nil {
-			return "", err
-		}
-		var b []byte
-		for _, c := range res.Crates {
-			line := c.Name
-			if c.Version != "" {
-				line += " " + c.Version
-			}
-			b = append(b, line...)
-			b = append(b, '\n')
-		}
-		return string(b), nil
-	}
-}
-
-// runnablesView requests runnables at the cursor and lists their labels.
-// Rune does not run cargo targets from this surface, so the labels are
-// informational only.
-func runnablesView(lsp semanticapi.LSP) viewResult {
-	return func(ctx context.Context, cmd textapi.Command) (string, error) {
-		if err := requireFile(cmd); err != nil {
-			return "", err
-		}
-		params := struct {
-			TextDocument semanticapi.TextDocumentIdentifier `json:"textDocument"`
-			Position     *semanticapi.Position              `json:"position,omitempty"`
-		}{TextDocument: docParams(cmd)}
-		pos := posParams(cmd).Position
-		params.Position = &pos
-		res, err := execRequest[[]struct {
-			Label string `json:"label"`
-		}](ctx, lsp, "experimental/runnables", params)
-		if err != nil {
-			return "", err
-		}
-		var b []byte
-		for _, r := range res {
-			b = append(b, r.Label...)
-			b = append(b, '\n')
-		}
-		return string(b), nil
-	}
-}
-
-// relatedTestsView requests relatedTests at the cursor and lists the test
-// runnable labels.
-func relatedTestsView(lsp semanticapi.LSP) viewResult {
-	return func(ctx context.Context, cmd textapi.Command) (string, error) {
-		if err := requireFile(cmd); err != nil {
-			return "", err
-		}
-		res, err := execRequest[[]struct {
-			Runnable struct {
-				Label string `json:"label"`
-			} `json:"runnable"`
-		}](ctx, lsp, "rust-analyzer/relatedTests", posParams(cmd))
-		if err != nil {
-			return "", err
-		}
-		var b []byte
-		for _, r := range res {
-			b = append(b, r.Runnable.Label...)
-			b = append(b, '\n')
-		}
-		return string(b), nil
-	}
-}
-
 // evalPredicateView asks rust-analyzer to evaluate a trait predicate (e.g.
 // `T: Clone`) in the context of the item at the cursor, and renders the
 // resulting status and message. The predicate text comes from the command
@@ -326,75 +259,4 @@ func failedObligationsView(lsp semanticapi.LSP) viewResult {
 		}
 		return execRequest[string](ctx, lsp, "rust-analyzer/getFailedObligations", posParams(cmd))
 	}
-}
-
-// diagnosticsView pulls the diagnostics for the current file and renders
-// each as "severity[code] line:col message". When rust-analyzer attaches a
-// rustc-rendered ANSI block (data.rendered, from the colorDiagnosticOutput
-// capability), that full compiler output is appended verbatim.
-func diagnosticsView(lsp semanticapi.LSP) viewResult {
-	return func(ctx context.Context, cmd textapi.Command) (string, error) {
-		if err := requireFile(cmd); err != nil {
-			return "", err
-		}
-		report, err := lsp.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
-			TextDocument: docParams(cmd),
-		})
-		if err != nil {
-			return "", fmt.Errorf("document diagnostics: %w", err)
-		}
-		var b strings.Builder
-		for _, d := range report.Items {
-			fmt.Fprintf(&b, "%s%s %d:%d %s\n",
-				diagnosticSeverityLabel(d.Severity), diagnosticCode(d),
-				d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message)
-			if rendered := diagnosticRendered(d.Data); rendered != "" {
-				b.WriteString(rendered)
-				if !strings.HasSuffix(rendered, "\n") {
-					b.WriteByte('\n')
-				}
-			}
-		}
-		return b.String(), nil
-	}
-}
-
-func diagnosticSeverityLabel(s semanticapi.DiagnosticSeverity) string {
-	switch s {
-	case semanticapi.DiagnosticSeverityError:
-		return "error"
-	case semanticapi.DiagnosticSeverityWarning:
-		return "warning"
-	case semanticapi.DiagnosticSeverityInformation:
-		return "info"
-	case semanticapi.DiagnosticSeverityHint:
-		return "hint"
-	default:
-		return "diagnostic"
-	}
-}
-
-func diagnosticCode(d semanticapi.Diagnostic) string {
-	if d.CodeIsInt {
-		return fmt.Sprintf("[%d]", d.CodeInt)
-	}
-	if d.Code != "" {
-		return "[" + d.Code + "]"
-	}
-	return ""
-}
-
-// diagnosticRendered extracts rust-analyzer's rustc-rendered ANSI output
-// from a diagnostic's data field, when present.
-func diagnosticRendered(data json.RawMessage) string {
-	if len(data) == 0 {
-		return ""
-	}
-	var v struct {
-		Rendered string `json:"rendered"`
-	}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return ""
-	}
-	return v.Rendered
 }

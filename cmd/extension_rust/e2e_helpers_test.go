@@ -238,6 +238,20 @@ func newTestActionHandlerOpener(
 	t *testing.T, env *rustEnvE2E,
 ) (textapi.CommandHandler, *mockEditor, *mockNotifications, *mockResourceOpener) {
 	t.Helper()
+	handler, me, mn, opener, _ := newTestActionHandlerParser(t, env)
+	return handler, me, mn, opener
+}
+
+// newTestActionHandlerParser is newTestActionHandlerOpener that also
+// returns the recording parser, for tests that assert the viewers and
+// picker previews request syntax highlighting.
+func newTestActionHandlerParser(
+	t *testing.T, env *rustEnvE2E,
+) (
+	textapi.CommandHandler, *mockEditor, *mockNotifications,
+	*mockResourceOpener, *recordingParser,
+) {
+	t.Helper()
 	me := newMockEditor()
 	me.onCellEdit = func(uri workspaceapi.URI, start, end term.Coordinates, text string) {
 		env.mgr.Handle(context.Background(), textapi.Event{
@@ -253,9 +267,11 @@ func newTestActionHandlerOpener(
 	require.NoError(t, me.SubscribeEvents(
 		[]textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}, sel))
 	opener := newMockResourceOpener(me)
+	parser := &recordingParser{}
 	_, handler := newRustActionHandler(
-		env.mgr, me, &fakeWM{}, mn, opener, sel, newDirExecutor(env.dir), env.dir, true)
-	return handler, me, mn, opener
+		env.mgr, me, &fakeWM{}, mn, opener, sel, newDirExecutor(env.dir),
+		realFS{root: env.dir}, parser, nil, env.dir, true)
+	return handler, me, mn, opener, parser
 }
 
 // newTestActionHandlerExec is newTestActionHandler wired with a caller-
@@ -272,7 +288,8 @@ func newTestActionHandlerExec(
 		[]textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}, sel))
 	opener := newMockResourceOpener(me)
 	_, handler := newRustActionHandler(
-		env.mgr, me, &fakeWM{}, mn, opener, sel, exec, env.dir, true)
+		env.mgr, me, &fakeWM{}, mn, opener, sel, exec, realFS{root: env.dir},
+		&recordingParser{}, nil, env.dir, true)
 	return handler, me, mn
 }
 
