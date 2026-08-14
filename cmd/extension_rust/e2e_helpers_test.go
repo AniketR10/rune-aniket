@@ -270,7 +270,7 @@ func newTestActionHandlerParser(
 	parser := &recordingParser{}
 	_, handler := newRustActionHandler(
 		env.mgr, me, &fakeWM{}, mn, opener, sel, newDirExecutor(env.dir),
-		realFS{root: env.dir}, parser, nil, env.dir, true)
+		realFS{root: env.dir}, parser, nil, env.dir, true, true)
 	return handler, me, mn, opener, parser
 }
 
@@ -289,7 +289,7 @@ func newTestActionHandlerExec(
 	opener := newMockResourceOpener(me)
 	_, handler := newRustActionHandler(
 		env.mgr, me, &fakeWM{}, mn, opener, sel, exec, realFS{root: env.dir},
-		&recordingParser{}, nil, env.dir, true)
+		&recordingParser{}, nil, env.dir, true, true)
 	return handler, me, mn
 }
 

@@ -58,7 +58,7 @@ func newRustActionHandler(
 	opener browserapi.ResourceOpener, sel *lspcmd.SelectionTracker,
 	exec workspaceapi.Executor, fs workspaceapi.FileSystem,
 	parser syntaxapi.Parser, interrupt term.Interrupter,
-	cwd string, experimental bool,
+	cwd string, experimental, memoryUsage bool,
 ) (textapi.CommandManual, textapi.CommandHandler) {
 	edit := editDeps{lsp: lsp, editor: editor, opener: opener, notify: notify, sel: sel}
 	picks := pickDeps{
@@ -99,7 +99,6 @@ func newRustActionHandler(
 		"file-text":    stringViewCmd(lsp, wm, notify, parser, interrupt, fileTextView(lsp), "No file text available").withLang("rust"),
 		"item-tree":    stringViewCmd(lsp, wm, notify, parser, interrupt, docTextView(lsp, "rust-analyzer/viewItemTree"), "No item tree for this file"),
 		"expand-macro": stringViewCmd(lsp, wm, notify, parser, interrupt, expandMacroView(lsp), "Place the cursor on a macro invocation to expand it").withLang("rust"),
-		"memory-usage": stringViewCmd(lsp, wm, notify, parser, interrupt, noParamsView(lsp, "rust-analyzer/memoryUsage", nil), "rust-analyzer reported no memory usage"),
 		"crate-graph": stringViewCmd(lsp, wm, notify, parser, interrupt, noParamsView(lsp, "rust-analyzer/viewCrateGraph", struct {
 			Full bool `json:"full"`
 		}{Full: false}), "No crate graph available").withLang("dot"),
@@ -146,7 +145,6 @@ func newRustActionHandler(
 			{Name: "file-text", Summary: "Show rust-analyzer's view of the current file text"},
 			{Name: "item-tree", Summary: "Show the item tree of the current file"},
 			{Name: "expand-macro", Summary: "Expand the macro invocation at the cursor"},
-			{Name: "memory-usage", Summary: "Show rust-analyzer's memory usage"},
 			{Name: "crate-graph", Summary: "Show the crate dependency graph (DOT)"},
 			{Name: "dependencies", Summary: "List the crates in the workspace dependency graph and open one"},
 			{Name: "related-tests", Summary: "List the tests related to the symbol at the cursor and jump to one"},
@@ -210,6 +208,19 @@ func newRustActionHandler(
 			textapi.CommandManual{Name: "hover", Summary: "Show hover docs as markdown and pick a hover action (run/debug, go to impl/type)"},
 			textapi.CommandManual{Name: "eval-predicate", Summary: "Evaluate a trait predicate at the cursor (e.g. rust eval-predicate T: Clone)"},
 		)
+	}
+
+	// memoryUsage is a tool for developing rust-analyzer itself: the
+	// release build we ship rejects rust-analyzer/memoryUsage, which is
+	// only answered by a memory-profiling build the user points lsp_path
+	// at.
+	if memoryUsage {
+		handlers["memory-usage"] = stringViewCmd(lsp, wm, notify, parser, interrupt,
+			noParamsView(lsp, "rust-analyzer/memoryUsage", nil), "rust-analyzer reported no memory usage")
+		manual.Commands = append(manual.Commands, textapi.CommandManual{
+			Name:    "memory-usage",
+			Summary: "Show rust-analyzer's memory usage (needs a memory-profiling rust-analyzer build)",
+		})
 	}
 
 	return manual, &rustActionRouter{handlers: handlers, editor: editor}

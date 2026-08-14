@@ -184,6 +184,24 @@ func TestRustLogFilter(t *testing.T) {
 	assert.NotEmpty(t, notify.notifs)
 }
 
+func TestReadMemoryUsage(t *testing.T) {
+	assert.False(t, readMemoryUsage(nil, newFakeNotifications()))
+	assert.False(t, readMemoryUsage(
+		config.JSONFromMap(map[string]any{}), newFakeNotifications()))
+
+	enabled := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"memory_usage": true},
+	})
+	assert.True(t, readMemoryUsage(enabled, newFakeNotifications()))
+
+	invalid := config.JSONFromMap(map[string]any{
+		"debug": map[string]any{"memory_usage": "yes"},
+	})
+	notify := newFakeNotifications()
+	assert.False(t, readMemoryUsage(invalid, notify))
+	assert.NotEmpty(t, notify.notifs)
+}
+
 // TestRustInitializeOptionsExtras guards the initialization options we
 // forward to rust-analyzer beyond the baseline: import shaping so
 // organize-imports and auto-import assists produce idiomatic use trees,

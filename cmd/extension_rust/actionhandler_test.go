@@ -38,13 +38,13 @@ import (
 
 func newTestActionRouter(lsp semanticapi.LSP, notify *fakeNotifications) textapi.CommandHandler {
 	_, h := newRustActionHandler(lsp, &fakeEditor{}, &fakeWM{}, notify, nil,
-		lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true)
+		lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true, true)
 	return h
 }
 
 func TestRustActionManualListsSubcommands(t *testing.T) {
 	manual, _ := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
-		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true)
+		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true, true)
 	assert.Equal(t, actionCmdName, manual.Name)
 	names := make(map[string]bool)
 	for _, c := range manual.Commands {
@@ -68,7 +68,7 @@ func TestRustActionExperimentalGating(t *testing.T) {
 	manualNames := func(experimental bool) map[string]bool {
 		manual, h := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
 			newFakeNotifications(), nil, lspcmd.NewSelectionTracker(),
-			newFakeExecutor(), newFakeFS(), nil, nil, "/ws", experimental)
+			newFakeExecutor(), newFakeFS(), nil, nil, "/ws", experimental, false)
 		names := make(map[string]bool)
 		for _, c := range manual.Commands {
 			names[c.Name] = true
@@ -92,6 +92,31 @@ func TestRustActionExperimentalGating(t *testing.T) {
 	for _, name := range append(append([]string{}, experimentalOnly...), alwaysOn...) {
 		assert.True(t, on[name], "%q must register with the experimental flag", name)
 	}
+}
+
+// memory-usage registers only when the debug.memory_usage flag is set,
+// independently of the experimental flag.
+func TestRustActionMemoryUsageGating(t *testing.T) {
+	registered := func(memoryUsage bool) (manual, handler bool) {
+		m, h := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
+			newFakeNotifications(), nil, lspcmd.NewSelectionTracker(),
+			newFakeExecutor(), newFakeFS(), nil, nil, "/ws", true, memoryUsage)
+		for _, c := range m.Commands {
+			if c.Name == "memory-usage" {
+				manual = true
+			}
+		}
+		_, handler = h.(*rustActionRouter).handlers["memory-usage"]
+		return manual, handler
+	}
+
+	offManual, offHandler := registered(false)
+	assert.False(t, offManual, "memory-usage must not be in the manual without the flag")
+	assert.False(t, offHandler, "memory-usage must not register without the flag")
+
+	onManual, onHandler := registered(true)
+	assert.True(t, onManual, "memory-usage must be in the manual with the flag")
+	assert.True(t, onHandler, "memory-usage must register with the flag")
 }
 
 func TestRustActionRouterUnknownCommand(t *testing.T) {

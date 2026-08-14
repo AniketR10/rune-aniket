@@ -88,6 +88,30 @@ func readExperimental(cfg config.Config, notify browserapi.Notifications) bool {
 	return v
 }
 
+// readMemoryUsage reports whether extensions.rust.config.debug.memory_usage
+// is set. It gates the `memory-usage` subcommand, which only a
+// rust-analyzer built with `--features dhat --profile dev-rel` answers;
+// every other build rejects the request. A missing key or non-bool value
+// resolves to false.
+func readMemoryUsage(cfg config.Config, notify browserapi.Notifications) bool {
+	if cfg == nil {
+		return false
+	}
+	debug, err := cfg.GetConfig("debug")
+	if err != nil || debug == nil {
+		return false
+	}
+	v, err := debug.GetBool("memory_usage")
+	if err != nil {
+		if !errors.Is(err, config.ErrNotFound) && notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.rust.config.debug.memory_usage must be a bool: %v", err)
+		}
+		return false
+	}
+	return v
+}
+
 // resolveRustAnalyzer returns the rust-analyzer language server path. A
 // configured lsp_path overrides the bundled binary, which the package
 // ships under the install root's bin/ on the workspace host. Resolution

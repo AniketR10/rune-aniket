@@ -124,6 +124,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	rustupInitBin := resolveRustupInit(ctx, inst)
 
 	experimental := readExperimental(cfg, notify)
+	memoryUsage := readMemoryUsage(cfg, notify)
 
 	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
 		LanguageID: "rust",
@@ -163,7 +164,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	}
 	actionManual, actionHandler := newRustActionHandler(
 		lsp, editor, wm, notify, opener, sel, exec, fs, parser, interrupt,
-		cwd.Path(), experimental)
+		cwd.Path(), experimental, memoryUsage)
 	if err := registerCommand(actionManual, actionHandler); err != nil {
 		return fmt.Errorf("register rust action command: %w", err)
 	}
