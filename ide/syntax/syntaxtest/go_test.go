@@ -2271,7 +2271,14 @@ func newTestCase(
 	}))
 	w := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	tcfg := text.DefaultConfig()
-	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	// Share cfg's mutex-serializing scheduler: text.Component's async
+	// flush dispatch and syntax.Tree's async parser init both call
+	// ScheduleNextTick from their own goroutines, and both touch the
+	// same cell.Buffer/rawCells. Two independent inline schedulers let
+	// those calls run concurrently and race on rawCells' row-meta
+	// cache; production only has one scheduler (the host event loop),
+	// so the test must mirror that with a single shared mutex.
+	tcfg.ScheduleNextTick = cfg.ScheduleNextTick
 	tcfg.Syntax = cfg
 	tcfg.PkgManager = pkgs
 	tcfg.EventPublisher = func(ev term.Event) bool {

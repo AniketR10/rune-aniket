@@ -82,7 +82,10 @@ func newYAMLTestCase(
 	)
 	w := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	tcfg := text.DefaultConfig()
-	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	// Share scfg's mutex-serializing scheduler; see newTestCase in
+	// go_test.go for why an independent inline scheduler races with
+	// syntax.Tree's async parser init on the shared cell.Buffer.
+	tcfg.ScheduleNextTick = scfg.ScheduleNextTick
 	tcfg.Syntax = scfg
 	tcfg.PkgManager = pkgs
 	tcfg.EventPublisher = func(ev term.Event) bool {
