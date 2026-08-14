@@ -25,6 +25,7 @@ package localstorage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -116,6 +117,18 @@ func (d *delayedLoadingService) Delete(ctx context.Context, ID string) error {
 		return err
 	}
 	return d.service.Delete(ctx, ID)
+}
+
+// Drop satisfies storageapi.DroppableService.
+func (d *delayedLoadingService) Drop(ctx context.Context) error {
+	if err := d.waitReady(ctx); err != nil {
+		return err
+	}
+	droppable, ok := d.service.(storageapi.DroppableService)
+	if !ok {
+		return errors.New("storage service does not support dropping")
+	}
+	return droppable.Drop(ctx)
 }
 
 func (d *delayedLoadingService) List(ctx context.Context, filters []storageapi.Filter) (

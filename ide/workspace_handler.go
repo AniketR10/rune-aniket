@@ -78,6 +78,7 @@ import (
 	"unstable.build/go-tui/ide/idemacro"
 	"unstable.build/go-tui/ide/idenotice"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/idescavenger"
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
@@ -161,6 +162,7 @@ type workspaceManagerHandler struct {
 	workspaceBarKind        workspaceBarKind
 	userHome                string
 	state                   *idehistory.Store
+	scavenger               *idescavenger.Cleaner
 	workspacesBarHeight     int
 	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
@@ -771,6 +773,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
 	h.state = idehistory.New(h.ideStorage)
+	h.initScavenger(ctx)
 
 	// best effort
 	user, err := user.Current()
@@ -806,6 +809,62 @@ func (h *workspaceManagerHandler) focusHandler() tui.Handler {
 	}
 
 	return h.empty
+}
+
+// initScavenger sets up the reclamation of storage left behind by
+// workspaces that have since been removed from disk, and kicks off one
+// pass. Failures are not fatal: they only leave storage unreclaimed.
+func (h *workspaceManagerHandler) initScavenger(ctx context.Context) {
+	cleaner, err := idescavenger.New(idescavenger.Config{
+		Storage:        h.ideStorage,
+		OpenWorkspaces: h.openWorkspaceURIs,
+	})
+	if err != nil {
+		log.Errorf("new workspace scavenger: %v", err)
+		return
+	}
+	cleaner.AddWorkspaceHook(symboldb.CleanupWorkspaceHook(h.ideStorage))
+	cleaner.AddWorkspaceHook(h.state.ClearWorkspaceState)
+	h.scavenger = cleaner
+
+	// workspaces opened before the scavenger existed are only known to
+	// the session history
+	if uris, err := h.state.ListWorkspaceURIs(ctx); err != nil {
+		log.Errorf("list workspace states: %v", err)
+	} else if err := cleaner.Seed(ctx, uris); err != nil {
+		log.Errorf("seed workspace scavenger: %v", err)
+	}
+	cleaner.Start(ctx)
+}
+
+// openWorkspaceURIs answers from the event loop, which owns the
+// installed and in-flight workspace tables.
+func (h *workspaceManagerHandler) openWorkspaceURIs(
+	ctx context.Context,
+) ([]workspaceapi.URI, error) {
+	result := make(chan []workspaceapi.URI, 1)
+	if !h.scheduleNextTick(func() {
+		uris := make([]workspaceapi.URI, 0,
+			h.workspaceCount+len(h.pending)+1)
+		for _, w := range h.workspaces {
+			if w == nil {
+				continue
+			}
+			uris = append(uris, w.uri)
+		}
+		for _, p := range h.pending {
+			uris = append(uris, p.uri)
+		}
+		result <- append(uris, h.homeURI)
+	}) {
+		return nil, errors.New("event loop is not accepting work")
+	}
+	select {
+	case uris := <-result:
+		return uris, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
@@ -1723,13 +1782,25 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 			fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
+	// tracked from the build phase rather than the event loop: this is
+	// storage I/O, and the workspace owns storage from here on
+	if h.scavenger != nil {
+		if err := h.scavenger.RegisterNewWorkspace(
+			context.Background(), uri,
+		); err != nil {
+			log.Errorf("track workspace %q for scavenging: %v",
+				uri.String(), err)
+		}
+	}
+
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
 	var wsParser syntaxapi.Parser = parser
 	var symbolDB *symboldb.Parser
 	var symbolDBCloser io.Closer
 	if cfg.workspaceSymbolDB() {
 		sdb, sdbErr := symboldb.New(parser, cwd, uri, storageapi.WithPartition(
-			storageapi.WithPartition(h.ideStorage, "symboldb"), uri.String()),
+			storageapi.WithPartition(h.ideStorage, symboldb.PartitionName),
+			uri.String()),
 			h.notifications.current(), h.scheduleNextTick)
 		if sdbErr != nil {
 			h.empty.log(log.ErrorLevel, "symbol database for workspace %q: %v",
@@ -2879,6 +2950,11 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	if h.pkgmanager != nil {
 		if err := h.pkgmanager.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if h.scavenger != nil {
+		if err := h.scavenger.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

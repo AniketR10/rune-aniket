@@ -1409,3 +1409,77 @@ func TestScanReportsProgressNotifications(t *testing.T) {
 	assert.Equal(t, final.total, final.progress)
 	assert.Equal(t, int64(2), final.total)
 }
+
+// The scavenger reclaims the databases of workspaces that no longer
+// exist, so dropping one workspace must empty its partitions without
+// touching the databases of the workspaces that remain.
+func TestCleanupWorkspaceHook(t *testing.T) {
+	ctx := context.Background()
+	ideStorage := storagestub.NewInMemoryService()
+	t.Cleanup(func() { _ = ideStorage.Close() })
+
+	e := newEnv(t)
+	e.db = workspaceStorage(t, ideStorage, e.root)
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{
+		pkg:  "mypkg",
+		defs: []string{"Widget"},
+		refs: [][2]string{{"iterator", "Iterator"}},
+	})
+	p := e.start(t)
+	require.NoError(t, p.Wait(ctx))
+	require.NoError(t, p.Close())
+
+	other, err := workspaceapi.ParseURI(e.root.String() + "-other")
+	require.NoError(t, err)
+	otherDB := workspaceStorage(t, ideStorage, other)
+	require.NoError(t, otherDB.Set(ctx, metaScanID, metaDoc{Complete: true}))
+
+	for _, name := range []string{filesPartition, symbolsPartition, namesPartition} {
+		require.NotZero(t, countDocs(t, e.db, name),
+			"%s partition must be populated before the drop", name)
+	}
+
+	require.NoError(t, CleanupWorkspaceHook(ideStorage)(ctx, e.root))
+
+	for _, name := range []string{filesPartition, symbolsPartition, namesPartition} {
+		assert.Zero(t, countDocs(t, e.db, name),
+			"%s partition must be empty after the drop", name)
+	}
+	var m metaDoc
+	assert.ErrorIs(t, e.db.Get(ctx, metaScanID, &m), storageapi.ErrNotFound)
+	assert.NoError(t, otherDB.Get(ctx, metaScanID, &m),
+		"dropping one workspace must not touch another")
+}
+
+func workspaceStorage(
+	t *testing.T, ideStorage storageapi.Service, root workspaceapi.URI,
+) storageapi.Service {
+	t.Helper()
+	dbs, err := ideStorage.Partition(PartitionName)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dbs.Close() })
+	db, err := dbs.Partition(root.String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func countDocs(t *testing.T, db storageapi.Service, partition string) int {
+	t.Helper()
+	part, err := db.Partition(partition)
+	require.NoError(t, err)
+	defer func() { _ = part.Close() }()
+
+	it, err := part.List(context.Background(), nil)
+	require.NoError(t, err)
+	defer func() { _ = it.Close() }()
+
+	var count int
+	for it.HasNext() {
+		var doc map[string]any
+		require.NoError(t, it.NextTo(&doc))
+		count++
+	}
+	return count
+}

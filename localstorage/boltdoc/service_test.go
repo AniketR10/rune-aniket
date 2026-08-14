@@ -85,6 +85,42 @@ func TestStoreImplementsDocumentService(t *testing.T) {
 	})
 }
 
+// The scavenger reclaims disk by dropping the partitions of workspaces
+// that no longer exist, so a bolt-backed partition must be droppable and
+// must leave its siblings and sub-partitions alone.
+func TestPartitionDrop(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	svc, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = svc.Close() })
+
+	type rec struct{ Name string }
+
+	dropped, err := svc.Partition("dropped")
+	require.NoError(t, err)
+	kept, err := svc.Partition("kept")
+	require.NoError(t, err)
+	nested, err := dropped.Partition("nested")
+	require.NoError(t, err)
+
+	for _, part := range []storageapi.Service{dropped, kept, nested} {
+		require.NoError(t, part.Create(ctx, "doc", &rec{Name: "v"}))
+	}
+
+	droppable, ok := dropped.(storageapi.DroppableService)
+	require.True(t, ok, "bolt partitions must be droppable")
+	require.NoError(t, droppable.Drop(ctx))
+
+	var got rec
+	assert.ErrorIs(t, dropped.Get(ctx, "doc", &got), storageapi.ErrNotFound)
+	assert.NoError(t, kept.Get(ctx, "doc", &got))
+	assert.NoError(t, nested.Get(ctx, "doc", &got))
+
+	require.NoError(t, dropped.Create(ctx, "doc", &rec{Name: "again"}))
+	require.NoError(t, dropped.Get(ctx, "doc", &got))
+}
+
 // TestConsistentUpdate verifies that two goroutines racing to bump a
 // Version field via storageapi.ConsistentUpdate both succeed, with the
 // final Version reflecting both increments. This is the central

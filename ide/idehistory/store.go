@@ -186,6 +186,41 @@ func (s *Store) LoadWorkspaceState(
 	return doc.toState(), nil
 }
 
+// ListWorkspaceURIs returns the URI of every workspace that has
+// persisted state.
+func (s *Store) ListWorkspaceURIs(
+	ctx context.Context,
+) ([]workspaceapi.URI, error) {
+	it, err := s.storage.List(ctx, []storageapi.Filter{{
+		Field: storageapi.Field{
+			FieldPath: []string{"Kind"},
+			Value:     workspaceStateDocumentKind,
+		},
+		Op: storageapi.OpEqual,
+	}})
+	if err != nil {
+		return nil, fmt.Errorf("idehistory: list workspace states: %w", err)
+	}
+	defer it.Close()
+
+	var uris []workspaceapi.URI
+	for it.HasNext() {
+		var doc workspaceStateDocument
+		if err := it.NextTo(&doc); err != nil {
+			return nil, fmt.Errorf("idehistory: list workspace states: %w", err)
+		}
+		if doc.WorkspaceURI == "" {
+			continue
+		}
+		uri, err := workspaceapi.ParseURI(doc.WorkspaceURI)
+		if err != nil {
+			continue
+		}
+		uris = append(uris, uri)
+	}
+	return uris, nil
+}
+
 // SubscribeEvents subscribes to ed's events and maintains the
 // in-memory File list + cursor map for uri. snap is invoked when the
 // tracker needs terminal/task/layout context for the next Store call.

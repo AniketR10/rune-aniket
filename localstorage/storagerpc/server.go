@@ -388,6 +388,31 @@ func (s *Server) Delete(
 	return
 }
 
+// Drop satisfies proto.DocumentStoreServer. It drops the partition addressed
+// by the request metadata; sub-partitions are not dropped, since the service
+// has no way to enumerate them.
+func (s *Server) Drop(
+	ctx context.Context, _ *docpb.DropRequest,
+) (*docpb.DropResponse, error) {
+	ctx = noSyncIncomingContext(ctx)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	droppable, ok := svc.(storageapi.DroppableService)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition,
+			"underlying service cannot be dropped")
+	}
+	if err := droppable.Drop(ctx); err != nil {
+		if errors.Is(err, storageapi.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, "")
+		}
+		return nil, err
+	}
+	return new(docpb.DropResponse), nil
+}
+
 func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.Iterator, fields []string) (err error) {
 	var fieldSet map[string]struct{}
 	if len(fields) > 0 {

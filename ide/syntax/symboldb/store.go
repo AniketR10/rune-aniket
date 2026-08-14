@@ -26,6 +26,10 @@ package symboldb
 import "unstable.build/go-tui/ide/idelsp/symbolresolve"
 
 const (
+	// PartitionName is the IDE storage partition every workspace's
+	// symbol database is nested under.
+	PartitionName = "symboldb"
+
 	filesPartition   = "files"
 	symbolsPartition = "symbols"
 	namesPartition   = "names"

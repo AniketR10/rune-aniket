@@ -184,6 +184,58 @@ func New(
 	return p, nil
 }
 
+// CleanupWorkspaceHook returns a hook that drops the index of a
+// workspace, given the storage symboldb databases are partitioned out
+// of (the same service New's db argument is derived from). It is a
+// package-level function because the workspaces it reclaims have no
+// live Parser.
+func CleanupWorkspaceHook(
+	storage storageapi.Service,
+) func(ctx context.Context, root workspaceapi.URI) error {
+	return func(ctx context.Context, root workspaceapi.URI) error {
+		dbs, err := storage.Partition(PartitionName)
+		if err != nil {
+			return fmt.Errorf("symboldb: partition storage: %w", err)
+		}
+		defer func() { _ = dbs.Close() }()
+
+		db, err := dbs.Partition(root.String())
+		if err != nil {
+			return fmt.Errorf("symboldb: partition %q: %w", root.String(), err)
+		}
+		defer func() { _ = db.Close() }()
+
+		// Drop is not recursive, so the derived tables go first.
+		for _, name := range []string{
+			filesPartition, symbolsPartition, namesPartition,
+		} {
+			part, err := db.Partition(name)
+			if err != nil {
+				return fmt.Errorf("symboldb: partition %q: %w", name, err)
+			}
+			err = drop(ctx, part)
+			if cerr := part.Close(); err == nil {
+				err = cerr
+			}
+			if err != nil {
+				return fmt.Errorf("symboldb: drop %q: %w", name, err)
+			}
+		}
+		if err := drop(ctx, db); err != nil {
+			return fmt.Errorf("symboldb: drop %q: %w", root.String(), err)
+		}
+		return nil
+	}
+}
+
+func drop(ctx context.Context, svc storageapi.Service) error {
+	droppable, ok := svc.(storageapi.DroppableService)
+	if !ok {
+		return errors.New("storage service does not support dropping")
+	}
+	return droppable.Drop(ctx)
+}
+
 // Handle implements text.EventHandler. It is O(1) and never blocks:
 // relevant events only mark the file dirty for the indexer goroutine.
 func (p *Parser) Handle(_ context.Context, ev textapi.Event) bool {

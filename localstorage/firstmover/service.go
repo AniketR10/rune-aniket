@@ -268,6 +268,25 @@ func (s *Service) Delete(ctx context.Context, ID string) error {
 	})
 }
 
+// Drop satisfies storageapi.DroppableService.
+func (s *Service) Drop(ctx context.Context) error {
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
+	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
+		s.mu.Lock()
+		active := s.active
+		s.mu.Unlock()
+		droppable, ok := active.(storageapi.DroppableService)
+		if !ok {
+			return false, errors.New(
+				"firstmover: active service does not support dropping")
+		}
+		err := droppable.Drop(ctx)
+		return s.isRetriableError(ctx, err), err
+	})
+}
+
 // List satisfies storageapi.Service.
 func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,

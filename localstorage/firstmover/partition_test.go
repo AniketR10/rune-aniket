@@ -69,6 +69,27 @@ func TestPartitionResolvesOnceWhileLeaderStable(t *testing.T) {
 		"cached partition handle must stay open across operations")
 }
 
+// The scavenger drops the partitions of workspaces that no longer exist
+// through this partitioned view, so Drop must reach the resolved target.
+func TestPartitionDropForwardsToTarget(t *testing.T) {
+	ctx := context.Background()
+	lockFile := makeTempLockFile(t)
+	cfg := testConfig()
+	leader := New(factoryFor(storagestub.NewInMemoryService()), lockFile, cfg)
+	t.Cleanup(func() { _ = leader.Close() })
+
+	part, err := leader.Partition("p")
+	require.NoError(t, err)
+	require.NoError(t, part.Set(ctx, "k", &testStruct{A: "v"}))
+
+	droppable, ok := part.(storageapi.DroppableService)
+	require.True(t, ok, "partitioned views must be droppable")
+	require.NoError(t, droppable.Drop(ctx))
+
+	var got testStruct
+	assert.ErrorIs(t, part.Get(ctx, "k", &got), storageapi.ErrNotFound)
+}
+
 // TestPartitionCacheInvalidatesOnLeadershipChange verifies that when
 // the active backend swaps (leadership transition), the cached
 // leader-side handle is closed exactly once and the new backend is

@@ -246,6 +246,67 @@ type interopHelper struct {
 	write document.Service
 }
 
+// nonDroppableService hides the Drop method of the service it wraps, since
+// embedding an interface only promotes that interface's methods.
+type nonDroppableService struct {
+	storageapi.Service
+}
+
+func TestDrop(t *testing.T) {
+	marshaler := docbson.Marshaler()
+	ctx := context.Background()
+
+	t.Run("drops only the addressed partition", func(t *testing.T) {
+		backing := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+		addr, teardown := runDatastoreServer(t, backing, marshaler)
+		defer teardown()
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer store.Close()
+
+		dropped, err := store.Partition("dropped")
+		require.NoError(t, err)
+		kept, err := store.Partition("kept")
+		require.NoError(t, err)
+		nested, err := dropped.Partition("nested")
+		require.NoError(t, err)
+
+		for _, svc := range []storageapi.Service{dropped, kept, nested} {
+			require.NoError(t, svc.Create(ctx, "doc", map[string]any{"v": "1"}))
+		}
+
+		require.NoError(t, dropped.(storageapi.DroppableService).Drop(ctx))
+
+		var doc map[string]any
+		require.ErrorIs(t, dropped.Get(ctx, "doc", &doc), storageapi.ErrNotFound)
+		require.NoError(t, kept.Get(ctx, "doc", &doc))
+		// Drop is not recursive: owners of sub-partitions drop them.
+		require.NoError(t, nested.Get(ctx, "doc", &doc))
+
+		// the service must remain usable after being dropped
+		require.NoError(t, dropped.Create(ctx, "doc", map[string]any{"v": "2"}))
+		require.NoError(t, dropped.Get(ctx, "doc", &doc))
+	})
+
+	t.Run("service that cannot be dropped", func(t *testing.T) {
+		backing := nonDroppableService{
+			storagestub.NewInMemoryServiceWithMarshaler(marshaler),
+		}
+		addr, teardown := runDatastoreServer(t, backing, marshaler)
+		defer teardown()
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer store.Close()
+
+		require.ErrorIs(t, store.(storageapi.DroppableService).Drop(ctx),
+			storageapi.ErrPreconditionFailed)
+	})
+}
+
 func (h interopHelper) Create(ctx context.Context, ID string, doc any) error {
 	return h.write.Create(ctx, ID, doc)
 }

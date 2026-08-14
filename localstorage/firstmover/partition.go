@@ -195,6 +195,17 @@ func (p *partitionService) Delete(ctx context.Context, ID string) error {
 	})
 }
 
+// Drop satisfies storageapi.DroppableService.
+func (p *partitionService) Drop(ctx context.Context) error {
+	return p.withActive(ctx, func(ctx context.Context, target storageapi.Service) error {
+		droppable, ok := target.(storageapi.DroppableService)
+		if !ok {
+			return errors.New("firstmover: target service does not support dropping")
+		}
+		return droppable.Drop(ctx)
+	})
+}
+
 func (p *partitionService) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,
 ) {
