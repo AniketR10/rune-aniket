@@ -46,6 +46,10 @@ type commandClientStream struct {
 	counter       int64
 	pendingMu     sync.Mutex
 	pending       []chan error
+	sendMu        sync.Mutex
+	// whether the extension understands CompleteCancel messages; older
+	// SDKs terminate the stream when they receive an unknown message type.
+	supportsCompleteCancel bool
 }
 
 // subset of Editor_SubscribeCommandServer
@@ -55,15 +59,22 @@ type serverStream interface {
 }
 
 func newCommandClientStream(
-	ctx context.Context, stream serverStream,
+	ctx context.Context, stream serverStream, supportsCompleteCancel bool,
 ) *commandClientStream {
 	log := slog.Default().With("struct", "textrpc.commandClientStream")
 	return &commandClientStream{
-		log:           log,
-		stream:        stream,
-		ctx:           ctx,
-		handleCommand: make(chan string),
+		log:                    log,
+		stream:                 stream,
+		ctx:                    ctx,
+		handleCommand:          make(chan string),
+		supportsCompleteCancel: supportsCompleteCancel,
 	}
+}
+
+func (c *commandClientStream) send(msg *textrpc.ServerCommandMessage) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return c.stream.Send(msg)
 }
 
 func (c *commandClientStream) receiveMessages() error {
@@ -118,6 +129,9 @@ func (c *commandClientStream) receiveMessages() error {
 				continue
 			}
 			chanCtx := val.(chanCtx)
+			if chanCtx.cancelled {
+				continue
+			}
 			chanValue := chanValue{
 				val: complete.GetValue(),
 			}
@@ -140,6 +154,9 @@ func (c *commandClientStream) receiveMessages() error {
 				continue
 			}
 			chanCtx := val.(chanCtx)
+			if chanCtx.cancelled {
+				continue
+			}
 			errStr := done.GetError()
 			if errStr == "" {
 				close(chanCtx.ch)
@@ -179,7 +196,7 @@ func (c *commandClientStream) HandleCommand(
 	c.pendingMu.Lock()
 	defer c.pendingMu.Unlock()
 	c.pending = append(c.pending, replyCh)
-	if err := c.stream.Send(c.buildHandleRequest(cmd)); err != nil {
+	if err := c.send(c.buildHandleRequest(cmd)); err != nil {
 		c.pending = c.pending[:len(c.pending)-1]
 		return fmt.Errorf("send complete request: %w", err)
 	}
@@ -232,7 +249,7 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ch := make(chan chanValue)
 	c.completers.Store(id, chanCtx{ctx: ctx, ch: ch})
-	if err := c.stream.Send(&reqMsg); err != nil {
+	if err := c.send(&reqMsg); err != nil {
 		cancelCtx()
 		c.completers.Delete(id)
 		return nil, "", fmt.Errorf("send complete request: %w", err)
@@ -254,7 +271,19 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command)
 		}
 	}, func() error {
 		cancelCtx()
-		c.completers.Delete(id)
+		// keep a tombstone so values still in flight for this abandoned
+		// completion are dropped silently; CompleteDone clears it.
+		c.completers.Store(id, chanCtx{cancelled: true})
+		if !c.supportsCompleteCancel {
+			return nil
+		}
+		cancelMsg := textrpc.ServerCommandMessage{
+			Type:           textrpc.ServerCommandMessage_CompleteCancel,
+			CompleteCancel: &textrpc.CompleteCommandCancel{Id: id},
+		}
+		if err := c.send(&cancelMsg); err != nil {
+			c.log.Warn("send complete cancel", "error", err)
+		}
 		return nil
 	}), "", nil
 }
@@ -267,6 +296,9 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command)
 type chanCtx struct {
 	ctx context.Context
 	ch  chan chanValue
+	// tombstone for a completion abandoned by the editor: its id stays
+	// known until the extension reports the completion done.
+	cancelled bool
 }
 
 type chanValue struct {

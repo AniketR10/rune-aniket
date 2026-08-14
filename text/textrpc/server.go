@@ -172,7 +172,8 @@ func (s *Server) SubscribeCommand(srv textrpc.Editor_SubscribeCommandServer) err
 
 	streamCtx, cancelStream := context.WithCancel(s.ctx)
 	defer cancelStream()
-	clientStream := newCommandClientStream(streamCtx, srv)
+	clientStream := newCommandClientStream(
+		streamCtx, srv, req.GetSupportsCompleteCancel())
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()
@@ -249,7 +250,8 @@ func (s *Server) SubscribeREPLCommand(srv textrpc.Editor_SubscribeREPLCommandSer
 		return errors.New("receive subscribe repl command request: missing request")
 	}
 
-	clientStream := newREPLCommandClientStream(s.ctx, srv)
+	clientStream := newREPLCommandClientStream(
+		s.ctx, srv, req.GetSupportsCompleteCancel())
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()

@@ -55,6 +55,11 @@ type replCommandClientStream struct {
 
 	completers sync.Map
 	counter    int64
+
+	sendMu sync.Mutex
+	// whether the extension understands CompleteCancel messages; older
+	// SDKs terminate the stream when they receive an unknown message type.
+	supportsCompleteCancel bool
 }
 
 // subset of Editor_SubscribeREPLCommandServer
@@ -76,15 +81,22 @@ type responsiveValue struct {
 }
 
 func newREPLCommandClientStream(
-	ctx context.Context, stream replServerStream,
+	ctx context.Context, stream replServerStream, supportsCompleteCancel bool,
 ) *replCommandClientStream {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	return &replCommandClientStream{
-		log:       slog.Default().With("struct", "textrpc.replCommandClientStream"),
-		ctx:       ctx,
-		cancelCtx: cancelCtx,
-		stream:    stream,
+		log:                    slog.Default().With("struct", "textrpc.replCommandClientStream"),
+		ctx:                    ctx,
+		cancelCtx:              cancelCtx,
+		stream:                 stream,
+		supportsCompleteCancel: supportsCompleteCancel,
 	}
+}
+
+func (c *replCommandClientStream) send(msg *textrpc.ServerREPLCommandMessage) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return c.stream.Send(msg)
 }
 
 func (c *replCommandClientStream) receiveMessages() error {
@@ -126,6 +138,9 @@ func (c *replCommandClientStream) receiveMessages() error {
 				continue
 			}
 			chanCtx := val.(chanCtx)
+			if chanCtx.cancelled {
+				continue
+			}
 			chanValue := chanValue{val: complete.GetValue()}
 			select {
 			case chanCtx.ch <- chanValue:
@@ -146,6 +161,9 @@ func (c *replCommandClientStream) receiveMessages() error {
 				continue
 			}
 			chanCtx := val.(chanCtx)
+			if chanCtx.cancelled {
+				continue
+			}
 			errStr := done.GetError()
 			if errStr == "" {
 				close(chanCtx.ch)
@@ -183,7 +201,7 @@ func (c *replCommandClientStream) HandleCommand(
 		Type:   textrpc.ServerREPLCommandMessage_Handle,
 		Handle: &req,
 	}
-	if err := c.stream.Send(&msg); err != nil {
+	if err := c.send(&msg); err != nil {
 		c.clearResponsiveRequest(true, respCtx.ch)
 		return nil, fmt.Errorf("send repl handle request: %w", err)
 	}
@@ -206,7 +224,7 @@ func (c *replCommandClientStream) Complete(
 	reqMsg.Type = textrpc.ServerREPLCommandMessage_Complete
 	reqMsg.Complete = &req
 
-	if err := c.stream.Send(&reqMsg); err != nil {
+	if err := c.send(&reqMsg); err != nil {
 		return nil, fmt.Errorf("send repl complete request: %w", err)
 	}
 
@@ -232,7 +250,19 @@ func (c *replCommandClientStream) Complete(
 		}
 	}, func() error {
 		cancelCtx()
-		c.completers.Delete(id)
+		// keep a tombstone so values still in flight for this abandoned
+		// completion are dropped silently; CompleteDone clears it.
+		c.completers.Store(id, chanCtx{cancelled: true})
+		if !c.supportsCompleteCancel {
+			return nil
+		}
+		cancelMsg := textrpc.ServerREPLCommandMessage{
+			Type:           textrpc.ServerREPLCommandMessage_CompleteCancel,
+			CompleteCancel: &textrpc.CompleteCommandCancel{Id: id},
+		}
+		if err := c.send(&cancelMsg); err != nil {
+			c.log.Warn("send repl complete cancel", "error", err)
+		}
 		return nil
 	}), nil
 }
@@ -253,7 +283,7 @@ func (c *replCommandClientStream) Help(
 		Type: textrpc.ServerREPLCommandMessage_Help,
 		Help: &req,
 	}
-	if err := c.stream.Send(&msg); err != nil {
+	if err := c.send(&msg); err != nil {
 		c.clearResponsiveRequest(false, respCtx.ch)
 		return nil, fmt.Errorf("send repl help request: %w", err)
 	}

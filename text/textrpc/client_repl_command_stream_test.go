@@ -14,14 +14,127 @@
 package textrpc
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sdktextrpc "github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
+	"google.golang.org/protobuf/proto"
 )
+
+type waitableREPLServerStream struct {
+	sent chan *sdktextrpc.ServerREPLCommandMessage
+	recv chan *sdktextrpc.ClientREPLCommandMessage
+}
+
+func newWaitableREPLServerStream() *waitableREPLServerStream {
+	return &waitableREPLServerStream{
+		sent: make(chan *sdktextrpc.ServerREPLCommandMessage, 8),
+		recv: make(chan *sdktextrpc.ClientREPLCommandMessage, 8),
+	}
+}
+
+func (s *waitableREPLServerStream) Send(
+	msg *sdktextrpc.ServerREPLCommandMessage,
+) error {
+	s.sent <- msg
+	return nil
+}
+
+func (s *waitableREPLServerStream) RecvMsg(msg any) error {
+	next, ok := <-s.recv
+	if !ok {
+		return io.EOF
+	}
+	proto.Merge(msg.(*sdktextrpc.ClientREPLCommandMessage), next)
+	return nil
+}
+
+// See TestCommandClientStreamCompleteCancelLifecycle: the REPL stream
+// must abandon completions the same way.
+func TestREPLCommandClientStreamCompleteCancelLifecycle(t *testing.T) {
+	cases := []struct {
+		name           string
+		supportsCancel bool
+	}{
+		{name: "extension supports cancel", supportsCancel: true},
+		{name: "legacy extension", supportsCancel: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := newWaitableREPLServerStream()
+			c := newREPLCommandClientStream(
+				context.Background(), stream, tc.supportsCancel)
+			var logs syncBuffer
+			c.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+				Level: slog.LevelWarn,
+			}))
+			go func() { _ = c.receiveMessages() }()
+
+			it, err := c.Complete(context.Background(), "cmd", nil)
+			require.NoError(t, err)
+			select {
+			case msg := <-stream.sent:
+				require.Equal(t,
+					sdktextrpc.ServerREPLCommandMessage_Complete, msg.GetType())
+			case <-time.After(time.Second):
+				t.Fatal("Complete did not send the request")
+			}
+
+			require.NoError(t, it.Close())
+
+			if tc.supportsCancel {
+				select {
+				case msg := <-stream.sent:
+					require.Equal(t,
+						sdktextrpc.ServerREPLCommandMessage_CompleteCancel,
+						msg.GetType())
+					require.Equal(t, int64(1), msg.GetCompleteCancel().GetId())
+				case <-time.After(time.Second):
+					t.Fatal("close did not cancel the completion")
+				}
+			} else {
+				select {
+				case msg := <-stream.sent:
+					t.Fatalf("sent %v to an extension that cannot cancel",
+						msg.GetType())
+				case <-time.After(50 * time.Millisecond):
+				}
+			}
+
+			stream.recv <- &sdktextrpc.ClientREPLCommandMessage{
+				Type: sdktextrpc.ClientREPLCommandMessage_CompleteValue,
+				CompleteValue: &sdktextrpc.CompleteCommandValue{
+					Id: 1, Value: "late",
+				},
+			}
+			stream.recv <- &sdktextrpc.ClientREPLCommandMessage{
+				Type:         sdktextrpc.ClientREPLCommandMessage_CompleteDone,
+				CompleteDone: &sdktextrpc.CompleteCommandDone{Id: 1},
+			}
+			// help values for an inactive request are logged by the same
+			// receive loop, which gives the test an in-order marker.
+			stream.recv <- &sdktextrpc.ClientREPLCommandMessage{
+				Type:      sdktextrpc.ClientREPLCommandMessage_HelpValue,
+				HelpValue: &sdktextrpc.HelpCommandValue{},
+			}
+			require.Eventually(t, func() bool {
+				return logs.String() != ""
+			}, time.Second, 10*time.Millisecond,
+				"receive loop did not process the marker message")
+			require.NotContains(t, logs.String(), "unknown stream")
+			_, ok := c.completers.Load(int64(1))
+			require.False(t, ok, "completion done must clear the tombstone")
+		})
+	}
+}
 
 func TestResponsiveFromProtoRows_PreservesPerCellAttributes(t *testing.T) {
 	width := 4

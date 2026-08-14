@@ -24,8 +24,11 @@
 package textrpc
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,9 +38,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestCommandClientStreamCompleteCloseDeletesCompleter(t *testing.T) {
+func TestCommandClientStreamCompleteCloseTombstonesCompleter(t *testing.T) {
 	stream := &recordingServerStream{}
-	c := newCommandClientStream(context.Background(), stream)
+	c := newCommandClientStream(context.Background(), stream, true)
 
 	it, _, err := c.Complete(context.Background(), textapi.Command{Name: "cmd"})
 	if err != nil {
@@ -49,8 +52,111 @@ func TestCommandClientStreamCompleteCloseDeletesCompleter(t *testing.T) {
 	if err := it.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := c.completers.Load(int64(1)); ok {
-		t.Fatal("expected completer to be deleted on iterator close")
+	val, ok := c.completers.Load(int64(1))
+	if !ok {
+		t.Fatal("expected a tombstone for the abandoned completion")
+	}
+	if !val.(chanCtx).cancelled {
+		t.Fatal("expected the abandoned completion to be marked cancelled")
+	}
+}
+
+// syncBuffer collects log output written by the stream's receive
+// goroutine while the test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// Abandoning a completion must silence the values the extension is still
+// streaming for it: the editor cancels the completion when the extension
+// supports it, and drops late values without logging an unknown-stream
+// warning until the extension reports the completion done.
+func TestCommandClientStreamCompleteCancelLifecycle(t *testing.T) {
+	cases := []struct {
+		name           string
+		supportsCancel bool
+	}{
+		{name: "extension supports cancel", supportsCancel: true},
+		{name: "legacy extension", supportsCancel: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := newWaitableServerStream()
+			c := newCommandClientStream(
+				context.Background(), stream, tc.supportsCancel)
+			var logs syncBuffer
+			c.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+				Level: slog.LevelWarn,
+			}))
+			go func() { _ = c.receiveMessages() }()
+
+			it, _, err := c.Complete(
+				context.Background(), textapi.Command{Name: "cmd"})
+			require.NoError(t, err)
+			select {
+			case msg := <-stream.sent:
+				require.Equal(t,
+					sdktextrpc.ServerCommandMessage_Complete, msg.GetType())
+			case <-time.After(time.Second):
+				t.Fatal("Complete did not send the request")
+			}
+
+			require.NoError(t, it.Close())
+
+			if tc.supportsCancel {
+				select {
+				case msg := <-stream.sent:
+					require.Equal(t,
+						sdktextrpc.ServerCommandMessage_CompleteCancel,
+						msg.GetType())
+					require.Equal(t, int64(1), msg.GetCompleteCancel().GetId())
+				case <-time.After(time.Second):
+					t.Fatal("close did not cancel the completion")
+				}
+			} else {
+				select {
+				case msg := <-stream.sent:
+					t.Fatalf("sent %v to an extension that cannot cancel",
+						msg.GetType())
+				case <-time.After(50 * time.Millisecond):
+				}
+			}
+
+			stream.recv <- &sdktextrpc.ClientCommandMessage{
+				Type: sdktextrpc.ClientCommandMessage_CompleteValue,
+				CompleteValue: &sdktextrpc.CompleteCommandValue{
+					Id: 1, Value: "late",
+				},
+			}
+			stream.recv <- &sdktextrpc.ClientCommandMessage{
+				Type:         sdktextrpc.ClientCommandMessage_CompleteDone,
+				CompleteDone: &sdktextrpc.CompleteCommandDone{Id: 1},
+			}
+			// messages are processed in order, so once this marker has
+			// been routed the completion messages above are done.
+			stream.replyHandle("marker")
+			select {
+			case <-c.handleCommand:
+			case <-time.After(time.Second):
+				t.Fatal("stream did not process the completion messages")
+			}
+			require.NotContains(t, logs.String(), "unknown stream")
+			_, ok := c.completers.Load(int64(1))
+			require.False(t, ok, "completion done must clear the tombstone")
+		})
 	}
 }
 
@@ -112,7 +218,7 @@ func TestCommandClientStreamHandleCommandWaiter(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			stream := newWaitableServerStream()
-			c := newCommandClientStream(context.Background(), stream)
+			c := newCommandClientStream(context.Background(), stream, true)
 			go func() { _ = c.receiveMessages() }()
 
 			w := &Waiter{Ch: make(chan error, 1)}
@@ -159,7 +265,7 @@ func TestCommandClientStreamHandleCommandWaiter(t *testing.T) {
 // command dispatched with a Waiter must reach the waiter instead.
 func TestCommandClientStreamHandleResponseRouting(t *testing.T) {
 	stream := newWaitableServerStream()
-	c := newCommandClientStream(context.Background(), stream)
+	c := newCommandClientStream(context.Background(), stream, true)
 	go func() { _ = c.receiveMessages() }()
 
 	stream.replyHandle("loose error")
@@ -202,7 +308,7 @@ func TestCommandClientStreamHandleResponseRouting(t *testing.T) {
 // belonging to a different command sent between it and its own reply.
 func TestCommandClientStreamHandleResponseFIFO(t *testing.T) {
 	stream := newWaitableServerStream()
-	c := newCommandClientStream(context.Background(), stream)
+	c := newCommandClientStream(context.Background(), stream, true)
 	go func() { _ = c.receiveMessages() }()
 
 	wA := &Waiter{Ch: make(chan error, 1)}
@@ -253,7 +359,7 @@ func TestCommandClientStreamHandleResponseFIFO(t *testing.T) {
 func TestCommandClientStreamHandleResponseDropOnTeardown(t *testing.T) {
 	stream := newWaitableServerStream()
 	streamCtx, cancelStream := context.WithCancel(context.Background())
-	c := newCommandClientStream(streamCtx, stream)
+	c := newCommandClientStream(streamCtx, stream, true)
 
 	recvDone := make(chan error, 1)
 	go func() { recvDone <- c.receiveMessages() }()
