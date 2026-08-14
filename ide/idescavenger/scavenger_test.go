@@ -29,13 +29,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 
 	"unstable.build/go-tui/ide/idescavenger"
 )
@@ -184,6 +187,94 @@ func TestRegisterNewWorkspaceIsIdempotent(t *testing.T) {
 
 	require.NoError(t, f.cleaner.RunOnce(ctx))
 	assert.Equal(t, []string{gone.String()}, f.cleaned)
+}
+
+// Start runs its pass while the IDE is still starting up, before the
+// event loop accepts work, so the open workspaces can be unknowable for
+// the first attempts. The pass must be retried until they are known:
+// giving up leaves the session with no reclamation at all.
+func TestStartRetriesUntilOpenWorkspacesAreKnown(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	var cleaned []string
+	cleaner, err := idescavenger.New(idescavenger.Config{
+		Storage: storagestub.NewInMemoryService(),
+		OpenWorkspaces: func(context.Context) ([]workspaceapi.URI, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			if calls < 3 {
+				return nil, errors.New("event loop is not accepting work")
+			}
+			return nil, nil
+		},
+		Stat: func(name string) (fs.FileInfo, error) {
+			return nil, &fs.PathError{
+				Op: "stat", Path: name, Err: fs.ErrNotExist,
+			}
+		},
+		StartRetry: retry.SequentialStrategy(time.Millisecond),
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cleaner.Close() })
+	cleaner.AddWorkspaceHook(func(
+		_ context.Context, cwd workspaceapi.URI,
+	) error {
+		mu.Lock()
+		defer mu.Unlock()
+		cleaned = append(cleaned, cwd.String())
+		return nil
+	})
+	gone := uri(t, "/tmp/gone")
+	require.NoError(t, cleaner.RegisterNewWorkspace(context.Background(), gone))
+
+	cleaner.Start(context.Background())
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(cleaned) == 1
+	}, 5*time.Second, 5*time.Millisecond,
+		"the pass must survive OpenWorkspaces failing while the IDE starts")
+}
+
+// Close must stop a Start whose pass keeps failing, so a shutdown does
+// not leave a retry loop running against closed storage.
+func TestCloseStopsStartRetries(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	cleaner, err := idescavenger.New(idescavenger.Config{
+		Storage: storagestub.NewInMemoryService(),
+		OpenWorkspaces: func(context.Context) ([]workspaceapi.URI, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			return nil, errors.New("event loop is not accepting work")
+		},
+		StartRetry: retry.SequentialStrategy(time.Millisecond),
+	})
+	require.NoError(t, err)
+	gone := uri(t, "/tmp/gone")
+	require.NoError(t, cleaner.RegisterNewWorkspace(context.Background(), gone))
+
+	cleaner.Start(context.Background())
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return calls > 0
+	}, 5*time.Second, time.Millisecond)
+	require.NoError(t, cleaner.Close())
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		before := calls
+		mu.Unlock()
+		time.Sleep(30 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		return calls == before
+	}, 5*time.Second, time.Millisecond,
+		"retries must stop once the Cleaner is closed")
 }
 
 // The default Stat must recognize a workspace that really is gone.

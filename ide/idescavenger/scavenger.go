@@ -30,11 +30,13 @@ import (
 	"io/fs"
 	"os"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 	"unstable.build/go-tui/debug"
 )
 
@@ -68,6 +70,12 @@ type Config struct {
 
 	// Stat resolves a workspace root. Defaults to os.Stat.
 	Stat func(name string) (fs.FileInfo, error)
+
+	// StartRetry bounds the retries of the pass Start runs. Defaults
+	// to an exponential backoff giving up after about two minutes,
+	// enough to outlast the startup window in which the event loop
+	// does not accept work yet.
+	StartRetry retry.Strategy
 }
 
 // Cleaner reclaims the storage of workspaces that no longer exist on
@@ -76,9 +84,11 @@ type Cleaner struct {
 	storage        storageapi.Service
 	openWorkspaces func(ctx context.Context) ([]workspaceapi.URI, error)
 	stat           func(name string) (fs.FileInfo, error)
+	startRetry     retry.Strategy
 
 	mu    sync.Mutex
 	hooks []WorkspaceHook
+	stop  context.CancelFunc
 }
 
 // New returns a Cleaner that tracks workspaces in its own partition of
@@ -95,10 +105,16 @@ func New(cfg Config) (*Cleaner, error) {
 	if stat == nil {
 		stat = os.Stat
 	}
+	startRetry := cfg.StartRetry
+	if startRetry == nil {
+		startRetry = retry.CombinedStrategy(retry.LimitStrategy(8),
+			retry.ExponentialStrategy(time.Second, 30*time.Second))
+	}
 	return &Cleaner{
 		storage:        storage,
 		openWorkspaces: cfg.OpenWorkspaces,
 		stat:           stat,
+		startRetry:     startRetry,
 	}, nil
 }
 
@@ -126,11 +142,34 @@ func (c *Cleaner) Seed(
 	return c.register(ctx, uris...)
 }
 
-// Start runs a single pass in the background.
+// Start runs a single pass in the background, retrying a failed pass
+// with the configured backoff: the pass first runs while the IDE is
+// still starting up, when the event loop does not accept work yet and
+// the open workspaces cannot be determined. Close stops the retries.
 func (c *Cleaner) Start(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	c.mu.Lock()
+	c.stop = cancel
+	c.mu.Unlock()
 	go debug.CapturePanicReport(func() {
-		if err := c.RunOnce(ctx); err != nil {
-			logger().Errorf("scavenge workspaces: %v", err)
+		defer cancel()
+		for attempt := uint(1); ; attempt++ {
+			err := c.RunOnce(ctx)
+			if err == nil || ctx.Err() != nil {
+				return
+			}
+			sleep, stop := c.startRetry(attempt)
+			if stop {
+				logger().Errorf("scavenge workspaces: %v", err)
+				return
+			}
+			logger().Debugf("scavenge workspaces (attempt %d): %v",
+				attempt, err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sleep):
+			}
 		}
 	})
 }
@@ -289,8 +328,16 @@ func (c *Cleaner) store(ctx context.Context, uris []string) error {
 	return nil
 }
 
-// Close releases the partition handle owned by this Cleaner.
+// Close stops the pass Start may still be retrying and releases the
+// partition handle owned by this Cleaner.
 func (c *Cleaner) Close() error {
+	c.mu.Lock()
+	stop := c.stop
+	c.stop = nil
+	c.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
 	return c.storage.Close()
 }
 
