@@ -55,3 +55,28 @@ func TestCaptureNameAttributesUserConfigOverridesFallback(t *testing.T) {
 func TestCaptureNameAttributesUnknownCaptureReturnsZeroAttributes(t *testing.T) {
 	assert.Equal(t, term.Attributes{}, captureNameAttributes(nil, "unknown.capture"))
 }
+
+// nvim-treesitter style queries (zig, lua, c, and many others) refine base
+// captures with a suffix; without the fallback those tokens render unstyled.
+func TestCaptureNameAttributesFallsBackToBaseCapture(t *testing.T) {
+	attrs := DefaultConfig().CaptureNamesAttributes
+
+	for _, name := range []string{
+		"keyword.function",
+		"keyword.type",
+		"keyword.return",
+		"keyword.conditional",
+		"keyword.repeat",
+		"keyword.modifier",
+		"keyword.operator",
+		"keyword.exception",
+		"keyword.import",
+		"keyword.coroutine",
+	} {
+		assert.Equal(t, term.ColorYellow, captureNameAttributes(attrs, name).Fg, name)
+	}
+
+	assert.Equal(t, term.ColorFuchsia, captureNameAttributes(attrs, "string.escape").Fg)
+	assert.Equal(t, term.ColorRed, captureNameAttributes(attrs, "number.float").Fg)
+	assert.Equal(t, term.ColorBlue, captureNameAttributes(attrs, "comment.documentation").Fg)
+}

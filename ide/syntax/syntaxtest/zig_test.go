@@ -248,9 +248,9 @@ const zigHighlightContent = `fn add(a: i32, b: i32) i32 {
 const zigHighlightFrame = `┌###############─────────────┐
 │# #############             │
 ├────────────────────────────┤
-│fn add(a: i32, b: i32) i32 {│
+│## add(a: i32, b: i32) i32 {│
 │    ##### total = a + b;    │
-│    return total;           │
+│    ###### total;           │
 │}                           │
 │                            │
 │                            │
@@ -290,7 +290,7 @@ const zigIndentContent = `fn main() void {
 const zigIndentFrame = `┌#############───────────────┐
 │# ###########               │
 ├────────────────────────────┤
-│fn main() void {            │
+│## main() void {            │
 │    ##### x = #;            │
 │    ▐                       │
 │}                           │

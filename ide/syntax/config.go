@@ -127,6 +127,9 @@ var defaultCaptureNamesAttributes = map[string]term.Attributes{
 	"text.strong":    {Fg: term.ColorYellow},
 }
 
+// captureNameAttributes resolves a tree-sitter capture name, falling back to
+// progressively shorter dotted prefixes so that refined captures such as
+// "keyword.function" inherit the attributes configured for "keyword".
 func captureNameAttributes(
 	captureNamesAttributes map[string]term.Attributes, name string,
 ) term.Attributes {
@@ -137,10 +140,6 @@ func captureNameAttributes(
 		if attr, ok := defaultCaptureNamesAttributes[name]; ok {
 			return attr
 		}
-		if !strings.HasPrefix(name, "markup.") && !strings.HasPrefix(name, "text.") {
-			return term.Attributes{}
-		}
-
 		idx := strings.LastIndexByte(name, '.')
 		if idx < 0 {
 			return term.Attributes{}

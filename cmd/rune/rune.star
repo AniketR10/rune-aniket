@@ -443,6 +443,8 @@ config = {
         "ruler": 90,
         # Syntax highlight overrides. Any omitted key inherits the default
         # highlight attributes provided by the active language/parser.
+        # Capture names fall back to their dotted prefix, so "keyword.function"
+        # inherits "keyword" unless it is given its own entry here.
         "highlights": {
             "function":             attr(fg = "default"),
             "function.builtin":     attr(fg = "yellow"),
