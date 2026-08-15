@@ -33,6 +33,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/google/go-dap"
@@ -153,6 +154,11 @@ func (s *debugServer) start(ctx context.Context) error {
 		Args:    args,
 		Dir:     strings.TrimPrefix(s.rootURI, "file://"),
 		Watcher: watcher,
+		// Adapters are reached through launchers like `uvx` that exec
+		// the adapter as a grandchild, and they spawn the debuggee in
+		// turn. Heading its own process group is what lets ending the
+		// session tear the whole tree down.
+		SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
 	}
 
 	// Do not use ctx for lifecycle cancellation: it is scoped to the initial

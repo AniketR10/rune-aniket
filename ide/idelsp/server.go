@@ -221,6 +221,11 @@ func (s *langServer) start(ctx context.Context) error {
 		Stdin:   lspFile,
 		Stdout:  lspFile,
 		Watcher: watcher,
+		// Language servers spawn helpers of their own (gopls runs a
+		// telemetry child), and some are reached through a launcher
+		// that execs the server as a grandchild. Heading its own
+		// process group is what lets stopping the server reach them.
+		SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
 	}
 
 	// Do not use ctx for lifecycle cancellation: it is scoped to the initial

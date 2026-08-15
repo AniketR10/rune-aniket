@@ -424,6 +424,16 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	stdcmd.Env = gitenv.Sanitize(stdcmd.Environ())
 	stdcmd.Env = append(stdcmd.Env, cmd.Env...)
 	stdcmd.SysProcAttr = cmd.SysProcAttr
+	// A caller that asks to head a new process group is asking for its
+	// descendants to be terminated with it: intermediaries like
+	// `go run` exec the real program as a grandchild that SIGKILL
+	// cannot be forwarded to. Joining an existing Pgid is someone
+	// else's group and not ours to signal.
+	attr := cmd.SysProcAttr
+	leadsGroup := attr != nil && attr.Setpgid && attr.Pgid == 0
+	if leadsGroup {
+		stdcmd.Cancel = func() error { return killProcessGroup(stdcmd.Process) }
+	}
 
 	p.execMu.RLock()
 	if p.ctx.Err() != nil {
@@ -453,6 +463,15 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		err := stdcmd.Wait()
 		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v",
 			stdcmd.Args, stdcmd.Process.Pid, err)
+
+		if leadsGroup {
+			// Cancellation is not the only way a tree is left
+			// behind: a program that exits on its own can leave
+			// helpers running. The group's id stays reserved while
+			// any member of it is alive, so this cannot reach the
+			// group of a process that reused the pid.
+			_ = killProcessGroup(stdcmd.Process)
+		}
 
 		ctx, cancel := context.WithTimeout(
 			context.Background(), watcherWaitTimeout)
@@ -504,6 +523,15 @@ func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 		return fmt.Errorf("syscall kill: %w", err)
 	}
 	return nil
+}
+
+// killProcessGroup terminates every process in the group led by proc.
+func killProcessGroup(proc *os.Process) error {
+	err := syscall.Kill(-proc.Pid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
 }
 
 func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {

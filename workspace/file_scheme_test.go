@@ -31,7 +31,9 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -600,6 +602,89 @@ func TestStartCommand(t *testing.T) {
 				"or directory'")
 		require.NoError(t, <-ch)
 		assert.Equal(t, "ok\n", stdout.String())
+	})
+
+	// Commands launched behind an intermediary (`go run`, `uv run`,
+	// `cargo run`) exec the real program as a grandchild. SIGKILL
+	// cannot be forwarded, so killing only the direct child leaves the
+	// grandchild running forever.
+	t.Run("cancelling a process group leader kills its tree", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		pidPath := filepath.Join(tmpDir, "grandchild.pid")
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		_, err = s.StartCommand(ctx, workspaceapi.Cmd{
+			Path: "/bin/sh",
+			Args: []string{"-c", fmt.Sprintf(
+				"sleep 60 & echo $! > %s; wait", pidPath)},
+			SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
+		})
+		require.NoError(t, err)
+
+		var grandchild int
+		require.Eventually(t, func() bool {
+			data, err := os.ReadFile(pidPath)
+			if err != nil {
+				return false
+			}
+			grandchild, err = strconv.Atoi(strings.TrimSpace(string(data)))
+			return err == nil && grandchild > 0 &&
+				syscall.Kill(grandchild, 0) == nil
+		}, 10*time.Second, 10*time.Millisecond,
+			"grandchild never started")
+
+		cancel()
+
+		require.Eventually(t, func() bool {
+			return syscall.Kill(grandchild, 0) != nil
+		}, 10*time.Second, 10*time.Millisecond,
+			"grandchild outlived the cancelled command")
+	})
+
+	// Cancellation is not the only way a tree is left behind: a
+	// program that exits on its own can leave helpers running, and
+	// nothing cancels the context in that case.
+	t.Run("a group leader's tree dies when it exits on its own", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		pidPath := filepath.Join(tmpDir, "helper.pid")
+		ch := make(chan error, 1)
+
+		_, err = s.StartCommand(context.Background(), workspaceapi.Cmd{
+			Path: "/bin/sh",
+			Args: []string{"-c", fmt.Sprintf(
+				"sleep 60 & echo $! > %s", pidPath)},
+			SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
+			Watcher:     workspaceapi.ChanProcessWatcher(ch),
+		})
+		require.NoError(t, err)
+		require.NoError(t, <-ch, "the command exits successfully on its own")
+
+		data, err := os.ReadFile(pidPath)
+		require.NoError(t, err)
+		helper, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		require.NoError(t, err)
+
+		require.Eventually(t, func() bool {
+			return syscall.Kill(helper, 0) != nil
+		}, 10*time.Second, 10*time.Millisecond,
+			"helper outlived the command that spawned it")
 	})
 }
 

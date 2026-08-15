@@ -829,6 +829,31 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	assert.Nil(t, states[0].LastErr)
 }
 
+// TestWorkspaceRunnerRunsExtensionInItsOwnProcessGroup pins the
+// arrangement that lets stopping an extension reach the program itself:
+// source entrypoints run behind `go run`, `uv run` or `cargo run`, which
+// exec the extension as a grandchild that SIGKILL cannot be forwarded
+// to. Without a group of its own, only the intermediary is terminated
+// and the extension is left orphaned.
+func TestWorkspaceRunnerRunsExtensionInItsOwnProcessGroup(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+
+	exec := &recordingExecutor{}
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), nopTrustVerifier{}, uri,
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
+	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
+
+	attr := exec.waitCmd(t).SysProcAttr
+	require.NotNil(t, attr)
+	assert.True(t, attr.Setpgid, "extension must head its own process group")
+	assert.Zero(t, attr.Pgid, "extension must not join an existing group")
+}
+
 func TestWorkspaceRunnerWaitReady(t *testing.T) {
 	t.Parallel()
 

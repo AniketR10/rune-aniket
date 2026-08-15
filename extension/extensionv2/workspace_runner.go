@@ -316,6 +316,11 @@ func (m *workspaceRunner) makeCommand(
 		Args:    argv[1:],
 		Dir:     m.dataDir, // default
 		Watcher: workspaceapi.ChanProcessWatcher(waitCh),
+		// Source entrypoints run behind `go run`, `uv run` or
+		// `cargo run`, which exec the extension as a grandchild that
+		// SIGKILL cannot be forwarded to. Heading its own process
+		// group is what lets stopping the extension reach it.
+		SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
 	}
 
 	// if local workspace, then do set dir in a best effort for
