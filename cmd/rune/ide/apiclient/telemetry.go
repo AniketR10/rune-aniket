@@ -30,6 +30,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,8 +40,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idelsp/languages"
 )
 
 const telemetryPath = "/telemetry"
@@ -46,6 +51,21 @@ const telemetryPath = "/telemetry"
 // flushTimeout bounds the final usage post performed on Close so that
 // shutting down Rune while offline is not delayed by a hanging request.
 const flushTimeout = 300 * time.Millisecond
+
+// unknownLanguage buckets files whose language cannot be derived from the
+// extension, or whose derived id is not a plausible language name, so that no
+// path-derived data ends up in the payload.
+const unknownLanguage = "other"
+
+// maxLanguageLen and maxLanguages bound what a single session can report: long
+// or numerous ids come from generated or scratch files rather than from
+// languages a user needs support for. Opens past maxLanguages are dropped
+// rather than folded into unknownLanguage, which would misreport a real
+// language as one Rune could not identify.
+const (
+	maxLanguageLen = 24
+	maxLanguages   = 64
+)
 
 // TelemetryEvents returns the events that telemetry's text.EventHandler needs
 // to collects user statistics.
@@ -79,6 +99,16 @@ type telemetry struct {
 	edited         atomic.Int32
 	watchedChanges atomic.Int32
 	commands       atomic.Int32
+
+	// languages maps a language id to its *atomic.Int32 open count, bounded
+	// in cardinality by numLanguages.
+	languages    sync.Map
+	numLanguages atomic.Int32
+
+	// usageMu serializes usage posts: usageLanguages is refilled in place by
+	// every post, so a post must complete before the next one overwrites it.
+	usageMu        sync.Mutex
+	usageLanguages map[string]int
 }
 
 func newTelemetry(
@@ -98,6 +128,7 @@ func newTelemetry(
 	}
 	ret := new(telemetry)
 	ret.auth = auth
+	ret.usageLanguages = make(map[string]int, maxLanguages)
 
 	ret.url = url.JoinPath(telemetryPath).String()
 	ret.sessionID = uuid.New().String()
@@ -142,14 +173,22 @@ func (t *telemetry) periodicPostData(period time.Duration) {
 			return
 		}
 
-		data := t.getUsage()
-		err := t.postData(buf, period, data)
-		if err != nil {
+		if err := t.postUsage(buf, period); err != nil {
 			log.Tracef("Could not post telemetry usage data: %v", err)
-			continue
 		}
-		t.resetUsage(data)
 	}
+}
+
+func (t *telemetry) postUsage(buf *bytes.Buffer, period time.Duration) error {
+	t.usageMu.Lock()
+	defer t.usageMu.Unlock()
+
+	data := t.getUsage()
+	if err := t.postData(buf, period, data); err != nil {
+		return err
+	}
+	t.resetUsage(data)
+	return nil
 }
 
 func (t *telemetry) getUsage() telemetryUsagePayload {
@@ -160,10 +199,25 @@ func (t *telemetry) getUsage() telemetryUsagePayload {
 	data.Edited = int(t.edited.Load())
 	data.WatchedChanges = int(t.watchedChanges.Load())
 	data.Commands = int(t.commands.Load())
+	data.Languages = t.snapshotLanguages()
 	data.SID = t.sessionID
 	data.Type = "ClientUsage"
 	data.EditorMode = t.editorMode
 	return data
+}
+
+func (t *telemetry) snapshotLanguages() map[string]int {
+	clear(t.usageLanguages)
+	t.languages.Range(func(lang, count any) bool {
+		if n := int(count.(*atomic.Int32).Load()); n > 0 {
+			t.usageLanguages[lang.(string)] = n
+		}
+		return true
+	})
+	if len(t.usageLanguages) == 0 {
+		return nil
+	}
+	return t.usageLanguages
 }
 
 func (t *telemetry) getSystemData() telemetrySystemPayload {
@@ -191,6 +245,12 @@ func (t *telemetry) resetUsage(data telemetryUsagePayload) {
 	t.edited.Add(-int32(data.Edited))
 	t.watchedChanges.Add(-int32(data.WatchedChanges))
 	t.commands.Add(-int32(data.Commands))
+
+	for lang, n := range data.Languages {
+		if count, ok := t.languages.Load(lang); ok {
+			count.(*atomic.Int32).Add(-int32(n))
+		}
+	}
 }
 
 func (t *telemetry) postData(buf *bytes.Buffer, period time.Duration, data any) error {
@@ -230,6 +290,7 @@ func (t *telemetry) Handle(ctx context.Context, ev textapi.Event) bool {
 	switch ev.Type {
 	case textapi.EventTypeOpen:
 		t.opened.Add(1)
+		t.recordLanguage(ev.URI)
 	case textapi.EventTypeClose:
 		t.closed.Add(1)
 	case textapi.EventTypeFlush:
@@ -248,6 +309,47 @@ func (t *telemetry) recordCommand() {
 	t.commands.Add(1)
 }
 
+// recordLanguage counts the language of an opened file so we can tell which
+// languages users need support for. Only the language id is reported, never
+// the file name or path.
+func (t *telemetry) recordLanguage(uri workspaceapi.URI) {
+	lang := languageID(filepath.Base(uri.Path()))
+	count, seen := t.languages.Load(lang)
+	if !seen {
+		if t.numLanguages.Load() >= maxLanguages {
+			return
+		}
+		var loaded bool
+		count, loaded = t.languages.LoadOrStore(lang, new(atomic.Int32))
+		if !loaded {
+			t.numLanguages.Add(1)
+		}
+	}
+	count.(*atomic.Int32).Add(1)
+}
+
+func languageID(filename string) string {
+	lang, err := languages.LanguageForFile(filename)
+	if err != nil {
+		return unknownLanguage
+	}
+	lang = strings.ToLower(lang)
+	if len(lang) > maxLanguageLen || strings.IndexFunc(lang, isNotLanguageRune) >= 0 {
+		return unknownLanguage
+	}
+	return lang
+}
+
+func isNotLanguageRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		return false
+	case r == '_', r == '-', r == '+', r == '.':
+		return false
+	}
+	return true
+}
+
 func (t *telemetry) Close() error {
 	t.flushFinalUsage()
 	t.cancelCtx()
@@ -255,6 +357,13 @@ func (t *telemetry) Close() error {
 }
 
 func (t *telemetry) flushFinalUsage() {
+	// a periodic post already in flight carries the same counters, and waiting
+	// for it would delay shutdown by as long as its request takes.
+	if !t.usageMu.TryLock() {
+		return
+	}
+	defer t.usageMu.Unlock()
+
 	data := t.getUsage()
 	ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
 	defer cancel()
@@ -271,6 +380,7 @@ type telemetryUsagePayload struct {
 	Flushed        int
 	WatchedChanges int
 	Commands       int
+	Languages      map[string]int
 }
 
 type telemetrySystemPayload struct {

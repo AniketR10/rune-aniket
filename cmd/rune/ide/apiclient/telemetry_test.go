@@ -26,10 +26,12 @@ package apiclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/oauth2"
 )
 
@@ -242,6 +245,112 @@ func TestRecordCommandDisabled(t *testing.T) {
 	client := &Client{}
 	assert.False(t, client.TelemetryEnabled())
 	assert.NotPanics(t, client.RecordCommand)
+}
+
+// TestOpenedLanguagesFlushed verifies opened files are aggregated per language
+// id, including languages Rune has no explicit mapping for, and that the
+// posted counts are cleared afterwards.
+func TestOpenedLanguagesFlushed(t *testing.T) {
+	usage := make(chan telemetryUsagePayload, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p telemetryUsagePayload
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		if p.Type == "ClientUsage" {
+			usage <- p
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", "modal",
+		storagestub.NewInMemoryService(), t.TempDir())
+
+	for _, path := range []string{
+		"file:///home/user/src/rune/main.go",
+		"file:///home/user/src/rune/ide/ide.go",
+		"file:///home/user/src/rune/Makefile",
+		"file:///home/user/src/proj/lib.rs",
+		"file:///home/user/notes",
+	} {
+		uri, err := workspaceapi.ParseURI(path)
+		require.NoError(t, err)
+		tel.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+	}
+
+	require.NoError(t, tel.Close())
+
+	select {
+	case p := <-usage:
+		assert.Equal(t,
+			map[string]int{"go": 2, "make": 1, "rust": 1, unknownLanguage: 1},
+			p.Languages)
+		tel.resetUsage(p)
+		assert.Empty(t, tel.getUsage().Languages)
+	case <-time.After(time.Second):
+		t.Fatal("Close did not flush a final ClientUsage event")
+	}
+}
+
+// TestLanguageIDSanitized verifies only plausible language ids reach the
+// payload, so no path-derived data leaks through the extension fallback.
+func TestLanguageIDSanitized(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		want     string
+	}{
+		{"explicit extension", "lib.rs", "rust"},
+		{"implicit extension", "main.go", "go"},
+		{"special filename", "Makefile", "make"},
+		{"uppercase extension", "MAIN.GO", "go"},
+		{"unmapped extension", "shader.wgsl", "wgsl"},
+		{"no extension", "notes", unknownLanguage},
+		{"overlong extension", "dump." + strings.Repeat("x", maxLanguageLen+1), unknownLanguage},
+		{"non-language runes", "archive.tar~backup!", unknownLanguage},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, languageID(tt.filename))
+		})
+	}
+}
+
+// TestOpenedLanguagesCardinalityCapped verifies a session opening files with
+// many distinct extensions cannot grow the payload without bound, and that
+// opens past the cap are dropped rather than misreported as unknown.
+func TestOpenedLanguagesCardinalityCapped(t *testing.T) {
+	u, err := url.Parse("http://127.0.0.1:0")
+	require.NoError(t, err)
+
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", "modal",
+		storagestub.NewInMemoryService(), t.TempDir())
+	defer tel.cancelCtx()
+
+	for i := range maxLanguages * 2 {
+		uri, err := workspaceapi.ParseURI(fmt.Sprintf("file:///tmp/scratch.ext%d", i))
+		require.NoError(t, err)
+		tel.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+	}
+
+	got := tel.getUsage().Languages
+	assert.Len(t, got, maxLanguages)
+	assert.NotContains(t, got, unknownLanguage, "dropped opens must not pollute the unknown bucket")
+}
+
+// TestOpenedLanguagesOmittedWhenEmpty verifies a session that opened no files
+// does not report an empty language map.
+func TestOpenedLanguagesOmittedWhenEmpty(t *testing.T) {
+	u, err := url.Parse("http://127.0.0.1:0")
+	require.NoError(t, err)
+
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", "modal",
+		storagestub.NewInMemoryService(), t.TempDir())
+	defer tel.cancelCtx()
+
+	assert.Nil(t, tel.getUsage().Languages)
 }
 
 // captureSystemPayload starts telemetry against a test server and returns the
