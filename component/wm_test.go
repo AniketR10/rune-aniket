@@ -1706,6 +1706,327 @@ func TestComponentWindowAt(t *testing.T) {
 	}
 }
 
+// tileAtLayout builds a window manager layout for the TileAt suite and
+// returns the windows the expectations refer to by name.
+type tileAtLayout struct {
+	name  string
+	size  term.Coordinates
+	build func(t *testing.T, wm *WindowManager, root Window) map[string]Window
+	cases []tileAtCase
+}
+
+type tileAtCase struct {
+	at term.Coordinates
+	// want names a window returned by build, or is empty when TileAt
+	// must report no tile at all.
+	want string
+	why  string
+}
+
+func TestComponentTileAt(t *testing.T) {
+	newTile := func(ch rune) *component.TestComponent {
+		return &component.TestComponent{Ch: ch}
+	}
+	newFloat := func(ch rune, w, h int) component.Floating {
+		return component.StaticFloating(newTile(ch), w, h)
+	}
+
+	layouts := []tileAtLayout{
+		{
+			name: "single tile covers the whole surface",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(_ *testing.T, _ *WindowManager, root Window) map[string]Window {
+				return map[string]Window{"root": root}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "root"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "root"},
+				{at: term.Coordinates{X: 10, Y: 4}, want: "root"},
+				{at: term.Coordinates{X: -1, Y: 0}, why: "negative x"},
+				{at: term.Coordinates{X: 0, Y: -1}, why: "negative y"},
+				{at: term.Coordinates{X: 20, Y: 0}, why: "x past the right edge"},
+				{at: term.Coordinates{X: 0, Y: 8}, why: "y past the bottom edge"},
+			},
+		},
+		{
+			name: "vertical split",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				right, ok := wm.SplitVertical(root, newTile('r'))
+				require.True(t, ok)
+				return map[string]Window{"left": root, "right": right}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "left"},
+				{at: term.Coordinates{X: 9, Y: 7}, want: "left"},
+				{at: term.Coordinates{X: 10, Y: 0}, want: "right"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "right"},
+			},
+		},
+		{
+			name: "horizontal split",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				bottom, ok := wm.SplitHorizontal(root, newTile('b'))
+				require.True(t, ok)
+				return map[string]Window{"top": root, "bottom": bottom}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "top"},
+				{at: term.Coordinates{X: 19, Y: 3}, want: "top"},
+				{at: term.Coordinates{X: 0, Y: 4}, want: "bottom"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "bottom"},
+			},
+		},
+		{
+			name: "nested splits",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				right, ok := wm.SplitVertical(root, newTile('r'))
+				require.True(t, ok)
+				rightBottom, ok := wm.SplitHorizontal(right, newTile('B'))
+				require.True(t, ok)
+				leftBottom, ok := wm.SplitHorizontal(root, newTile('L'))
+				require.True(t, ok)
+				return map[string]Window{
+					"leftTop":     root,
+					"leftBottom":  leftBottom,
+					"rightTop":    right,
+					"rightBottom": rightBottom,
+				}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "leftTop"},
+				{at: term.Coordinates{X: 9, Y: 3}, want: "leftTop"},
+				{at: term.Coordinates{X: 0, Y: 4}, want: "leftBottom"},
+				{at: term.Coordinates{X: 9, Y: 7}, want: "leftBottom"},
+				{at: term.Coordinates{X: 10, Y: 0}, want: "rightTop"},
+				{at: term.Coordinates{X: 19, Y: 3}, want: "rightTop"},
+				{at: term.Coordinates{X: 10, Y: 4}, want: "rightBottom"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "rightBottom"},
+			},
+		},
+		{
+			name: "three vertical siblings",
+			size: term.Coordinates{X: 30, Y: 6},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				mid, ok := wm.SplitVertical(root, newTile('m'))
+				require.True(t, ok)
+				last, ok := wm.SplitVertical(mid, newTile('l'))
+				require.True(t, ok)
+				return map[string]Window{"first": root, "mid": mid, "last": last}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "first"},
+				{at: term.Coordinates{X: 9, Y: 5}, want: "first"},
+				{at: term.Coordinates{X: 10, Y: 0}, want: "mid"},
+				{at: term.Coordinates{X: 19, Y: 5}, want: "mid"},
+				{at: term.Coordinates{X: 20, Y: 0}, want: "last"},
+				{at: term.Coordinates{X: 29, Y: 5}, want: "last"},
+			},
+		},
+		{
+			name: "a float never shadows the tile underneath",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				right, ok := wm.SplitVertical(root, newTile('r'))
+				require.True(t, ok)
+				float := wm.FloatingWindow(newFloat('F', 20, 8), FloatingConfig{
+					Alignment: component.AlignmentCentered,
+				})
+				return map[string]Window{"left": root, "right": right, "float": float}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "left"},
+				{at: term.Coordinates{X: 9, Y: 4}, want: "left",
+					why: "covered by the float, but TileAt ignores floats"},
+				{at: term.Coordinates{X: 10, Y: 4}, want: "right",
+					why: "covered by the float, but TileAt ignores floats"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "right"},
+			},
+		},
+		{
+			name: "stacked floats never shadow tiles",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				bottom, ok := wm.SplitHorizontal(root, newTile('b'))
+				require.True(t, ok)
+				wm.FloatingWindow(newFloat('F', 10, 4), FloatingConfig{})
+				wm.FloatingWindow(newFloat('G', 6, 2), FloatingConfig{
+					Alignment: component.AlignmentCentered,
+				})
+				return map[string]Window{"top": root, "bottom": bottom}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "top"},
+				{at: term.Coordinates{X: 10, Y: 4}, want: "bottom"},
+			},
+		},
+		{
+			name: "a minimized float shifts the tiled area down",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				bottom, ok := wm.SplitHorizontal(root, newTile('b'))
+				require.True(t, ok)
+				float := wm.FloatingWindow(newFloat('F', 20, 8), FloatingConfig{})
+				require.True(t, float.MinimizeUp(2))
+				return map[string]Window{"top": root, "bottom": bottom}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, why: "inside the minimized strip"},
+				{at: term.Coordinates{X: 19, Y: 2}, why: "inside the minimized strip"},
+				{at: term.Coordinates{X: 0, Y: 3}, want: "top",
+					why: "the tiled area starts below the strip"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "bottom"},
+			},
+		},
+		{
+			name: "a minimized float shifts the tiled area right",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				right, ok := wm.SplitVertical(root, newTile('r'))
+				require.True(t, ok)
+				float := wm.FloatingWindow(newFloat('F', 20, 8), FloatingConfig{})
+				require.True(t, float.MinimizeLeft(3))
+				return map[string]Window{"left": root, "right": right}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, why: "inside the minimized strip"},
+				{at: term.Coordinates{X: 3, Y: 7}, why: "inside the minimized strip"},
+				{at: term.Coordinates{X: 4, Y: 0}, want: "left"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "right"},
+			},
+		},
+		{
+			name: "a bottom-minimized float leaves the trailing rows tileless",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				float := wm.FloatingWindow(newFloat('F', 20, 8), FloatingConfig{})
+				require.True(t, float.MinimizeDown(2))
+				return map[string]Window{"root": root}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "root"},
+				{at: term.Coordinates{X: 19, Y: 4}, want: "root"},
+				{at: term.Coordinates{X: 0, Y: 5}, why: "inside the minimized strip"},
+				{at: term.Coordinates{X: 19, Y: 7}, why: "inside the minimized strip"},
+			},
+		},
+		{
+			name: "fixed-size tiles",
+			size: term.Coordinates{X: 30, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				right, ok := wm.SplitVertical(root, newTile('r'))
+				require.True(t, ok)
+				require.True(t, wm.SetWidth(root, 5))
+				return map[string]Window{"left": root, "right": right}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "left"},
+				{at: term.Coordinates{X: 4, Y: 7}, want: "left"},
+				{at: term.Coordinates{X: 5, Y: 0}, want: "right"},
+				{at: term.Coordinates{X: 29, Y: 7}, want: "right"},
+			},
+		},
+		{
+			name: "root split spanning the full height",
+			size: term.Coordinates{X: 20, Y: 8},
+			build: func(t *testing.T, wm *WindowManager, root Window) map[string]Window {
+				bottom, ok := wm.SplitHorizontal(root, newTile('b'))
+				require.True(t, ok)
+				side, ok := wm.SplitRoot(component.AlignmentRight, newTile('s'))
+				require.True(t, ok)
+				return map[string]Window{"top": root, "bottom": bottom, "side": side}
+			},
+			cases: []tileAtCase{
+				{at: term.Coordinates{X: 0, Y: 0}, want: "top"},
+				{at: term.Coordinates{X: 0, Y: 7}, want: "bottom"},
+				{at: term.Coordinates{X: 19, Y: 0}, want: "side"},
+				{at: term.Coordinates{X: 19, Y: 7}, want: "side",
+					why: "a root split spans the full height"},
+			},
+		},
+	}
+
+	for _, layout := range layouts {
+		t.Run(layout.name, func(t *testing.T) {
+			wm, root := NewWindowManager(&component.TestComponent{Ch: '0'},
+				testWindowManagerConfig())
+			wm.Resize(layout.size.X, layout.size.Y)
+			windows := layout.build(t, wm, root)
+			wm.Resize(layout.size.X, layout.size.Y)
+
+			for _, test := range layout.cases {
+				t.Run(fmt.Sprintf("%d,%d", test.at.X, test.at.Y), func(t *testing.T) {
+					got, ok := wm.TileAt(test.at)
+					if test.want == "" {
+						assert.False(t, ok, test.why)
+						assert.Equal(t, Window{}, got,
+							"a missing tile must return the zero Window")
+						return
+					}
+					want, found := windows[test.want]
+					require.True(t, found, "unknown window %q", test.want)
+					require.True(t, ok, test.why)
+					assert.Equal(t, want, got, test.why)
+				})
+			}
+		})
+	}
+}
+
+// TestComponentTileAtNeverReturnsOverlays sweeps every cell of a layout
+// carrying both a float and a minimized strip, asserting the two
+// invariants TileAt exists for: it never resolves to an overlay, and
+// wherever it does resolve the tile actually contains the position.
+func TestComponentTileAtNeverReturnsOverlays(t *testing.T) {
+	wm, root := NewWindowManager(&component.TestComponent{Ch: '1'},
+		testWindowManagerConfig())
+	wm.Resize(24, 10)
+
+	right, ok := wm.SplitVertical(root, &component.TestComponent{Ch: '2'})
+	require.True(t, ok)
+	bottom, ok := wm.SplitHorizontal(right, &component.TestComponent{Ch: '3'})
+	require.True(t, ok)
+
+	float := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'F'}, 8, 4),
+		FloatingConfig{Alignment: component.AlignmentCentered},
+	)
+	strip := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'm'}, 24, 10),
+		FloatingConfig{},
+	)
+	require.True(t, strip.MinimizeDown(2))
+	wm.Resize(24, 10)
+
+	tiles := []Window{root, right, bottom}
+	overlays := []Window{float, strip}
+
+	resolved := 0
+	for y := range 10 {
+		for x := range 24 {
+			at := term.Coordinates{X: x, Y: y}
+			got, ok := wm.TileAt(at)
+			if !ok {
+				continue
+			}
+			resolved++
+			assert.NotContains(t, overlays, got,
+				"TileAt(%v) resolved to an overlay window", at)
+			require.Contains(t, tiles, got, "TileAt(%v) resolved to an unknown window", at)
+
+			pos := got.Position()
+			assert.True(t,
+				x >= pos.X && x < pos.X+got.Width() &&
+					y >= pos.Y && y < pos.Y+got.Height(),
+				"TileAt(%v) returned a tile at %v sized %dx%d that does not contain it",
+				at, pos, got.Width(), got.Height())
+		}
+	}
+	assert.Positive(t, resolved, "the sweep must resolve at least one tile")
+}
+
 func TestFixedSizeWindows(t *testing.T) {
 	h1 := &component.TestComponent{Ch: '1'}
 	wm, w1 := NewWindowManager(h1, testWindowManagerConfig())

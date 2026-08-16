@@ -72,6 +72,7 @@ func dragConfig() Config {
 	cfg.Dim = false
 	cfg.TabBarHeight = 1
 	cfg.DropTargetAttr = term.Attributes{Fg: term.ColorSilver}
+	cfg.DropTargetLabelAttr = term.Attributes{Fg: term.ColorBlue}
 	cfg.DropTargetLabels = map[string]string{
 		"":           "Drop files here",
 		"rune-agent": "Drop files here to add to chat",

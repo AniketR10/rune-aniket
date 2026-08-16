@@ -45,11 +45,44 @@ type WindowManagerConfig struct {
 	FocusFrameAttr     term.Attributes
 	FocusFrameCharSet  compapi.FrameCharSet
 	ScrollBarHoverChar rune
-	// OnBarCloseClick is invoked when the close icon on a floating
-	// window's bar is clicked. Returning true marks the click as
-	// handled; otherwise the window is closed via Window.Close.
-	OnBarCloseClick func(win Window) bool
+	// FloatingBar receives the interactions produced by floating
+	// window bars. It may be nil.
+	FloatingBar FloatingBarHandler
 }
+
+// FloatingBarHandler groups the interactions produced by a floating
+// window's bar. Positions are relative to the window manager's
+// top-left corner.
+type FloatingBarHandler interface {
+	// OnBarClose reports whether the close-icon click was handled;
+	// when false the window is closed via Window.Close.
+	OnBarClose(win Window) bool
+	// OnBarDrag is invoked on every mouse move of a bar move drag,
+	// after the window has been repositioned.
+	OnBarDrag(win Window, pos term.Coordinates)
+	// OnBarDrop reports whether the release was consumed; when true
+	// win may already have been closed by the handler.
+	OnBarDrop(win Window, pos term.Coordinates) bool
+	// OnBarDragCancel is invoked when a bar move drag ends without a
+	// drop, including when win is closed mid-drag.
+	OnBarDragCancel(win Window)
+}
+
+// NopFloatingBarHandler implements FloatingBarHandler with no-ops so
+// partial implementors can embed it.
+type NopFloatingBarHandler struct{}
+
+// OnBarClose satisfies FloatingBarHandler.
+func (NopFloatingBarHandler) OnBarClose(Window) bool { return false }
+
+// OnBarDrag satisfies FloatingBarHandler.
+func (NopFloatingBarHandler) OnBarDrag(Window, term.Coordinates) {}
+
+// OnBarDrop satisfies FloatingBarHandler.
+func (NopFloatingBarHandler) OnBarDrop(Window, term.Coordinates) bool { return false }
+
+// OnBarDragCancel satisfies FloatingBarHandler.
+func (NopFloatingBarHandler) OnBarDragCancel(Window) {}
 
 // winDragMode is a bitmask describing an in-progress window drag
 // started from a floating window's bar or a window's frame edge.
@@ -122,6 +155,17 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 	return wm.newNode(win), true
 }
 
+// TileAt returns the tiled window rendered at pos, which is relative to
+// the window manager's top-left corner, ignoring floating and minimized
+// windows drawn over the tiled layout.
+func (wm *WindowManager) TileAt(pos term.Coordinates) (Window, bool) {
+	win, ok := wm.comp.TileAt(pos)
+	if !ok {
+		return Window{}, false
+	}
+	return wm.newNode(win), true
+}
+
 // Init initializes this WindowManager with the given handler. If border is true, it will draw
 // a border around every tile.
 func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
@@ -174,6 +218,11 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	var endDragAfter bool
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
+		// The cancel hook may close windows, so nothing may be
+		// resolved from the layout before it runs.
+		if wm.winDrag != 0 && wm.winDragWin.Closed() {
+			wm.cancelWindowDrag()
+		}
 		childAtMouse, ok := wm.comp.WindowAt(mousePos)
 		// A pinned drag target can be closed mid-drag (e.g. by a
 		// runner or by the inner handler), leaving prevMouseLeftChild
@@ -184,9 +233,6 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			wm.resetScrollBarMouse()
 			wm.prevMouseLeftDrag = false
 			wm.prevMouseLeftChild = component.Window{}
-		}
-		if wm.winDrag != 0 && wm.winDragWin.Closed() {
-			wm.resetWindowDrag()
 		}
 		if wm.winDrag != 0 {
 			return wm.handleWindowDrag(mousePos, ev)
@@ -694,20 +740,37 @@ func (wm *WindowManager) resetWindowDrag() {
 	wm.winDragWin = component.Window{}
 }
 
+// cancelWindowDrag ends an in-progress drag without a drop, notifying
+// the floating bar handler when the drag was a bar move.
+func (wm *WindowManager) cancelWindowDrag() {
+	if wm.winDrag == winDragMove && wm.config.FloatingBar != nil {
+		wm.config.FloatingBar.OnBarDragCancel(wm.newNode(wm.winDragWin))
+	}
+	wm.resetWindowDrag()
+}
+
 // handleWindowDrag routes mouse events while a window move/resize drag
 // is in progress. mouse is in root coordinates.
 func (wm *WindowManager) handleWindowDrag(
 	mouse term.Coordinates, ev term.Event,
 ) (exit, handled bool) {
+	barMove := wm.winDrag == winDragMove && wm.config.FloatingBar != nil
 	switch ev.Key {
 	case term.MouseLeft:
+		win := wm.newNode(wm.winDragWin)
 		wm.applyWindowDrag(mouse)
+		if barMove {
+			wm.config.FloatingBar.OnBarDrag(win, mouse)
+		}
 		return false, true
 	case term.MouseRelease:
+		if barMove {
+			wm.config.FloatingBar.OnBarDrop(wm.newNode(wm.winDragWin), mouse)
+		}
 		wm.resetWindowDrag()
 		return false, true
 	default:
-		wm.resetWindowDrag()
+		wm.cancelWindowDrag()
 		return false, false
 	}
 }
@@ -855,7 +918,7 @@ func (wm *WindowManager) closeFromBar(win component.Window) (
 	exit, handled, done bool,
 ) {
 	bw := wm.newNode(win)
-	if cb := wm.config.OnBarCloseClick; cb != nil && cb(bw) {
+	if h := wm.config.FloatingBar; h != nil && h.OnBarClose(bw) {
 		return false, true, true
 	}
 	_ = bw.Close()

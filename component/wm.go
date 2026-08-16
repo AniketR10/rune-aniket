@@ -442,6 +442,26 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 	return wm.nodeToWindow(wm.tree.TileAt(pos)), true
 }
 
+// TileAt returns the tiled window at pos, ignoring floating and minimized
+// windows rendered over the tiled layout.
+func (wm *WindowManager) TileAt(pos term.Coordinates) (Window, bool) {
+	if pos.X < 0 || pos.Y < 0 || pos.X >= wm.width || pos.Y >= wm.height {
+		return Window{}, false
+	}
+
+	if wm.minimizedDirty {
+		wm.Resize(wm.width, wm.height)
+	}
+
+	pos.Y -= wm.minimizedOffset.Y
+	pos.X -= wm.minimizedOffset.X
+	if pos.X < 0 || pos.Y < 0 ||
+		pos.X >= wm.tree.root.width || pos.Y >= wm.tree.root.height {
+		return Window{}, false
+	}
+	return wm.nodeToWindow(wm.tree.TileAt(pos)), true
+}
+
 // SetFrameCharSet sets the defaultframe border cells used
 // to draw borders around tiles.  Note that this has no effect if WindowManager was
 // initialized with border == false.

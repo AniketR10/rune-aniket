@@ -24,11 +24,15 @@
 package browser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"path"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -39,12 +43,17 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 )
 
 var _ browserapi.Handler = (*Component)(nil)
+var _ thandler.FloatingBarHandler = (*Component)(nil)
+var _ DragTarget = (*Component)(nil)
 
 // offsetTabs is the tabs bar wrapped in a virtual writer offset so the
 // bar visually starts at TabBarOffset. The underlying component.Tabs is
@@ -94,8 +103,8 @@ type Component struct {
 	buffers     []*Tab
 	windows     map[uint64]*browserWindow
 	prompts     map[string]Window
-	// drag holds the drop-target overlay state. See drag.go.
 	drag        dragState
+	winDrop     winDropState
 	interrupter term.Interrupter
 }
 
@@ -109,7 +118,7 @@ func NewComponent(config Config) *Component {
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
-	c.config.WindowManagerConfig.OnBarCloseClick = c.onBarCloseClick
+	c.config.WindowManagerConfig.FloatingBar = c
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.nextSplit = browserapi.OrientationRight
@@ -1374,9 +1383,9 @@ func (c *Component) splitInverted(
 	splitWindow Window,
 	newHandler browserapi.Handler,
 ) (*browserWindow, bool) {
-	focusBrowserWin := c.focus()
-	focusHandlerWin := focusBrowserWin.win
-	focusHandler := focusBrowserWin.win.Content()
+	splitBrowserWin := splitWindow.(*browserWindow)
+	splitHandlerWin := splitBrowserWin.win
+	splitHandler := splitHandlerWin.Content()
 
 	// perform a regular split
 	newBrowserWin := c.split(split, splitWindow, newHandler)
@@ -1388,20 +1397,20 @@ func (c *Component) splitInverted(
 
 	// switch underlying handler.Window
 	// so the new *browserWindow refers to the
-	// original focus handler.Window
-	focusBrowserWin.win = newHandlerWin
-	newBrowserWin.win = focusHandlerWin
+	// original split target's handler.Window
+	splitBrowserWin.win = newHandlerWin
+	newBrowserWin.win = splitHandlerWin
 
 	// switch content
 	newBrowserWin.win.SetContent(newBrowserHandler)
-	focusBrowserWin.win.SetContent(focusHandler)
+	splitBrowserWin.win.SetContent(splitHandler)
 
 	// ammend id mapping
 	c.windows[newBrowserWin.WindowID()] = newBrowserWin
-	c.windows[focusBrowserWin.WindowID()] = focusBrowserWin
+	c.windows[splitBrowserWin.WindowID()] = splitBrowserWin
 
 	// return new instance of browser window
-	// pointing to old instance of focus window
+	// pointing to old instance of the split target window
 	return newBrowserWin, true
 }
 
@@ -1480,21 +1489,6 @@ func (c *Component) closeWindow(win *browserWindow) error {
 func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
 	w, ok := c.windows[winID]
 	return w, ok
-}
-
-// onBarCloseClick routes window-bar close icon clicks through
-// closeWindow so tab and handler release bookkeeping runs, mirroring
-// tab close and :close. Returning false for unknown windows lets the
-// window manager fall back to closing the window directly.
-func (c *Component) onBarCloseClick(win thandler.Window) bool {
-	bw, ok := c.findWindow(win.ID())
-	if !ok {
-		return false
-	}
-	if err := c.closeWindow(bw); err != nil {
-		c.setError(err)
-	}
-	return true
 }
 
 func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
@@ -1758,4 +1752,410 @@ func (s *wmSubscriber) OnFocus(prev, focus thandler.Window) {
 	c := (*Component)(s)
 	c.focusWindow = focus
 	c.dirtyTabs = true
+}
+
+// OnBarClose routes window-bar close icon clicks through closeWindow so
+// tab and handler release bookkeeping runs, mirroring tab close and
+// :close. Returning false for unknown windows lets the window manager
+// fall back to closing the window directly.
+func (c *Component) OnBarClose(win thandler.Window) bool {
+	bw, ok := c.findWindow(win.ID())
+	if !ok {
+		return false
+	}
+	if err := c.closeWindow(bw); err != nil {
+		c.setError(err)
+	}
+	return true
+}
+
+// OnBarDrag satisfies handler.FloatingBarHandler by keeping the
+// pre-split preview in sync with the cursor.
+func (c *Component) OnBarDrag(win thandler.Window, pos term.Coordinates) {
+	src, ok := c.findWindow(win.ID())
+	if !ok {
+		c.clearWinDropPreview()
+		return
+	}
+	c.updateWinDropPreview(src, pos)
+}
+
+// OnBarDragCancel satisfies handler.FloatingBarHandler.
+func (c *Component) OnBarDragCancel(thandler.Window) {
+	c.clearWinDropPreview()
+}
+
+// OnBarDrop converts the dragged float's content into a tab and
+// installs it in the previewed region. It reports false when the
+// release lands outside any drop zone, leaving the drag a plain move.
+func (c *Component) OnBarDrop(win thandler.Window, pos term.Coordinates) bool {
+	src, ok := c.findWindow(win.ID())
+	if !ok {
+		c.clearWinDropPreview()
+		return false
+	}
+	c.updateWinDropPreview(src, pos)
+
+	st := c.winDrop
+	dst := st.target
+	if st.zone != winDropCenter {
+		dst = st.preview
+	}
+	if st.zone == winDropNone || dst == nil || dst.Closed() {
+		c.clearWinDropPreview()
+		return false
+	}
+
+	tab, _ := c.NewTabFromContent(winDropTabIcon, c.winDropTabName(src), src)
+	// Release the preview before closing the float so the teardown
+	// below cannot reclaim the window we are about to fill.
+	c.winDrop = winDropState{}
+	c.stopVeil()
+
+	if err := src.Close(); err != nil {
+		c.setError(err)
+		return false
+	}
+	if err := dst.SetContent(tab); err != nil {
+		c.setError(err)
+		return false
+	}
+	c.SetFocus(dst)
+	c.interrupt()
+	return true
+}
+
+// winDropTabName names the tab created from a dropped float, preferring
+// the bar title and falling back to the content's resource basename.
+func (c *Component) winDropTabName(src *browserWindow) string {
+	if title := src.win.Title(); title != "" {
+		return title
+	}
+	content, err := src.Content()
+	if err != nil {
+		return winDropDefaultTabName
+	}
+	if urier, ok := content.(interface{ URI() workspaceapi.URI }); ok {
+		if base := path.Base(urier.URI().Path()); base != "" &&
+			base != "." && base != "/" {
+			return base
+		}
+	}
+	return winDropDefaultTabName
+}
+
+// updateWinDropPreview resolves the drop zone under pos and installs
+// the matching pre-split preview, tearing down any stale one.
+func (c *Component) updateWinDropPreview(src *browserWindow, pos term.Coordinates) {
+	if c.holdsWinDropPreview(pos) {
+		return
+	}
+	target, region, local, ok := c.winDropTarget(src, pos)
+	if !ok {
+		c.clearWinDropPreview()
+		return
+	}
+	zone := dropZoneAt(local, region.w, region.h)
+	if target == c.winDrop.target && zone == c.winDrop.zone {
+		return
+	}
+
+	c.clearWinDropPreview()
+	// The teardown above closed the placeholder, which is itself a
+	// tile the layout may have moved under the cursor since it was
+	// created, so target is only known to be live before that call.
+	if zone == winDropNone || target.Closed() {
+		return
+	}
+	c.winDrop = winDropState{
+		src:    src,
+		target: target,
+		region: region,
+		zone:   zone,
+	}
+	if zone != winDropCenter {
+		preview, ok := c.Split(zone.orientation(), target, nil)
+		if !ok {
+			c.winDrop = winDropState{}
+			return
+		}
+		c.winDrop.preview = preview.(*browserWindow)
+		// Split focuses the new window; the dragged float must keep
+		// its focus frame for the duration of the drag.
+		c.SetFocus(src)
+	}
+	c.startVeil()
+	c.interrupt()
+}
+
+// holdsWinDropPreview reports whether pos sits on the placeholder but
+// outside the region the current zone was measured against. Inserting
+// the placeholder as a new sibling redistributes the others, and later
+// relayouts move it again, so it can drift off that region while the
+// cursor is still on what the veil highlights. Re-resolving there would
+// pick the placeholder as the next target and split the very window the
+// teardown is about to close.
+func (c *Component) holdsWinDropPreview(pos term.Coordinates) bool {
+	st := c.winDrop
+	if st.zone == winDropNone || st.preview == nil || st.preview.Closed() {
+		return false
+	}
+	return !st.region.contains(pos) && windowRect(st.preview).contains(pos)
+}
+
+// winDropTarget returns the tile the preview applies to, the region the
+// zone is measured against, and pos as a coordinate local to it.
+func (c *Component) winDropTarget(src *browserWindow, pos term.Coordinates) (
+	target *browserWindow, region winDropRect, local term.Coordinates, ok bool,
+) {
+	if st := c.winDrop; st.zone != winDropNone &&
+		st.target != nil && !st.target.Closed() && st.region.contains(pos) {
+		return st.target, st.region, st.region.local(pos), true
+	}
+	win, ok := c.wm.TileAt(pos)
+	if !ok {
+		return nil, winDropRect{}, term.Coordinates{}, false
+	}
+	target, ok = c.findWindow(win.ID())
+	if !ok || target == src {
+		return nil, winDropRect{}, term.Coordinates{}, false
+	}
+	region = windowRect(target)
+	return target, region, region.local(pos), true
+}
+
+// clearWinDropPreview removes the pre-split placeholder and restores
+// the layout and focus the drag found.
+func (c *Component) clearWinDropPreview() {
+	st := c.winDrop
+	if st.zone == winDropNone && st.preview == nil {
+		return
+	}
+	c.winDrop = winDropState{}
+	if st.preview != nil && !st.preview.Closed() {
+		if err := st.preview.Close(); err != nil {
+			c.setError(err)
+		}
+	}
+	if st.src != nil && !st.src.Closed() {
+		c.SetFocus(st.src)
+	}
+	c.stopVeil()
+	c.interrupt()
+}
+
+// winDropVeil returns the rect and label of the window-drag preview.
+func (c *Component) winDropVeil() (win *browserWindow, label string, ok bool) {
+	st := c.winDrop
+	switch st.zone {
+	case winDropNone:
+		return nil, "", false
+	case winDropCenter:
+		return st.target, winDropConvertLabel, st.target != nil
+	default:
+		return st.preview, winDropSplitLabel, st.preview != nil
+	}
+}
+
+// SetInterrupter installs the interrupter used to animate the
+// drop-target veil. Without one the veil is still drawn, but only
+// repaints when the host redraws for another reason.
+func (c *Component) SetInterrupter(i term.Interrupter) {
+	c.interrupter = i
+}
+
+// WindowAt returns the window rendered at pos, which is relative to
+// this Component's top-left corner.
+func (c *Component) WindowAt(pos term.Coordinates) (Window, bool) {
+	off := c.WindowManagerPosition()
+	pos.X -= off.X
+	pos.Y -= off.Y
+	if pos.X < 0 || pos.Y < 0 {
+		return nil, false
+	}
+	win, ok := c.wm.WindowAt(pos)
+	if !ok {
+		return nil, false
+	}
+	bwin, ok := c.findWindow(win.ID())
+	if !ok {
+		return nil, false
+	}
+	return bwin, true
+}
+
+// DragHover marks the window under pos as the pending drop target and
+// starts the veil animation. It reports whether a window was found;
+// when none is, any previous target is cleared.
+func (c *Component) DragHover(pos term.Coordinates) bool {
+	win, ok := c.WindowAt(pos)
+	if !ok {
+		c.DragCancel()
+		return false
+	}
+	bwin := win.(*browserWindow)
+	if c.drag.win == bwin {
+		return true
+	}
+	c.drag.win = bwin
+	c.startVeil()
+	c.interrupt()
+	return true
+}
+
+// DragCancel clears the drop target and stops the veil animation.
+func (c *Component) DragCancel() {
+	if c.drag.win == nil && c.drag.cancel == nil {
+		return
+	}
+	c.drag.win = nil
+	c.stopVeil()
+	c.interrupt()
+}
+
+// DragDrop delivers paths to the window under pos as a bracketed paste,
+// focusing that window first so the paste reaches it even when another
+// window holds the focus. It reports whether a window received the drop.
+func (c *Component) DragDrop(pos term.Coordinates, paths []string) bool {
+	c.DragCancel()
+	if len(paths) == 0 {
+		return false
+	}
+	win, ok := c.WindowAt(pos)
+	if !ok {
+		return false
+	}
+	c.SetFocus(win)
+	c.Handle(term.Event{Type: term.EventPasteStart})
+	for _, r := range strings.Join(paths, "\n") {
+		c.Handle(term.Event{
+			Type: term.EventKey,
+			Ch:   r,
+			Raw:  []byte(string(r)),
+		})
+	}
+	c.Handle(term.Event{Type: term.EventPasteEnd})
+	return true
+}
+
+// startVeil starts the shared pulse ticker used by both the file-drop
+// veil and the window-drag preview veil.
+func (c *Component) startVeil() {
+	if c.interrupter == nil || c.drag.cancel != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c.drag.cancel = cancel
+	interrupter := c.interrupter
+	frame := &c.drag.frame
+	go debug.CapturePanicReport(func() {
+		ticker := time.NewTicker(time.Second / dragVeilFPS)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				frame.Add(1)
+				_ = interrupter.Interrupt(ctx)
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
+
+// stopVeil stops the shared pulse ticker once neither veil needs it.
+func (c *Component) stopVeil() {
+	if c.drag.win != nil || c.winDrop.zone != winDropNone {
+		return
+	}
+	if c.drag.cancel != nil {
+		c.drag.cancel()
+		c.drag.cancel = nil
+	}
+	c.drag.frame.Store(0)
+}
+
+func (c *Component) interrupt() {
+	if c.interrupter == nil {
+		return
+	}
+	_ = c.interrupter.Interrupt(context.Background())
+}
+
+// drawDragVeil renders the browser with a pulsing veil over the file
+// drop target or the window-drag preview region. It reports false when
+// neither is active, leaving the caller to draw normally.
+func (c *Component) drawDragVeil(w term.Writer) bool {
+	win, label, exclude := c.veilTarget()
+	if win == nil || win.Closed() {
+		return false
+	}
+	width, height := win.Width(), win.Height()
+	if width <= 0 || height <= 0 || c.width <= 0 || c.height <= 0 {
+		return false
+	}
+	if c.drag.buf == nil || c.drag.bufW != c.width || c.drag.bufH != c.height {
+		c.drag.buf = cell.NewBufferWriter(context.Background(), c.width, c.height)
+		c.drag.bufW, c.drag.bufH = c.width, c.height
+	}
+	c.drag.buf.SetContext(w.Context())
+	_ = c.drag.buf.Clear(term.Attributes{})
+	c.drawContent(c.drag.buf)
+
+	pos := win.Position()
+	off := c.WindowManagerPosition()
+	pos.X += off.X
+	pos.Y += off.Y
+
+	var skip *veilRect
+	if exclude != nil && !exclude.Closed() {
+		epos := exclude.Position()
+		epos.X += off.X
+		epos.Y += off.Y
+		skip = &veilRect{pos: epos, width: exclude.Width(), height: exclude.Height()}
+	}
+
+	cells := c.drag.buf.RawCells()
+	veilCells(cells, pos, width, height, c.config.DropTargetAttr, skip)
+	writeCenteredLabel(cells, pos, width, height, label,
+		c.config.DropTargetLabelAttr)
+	shader.Virtual(shader.Pulse(shader.PulseParams{
+		Color:        c.config.DropTargetAttr.Fg,
+		PeriodFrames: dragVeilPeriodFrame,
+		Intensity:    dragVeilIntensity,
+	}, c.config.DropTargetAttr), pos, width, height).
+		Shade(int(c.drag.frame.Load()), 0, cells)
+
+	for y, row := range cells {
+		for x, cl := range row {
+			w.SetCell(term.Coordinates{X: x, Y: y}, cl)
+		}
+	}
+	return true
+}
+
+// veilTarget resolves which window the veil covers, its label, and the
+// window whose cells must stay untinted where they overlap it.
+func (c *Component) veilTarget() (win *browserWindow, label string, exclude *browserWindow) {
+	if win, label, ok := c.winDropVeil(); ok {
+		return win, label, c.winDrop.src
+	}
+	if c.drag.win == nil {
+		return nil, "", nil
+	}
+	return c.drag.win, c.dropLabel(c.drag.win), nil
+}
+
+// dropLabel returns the veil message for the target window, keyed by
+// the scheme of the tab it renders.
+func (c *Component) dropLabel(win *browserWindow) string {
+	if t, ok := browserTabAtWindow(win); ok {
+		if label, ok := c.config.DropTargetLabels[t.URI().Scheme()]; ok {
+			return label
+		}
+	}
+	if label, ok := c.config.DropTargetLabels[""]; ok {
+		return label
+	}
+	return defaultDropLabel
 }

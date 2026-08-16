@@ -105,6 +105,9 @@ type Config struct {
 	// DropTargetAttr styles the veil drawn over the window under the
 	// cursor while files are dragged over this browser.
 	DropTargetAttr term.Attributes
+	// DropTargetLabelAttr styles the message centered in the
+	// drop-target veil. The veil's own background is kept.
+	DropTargetLabelAttr term.Attributes
 	// DropTargetLabels maps a tab URI scheme to the message centered in
 	// the drop-target veil. The empty key is the fallback for windows
 	// whose scheme has no entry.

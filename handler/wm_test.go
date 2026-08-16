@@ -1839,6 +1839,51 @@ func mouseEv(key term.Key, x, y int) term.Event {
 	return term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y}
 }
 
+// barEvent is one floating-bar interaction dispatched by the window
+// manager. pos is meaningless for close and cancel.
+type barEvent struct {
+	kind string
+	pos  term.Coordinates
+}
+
+func barClose() barEvent        { return barEvent{kind: "close"} }
+func barCancel() barEvent       { return barEvent{kind: "cancel"} }
+func barDrag(x, y int) barEvent { return barEvent{"drag", term.Coordinates{X: x, Y: y}} }
+func barDrop(x, y int) barEvent { return barEvent{"drop", term.Coordinates{X: x, Y: y}} }
+
+// testFloatingBar records the floating-bar interactions dispatched by
+// the window manager, in dispatch order.
+type testFloatingBar struct {
+	NopFloatingBarHandler
+	log         []barEvent
+	windows     []Window
+	handleClose bool
+	handleDrop  bool
+}
+
+func (b *testFloatingBar) record(ev barEvent, win Window) {
+	b.log = append(b.log, ev)
+	b.windows = append(b.windows, win)
+}
+
+func (b *testFloatingBar) OnBarClose(win Window) bool {
+	b.record(barClose(), win)
+	return b.handleClose
+}
+
+func (b *testFloatingBar) OnBarDrag(win Window, pos term.Coordinates) {
+	b.record(barEvent{"drag", pos}, win)
+}
+
+func (b *testFloatingBar) OnBarDrop(win Window, pos term.Coordinates) bool {
+	b.record(barEvent{"drop", pos}, win)
+	return b.handleDrop
+}
+
+func (b *testFloatingBar) OnBarDragCancel(win Window) {
+	b.record(barCancel(), win)
+}
+
 // prepareWindowBarTest builds a 30x12 framed manager with a focused
 // floating window of 6x3 content (8x5 framed) at the top-left corner.
 func prepareWindowBarTest(t *testing.T) (
@@ -1877,14 +1922,11 @@ func TestWindowBarCloseClick(t *testing.T) {
 		assert.True(t, floatWin.Closed())
 		assert.Zero(t, contentEvents, "close press must not reach content")
 	})
-	t.Run("OnBarCloseClick short-circuits the default close", func(t *testing.T) {
+	t.Run("OnBarClose short-circuits the default close", func(t *testing.T) {
 		root := handler.NewTestHandler()
 		cfg := DefaultWindowManagerConfig()
-		var got Window
-		cfg.OnBarCloseClick = func(win Window) bool {
-			got = win
-			return true
-		}
+		bar := &testFloatingBar{handleClose: true}
+		cfg.FloatingBar = bar
 		wm := NewWindowManager(root, cfg)
 		wm.Resize(30, 12)
 		floatWin := wm.FloatingWindow(
@@ -1894,11 +1936,22 @@ func TestWindowBarCloseClick(t *testing.T) {
 		wm.SetFocus(floatWin)
 		_, handled := wm.Handle(mouseEv(term.MouseLeft, component.WindowBarCloseIconX, 0))
 		assert.True(t, handled)
-		require.NotEqual(t, Window{}, got)
-		assert.Equal(t, floatWin.ID(), got.ID())
+		require.Equal(t, []barEvent{barClose()}, bar.log)
+		assert.Equal(t, floatWin.ID(), bar.windows[0].ID())
 		assert.Equal(t, 1, wm.SizeFloating(), "callback handled the close")
 		assert.False(t, floatWin.Closed())
 	})
+	t.Run("OnBarClose returning false falls back to the default close",
+		func(t *testing.T) {
+			bar := &testFloatingBar{}
+			wm, floatWin := prepareFloatingBarTest(t, bar)
+			require.Equal(t, 1, wm.SizeFloating())
+			_, handled := wm.Handle(mouseEv(term.MouseLeft, component.WindowBarCloseIconX, 0))
+			assert.True(t, handled)
+			assert.Equal(t, []barEvent{barClose()}, bar.log)
+			assert.True(t, floatWin.Closed(), "the manager must close the window itself")
+			assert.Equal(t, 0, wm.SizeFloating())
+		})
 	t.Run("minimized floats are unaffected", func(t *testing.T) {
 		wm, _, _, _, floatWin := prepareWindowBarTest(t)
 		require.True(t, floatWin.MinimizeDown(0))
@@ -1947,6 +2000,331 @@ func TestWindowBarMoveDrag(t *testing.T) {
 	// after release, a fresh press inside content dispatches normally
 	wm.Handle(mouseEv(term.MouseLeft, 17, 8))
 	assert.Equal(t, 1, contentEvents)
+}
+
+// prepareFloatingBarTest builds a 30x12 manager with one tile and a
+// focused 8x5 floating window at the top-left corner, wired to bar.
+func prepareFloatingBarTest(t *testing.T, bar *testFloatingBar) (*WindowManager, Window) {
+	t.Helper()
+	cfg := DefaultWindowManagerConfig()
+	cfg.FloatingBar = bar
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(30, 12)
+	floatWin := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 6, 3),
+		component.FloatingConfig{},
+	)
+	wm.SetFocus(floatWin)
+	require.Equal(t, term.Coordinates{}, floatWin.Position())
+	require.Equal(t, 8, floatWin.Width())
+	require.Equal(t, 5, floatWin.Height())
+	return wm, floatWin
+}
+
+func TestFloatingBarDragLifecycle(t *testing.T) {
+	suite := []struct {
+		name string
+		// bar knobs applied before the sequence runs.
+		handleClose bool
+		handleDrop  bool
+		// mid runs after the sequence's first event, so a test can
+		// perturb the manager mid-drag.
+		mid  func(t *testing.T, wm *WindowManager, float Window)
+		seq  []term.Event
+		want []barEvent
+	}{
+		{
+			name: "a bar press alone reports nothing",
+			seq:  []term.Event{mouseEv(term.MouseLeft, 4, 0)},
+		},
+		{
+			name: "every move is reported, then exactly one drop",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseLeft, 12, 5),
+				mouseEv(term.MouseRelease, 12, 5),
+			},
+			want: []barEvent{barDrag(10, 3), barDrag(12, 5), barDrop(12, 5)},
+		},
+		{
+			name: "a release without a move still drops",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseRelease, 4, 0),
+			},
+			want: []barEvent{barDrop(4, 0)},
+		},
+		{
+			name: "moves after the drop belong to no drag",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+				mouseEv(term.MouseLeft, 15, 6),
+			},
+			want: []barEvent{barDrag(10, 3), barDrop(10, 3)},
+		},
+		{
+			name: "an interrupting mouse event cancels instead of dropping",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseWheelUp, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+			},
+			want: []barEvent{barDrag(10, 3), barCancel()},
+		},
+		{
+			name: "a right press cancels instead of dropping",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRight, 10, 3),
+			},
+			want: []barEvent{barDrag(10, 3), barCancel()},
+		},
+		{
+			name: "closing the float mid-drag cancels",
+			mid: func(t *testing.T, _ *WindowManager, float Window) {
+				require.NoError(t, float.Close())
+			},
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+			},
+			want: []barEvent{barCancel()},
+		},
+		{
+			name:       "a handled drop still ends the drag",
+			handleDrop: true,
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+				mouseEv(term.MouseLeft, 12, 5),
+			},
+			want: []barEvent{barDrag(10, 3), barDrop(10, 3)},
+		},
+		{
+			name: "right-edge resize drags report nothing",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 7, 2),
+				mouseEv(term.MouseLeft, 12, 2),
+				mouseEv(term.MouseRelease, 12, 2),
+			},
+		},
+		{
+			name: "bottom-edge resize drags report nothing",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 3, 4),
+				mouseEv(term.MouseLeft, 3, 8),
+				mouseEv(term.MouseRelease, 3, 8),
+			},
+		},
+		{
+			name: "bar-corner resize drags report nothing",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 0, 0),
+				mouseEv(term.MouseLeft, 3, 3),
+				mouseEv(term.MouseRelease, 3, 3),
+			},
+		},
+		{
+			name: "presses inside the float content report nothing",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 3, 2),
+				mouseEv(term.MouseLeft, 4, 2),
+				mouseEv(term.MouseRelease, 4, 2),
+			},
+		},
+		{
+			name: "presses on the tile report nothing",
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 20, 8),
+				mouseEv(term.MouseLeft, 22, 9),
+				mouseEv(term.MouseRelease, 22, 9),
+			},
+		},
+		{
+			name:        "the close icon reports a close, not a drag",
+			handleClose: true,
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, component.WindowBarCloseIconX, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+			},
+			want: []barEvent{barClose()},
+		},
+		{
+			name: "a drag survives the float being maximized mid-drag",
+			mid: func(_ *testing.T, wm *WindowManager, float Window) {
+				wm.comp.ToggleMaximize(float.Window)
+			},
+			seq: []term.Event{
+				mouseEv(term.MouseLeft, 4, 0),
+				mouseEv(term.MouseLeft, 10, 3),
+				mouseEv(term.MouseRelease, 10, 3),
+			},
+			want: []barEvent{barDrag(10, 3), barDrop(10, 3)},
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			bar := &testFloatingBar{
+				handleClose: test.handleClose,
+				handleDrop:  test.handleDrop,
+			}
+			wm, float := prepareFloatingBarTest(t, bar)
+			for i, ev := range test.seq {
+				if i == 1 && test.mid != nil {
+					test.mid(t, wm, float)
+				}
+				wm.Handle(ev)
+			}
+			assert.Equal(t, test.want, nilIfEmpty(bar.log))
+			assertBarLogConsistent(t, bar)
+		})
+	}
+}
+
+// TestFloatingBarMinimizedFloat pins that a minimized float's strip is
+// inert: it starts no drag, so no bar interaction is ever reported.
+func TestFloatingBarMinimizedFloat(t *testing.T) {
+	bar := &testFloatingBar{}
+	wm, float := prepareFloatingBarTest(t, bar)
+	require.True(t, float.MinimizeDown(0))
+	pos := float.Position()
+
+	wm.Handle(mouseEv(term.MouseLeft, pos.X+4, pos.Y))
+	wm.Handle(mouseEv(term.MouseLeft, pos.X+10, pos.Y))
+	wm.Handle(mouseEv(term.MouseRelease, pos.X+10, pos.Y))
+	assert.Empty(t, bar.log)
+
+	wm.Handle(mouseEv(term.MouseLeft, pos.X+component.WindowBarCloseIconX, pos.Y))
+	assert.Empty(t, bar.log, "the close icon of a minimized float is inert too")
+	assert.False(t, float.Closed())
+}
+
+func nilIfEmpty(log []barEvent) []barEvent {
+	if len(log) == 0 {
+		return nil
+	}
+	return log
+}
+
+// assertBarLogConsistent checks the contract the browser relies on: a
+// drag is terminated by exactly one drop or one cancel, never both, and
+// every interaction names a window.
+func assertBarLogConsistent(t *testing.T, bar *testFloatingBar) {
+	t.Helper()
+	dragging := false
+	for i, ev := range bar.log {
+		assert.NotEqual(t, Window{}, bar.windows[i],
+			"interaction %d must name a window", i)
+		switch ev.kind {
+		case "drag":
+			dragging = true
+		case "drop", "cancel":
+			assert.True(t, dragging || i == 0 || bar.log[i-1].kind == "drag",
+				"%s at %d must terminate a drag", ev.kind, i)
+			dragging = false
+		}
+	}
+}
+
+// closingFloatingBar closes a tile from OnBarDragCancel, the way the
+// browser tears its pre-split placeholder down.
+type closingFloatingBar struct {
+	NopFloatingBarHandler
+	victim    Window
+	cancelled int
+}
+
+func (b *closingFloatingBar) OnBarDragCancel(Window) {
+	b.cancelled++
+	if b.victim != (Window{}) && !b.victim.Closed() {
+		_ = b.victim.Close()
+		b.victim = Window{}
+	}
+}
+
+// TestFloatingBarCancelMayCloseWindows pins that the cancel hook is
+// allowed to change the layout: Handle resolves the window under the
+// cursor before the hook runs, and reusing that resolution afterwards
+// dereferences a detached tile.
+func TestFloatingBarCancelMayCloseWindows(t *testing.T) {
+	bar := &closingFloatingBar{}
+	cfg := DefaultWindowManagerConfig()
+	cfg.FloatingBar = bar
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(30, 12)
+	rootWin := wm.Focus()
+	victim, ok := wm.SplitVertical(rootWin, handler.NewTestHandler())
+	require.True(t, ok)
+	bar.victim = victim
+
+	floatWin := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 6, 3),
+		component.FloatingConfig{},
+	)
+	wm.SetFocus(floatWin)
+
+	wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	require.NoError(t, floatWin.Close())
+
+	// The cursor sits over the tile the cancel hook closes.
+	pos := victim.Position()
+	wm.Handle(mouseEv(term.MouseLeft, pos.X+1, pos.Y+1))
+	assert.Equal(t, 1, bar.cancelled)
+	assert.Equal(t, 1, wm.SizeTiles())
+}
+
+// TestFloatingBarNilIsInert guards the nil FloatingBar default: the
+// drag machinery must not dereference the hook.
+func TestFloatingBarNilIsInert(t *testing.T) {
+	wm, _, _, _, floatWin := prepareWindowBarTest(t)
+	require.Nil(t, wm.config.FloatingBar)
+	wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	wm.Handle(mouseEv(term.MouseLeft, 10, 3))
+	wm.Handle(mouseEv(term.MouseWheelUp, 10, 3))
+	wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	wm.Handle(mouseEv(term.MouseRelease, 12, 5))
+	assert.False(t, floatWin.Closed())
+}
+
+// TestNopFloatingBarHandler pins the embeddable default so partial
+// implementors inherit inert, non-consuming behaviour.
+func TestNopFloatingBarHandler(t *testing.T) {
+	var nop NopFloatingBarHandler
+	assert.False(t, nop.OnBarClose(Window{}),
+		"the default must let the manager close the window")
+	assert.False(t, nop.OnBarDrop(Window{}, term.Coordinates{}),
+		"the default must leave the release a plain move")
+	nop.OnBarDrag(Window{}, term.Coordinates{})
+	nop.OnBarDragCancel(Window{})
+}
+
+// TestFloatingBarDragReportsPositionAfterMove pins that OnBarDrag is
+// dispatched after the window has been repositioned, so a handler can
+// measure the float against the cursor it was given.
+func TestFloatingBarDragReportsPositionAfterMove(t *testing.T) {
+	bar := &testFloatingBar{}
+	wm, float := prepareFloatingBarTest(t, bar)
+
+	var seen []term.Coordinates
+	wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	for _, at := range []term.Coordinates{{X: 10, Y: 3}, {X: 20, Y: 6}} {
+		wm.Handle(mouseEv(term.MouseLeft, at.X, at.Y))
+		seen = append(seen, float.Position())
+	}
+	assert.Equal(t,
+		[]term.Coordinates{{X: 6, Y: 3}, {X: 16, Y: 6}}, seen,
+		"the float keeps the grab offset while the drag reports positions")
+	assert.Equal(t,
+		[]barEvent{barDrag(10, 3), barDrag(20, 6)}, bar.log)
 }
 
 func TestWindowBarPressFocusesFloat(t *testing.T) {

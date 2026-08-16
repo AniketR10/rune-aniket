@@ -523,6 +523,50 @@ func TestSplitAlreadyBoundTabFocusesOwningWindow(t *testing.T) {
 	assert.Equal(t, 1, refs, "exactly one window may reference the tab")
 }
 
+// TestSplitInvertedUsesSplitWindowArgument guards against splitInverted
+// swapping the handler.Window of the *focused* window instead of the one
+// passed as the split target. Splitting a non-focused tile must not move
+// the focused window's tile.
+func TestSplitInvertedUsesSplitWindowArgument(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	b := NewComponent(cfg)
+
+	handlerA := newTestHandler()
+	winA := b.Focus()
+	require.NoError(t, winA.SetContent(handlerA))
+
+	handlerB := newTestHandler()
+	winB, ok := b.Split(browserapi.OrientationRight, winA, handlerB)
+	require.True(t, ok)
+	require.Equal(t, winB, b.SetFocus(winA))
+
+	b.Resize(60, 10)
+
+	handlerC := newTestHandler()
+	winC, ok := b.Split(browserapi.OrientationLeft, winB, handlerC)
+	require.True(t, ok)
+
+	b.Resize(60, 10)
+
+	contentA, err := winA.Content()
+	require.NoError(t, err)
+	assert.Equal(t, handlerA, contentA, "the focused window's content must be untouched")
+	contentB, err := winB.Content()
+	require.NoError(t, err)
+	assert.Equal(t, handlerB, contentB)
+	contentC, err := winC.Content()
+	require.NoError(t, err)
+	assert.Equal(t, handlerC, contentC)
+
+	assert.Equal(t, 0, winA.Position().X, "the focused window must remain the leftmost tile")
+	assert.Greater(t, winC.Position().X, winA.Position().X,
+		"the new window must be placed to the right of the untouched focused window")
+	assert.Greater(t, winB.Position().X, winC.Position().X,
+		"the new window must be placed left of the split target")
+}
+
 // TestTabClickOnFocusedTabIsNoOp verifies that clicking the tab of the
 // currently-focused window does not change focus or surface an error.
 func TestTabClickOnFocusedTabIsNoOp(t *testing.T) {
@@ -1559,4 +1603,719 @@ func assertTabNames(t *testing.T, b *Component, expected []string) {
 		actual = append(actual, tabName)
 	}
 	assert.Equal(t, expected, actual)
+}
+
+func TestDropZoneAt(t *testing.T) {
+	suite := []struct {
+		name  string
+		local term.Coordinates
+		w, h  int
+		want  winDropZone
+	}{
+		{"left edge", term.Coordinates{X: 0, Y: 10}, 40, 20, winDropLeft},
+		{"right edge", term.Coordinates{X: 39, Y: 10}, 40, 20, winDropRight},
+		{"top edge", term.Coordinates{X: 20, Y: 0}, 40, 20, winDropTop},
+		{"bottom edge", term.Coordinates{X: 20, Y: 19}, 40, 20, winDropBottom},
+		{"center", term.Coordinates{X: 20, Y: 10}, 40, 20, winDropCenter},
+		{"dead zone", term.Coordinates{X: 12, Y: 10}, 40, 20, winDropNone},
+		{"top-left corner favors the closer edge",
+			term.Coordinates{X: 0, Y: 3}, 40, 20, winDropLeft},
+		{"bottom-right corner favors the closer edge",
+			term.Coordinates{X: 33, Y: 19}, 40, 20, winDropBottom},
+		{"out of bounds", term.Coordinates{X: 40, Y: 10}, 40, 20, winDropNone},
+		{"negative", term.Coordinates{X: -1, Y: 0}, 40, 20, winDropNone},
+		{"empty tile", term.Coordinates{}, 0, 0, winDropNone},
+		{"1x1 tile is all center", term.Coordinates{}, 1, 1, winDropCenter},
+		{"3x3 tile center", term.Coordinates{X: 1, Y: 1}, 3, 3, winDropCenter},
+		{"3x3 tile left", term.Coordinates{X: 0, Y: 1}, 3, 3, winDropLeft},
+		{"3x3 tile top", term.Coordinates{X: 1, Y: 0}, 3, 3, winDropTop},
+	}
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, dropZoneAt(test.local, test.w, test.h))
+		})
+	}
+}
+
+// winDragBrowser returns a browser with a single tile and a focused
+// floating window, plus zoneAt: the window-manager coordinates of each
+// drop zone of the tile as it was *before* any pre-split.
+func winDragBrowser(t *testing.T, width, height int) (
+	b *Component, tile Window, float Window, zoneAt func(winDropZone) term.Coordinates,
+) {
+	t.Helper()
+	b = NewComponent(dragConfig())
+	tile = b.Focus()
+	require.NoError(t, tile.SetContent(newTestHandler()))
+	b.Resize(width, height)
+
+	float = b.Floating(newTestHandler(), browserapi.FloatingConfig{
+		Title: "float",
+	})
+	b.Resize(width, height)
+	b.Draw(term.NewStringWriter(width, height))
+	require.Equal(t, float, b.Focus())
+
+	pos, w, h := tile.Position(), tile.Width(), tile.Height()
+	zoneAt = func(zone winDropZone) term.Coordinates {
+		switch zone {
+		case winDropLeft:
+			return term.Coordinates{X: pos.X, Y: pos.Y + h/2}
+		case winDropRight:
+			return term.Coordinates{X: pos.X + w - 1, Y: pos.Y + h/2}
+		case winDropTop:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y}
+		case winDropBottom:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y + h - 1}
+		case winDropCenter:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y + h/2}
+		default:
+			// dead zone: just outside the left band and left of center
+			return term.Coordinates{X: pos.X + w/winDropBandDiv + 1, Y: pos.Y + h/2}
+		}
+	}
+	require.Equal(t, winDropNone, dropZoneAt(
+		term.Coordinates{X: zoneAt(winDropNone).X - pos.X, Y: h / 2}, w, h),
+		"the dead-zone probe must not land in a drop zone")
+	return b, tile, float, zoneAt
+}
+
+func barDrag(b *Component, float Window, pos term.Coordinates) {
+	b.OnBarDrag(float.(*browserWindow).win, pos)
+}
+
+// framedDragBrowser returns a browser whose floating windows carry a
+// window bar, so mouse events can reach the bar drag machinery. The
+// unframed fixtures used elsewhere have no bar at all.
+func framedDragBrowser(t *testing.T, width, height int) (
+	b *Component, tile Window, float Window, zoneAt func(winDropZone) term.Coordinates,
+) {
+	t.Helper()
+	cfg := dragConfig()
+	cfg.Frame = true
+	cfg.WindowBar = true
+	b = NewComponent(cfg)
+	tile = b.Focus()
+	require.NoError(t, tile.SetContent(newTestHandler()))
+	b.Resize(width, height)
+
+	float = b.Floating(newTestHandler(), browserapi.FloatingConfig{Title: "float"})
+	b.Resize(width, height)
+	b.Draw(term.NewStringWriter(width, height))
+	require.Equal(t, float, b.Focus())
+	require.True(t, float.(*browserWindow).win.HasWindowBar(),
+		"the fixture must give the float a bar to drag")
+
+	pos, w, h := tile.Position(), tile.Width(), tile.Height()
+	zoneAt = func(zone winDropZone) term.Coordinates {
+		switch zone {
+		case winDropLeft:
+			return term.Coordinates{X: pos.X, Y: pos.Y + h/2}
+		case winDropRight:
+			return term.Coordinates{X: pos.X + w - 1, Y: pos.Y + h/2}
+		case winDropTop:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y}
+		case winDropBottom:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y + h - 1}
+		case winDropCenter:
+			return term.Coordinates{X: pos.X + w/2, Y: pos.Y + h/2}
+		default:
+			return term.Coordinates{X: pos.X + w/winDropBandDiv + 1, Y: pos.Y + h/2}
+		}
+	}
+	return b, tile, float, zoneAt
+}
+
+// mouseAt builds a component-relative mouse event. Callers pass window
+// manager coordinates; the tab bar offset is added here.
+func mouseAt(b *Component, key term.Key, pos term.Coordinates) term.Event {
+	off := b.WindowManagerPosition()
+	return term.Event{
+		Type:   term.EventMouse,
+		Key:    key,
+		MouseX: pos.X + off.X,
+		MouseY: pos.Y + off.Y,
+	}
+}
+
+// TestWinDropThroughMouseEvents drives the whole feature the way the
+// runtime does - a press on the float's bar, moves, then a release -
+// instead of calling the FloatingBarHandler hooks directly, so the
+// window manager wiring is covered end to end.
+func TestWinDropThroughMouseEvents(t *testing.T) {
+	t.Run("dragging onto a tile edge splits it and installs a tab",
+		func(t *testing.T) {
+			b, tile, float, zoneAt := framedDragBrowser(t, 60, 20)
+			content, err := float.Content()
+			require.NoError(t, err)
+			bar := float.Position()
+
+			_, handled := b.Handle(mouseAt(b, term.MouseLeft,
+				term.Coordinates{X: bar.X + 4, Y: bar.Y}))
+			require.True(t, handled, "the bar press must start a drag")
+			require.Equal(t, 1, b.Tiles(), "the press alone must not split")
+
+			right := zoneAt(winDropRight)
+			b.Handle(mouseAt(b, term.MouseLeft, right))
+			assert.Equal(t, 2, b.Tiles(), "the hover must pre-split the tile")
+			assert.Equal(t, float, b.Focus())
+
+			b.Handle(mouseAt(b, term.MouseRelease, right))
+			assert.Equal(t, 2, b.Tiles())
+			assert.Equal(t, 0, b.FloatingWindows())
+			require.Len(t, b.buffers, 1)
+			assert.Equal(t, content, b.buffers[0].Handler())
+			win, ok := b.buffers[0].Window()
+			require.True(t, ok)
+			assert.Greater(t, win.Position().X, tile.Position().X)
+			assert.Equal(t, winDropNone, b.winDrop.zone)
+		})
+
+	t.Run("dragging to the dead zone leaves a plain window move",
+		func(t *testing.T) {
+			b, _, float, zoneAt := framedDragBrowser(t, 60, 20)
+			bar := float.Position()
+
+			b.Handle(mouseAt(b, term.MouseLeft,
+				term.Coordinates{X: bar.X + 4, Y: bar.Y}))
+			b.Handle(mouseAt(b, term.MouseLeft, zoneAt(winDropLeft)))
+			require.Equal(t, 2, b.Tiles())
+			b.Handle(mouseAt(b, term.MouseLeft, zoneAt(winDropNone)))
+			assert.Equal(t, 1, b.Tiles(), "leaving the zones removes the preview")
+
+			b.Handle(mouseAt(b, term.MouseRelease, zoneAt(winDropNone)))
+			assert.Equal(t, 1, b.Tiles())
+			assert.Equal(t, 1, b.FloatingWindows(), "the float survives")
+			assert.Empty(t, b.buffers)
+			assert.NotEqual(t, bar, float.Position(), "the float was moved")
+		})
+
+	t.Run("an interrupted drag restores the layout", func(t *testing.T) {
+		b, _, float, zoneAt := framedDragBrowser(t, 60, 20)
+		bar := float.Position()
+
+		b.Handle(mouseAt(b, term.MouseLeft, term.Coordinates{X: bar.X + 4, Y: bar.Y}))
+		b.Handle(mouseAt(b, term.MouseLeft, zoneAt(winDropTop)))
+		require.Equal(t, 2, b.Tiles())
+
+		b.Handle(mouseAt(b, term.MouseWheelUp, zoneAt(winDropTop)))
+		assert.Equal(t, 1, b.Tiles(), "the interrupted drag removes the preview")
+		assert.Equal(t, 1, b.FloatingWindows())
+		assert.Equal(t, float, b.Focus())
+		assert.Equal(t, winDropNone, b.winDrop.zone)
+	})
+
+	t.Run("closing the float mid-drag restores the layout", func(t *testing.T) {
+		b, _, float, zoneAt := framedDragBrowser(t, 60, 20)
+		bar := float.Position()
+
+		b.Handle(mouseAt(b, term.MouseLeft, term.Coordinates{X: bar.X + 4, Y: bar.Y}))
+		b.Handle(mouseAt(b, term.MouseLeft, zoneAt(winDropBottom)))
+		require.Equal(t, 2, b.Tiles())
+
+		require.NoError(t, float.Close())
+		b.Handle(mouseAt(b, term.MouseLeft, zoneAt(winDropBottom)))
+		assert.Equal(t, 1, b.Tiles(), "the cancelled drag removes the preview")
+		assert.Equal(t, winDropNone, b.winDrop.zone)
+	})
+
+	t.Run("the close icon still closes instead of dragging", func(t *testing.T) {
+		b, _, float, _ := framedDragBrowser(t, 60, 20)
+		bar := float.Position()
+		b.Handle(mouseAt(b, term.MouseLeft, term.Coordinates{
+			X: bar.X + tcomponent.WindowBarCloseIconX, Y: bar.Y,
+		}))
+		assert.Equal(t, 0, b.FloatingWindows())
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, winDropNone, b.winDrop.zone)
+		assert.Empty(t, b.buffers, "closing a float creates no tab")
+	})
+}
+
+// complexDragBrowser returns a browser with a deliberately awkward
+// tiled layout - three vertical siblings, the last one split
+// horizontally - plus a focused float. Splitting any of the vertical
+// siblings inserts a fourth sibling, which redistributes all of them.
+// A framed browser gives the float a window bar, which is what mouse
+// events need to start a drag.
+func complexDragBrowser(t *testing.T, width, height int, framed bool) (
+	b *Component, float Window,
+) {
+	t.Helper()
+	cfg := dragConfig()
+	if framed {
+		cfg.Frame = true
+		cfg.WindowBar = true
+	}
+	b = NewComponent(cfg)
+	first := b.Focus()
+	require.NoError(t, first.SetContent(newTestHandler()))
+	second, ok := b.Split(browserapi.OrientationRight, first, newTestHandler())
+	require.True(t, ok)
+	third, ok := b.Split(browserapi.OrientationRight, second, newTestHandler())
+	require.True(t, ok)
+	_, ok = b.Split(browserapi.OrientationBottom, third, newTestHandler())
+	require.True(t, ok)
+	b.Resize(width, height)
+
+	float = b.Floating(newTestHandler(), browserapi.FloatingConfig{Title: "float"})
+	b.Resize(width, height)
+	b.Draw(term.NewStringWriter(width, height))
+	require.Equal(t, float, b.Focus())
+	require.Equal(t, 4, b.Tiles())
+	require.Equal(t, framed, float.(*browserWindow).win.HasWindowBar())
+	return b, float
+}
+
+// assertWinDropInvariants checks what must hold between two drag events,
+// independently of which zone the cursor resolved to.
+func assertWinDropInvariants(t *testing.T, b *Component, float Window, baseTiles int) {
+	t.Helper()
+	st := b.winDrop
+
+	if st.target != nil {
+		assert.False(t, st.target.Closed(), "the drop target must be live")
+	}
+	if st.preview != nil {
+		assert.False(t, st.preview.Closed(), "the placeholder must be live")
+	}
+	switch st.zone {
+	case winDropNone:
+		assert.Nil(t, st.target, "no zone means no target")
+		assert.Nil(t, st.preview, "no zone means no placeholder")
+		assert.Equal(t, baseTiles, b.Tiles(), "no zone must not change the layout")
+	case winDropCenter:
+		assert.NotNil(t, st.target)
+		assert.Nil(t, st.preview, "a center preview never splits")
+		assert.Equal(t, baseTiles, b.Tiles(), "a center preview never splits")
+	default:
+		assert.NotNil(t, st.target)
+		assert.NotNil(t, st.preview, "an edge preview must install a placeholder")
+		assert.Equal(t, baseTiles+1, b.Tiles(),
+			"an edge preview installs exactly one placeholder")
+	}
+	if st.zone != winDropNone {
+		assert.Same(t, float.(*browserWindow), st.src)
+		assert.Equal(t, float, b.Focus(),
+			"the dragged float keeps focus while previewing")
+	}
+	for id, win := range b.windows {
+		assert.False(t, win.Closed(), "window %d is closed but still registered", id)
+	}
+}
+
+// TestWinDropSweepNeverCorruptsLayout drags the float's bar across every
+// cell of a complex layout. The single-tile fixtures used by the other
+// tests cannot reach the sibling redistribution that splitting one of
+// several siblings triggers, which is where the layout and the recorded
+// pre-split geometry drift apart.
+func TestWinDropSweepNeverCorruptsLayout(t *testing.T) {
+	const width, height = 60, 20
+	b, float := complexDragBrowser(t, width, height, false)
+	base := b.Tiles()
+
+	for y := range height {
+		for x := range width {
+			at := term.Coordinates{X: x, Y: y}
+			barDrag(b, float, at)
+			assertWinDropInvariants(t, b, float, base)
+			if t.Failed() {
+				t.Fatalf("invariant broken while hovering %v", at)
+			}
+		}
+	}
+
+	b.OnBarDragCancel(float.(*browserWindow).win)
+	assert.Equal(t, base, b.Tiles(), "the sweep must leave the layout as it found it")
+	assert.Equal(t, float, b.Focus())
+}
+
+// TestWinDropSweepWithRelayout repeats the sweep while the surface is
+// resized between events, so the geometry recorded when a placeholder
+// was installed is stale by the time the next event arrives.
+func TestWinDropSweepWithRelayout(t *testing.T) {
+	b, float := complexDragBrowser(t, 60, 20, false)
+	base := b.Tiles()
+
+	sizes := []term.Coordinates{{X: 60, Y: 20}, {X: 120, Y: 20}, {X: 40, Y: 30}}
+	for i, size := range sizes {
+		b.Resize(size.X, size.Y)
+		for y := 0; y < size.Y; y += 3 {
+			for x := 0; x < size.X; x += 3 {
+				at := term.Coordinates{X: x, Y: y}
+				barDrag(b, float, at)
+				assertWinDropInvariants(t, b, float, base)
+				if t.Failed() {
+					t.Fatalf("invariant broken at size %v hovering %v", size, at)
+				}
+			}
+			// a relayout between two drag events, as a terminal
+			// resize or a background window change would produce
+			b.Resize(sizes[(i+1)%len(sizes)].X, sizes[(i+1)%len(sizes)].Y)
+			b.Resize(size.X, size.Y)
+		}
+	}
+
+	b.OnBarDragCancel(float.(*browserWindow).win)
+	assert.Equal(t, base, b.Tiles())
+}
+
+// TestWinDropMouseSweep repeats the sweep through the runtime's own
+// path - a press on the bar followed by mouse moves - so the window
+// manager wiring, which the direct hook calls bypass entirely, is
+// exercised over the whole surface.
+func TestWinDropMouseSweep(t *testing.T) {
+	const width, height = 45, 15
+	b, float := complexDragBrowser(t, width, height, true)
+	base := b.Tiles()
+
+	bar := float.Position()
+	_, handled := b.Handle(mouseAt(b, term.MouseLeft,
+		term.Coordinates{X: bar.X + 4, Y: bar.Y}))
+	require.True(t, handled, "the bar press must start a drag")
+
+	for y := range height {
+		for x := range width {
+			at := term.Coordinates{X: x, Y: y}
+			b.Handle(mouseAt(b, term.MouseLeft, at))
+			assertWinDropInvariants(t, b, float, base)
+			if t.Failed() {
+				t.Fatalf("invariant broken while dragging over %v", at)
+			}
+		}
+	}
+
+	b.Handle(mouseAt(b, term.MouseWheelUp, term.Coordinates{X: 1, Y: 1}))
+	assert.Equal(t, base, b.Tiles(), "the cancelled drag restores the layout")
+	assert.Equal(t, 1, b.FloatingWindows())
+}
+
+// TestWinDropSweepDropsEverywhere releases the drag on every cell of a
+// complex layout, each time on a fresh browser, and checks the drop
+// leaves consistent tab and window bookkeeping behind.
+func TestWinDropSweepDropsEverywhere(t *testing.T) {
+	const width, height = 45, 15
+	for y := 0; y < height; y += 2 {
+		for x := 0; x < width; x += 2 {
+			at := term.Coordinates{X: x, Y: y}
+			b, float := complexDragBrowser(t, width, height, false)
+			base := b.Tiles()
+
+			barDrag(b, float, at)
+			zone := b.winDrop.zone
+			handled := b.OnBarDrop(float.(*browserWindow).win, at)
+
+			if !handled {
+				require.Equal(t, winDropNone, zone,
+					"only a dead-zone release may decline the drop at %v", at)
+				assert.Equal(t, base, b.Tiles(), "a declined drop keeps the layout")
+				assert.Equal(t, 1, b.FloatingWindows(), "a declined drop keeps the float")
+				assert.Empty(t, b.buffers, "a declined drop creates no tab")
+				continue
+			}
+
+			require.NotEqual(t, winDropNone, zone)
+			assert.Equal(t, 0, b.FloatingWindows(), "a drop closes the float")
+			assert.True(t, float.Closed())
+			require.Len(t, b.buffers, 1, "a drop creates exactly one tab")
+			if zone == winDropCenter {
+				assert.Equal(t, base, b.Tiles(), "a center drop replaces content")
+			} else {
+				assert.Equal(t, base+1, b.Tiles(), "an edge drop keeps the split")
+			}
+
+			win, ok := b.buffers[0].Window()
+			require.True(t, ok, "the dropped tab must be bound to a window at %v", at)
+			assert.Equal(t, win, b.Focus(), "the drop focuses the tab's window")
+			assert.Equal(t, winDropNone, b.winDrop.zone, "the drop clears the preview")
+			for id, w := range b.windows {
+				assert.False(t, w.Closed(), "window %d is closed but still registered", id)
+			}
+			if t.Failed() {
+				t.Fatalf("drop at %v (zone %d) left inconsistent state", at, zone)
+			}
+		}
+	}
+}
+
+func TestWinDropPreviewLifecycle(t *testing.T) {
+	t.Run("hovering an edge pre-splits once and keeps focus on the float",
+		func(t *testing.T) {
+			b, tile, float, zoneAt := winDragBrowser(t, 60, 20)
+			tileX := tile.Position().X
+			require.Equal(t, 1, b.Tiles())
+
+			barDrag(b, float, zoneAt(winDropLeft))
+			assert.Equal(t, 2, b.Tiles(), "the edge hover must pre-split the tile")
+			assert.Equal(t, float, b.Focus(),
+				"the dragged float must keep focus during the preview")
+			require.NotNil(t, b.winDrop.preview)
+			assert.Equal(t, tileX, b.winDrop.preview.Position().X,
+				"a left drop previews the tile left of the target")
+			assert.Greater(t, tile.Position().X, tileX,
+				"the split target moves right of the placeholder")
+
+			// a second move inside the same zone must not split again
+			pos := zoneAt(winDropLeft)
+			pos.Y++
+			barDrag(b, float, pos)
+			assert.Equal(t, 2, b.Tiles())
+			assert.Equal(t, winDropLeft, b.winDrop.zone)
+		})
+
+	t.Run("moving to another edge replaces the preview", func(t *testing.T) {
+		b, _, float, zoneAt := winDragBrowser(t, 60, 20)
+		barDrag(b, float, zoneAt(winDropLeft))
+		first := b.winDrop.preview
+		require.NotNil(t, first)
+
+		barDrag(b, float, zoneAt(winDropRight))
+		assert.Equal(t, 2, b.Tiles(), "exactly one placeholder may exist")
+		require.NotNil(t, b.winDrop.preview)
+		assert.True(t, first.Closed(), "the stale placeholder must be closed")
+		assert.Equal(t, winDropRight, b.winDrop.zone)
+		assert.Equal(t, float, b.Focus())
+	})
+
+	t.Run("the dead zone removes the preview and restores the layout",
+		func(t *testing.T) {
+			b, tile, float, zoneAt := winDragBrowser(t, 60, 20)
+			pos, w, h := tile.Position(), tile.Width(), tile.Height()
+
+			barDrag(b, float, zoneAt(winDropLeft))
+			require.Equal(t, 2, b.Tiles())
+
+			barDrag(b, float, zoneAt(winDropNone))
+			assert.Equal(t, 1, b.Tiles())
+			assert.Equal(t, winDropNone, b.winDrop.zone)
+			b.Resize(60, 20)
+			assert.Equal(t, pos, tile.Position())
+			assert.Equal(t, w, tile.Width())
+			assert.Equal(t, h, tile.Height())
+			assert.Equal(t, float, b.Focus())
+		})
+
+	t.Run("the center box previews without splitting", func(t *testing.T) {
+		b, _, float, zoneAt := winDragBrowser(t, 60, 20)
+		barDrag(b, float, zoneAt(winDropCenter))
+		assert.Equal(t, 1, b.Tiles(), "a center drop replaces, it does not split")
+		assert.Equal(t, winDropCenter, b.winDrop.zone)
+		assert.Nil(t, b.winDrop.preview)
+	})
+
+	t.Run("cancelling tears the preview down", func(t *testing.T) {
+		b, _, float, zoneAt := winDragBrowser(t, 60, 20)
+		barDrag(b, float, zoneAt(winDropTop))
+		require.Equal(t, 2, b.Tiles())
+
+		b.OnBarDragCancel(float.(*browserWindow).win)
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, winDropNone, b.winDrop.zone)
+		assert.Equal(t, float, b.Focus())
+	})
+
+	// Inserting a placeholder as a new sibling redistributes every
+	// tile in the parent, so the placeholder can end up straddling the
+	// pre-split rect. Hovering the part that sticks out used to
+	// resolve the placeholder itself as the next split target, which
+	// then split a window the teardown had just closed.
+	t.Run("hovering the placeholder outside the pre-split rect keeps the target",
+		func(t *testing.T) {
+			b, float, cWin := threeTileDragBrowser(t)
+
+			edge := term.Coordinates{
+				X: cWin.Position().X,
+				Y: cWin.Position().Y + cWin.Height()/2,
+			}
+			barDrag(b, float, edge)
+			require.Equal(t, 4, b.Tiles())
+			preview := b.winDrop.preview
+			require.NotNil(t, preview)
+			b.Resize(60, 20)
+			require.Less(t, preview.Position().X, edge.X,
+				"the placeholder must stick out of the pre-split rect")
+
+			over := term.Coordinates{X: preview.Position().X, Y: edge.Y}
+			barDrag(b, float, over)
+			assert.Equal(t, 4, b.Tiles())
+			assert.Same(t, preview, b.winDrop.preview,
+				"hovering the placeholder must not rebuild the preview")
+			assert.Equal(t, cWin, Window(b.winDrop.target))
+		})
+
+	// Any relayout between two drag events - a terminal resize here,
+	// but equally a window opening or closing - moves the placeholder,
+	// so the previewed region has to be measured live.
+	t.Run("a relayout under a live preview keeps the same placeholder",
+		func(t *testing.T) {
+			b, float, cWin := threeTileDragBrowser(t)
+
+			edge := term.Coordinates{
+				X: cWin.Position().X,
+				Y: cWin.Position().Y + cWin.Height()/2,
+			}
+			barDrag(b, float, edge)
+			preview := b.winDrop.preview
+			require.NotNil(t, preview)
+
+			b.Resize(120, 20)
+			over := term.Coordinates{
+				X: preview.Position().X,
+				Y: preview.Position().Y + preview.Height()/2,
+			}
+			barDrag(b, float, over)
+			assert.Same(t, preview, b.winDrop.preview,
+				"hovering the placeholder must not rebuild the preview")
+			assert.Equal(t, cWin, Window(b.winDrop.target))
+			assert.False(t, b.winDrop.target.Closed(),
+				"the preview must never target a closed window")
+
+			assert.True(t, b.OnBarDrop(float.(*browserWindow).win, over),
+				"releasing on the placeholder must complete the drop")
+		})
+}
+
+// threeTileDragBrowser returns a browser with three side-by-side tiles
+// and a focused floating window. Splitting the last tile inserts the
+// placeholder as a fourth sibling, which redistributes all of them.
+func threeTileDragBrowser(t *testing.T) (b *Component, float, last Window) {
+	t.Helper()
+	b = NewComponent(dragConfig())
+	first := b.Focus()
+	require.NoError(t, first.SetContent(newTestHandler()))
+	_, ok := b.Split(browserapi.OrientationRight, first, newTestHandler())
+	require.True(t, ok)
+	last, ok = b.Split(browserapi.OrientationRight, b.Focus(), newTestHandler())
+	require.True(t, ok)
+	b.Resize(60, 20)
+
+	float = b.Floating(newTestHandler(), browserapi.FloatingConfig{})
+	b.Resize(60, 20)
+	require.Equal(t, 3, b.Tiles())
+	return b, float, last
+}
+
+func TestWinDropVeilLabels(t *testing.T) {
+	b, _, float, zoneAt := winDragBrowser(t, 60, 20)
+
+	barDrag(b, float, zoneAt(winDropBottom))
+	assert.Contains(t, drawString(b, 60, 20), winDropSplitLabel)
+
+	barDrag(b, float, zoneAt(winDropCenter))
+	assert.Contains(t, drawString(b, 60, 20), winDropConvertLabel)
+
+	b.OnBarDragCancel(float.(*browserWindow).win)
+	out := drawString(b, 60, 20)
+	assert.NotContains(t, out, winDropSplitLabel)
+	assert.NotContains(t, out, winDropConvertLabel)
+}
+
+func TestWinDrop(t *testing.T) {
+	t.Run("an edge drop splits and installs a tab", func(t *testing.T) {
+		b, tile, float, zoneAt := winDragBrowser(t, 60, 20)
+		tileX := tile.Position().X
+		content, err := float.Content()
+		require.NoError(t, err)
+
+		pos := zoneAt(winDropRight)
+		barDrag(b, float, pos)
+		require.True(t, b.OnBarDrop(float.(*browserWindow).win, pos))
+
+		assert.Equal(t, 2, b.Tiles())
+		assert.Equal(t, 0, b.FloatingWindows(), "the float is closed on drop")
+		require.Len(t, b.buffers, 1)
+		tab := b.buffers[0]
+		assert.Equal(t, content, tab.Handler())
+
+		win, ok := tab.Window()
+		require.True(t, ok)
+		assert.Equal(t, win, b.Focus())
+		assert.Greater(t, win.Position().X, tileX,
+			"the tab lands in the tile right of the drop target")
+	})
+
+	t.Run("a center drop replaces the target's content", func(t *testing.T) {
+		b, tile, float, zoneAt := winDragBrowser(t, 60, 20)
+		content, err := float.Content()
+		require.NoError(t, err)
+
+		pos := zoneAt(winDropCenter)
+		barDrag(b, float, pos)
+		require.True(t, b.OnBarDrop(float.(*browserWindow).win, pos))
+
+		assert.Equal(t, 1, b.Tiles(), "a center drop must not split")
+		assert.Equal(t, 0, b.FloatingWindows())
+		require.Len(t, b.buffers, 1)
+		assert.Equal(t, content, b.buffers[0].Handler())
+		win, ok := b.buffers[0].Window()
+		require.True(t, ok)
+		assert.Equal(t, tile, win)
+		assert.Equal(t, tile, b.Focus())
+	})
+
+	t.Run("a dead-zone drop leaves the layout untouched", func(t *testing.T) {
+		b, _, float, zoneAt := winDragBrowser(t, 60, 20)
+
+		pos := zoneAt(winDropNone)
+		barDrag(b, float, pos)
+		assert.False(t, b.OnBarDrop(float.(*browserWindow).win, pos))
+
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 1, b.FloatingWindows(), "the float survives a plain move")
+		assert.Empty(t, b.buffers)
+	})
+
+	t.Run("an existing tab is moved rather than duplicated", func(t *testing.T) {
+		b, tile, _, zoneAt := winDragBrowser(t, 60, 20)
+		h := newTestHandler()
+		uri, err := workspaceapi.ParseURI("file:///moved.txt")
+		require.NoError(t, err)
+		tab := b.NewTab(uri, 'm', "moved.txt", h, nil)
+		float := b.Floating(newTestHandler(), browserapi.FloatingConfig{})
+		require.NoError(t, float.SetContent(tab))
+		b.Resize(60, 20)
+
+		pos := zoneAt(winDropCenter)
+		barDrag(b, float, pos)
+		require.True(t, b.OnBarDrop(float.(*browserWindow).win, pos))
+
+		assert.Len(t, b.buffers, 1, "the tab must not be duplicated")
+		got, err := tile.Content()
+		require.NoError(t, err)
+		assert.Equal(t, tab, got)
+	})
+}
+
+func TestWinDropTabName(t *testing.T) {
+	t.Run("the bar title names the tab", func(t *testing.T) {
+		b, _, _, zoneAt := winDragBrowser(t, 60, 20)
+		titled := b.Floating(newTestHandler(), browserapi.FloatingConfig{Title: "shell"})
+		b.Resize(60, 20)
+
+		pos := zoneAt(winDropCenter)
+		barDrag(b, titled, pos)
+		require.True(t, b.OnBarDrop(titled.(*browserWindow).win, pos))
+
+		require.Len(t, b.buffers, 1)
+		name, _, ok := b.TabName(b.buffers[0].URI())
+		require.True(t, ok)
+		assert.Equal(t, "shell", name)
+	})
+	t.Run("an untitled float falls back to the resource basename",
+		func(t *testing.T) {
+			b, _, _, zoneAt := winDragBrowser(t, 60, 20)
+			uri, err := workspaceapi.ParseURI("file:///tmp/notes.md")
+			require.NoError(t, err)
+			float := b.Floating(newTestHandlerURI(uri), browserapi.FloatingConfig{})
+			b.Resize(60, 20)
+
+			pos := zoneAt(winDropCenter)
+			barDrag(b, float, pos)
+			require.True(t, b.OnBarDrop(float.(*browserWindow).win, pos))
+
+			require.Len(t, b.buffers, 1)
+			name, _, ok := b.TabName(b.buffers[0].URI())
+			require.True(t, ok)
+			assert.Equal(t, "notes.md", name)
+		})
 }

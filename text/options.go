@@ -507,12 +507,15 @@ func WithWallpaper(wallpaper browser.Wallpaper) Option {
 }
 
 // WithDropTarget styles the veil drawn over the window under the cursor
-// while files are dragged over the browser, and the messages centered in
-// it. Labels are keyed by the target tab's URI scheme; the empty key is
-// the fallback.
-func WithDropTarget(attr term.Attributes, labels map[string]string) Option {
+// while files are dragged over the browser, the messages centered in it,
+// and how those messages are styled. Labels are keyed by the target
+// tab's URI scheme; the empty key is the fallback.
+func WithDropTarget(
+	attr, labelAttr term.Attributes, labels map[string]string,
+) Option {
 	return func(cfg *Config) {
 		cfg.Config.DropTargetAttr = attr
+		cfg.Config.DropTargetLabelAttr = labelAttr
 		cfg.Config.DropTargetLabels = labels
 	}
 }

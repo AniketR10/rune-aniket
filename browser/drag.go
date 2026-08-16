@@ -24,18 +24,136 @@
 package browser
 
 import (
-	"context"
-	"strings"
 	"sync/atomic"
-	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/debug"
 )
 
-var _ DragTarget = (*Component)(nil)
+// winDropZone is the region of a tile the cursor hovers while a
+// floating window is dragged by its bar.
+type winDropZone uint8
+
+const (
+	winDropNone winDropZone = iota
+	winDropLeft
+	winDropRight
+	winDropTop
+	winDropBottom
+	winDropCenter
+)
+
+const (
+	// winDropBandDiv makes each edge band a fifth of its axis, and the
+	// center box a fifth of the tile on both axes.
+	winDropBandDiv = 5
+	// winDropTabIcon mirrors the :windowconverttab default icon.
+	winDropTabIcon        = '\ueaee'
+	winDropDefaultTabName = "window"
+	winDropSplitLabel     = "Split here"
+	winDropConvertLabel   = "Convert to tab"
+)
+
+// winDropState tracks the live pre-split preview of a bar drag.
+type winDropState struct {
+	src    *browserWindow
+	target *browserWindow
+	// region is the target's geometry as measured *before* the
+	// pre-split, which is what the user is aiming at: the real split
+	// shrinks the target, and inserting the placeholder as a new
+	// sibling redistributes the others, so neither the live target
+	// nor the region the split produced can be used to place zones.
+	region  winDropRect
+	zone    winDropZone
+	preview *browserWindow
+}
+
+// winDropRect is a region of the window manager surface.
+type winDropRect struct {
+	pos  term.Coordinates
+	w, h int
+}
+
+func windowRect(win *browserWindow) winDropRect {
+	return winDropRect{pos: win.Position(), w: win.Width(), h: win.Height()}
+}
+
+func (r winDropRect) contains(pos term.Coordinates) bool {
+	return pos.X >= r.pos.X && pos.X < r.pos.X+r.w &&
+		pos.Y >= r.pos.Y && pos.Y < r.pos.Y+r.h
+}
+
+// local maps pos into r, clamping it to the nearest cell of r when it
+// falls outside.
+func (r winDropRect) local(pos term.Coordinates) term.Coordinates {
+	return term.Coordinates{
+		X: min(max(pos.X-r.pos.X, 0), r.w-1),
+		Y: min(max(pos.Y-r.pos.Y, 0), r.h-1),
+	}
+}
+
+// dropZoneAt maps a tile-local position to its drop zone. Corners
+// resolve to the axis whose edge is proportionally closer.
+func dropZoneAt(local term.Coordinates, w, h int) winDropZone {
+	if w <= 0 || h <= 0 ||
+		local.X < 0 || local.Y < 0 || local.X >= w || local.Y >= h {
+		return winDropNone
+	}
+
+	if inCenterBox(local.X, w) && inCenterBox(local.Y, h) {
+		return winDropCenter
+	}
+
+	bandW := max(1, w/winDropBandDiv)
+	bandH := max(1, h/winDropBandDiv)
+
+	distX, horizontal := -1, winDropNone
+	if local.X < bandW {
+		distX, horizontal = local.X, winDropLeft
+	} else if local.X >= w-bandW {
+		distX, horizontal = w-1-local.X, winDropRight
+	}
+	distY, vertical := -1, winDropNone
+	if local.Y < bandH {
+		distY, vertical = local.Y, winDropTop
+	} else if local.Y >= h-bandH {
+		distY, vertical = h-1-local.Y, winDropBottom
+	}
+
+	switch {
+	case horizontal == winDropNone:
+		return vertical
+	case vertical == winDropNone:
+		return horizontal
+	case distY*w < distX*h:
+		return vertical
+	default:
+		return horizontal
+	}
+}
+
+// inCenterBox reports whether v lies in the middle fifth of dim.
+func inCenterBox(v, dim int) bool {
+	size := max(1, dim/winDropBandDiv)
+	start := (dim - size) / 2
+	return v >= start && v < start+size
+}
+
+func (z winDropZone) orientation() browserapi.Orientation {
+	switch z {
+	case winDropLeft:
+		return browserapi.OrientationLeft
+	case winDropRight:
+		return browserapi.OrientationRight
+	case winDropTop:
+		return browserapi.OrientationTop
+	case winDropBottom:
+		return browserapi.OrientationBottom
+	default:
+		panic("zone does not split")
+	}
+}
 
 const (
 	dragVeilFPS         = 24
@@ -55,188 +173,19 @@ type dragState struct {
 	frame  atomic.Int64
 }
 
-// SetInterrupter installs the interrupter used to animate the
-// drop-target veil. Without one the veil is still drawn, but only
-// repaints when the host redraws for another reason.
-func (c *Component) SetInterrupter(i term.Interrupter) {
-	c.interrupter = i
-}
-
-// WindowAt returns the window rendered at pos, which is relative to
-// this Component's top-left corner.
-func (c *Component) WindowAt(pos term.Coordinates) (Window, bool) {
-	off := c.WindowManagerPosition()
-	pos.X -= off.X
-	pos.Y -= off.Y
-	if pos.X < 0 || pos.Y < 0 {
-		return nil, false
-	}
-	win, ok := c.wm.WindowAt(pos)
-	if !ok {
-		return nil, false
-	}
-	bwin, ok := c.findWindow(win.ID())
-	if !ok {
-		return nil, false
-	}
-	return bwin, true
-}
-
-// DragHover marks the window under pos as the pending drop target and
-// starts the veil animation. It reports whether a window was found;
-// when none is, any previous target is cleared.
-func (c *Component) DragHover(pos term.Coordinates) bool {
-	win, ok := c.WindowAt(pos)
-	if !ok {
-		c.DragCancel()
-		return false
-	}
-	bwin := win.(*browserWindow)
-	if c.drag.win == bwin {
-		return true
-	}
-	c.drag.win = bwin
-	if c.drag.cancel == nil {
-		c.startDragVeil()
-	}
-	c.interrupt()
-	return true
-}
-
-// DragCancel clears the drop target and stops the veil animation.
-func (c *Component) DragCancel() {
-	if c.drag.win == nil && c.drag.cancel == nil {
-		return
-	}
-	c.drag.win = nil
-	if c.drag.cancel != nil {
-		c.drag.cancel()
-		c.drag.cancel = nil
-	}
-	c.drag.frame.Store(0)
-	c.interrupt()
-}
-
-// DragDrop delivers paths to the window under pos as a bracketed paste,
-// focusing that window first so the paste reaches it even when another
-// window holds the focus. It reports whether a window received the drop.
-func (c *Component) DragDrop(pos term.Coordinates, paths []string) bool {
-	c.DragCancel()
-	if len(paths) == 0 {
-		return false
-	}
-	win, ok := c.WindowAt(pos)
-	if !ok {
-		return false
-	}
-	c.SetFocus(win)
-	c.Handle(term.Event{Type: term.EventPasteStart})
-	for _, r := range strings.Join(paths, "\n") {
-		c.Handle(term.Event{
-			Type: term.EventKey,
-			Ch:   r,
-			Raw:  []byte(string(r)),
-		})
-	}
-	c.Handle(term.Event{Type: term.EventPasteEnd})
-	return true
-}
-
-func (c *Component) startDragVeil() {
-	if c.interrupter == nil {
-		return
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	c.drag.cancel = cancel
-	interrupter := c.interrupter
-	frame := &c.drag.frame
-	go debug.CapturePanicReport(func() {
-		ticker := time.NewTicker(time.Second / dragVeilFPS)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				frame.Add(1)
-				_ = interrupter.Interrupt(ctx)
-			case <-ctx.Done():
-				return
-			}
-		}
-	})
-}
-
-func (c *Component) interrupt() {
-	if c.interrupter == nil {
-		return
-	}
-	_ = c.interrupter.Interrupt(context.Background())
-}
-
-// drawDragVeil renders the browser with a pulsing veil over the drop
-// target. It reports false when no drop target is active, leaving the
-// caller to draw normally.
-func (c *Component) drawDragVeil(w term.Writer) bool {
-	win := c.drag.win
-	if win == nil || win.Closed() {
-		return false
-	}
-	width, height := win.Width(), win.Height()
-	if width <= 0 || height <= 0 || c.width <= 0 || c.height <= 0 {
-		return false
-	}
-	if c.drag.buf == nil || c.drag.bufW != c.width || c.drag.bufH != c.height {
-		c.drag.buf = cell.NewBufferWriter(context.Background(), c.width, c.height)
-		c.drag.bufW, c.drag.bufH = c.width, c.height
-	}
-	c.drag.buf.SetContext(w.Context())
-	_ = c.drag.buf.Clear(term.Attributes{})
-	c.drawContent(c.drag.buf)
-
-	pos := win.Position()
-	off := c.WindowManagerPosition()
-	pos.X += off.X
-	pos.Y += off.Y
-
-	cells := c.drag.buf.RawCells()
-	veilCells(cells, pos, width, height, c.config.DropTargetAttr)
-	writeCenteredLabel(cells, pos, width, height, c.dropLabel(win),
-		c.config.DropTargetAttr)
-	shader.Virtual(shader.Pulse(shader.PulseParams{
-		Color:        c.config.DropTargetAttr.Fg,
-		PeriodFrames: dragVeilPeriodFrame,
-		Intensity:    dragVeilIntensity,
-	}, c.config.DropTargetAttr), pos, width, height).
-		Shade(int(c.drag.frame.Load()), 0, cells)
-
-	for y, row := range cells {
-		for x, cl := range row {
-			w.SetCell(term.Coordinates{X: x, Y: y}, cl)
-		}
-	}
-	return true
-}
-
-// dropLabel returns the veil message for the target window, keyed by
-// the scheme of the tab it renders.
-func (c *Component) dropLabel(win *browserWindow) string {
-	if t, ok := browserTabAtWindow(win); ok {
-		if label, ok := c.config.DropTargetLabels[t.URI().Scheme()]; ok {
-			return label
-		}
-	}
-	if label, ok := c.config.DropTargetLabels[""]; ok {
-		return label
-	}
-	return defaultDropLabel
+// veilRect is a region excluded from the veil.
+type veilRect struct {
+	pos           term.Coordinates
+	width, height int
 }
 
 // veilCells dims the target rect by forcing the veil attributes onto
-// every cell while keeping the content underneath legible.
+// every cell outside skip while keeping the content underneath legible.
 func veilCells(
 	cells [][]term.Cell, pos term.Coordinates,
-	width, height int, attr term.Attributes,
+	width, height int, attr term.Attributes, skip *veilRect,
 ) {
-	forEachCell(cells, pos, width, height, func(c *term.Cell) {
+	forEachCell(cells, pos, width, height, skip, func(c *term.Cell) {
 		if attr.Bg != term.ColorDefault {
 			c.Bg = attr.Bg
 		}
@@ -247,7 +196,8 @@ func veilCells(
 }
 
 // writeCenteredLabel writes label on the middle row of the target rect,
-// blanking that row first so the message stays readable over content.
+// keeping each cell's background so the veil tint underneath shows
+// through.
 func writeCenteredLabel(
 	cells [][]term.Cell, pos term.Coordinates,
 	width, height int, label string, attr term.Attributes,
@@ -268,13 +218,15 @@ func writeCenteredLabel(
 		if x < 0 || x >= len(row) {
 			continue
 		}
-		row[x] = term.NewCell(r, 1, attr)
+		cellAttr := attr
+		cellAttr.Bg = row[x].Bg
+		row[x] = term.NewCell(r, 1, cellAttr)
 	}
 }
 
 func forEachCell(
 	cells [][]term.Cell, pos term.Coordinates,
-	width, height int, fn func(*term.Cell),
+	width, height int, skip *veilRect, fn func(*term.Cell),
 ) {
 	for y := pos.Y; y < pos.Y+height; y++ {
 		if y < 0 || y >= len(cells) {
@@ -283,6 +235,11 @@ func forEachCell(
 		row := cells[y]
 		for x := pos.X; x < pos.X+width; x++ {
 			if x < 0 || x >= len(row) {
+				continue
+			}
+			if skip != nil &&
+				x >= skip.pos.X && x < skip.pos.X+skip.width &&
+				y >= skip.pos.Y && y < skip.pos.Y+skip.height {
 				continue
 			}
 			fn(&row[x])
