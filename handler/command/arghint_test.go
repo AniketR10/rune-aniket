@@ -1,0 +1,246 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package command
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/handlertest"
+)
+
+func TestSynopsisSlots(t *testing.T) {
+	tsuite := []struct {
+		synopsis string
+		expected []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"<name>", []string{"<name>"}},
+		{"<name> <alignment> [<filter>]",
+			[]string{"<name>", "<alignment>", "[<filter>]"}},
+		{"[<executable> [<args>]]", []string{"[<executable> [<args>]]"}},
+		{"(increase|decrease) (height|width)",
+			[]string{"(increase|decrease)", "(height|width)"}},
+		{"[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>",
+			[]string{"[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>"}},
+		{"<extension-id> <command> [<args>...]",
+			[]string{"<extension-id>", "<command>", "[<args>...]"}},
+	}
+	for _, tcase := range tsuite {
+		assert.Equal(t, tcase.expected, synopsisSlots(tcase.synopsis), tcase.synopsis)
+	}
+}
+
+func TestArgHint(t *testing.T) {
+	const tasknew = "<name> <alignment> [<filter>] -- <cmd> [<args>]"
+	tsuite := []struct {
+		desc     string
+		command  string
+		synopsis string
+		args     []string
+		expected string
+	}{
+		{"first slot", "tasknew", "<name> <alignment>", nil, "<name>"},
+		{"second slot", "tasknew", "<name> <alignment>",
+			[]string{"hello"}, "<alignment>"},
+		{"past the last slot", "tasknew", "<name> <alignment>",
+			[]string{"hello", "left"}, ""},
+		{"variadic tail repeats", "extensionready",
+			"<extension-id> <command> [<args>...]",
+			[]string{"a", "b", "c", "d", "e"}, "[<args>...]"},
+		{"no synopsis", "quit", "", nil, ""},
+		{"override replaces synopsis", "workspaceopen",
+			"[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>", nil, "<path>"},
+		{"override does not extend past its slots", "workspaceopen",
+			"[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>",
+			[]string{"~/src/rune"}, ""},
+		{"alias without a synopsis is overridable", "worktreenew", "",
+			nil, "<name>"},
+		{"literal slot is hinted while unmet", "tasknew", tasknew,
+			[]string{"hello", "left", "*.go"}, "--"},
+		{"literal slot is not repeated once typed", "tasknew", tasknew,
+			[]string{"hello", "left", "*.go", "--"}, "<cmd>"},
+		{"skipped optional slot does not shift the literal", "tasknew", tasknew,
+			[]string{"hello", "left", "--"}, "<cmd>"},
+		{"optional slot is still offered before the literal", "tasknew", tasknew,
+			[]string{"hello", "left"}, "[<filter>]"},
+		{"skipped optional slot does not shift later slots", "tasknew", tasknew,
+			[]string{"hello", "left", "--", "ls"}, "[<args>]"},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			assert.Equal(t, tcase.expected,
+				argHint(tcase.command, tcase.synopsis, tcase.args))
+		})
+	}
+}
+
+var argHintTestCommands = []Manual{
+	{
+		Name:     "tasknew",
+		Summary:  "Create a task.",
+		Synopsis: "<name> <alignment> [<filter>] -- <cmd> [<args>]",
+	},
+	{
+		Name:     "workspaceopen",
+		Summary:  "Open a workspace.",
+		Synopsis: "[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>",
+	},
+	{
+		Name:     "lsp",
+		Summary:  "Language server commands.",
+		Synopsis: "<subcommand> [<args>...]",
+		Commands: []Manual{
+			{Name: "rename", Summary: "Rename a symbol.", Synopsis: "<symbol>"},
+		},
+	},
+	{
+		Name:    "worktreenew",
+		Summary: "Create a worktree.",
+		AliasOf: []string{"! git worktree add $1"},
+	},
+	{Name: "quit", Summary: "Quit."},
+}
+
+// TestCommandHandlerArgHintDraw pins the shadow argument placeholder:
+// it is drawn at the cursor once an argument slot is pending, is
+// replaced by the typed text on the first keystroke, advances to the
+// next slot on the separator space, and is absent for commands whose
+// synopsis does not describe the pending argument.
+func TestCommandHandlerArgHintDraw(t *testing.T) {
+	tsuite := []struct {
+		desc         string
+		sequence     string
+		width        int
+		expectedDraw string
+	}{
+		{"no hint while the command is still being typed", "tasknew", 30, `
+tasknew▐                      
+tasknew                       
+                              
+                              
+                              `},
+		{"first argument slot", "tasknew<space>", 30, `
+tasknew ▐name>                
+                              
+                              
+                              
+                              `},
+		{"hint disappears on the first typed character", "tasknew<space>a", 30, `
+tasknew a▐                    
+                              
+                              
+                              
+                              `},
+		{"hint advances to the next slot", "tasknew<space>a<space>", 30, `
+tasknew a ▐alignment>         
+                              
+                              
+                              
+                              `},
+		{"optional slots are hinted verbatim", "tasknew<space>a<space>b<space>", 30, `
+tasknew a b ▐<filter>]        
+                              
+                              
+                              
+                              `},
+		{"literal slot is hinted once the optional is filled", "tasknew<space>a<space>b<space>c<space>", 30, `
+tasknew a b c ▐-              
+                              
+                              
+                              
+                              `},
+		{"skipping the optional keeps later slots aligned", "tasknew<space>a<space>b<space>--<space>", 30, `
+tasknew a b -- ▐cmd>          
+                              
+                              
+                              
+                              `},
+		{"no hint past the last slot", "tasknew<space>a<space>b<space>--<space>ls<space>x<space>", 30, `
+tasknew a b -- ls x ▐         
+                              
+                              
+                              
+                              `},
+		{"whitespace-free synopsis uses the override", "workspaceopen<space>", 30, `
+workspaceopen ▐path>          
+                              
+                              
+                              
+                              `},
+		{"subcommand synopsis replaces the parent's", "lsp<space>rename<space>", 30, `
+lsp rename ▐symbol>           
+                              
+                              
+                              
+                              `},
+		{"command without a synopsis has no hint", "quit<space>", 30, `
+quit ▐                        
+                              
+                              
+                              
+                              `},
+		{"alias without a synopsis uses the override", "worktreenew<space>", 30, `
+worktreenew ▐name>            
+                              
+                              
+                              
+                              `},
+		{"hint is clipped at the progress widget", "workspaceopen<space>", 20, `
+workspaceopen ▐pa   
+                    
+                    
+                    
+                    `},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			t.Parallel()
+			cfg := testDefaultConfig()
+			cfg.Sync = true
+			cfg.ShowManual = false
+			cfg.ShowArgHint = true
+
+			dispatchFn, cleanup := nopDispatch()
+			defer cleanup(t)
+			completeFn, cleanupComplete := nopComplete()
+			defer cleanupComplete(t)
+
+			b := NewPrompt(
+				storagestub.NewInMemoryService(), FuncCompleter(completeFn),
+				FuncDispatcher(dispatchFn), term.NopInterrupter(),
+				argHintTestCommands, cfg,
+			)
+			defer b.Close()
+			cases := []handlertest.SequenceTestCase{
+				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},
+			}
+			handlertest.RunHandlerSequence(t, testCommandHandler{b}, tcase.width, 5, cases)
+		})
+	}
+}

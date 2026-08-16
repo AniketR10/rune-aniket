@@ -5931,7 +5931,7 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
-│ tabfocus ▐                 │
+│ tabfocus ▐<position>]      │
 │ 1 hello.go                 │
 │ 2 world.go                 │
 └────────────────────────────┘
@@ -6044,7 +6044,7 @@ func TestSwitchToTab(t *testing.T) {
 │                            │
 │                            │
 ┌────────────────────────────┐
-│ tabfocus ▐                 │
+│ tabfocus ▐<position>]      │
 │                            │
 │                            │
 └────────────────────────────┘

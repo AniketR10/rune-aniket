@@ -3568,7 +3568,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│ workspacefocus ▐                     │
+│ workspacefocus ▐1|2|3|4|5|6|7|8|9    │
 │ 1 memory:///tmp                      │
 │ 2                                    │
 │ 3                                    │
@@ -3601,7 +3601,7 @@ func TestMoveWorkspace(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│ workspacemove ▐                      │
+│ workspacemove ▐right|left|1|2|3|4    │
 │ 1                                    │
 │ 2                                    │
 │ 3                                    │

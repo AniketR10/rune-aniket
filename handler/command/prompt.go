@@ -311,6 +311,7 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 		h.drawKeyBindingHints(w, listHeight)
 		h.responsive.Resize(h.width, bufHeight)
 		h.responsive.Draw(w)
+		h.drawArgHint(w, h.width)
 		return
 	}
 
@@ -326,6 +327,7 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 	h.list.Draw(w)
 	union.Draw(w)
 	h.drawKeyBindingHints(w, listHeight)
+	h.drawArgHint(w, leftWidgetWidth)
 
 	// Overlay the active edit-session selection highlight in the
 	// prompt's wrap geometry. The responsive renderer above does not
@@ -334,6 +336,59 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 	// pipeline, so without this overlay visual selections inside
 	// modal edit mode would be invisible to the user.
 	h.drawSelectionOverlay(w, leftWidgetWidth, bufHeight)
+}
+
+// drawArgHint echoes the placeholder of the argument the prompt is
+// waiting for right after the cursor, as shadow text that is not part
+// of the input buffer. It runs after the buffer overlay so it paints
+// over the blank cells the renderer just emitted.
+func (h *Prompt) drawArgHint(w term.Writer, wrapWidth int) {
+	hint := h.pendingArgHint()
+	if hint == "" {
+		return
+	}
+	pos, _, ok := h.Cursor()
+	if !ok {
+		return
+	}
+	x := pos.X
+	for _, ch := range hint {
+		if x >= wrapWidth {
+			return
+		}
+		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.NewCell(ch, 1, h.config.ArgHintAttr))
+		x++
+	}
+}
+
+// pendingArgHint returns the placeholder for the argument the prompt
+// is waiting for, or "" when the prompt is not sitting on an empty
+// argument slot of a known command.
+func (h *Prompt) pendingArgHint() string {
+	if !h.config.ShowArgHint || h.showingHistory || h.editSession.Active() {
+		return ""
+	}
+	// mode 0 means the command itself is still being typed, and a
+	// non-empty list buffer means the argument is already started.
+	if h.mode < 1 || len(h.commandAndArgs) == 0 || h.list.Buffer().Size() != 0 {
+		return ""
+	}
+	man, ok := h.getManualForCommand(h.commandAndArgs[0])
+	if !ok {
+		return ""
+	}
+	path := []string{man.Name}
+	args := h.commandAndArgs[1:]
+	for len(args) > 0 {
+		sub, ok := getSubcommandManual(man, args[:1])
+		if !ok {
+			break
+		}
+		man = sub
+		path = append(path, sub.Name)
+		args = args[1:]
+	}
+	return argHint(strings.Join(path, " "), man.Synopsis, args)
 }
 
 func (h *Prompt) handleLastCommand() {

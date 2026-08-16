@@ -2482,6 +2482,9 @@ type testCommandHandler struct {
 func testDefaultConfig() Config {
 	cfg := DefaultConfig()
 	cfg.Editor = stubEditorImpl{}
+	// most draw assertions predate the shadow argument hint and expect
+	// the input row to stay blank past the cursor.
+	cfg.ShowArgHint = false
 	return cfg
 }
 

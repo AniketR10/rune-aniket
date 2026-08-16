@@ -134,6 +134,14 @@ type Config struct {
 	KeyBindingHintAttr term.Attributes
 	// KeyBindingHintFocusAttr styles the key hint on the focused row.
 	KeyBindingHintFocusAttr term.Attributes
+
+	// ShowArgHint controls whether the placeholder for the argument
+	// the prompt is currently waiting for is echoed after the cursor
+	// as shadow text. The hint is never part of the input buffer and
+	// disappears as soon as the argument is typed into.
+	ShowArgHint bool
+	// ArgHintAttr styles the shadow argument placeholder.
+	ArgHintAttr term.Attributes
 }
 
 // DefaultConfig returns a sane configuration for initializing a Handler.
@@ -152,5 +160,7 @@ func DefaultConfig() Config {
 		ShowProgressHint:        true,
 		KeyBindingHintAttr:      term.Attributes{Fg: term.ColorGray},
 		KeyBindingHintFocusAttr: term.Attributes{Fg: term.ColorSilver},
+		ShowArgHint:             true,
+		ArgHintAttr:             term.Attributes{Fg: term.ColorGray},
 	}
 }
