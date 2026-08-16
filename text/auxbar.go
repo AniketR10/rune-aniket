@@ -161,7 +161,7 @@ func WithAuxBar(
 	}
 
 	if ret.dirty {
-		ret.rebuildBar(context.Background())
+		ret.rebuildBar()
 	}
 	return ret
 }
@@ -249,7 +249,7 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 		b.prevCursor, _, _ = b.vhandler.C.Cursor()
 		if b.linesEnabled && !b.absoluteLines &&
 			(prevCursor.Y != b.prevCursor.Y || prevOffset.Y != b.prevOffset.Y) {
-			b.rebuildBar(context.Background())
+			b.rebuildBar()
 		}
 		return
 	}
@@ -290,7 +290,7 @@ func (b *auxBar) Resize(width, height int) {
 	b.vhandler.Move(term.Coordinates{X: b.barWidth})
 	b.vhandler.Resize(width-b.barWidth, height)
 	if rebuild {
-		b.rebuildBar(context.Background())
+		b.rebuildBar()
 	}
 }
 
@@ -323,7 +323,7 @@ func (b *auxBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 		} else {
 			b.delLocAttr = term.Attributes{}
 		}
-		b.rebuildBar(ctx)
+		b.rebuildBar()
 		return nil
 	default:
 		return nil
@@ -361,20 +361,20 @@ func (b *auxBar) Close() (ret error) {
 
 func (b *auxBar) SetCursorAtScroll(pos term.Coordinates) bool {
 	ok := b.Handler.SetCursorAtScroll(pos)
-	b.rebuildBar(context.Background())
+	b.rebuildBar()
 	b.prevCursor, _, _ = b.vhandler.Cursor()
 	return ok
 }
 
 func (b *auxBar) MoveToNextLocation(ID string) bool {
 	ok := b.Handler.MoveToNextLocation(ID)
-	b.rebuildBar(context.Background())
+	b.rebuildBar()
 	return ok
 }
 
 func (b *auxBar) MoveToPrevLocation(ID string) bool {
 	ok := b.Handler.MoveToPrevLocation(ID)
-	b.rebuildBar(context.Background())
+	b.rebuildBar()
 	return ok
 }
 
@@ -397,7 +397,7 @@ func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
 		return false
 	}
 	(*auxBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
-	(*auxBar)(b).rebuildBar(ctx)
+	(*auxBar)(b).rebuildBar()
 	return false
 }
 
@@ -424,9 +424,14 @@ func (b *auxBar) foldAt(posAtWindow term.Coordinates) (folded, ok bool) {
 	return
 }
 
-func (b *auxBar) rebuildBar(ctx context.Context) {
+// The build outlives whatever triggered it: an edit applied by a code
+// action carries the command's context, which is cancelled the moment
+// the command returns, and a cancelled build leaves the gutter blank
+// until something else rebuilds it.
+func (b *auxBar) rebuildBar() {
 	b.cancelBuild()
-	ctx, b.cancelBuild = context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancelBuild = cancel
 	uri := b.Handler.Resource()
 	b.dirty = false
 
@@ -766,7 +771,7 @@ func (b *auxBar) OnDidSeek(from, to term.Coordinates) {
 	prevOffset := b.prevOffset
 	b.prevOffset = b.scroll.Offset()
 	if prevOffset.Y != b.prevOffset.Y {
-		b.rebuildBar(context.Background())
+		b.rebuildBar()
 	}
 }
 
@@ -780,11 +785,11 @@ func (b *auxBar) OnWillVisible(start int) {
 }
 
 func (b *auxBar) OnDidHide(start, end int) {
-	b.rebuildBar(context.Background())
+	b.rebuildBar()
 }
 
 func (b *auxBar) OnDidVisible(start int) {
-	b.rebuildBar(context.Background())
+	b.rebuildBar()
 }
 
 func (b *auxBar) OnWillEdit(
@@ -799,7 +804,7 @@ func (b *auxBar) OnDidEdit(
 	b.prevRows = b.buf.View().Rows()
 	if prevRows != b.prevRows {
 		b.setLinesWidth()
-		b.rebuildBar(ctx)
+		b.rebuildBar()
 	}
 }
 

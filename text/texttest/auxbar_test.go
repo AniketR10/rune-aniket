@@ -426,6 +426,65 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	mu.Unlock()
 }
 
+// A code action applies its edits under the command's context, which is
+// cancelled as soon as the command returns. rebuildBar clears the bar
+// and repopulates it from a goroutine that gives up when that context
+// is done, so the gutter keeps its line numbers and loses folds and git
+// signs until something else triggers a rebuild -- in practice the next
+// flush.
+func TestAuxBarEditContextCancelledKeepsFolds(t *testing.T) {
+	const foldGlyph = "\uf44b"
+
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+
+	var mu sync.Mutex
+	var pending sync.WaitGroup
+	cb := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		pending.Done()
+		return true
+	}
+
+	pending.Add(1)
+	mu.Lock()
+	bar := text.WithAuxBar(h, buf, scroll, text.AuxBarConfig{
+		FoldsEnabled:     true,
+		ScheduleNextTick: cb,
+	})
+	bar.Resize(20, 10)
+	mu.Unlock()
+	pending.Wait()
+
+	render := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		w := term.NewStringWriter(20, 10)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		bar.Draw(w)
+		require.NoError(t, w.Flush())
+		return w.String()
+	}
+	require.Contains(t, render(), foldGlyph, "folds must render before the edit")
+
+	// The edit has to change the row count, which is what makes the bar
+	// rebuild at all.
+	pending.Add(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	buf.Edit(ctx, term.Coordinates{Y: 1}, term.Coordinates{Y: 2}, "")
+	cancel()
+	pending.Wait()
+
+	require.Contains(t, render(), foldGlyph,
+		"folds must survive an edit whose context is already cancelled")
+}
+
 func TestAuxBarGitEventSubscriptions(t *testing.T) {
 	fixture := newAuxBarEventFixture(t)
 	defer fixture.close(t)
