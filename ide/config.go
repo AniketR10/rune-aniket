@@ -35,9 +35,11 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -97,7 +99,157 @@ const (
 	keyCommandKeyBindingHintColor = "key_binding_hint_color"
 
 	keyCommandKeyBindingHintFocusColor = "key_binding_hint_focus_color"
+
+	keyGUI       = "gui"
+	keyQuickMenu = "quick_menu"
+
+	// maxQuickMenuButtons caps the reserved column so a runaway config
+	// cannot produce more buttons than the window can display.
+	maxQuickMenuButtons = 24
 )
+
+// quickMenuSymbolRe is the SF Symbol name grammar. It also excludes the
+// control bytes that would truncate the name at the native bridge's
+// C string boundary.
+var quickMenuSymbolRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// QuickMenuButton is one button of the native quick menu and the Rune
+// command it runs. Symbol is an SF Symbol name.
+type QuickMenuButton struct {
+	Symbol  string
+	Title   string
+	Command []string
+}
+
+// ID identifies the button to the native bar and keys the key-binding
+// lookup that renders its accelerator.
+func (b QuickMenuButton) ID() string { return strings.Join(b.Command, " ") }
+
+// QuickMenuButtons decodes cfg's `gui.quick_menu` list into the buttons
+// of the native quick menu, top to bottom. Malformed entries are
+// dropped; validateQuickMenu reports them at load time.
+func QuickMenuButtons(cfg config.Config) []QuickMenuButton {
+	guiCfg, err := cfg.GetConfig(keyGUI)
+	if err != nil {
+		return nil
+	}
+	return parseQuickMenuButtons(guiCfg, map[string]error{})
+}
+
+func parseQuickMenuButtons(
+	cfg config.Config, errs map[string]error,
+) []QuickMenuButton {
+	entries, err := cfg.GetSlice(keyQuickMenu)
+	if err != nil {
+		if err != config.ErrNotFound {
+			errs[keyGUI+"."+keyQuickMenu] = err
+		}
+		return nil
+	}
+	if len(entries) > maxQuickMenuButtons {
+		errs[keyGUI+"."+keyQuickMenu] = fmt.Errorf(
+			"at most %d buttons are supported but found %d",
+			maxQuickMenuButtons, len(entries))
+		entries = entries[:maxQuickMenuButtons]
+	}
+	ret := make([]QuickMenuButton, 0, len(entries))
+	seen := make(map[string]bool, len(entries))
+	for i, entry := range entries {
+		path := fmt.Sprintf("%s.%s[%d]", keyGUI, keyQuickMenu, i)
+		button, err := parseQuickMenuButton(entry, path, errs)
+		if err != nil {
+			errs[path] = err
+			continue
+		}
+		if button == nil {
+			continue
+		}
+		if seen[button.ID()] {
+			errs[path] = fmt.Errorf("duplicate command %q", button.ID())
+			continue
+		}
+		seen[button.ID()] = true
+		ret = append(ret, *button)
+	}
+	return ret
+}
+
+// parseQuickMenuButton returns a nil button when a field-level error was
+// already recorded under path, so the caller drops the entry without
+// masking the more specific message.
+func parseQuickMenuButton(
+	entry any, path string, errs map[string]error,
+) (*QuickMenuButton, error) {
+	m, ok := entry.(map[string]any)
+	if !ok {
+		return nil, errors.New("expected a dict with 'symbol', " +
+			"'title' and 'command' keys")
+	}
+	for key := range m {
+		switch key {
+		case "symbol", "title", "command":
+		default:
+			return nil, fmt.Errorf("unknown key %q", key)
+		}
+	}
+
+	symbol, ok := m["symbol"].(string)
+	if !ok {
+		errs[path+".symbol"] = errors.New("required, must be an SF Symbol name")
+		return nil, nil
+	}
+	if !quickMenuSymbolRe.MatchString(symbol) {
+		errs[path+".symbol"] = fmt.Errorf(
+			"%q is not a valid SF Symbol name", symbol)
+		return nil, nil
+	}
+
+	cmdAndArgs, err := parseQuickMenuCommand(m["command"])
+	if err != nil {
+		errs[path+".command"] = err
+		return nil, nil
+	}
+
+	title := strings.Join(cmdAndArgs, " ")
+	if raw, ok := m["title"]; ok {
+		title, ok = raw.(string)
+		if !ok {
+			errs[path+".title"] = errors.New("must be a string")
+			return nil, nil
+		}
+	}
+
+	return &QuickMenuButton{Symbol: symbol, Title: title, Command: cmdAndArgs}, nil
+}
+
+func parseQuickMenuCommand(raw any) ([]string, error) {
+	var parts []string
+	switch v := raw.(type) {
+	case string:
+		parts = strings.Fields(v)
+	case []any:
+		for _, ifc := range v {
+			word, ok := ifc.(string)
+			if !ok {
+				return nil, errors.New("expected space-separated multi-word " +
+					"string or []string but found unknown type")
+			}
+			parts = append(parts, strings.Fields(word)...)
+		}
+	default:
+		return nil, errors.New("required, must be a space-separated " +
+			"multi-word string or []string")
+	}
+	if len(parts) == 0 {
+		return nil, errors.New("must name a command")
+	}
+	for _, part := range parts {
+		if strings.ContainsFunc(part, unicode.IsControl) {
+			return nil, errors.New("must not contain control characters")
+		}
+	}
+	return parts, nil
+}
 
 var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()

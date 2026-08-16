@@ -308,6 +308,41 @@ config = {
         "key_mapping": {
         #     "<capslock>": "<esc>",
         },
+        # Buttons of the quick menu, the vertical bar of native buttons
+        # floating over the right edge of the window (macOS only; ignored
+        # elsewhere). Order is top to bottom, and an empty list removes the
+        # bar along with the column it reserves.
+        #   symbol  — SF Symbol name drawn as the button image.
+        #   title   — hover tooltip.
+        #   command — any Rune command line, as a space-separated string or
+        #             a list of words. It also identifies the button, so it
+        #             must be unique across the menu.
+        "quick_menu": [
+            {"symbol": "command", "title": "Command Prompt", "command": "echo {prompt}"},
+            {"symbol": "plus", "title": "Open Project", "command": "workspaceopen"},
+            {"symbol": "sidebar.left", "title": "File Explorer", "command": "fexplorer"},
+            {"symbol": "apple.terminal", "title": "New Terminal", "command": "terminalnewtab"},
+            {"symbol": "rectangle.lefthalf.filled", "title": "Split Left",
+             "command": "windownew left"},
+            {"symbol": "rectangle.righthalf.filled", "title": "Split Right",
+             "command": "windownew right"},
+            {"symbol": "rectangle.tophalf.filled", "title": "Split Up",
+             "command": "windownew up"},
+            {"symbol": "rectangle.bottomhalf.filled", "title": "Split Down",
+             "command": "windownew down"},
+            {"symbol": "arrow.up.left.and.arrow.down.right", "title": "Toggle Maximize",
+             "command": "windowtogglemaximize"},
+            {"symbol": "arrow.triangle.branch", "title": "New Worktree",
+             "command": "echo {prompt}worktreenew<space>"},
+            {"symbol": "sparkles", "title": "Agent", "command": "agent"},
+            {"symbol": "document.viewfinder", "title": "Find File", "command": "searchfile"},
+            {"symbol": "text.viewfinder", "title": "Find in Files", "command": "searchtext"},
+            {"symbol": "ellipsis.curlybraces", "title": "Find Definition",
+                "command": "echo {prompt}lsp<space>definition<space>"},
+            {"symbol": "bolt", "title": "Console", "command": "console help"},
+            {"symbol": "gearshape", "title": "Settings", "command": "config"},
+            {"symbol": "questionmark.circle", "title": "Rune Help", "command": "help"},
+        ],
     },
     "editor": {
         # Editor mode and exo settings are not configured here. The

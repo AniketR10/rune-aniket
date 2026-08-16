@@ -24,7 +24,9 @@
 package ide
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -45,6 +47,10 @@ func validateConfig(cfg map[string]any) (err error) {
 	}
 
 	if err = validateExo(&c, cfg); err != nil {
+		return
+	}
+
+	if err = validateQuickMenu(cfg); err != nil {
 		return
 	}
 
@@ -75,6 +81,49 @@ func validateAliases(c *ideConfig, cfg map[string]any) (err error) {
 		err = fmt.Errorf("'command.%s' is invalid: %w", keyCommandAliases, err)
 	}
 	return
+}
+
+// validateQuickMenu drops malformed `gui.quick_menu` entries from the
+// raw config so nothing downstream — including the native bar's cgo
+// bridge — can observe them, and reports what was rejected.
+func validateQuickMenu(cfg map[string]any) error {
+	guiCfg, ok := cfg[keyGUI].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if _, ok := guiCfg[keyQuickMenu]; !ok {
+		return nil
+	}
+	errs := make(map[string]error)
+	buttons := parseQuickMenuButtons(config.MapConfig(guiCfg), errs)
+	if len(errs) == 0 {
+		return nil
+	}
+	guiCfg[keyQuickMenu] = quickMenuEntries(buttons)
+	keys := make([]string, 0, len(errs))
+	for key := range errs {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	joined := make([]error, 0, len(keys))
+	for _, key := range keys {
+		joined = append(joined, fmt.Errorf("'%s' is invalid: %w", key, errs[key]))
+	}
+	return errors.Join(joined...)
+}
+
+// quickMenuEntries renders buttons back into the raw config shape so a
+// later parse of the neutralised tree yields exactly the valid subset.
+func quickMenuEntries(buttons []QuickMenuButton) []any {
+	entries := make([]any, 0, len(buttons))
+	for _, button := range buttons {
+		entries = append(entries, map[string]any{
+			"symbol":  button.Symbol,
+			"title":   button.Title,
+			"command": strings.Join(button.Command, " "),
+		})
+	}
+	return entries
 }
 
 func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {

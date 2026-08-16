@@ -813,6 +813,104 @@ func TestFocusedLastTabVisibleWithTabBarOffset(t *testing.T) {
 		"expected at least one non-focused tab to be shrunk: %q", bar)
 }
 
+// TestRightInsetReservesWindowColumn asserts Config.RightInset narrows
+// only the window manager. The tab bar is a top union member, so it is
+// laid out before the reserved column and keeps the full width, which
+// is what lets a native overlay float below it.
+func TestRightInsetReservesWindowColumn(t *testing.T) {
+	const width, height, inset = 40, 8, 5
+
+	draw := func(rightInset int) []string {
+		cfg := DefaultConfig()
+		cfg.Frame = false
+		cfg.FrameUnion = false
+		cfg.Dim = false
+		cfg.RightInset = rightInset
+
+		b := NewComponent(cfg)
+		uri, err := workspaceapi.ParseURI("file:///alpha")
+		require.NoError(t, err)
+		h := newTestHandler()
+		h.Ch = 'x'
+		require.NoError(t, b.Focus().SetContent(b.NewTab(uri, 0, "alpha", h, nil)))
+
+		b.Resize(width, height)
+		writer := term.NewStringWriter(width, height)
+		b.Draw(writer)
+		require.NoError(t, writer.Flush())
+		return strings.Split(writer.String(), "\n")
+	}
+
+	full, narrowed := draw(0), draw(inset)
+	require.Equal(t, len(full), len(narrowed))
+
+	var windowRows int
+	for y := range full {
+		if full[y] != strings.Repeat("x", width) {
+			assert.Equal(t, full[y], narrowed[y],
+				"row %d is above the reserved column and must not move", y)
+			continue
+		}
+		windowRows++
+		assert.Equal(t,
+			strings.Repeat("x", width-inset)+strings.Repeat(" ", inset),
+			narrowed[y], "row %d", y)
+	}
+	require.Positive(t, windowRows, "expected the window to fill some rows")
+}
+
+// TestSetRightInsetRelaysOut asserts the reserved column can be widened
+// and collapsed after construction. The union only ever appends members,
+// so this exercises the rebuild path, including replaying bars added
+// through the public Bar API.
+func TestSetRightInsetRelaysOut(t *testing.T) {
+	const width, height, inset = 40, 8, 5
+
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+
+	b := NewComponent(cfg)
+	uri, err := workspaceapi.ParseURI("file:///alpha")
+	require.NoError(t, err)
+	h := newTestHandler()
+	h.Ch = 'x'
+	require.NoError(t, b.Focus().SetContent(b.NewTab(uri, 0, "alpha", h, nil)))
+
+	bar := newTestHandler()
+	bar.Ch = 'b'
+	b.Bar(browserapi.BarConfig{
+		Orientation: browserapi.OrientationBottom,
+		Size:        1,
+		Frame:       browserapi.BarFrameNever,
+	}, bar)
+
+	draw := func() []string {
+		b.Resize(width, height)
+		writer := term.NewStringWriter(width, height)
+		b.Draw(writer)
+		require.NoError(t, writer.Flush())
+		return strings.Split(writer.String(), "\n")
+	}
+
+	before := draw()
+	require.Contains(t, before, strings.Repeat("b", width),
+		"the bar must span the full width before any inset change")
+
+	b.SetRightInset(inset)
+	narrowed := draw()
+	require.Contains(t, narrowed,
+		strings.Repeat("x", width-inset)+strings.Repeat(" ", inset),
+		"the window must be narrowed by the reserved column")
+	require.Contains(t, narrowed, strings.Repeat("b", width),
+		"the bar must survive the union rebuild")
+
+	b.SetRightInset(0)
+	assert.Equal(t, before, draw(),
+		"collapsing the reserved column must restore the original layout")
+}
+
 func TestComponentRestoreTileLayout(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Frame = false

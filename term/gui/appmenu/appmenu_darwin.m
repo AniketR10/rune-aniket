@@ -94,12 +94,13 @@ void runeAppMenuAddSeparator(void) {
 
 void runeAppMenuAddItem(const char *title, const char *selector,
                         const char *keyEquiv, unsigned long modifiers, int tag,
-                        int disabled) {
+                        int disabled, int checked) {
   NSMenuItem *item =
       [[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:title]
                                  action:NULL
                           keyEquivalent:[NSString stringWithUTF8String:keyEquiv]];
   [item setKeyEquivalentModifierMask:(NSEventModifierFlags)modifiers];
+  [item setState:(checked ? NSControlStateValueOn : NSControlStateValueOff)];
 
   if (disabled) {
     // A disabled item has no action, so AppKit greys it out.

@@ -119,7 +119,7 @@ func TestSetWorkspaceRequiresAttentionRace(t *testing.T) {
 		func(term.Event) bool { return true },
 		FuncExtensionsRunner(testRunnerFn), pkgtrust.NewStore(dir, nil), mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
+		".sixrc", 0, 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())
 	require.NoError(t, err)
 
@@ -144,6 +144,52 @@ func TestSetWorkspaceRequiresAttentionRace(t *testing.T) {
 	drain()
 
 	assert.Equal(t, attr, h.workspaces[1].attentionAttr)
+}
+
+// TestNotificationsInheritRightInset pins the plumbing that keeps
+// notifications clear of the column reserved for the native quick menu.
+// Without it the container right-aligns against the full window width
+// and overdraws the buttons floating there.
+func TestNotificationsInheritRightInset(t *testing.T) {
+	const rightInset = 5
+
+	homeURI, err := workspaceapi.ParseURI("memory:///home")
+	require.NoError(t, err)
+
+	mu := new(sync.Mutex)
+	sched, _ := newTestScheduler(t, mu)
+	cfg := defaultCfg()
+	cfg.scheduleNextTick = sched
+
+	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	dir := t.TempDir()
+	storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
+	releaseManager := docrelease.NewManager(document.NewInMemoryService())
+
+	shRunner := new(shaderRunner)
+	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
+		nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
+
+	h := new(workspaceManagerHandler)
+	h.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
+	require.NoError(t, h.init(nil, homeURI, manager,
+		notificationsConfig(), cfg, storage, dir,
+		func(term.Event) bool { return true },
+		FuncExtensionsRunner(testRunnerFn), pkgtrust.NewStore(dir, nil), mu, nil,
+		func() (ideConfig, error) { return cfg, nil },
+		".sixrc", 0, rightInset, 0, '1', 0, 0, true, nil, releaseManager,
+		shRunner, 0, nil, false, false, newCommandObserverRegistry()))
+	// Close runs under the IDE locker, as the event loop holds it.
+	defer func() {
+		mu.Lock()
+		assert.NoError(t, h.Close())
+	}()
+
+	assert.Equal(t, rightInset, h.notifications.cfg.RightInset)
 }
 
 func TestNotifyOnce(t *testing.T) {

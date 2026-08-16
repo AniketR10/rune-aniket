@@ -2738,6 +2738,14 @@ func (e *ex) Selection() (string, bool) {
 	return e.focusHandler().Selection()
 }
 
+// setRightInset resizes the column reserved along the right edge, both
+// in the editor layout and for the notifications floating over it.
+func (e *ex) setRightInset(cells int) {
+	e.comp.SetRightInset(cells)
+	e.container.SetRightInset(cells)
+	e.Resize(e.width, e.height)
+}
+
 // Resize satisfies tui.Component
 func (e *ex) Resize(width, height int) {
 	e.height = height

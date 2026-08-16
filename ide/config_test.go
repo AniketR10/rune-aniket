@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -1977,4 +1978,154 @@ func TestCommandKeyBindings(t *testing.T) {
 func TestCommandKeyBindingsWithoutCommandConfig(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, CommandKeyBindings(config.MapConfig(map[string]any{})))
+}
+
+func quickMenuEntry(symbol, title string, command any) map[string]any {
+	return map[string]any{"symbol": symbol, "title": title, "command": command}
+}
+
+func TestQuickMenuButtons(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		entries  any
+		want     []QuickMenuButton
+		wantErrs []string
+	}{{
+		name: "preserves order and accepts both command spellings",
+		entries: []any{
+			quickMenuEntry("plus", "Open Project", "workspaceopen"),
+			quickMenuEntry("terminal", "New Terminal", []any{"windownew", "right"}),
+		},
+		want: []QuickMenuButton{
+			{Symbol: "plus", Title: "Open Project", Command: []string{"workspaceopen"}},
+			{Symbol: "terminal", Title: "New Terminal",
+				Command: []string{"windownew", "right"}},
+		},
+	}, {
+		name:     "section must be a list",
+		entries:  map[string]any{"plus": "workspaceopen"},
+		wantErrs: []string{"gui.quick_menu"},
+	}, {
+		name:     "entry must be a dict",
+		entries:  []any{"workspaceopen"},
+		wantErrs: []string{"gui.quick_menu[0]"},
+	}, {
+		name:     "symbol is required",
+		entries:  []any{map[string]any{"command": "help"}},
+		wantErrs: []string{"gui.quick_menu[0].symbol"},
+	}, {
+		name:     "symbol charset is restricted",
+		entries:  []any{quickMenuEntry("plus\x00; rm -rf /", "Bad", "help")},
+		wantErrs: []string{"gui.quick_menu[0].symbol"},
+	}, {
+		name:     "command is required",
+		entries:  []any{map[string]any{"symbol": "plus"}},
+		wantErrs: []string{"gui.quick_menu[0].command"},
+	}, {
+		name:     "command must not be empty",
+		entries:  []any{quickMenuEntry("plus", "Empty", "   ")},
+		wantErrs: []string{"gui.quick_menu[0].command"},
+	}, {
+		name:     "command elements must be strings",
+		entries:  []any{quickMenuEntry("plus", "Bad", []any{"windownew", 2})},
+		wantErrs: []string{"gui.quick_menu[0].command"},
+	}, {
+		name:     "command must not contain control characters",
+		entries:  []any{quickMenuEntry("plus", "Bad", "help\x1b[2J")},
+		wantErrs: []string{"gui.quick_menu[0].command"},
+	}, {
+		name:     "title must be a string",
+		entries:  []any{map[string]any{"symbol": "plus", "command": "help", "title": 3}},
+		wantErrs: []string{"gui.quick_menu[0].title"},
+	}, {
+		name: "title defaults to the command line",
+		entries: []any{
+			map[string]any{"symbol": "plus", "command": []any{"windownew", "right"}},
+		},
+		want: []QuickMenuButton{{Symbol: "plus", Title: "windownew right",
+			Command: []string{"windownew", "right"}}},
+	}, {
+		name:     "unknown keys are rejected",
+		entries:  []any{map[string]any{"symbol": "plus", "command": "help", "icon": "x"}},
+		wantErrs: []string{"gui.quick_menu[0]"},
+	}, {
+		name: "duplicate command lines are rejected",
+		entries: []any{
+			quickMenuEntry("plus", "First", "help"),
+			quickMenuEntry("xmark", "Second", "help"),
+		},
+		want: []QuickMenuButton{
+			{Symbol: "plus", Title: "First", Command: []string{"help"}},
+		},
+		wantErrs: []string{"gui.quick_menu[1]"},
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			errs := make(map[string]error)
+			guiCfg := config.MapConfig(map[string]any{"quick_menu": tc.entries})
+			got := parseQuickMenuButtons(guiCfg, errs)
+			if tc.want == nil {
+				assert.Empty(t, got)
+			} else {
+				assert.Equal(t, tc.want, got)
+			}
+			for _, key := range tc.wantErrs {
+				assert.Contains(t, errs, key)
+			}
+			if len(tc.wantErrs) == 0 {
+				assert.Empty(t, errs)
+			}
+		})
+	}
+}
+
+func TestQuickMenuButtonsCapped(t *testing.T) {
+	t.Parallel()
+	entries := make([]any, 0, maxQuickMenuButtons+1)
+	for i := range maxQuickMenuButtons + 1 {
+		entries = append(entries,
+			quickMenuEntry("plus", "Button", fmt.Sprintf("help %d", i)))
+	}
+
+	errs := make(map[string]error)
+	got := parseQuickMenuButtons(
+		config.MapConfig(map[string]any{"quick_menu": entries}), errs)
+	assert.Len(t, got, maxQuickMenuButtons)
+	assert.Contains(t, errs, "gui.quick_menu")
+}
+
+func TestQuickMenuButtonsMissingSection(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, QuickMenuButtons(config.MapConfig(map[string]any{})))
+	assert.Empty(t, QuickMenuButtons(config.MapConfig(
+		map[string]any{"gui": map[string]any{}})))
+}
+
+func TestValidateQuickMenuDropsInvalidEntries(t *testing.T) {
+	t.Parallel()
+	cfg := map[string]any{"gui": map[string]any{"quick_menu": []any{
+		quickMenuEntry("plus", "Open Project", "workspaceopen"),
+		quickMenuEntry("plus\x00", "Injected", "help"),
+	}}}
+
+	err := validateQuickMenu(cfg)
+	assert.ErrorContains(t, err, "gui.quick_menu[1].symbol")
+
+	// The invalid entry must be gone from the raw tree so it can never
+	// reach the native bar.
+	assert.Equal(t, []QuickMenuButton{{Symbol: "plus", Title: "Open Project",
+		Command: []string{"workspaceopen"}}}, QuickMenuButtons(config.MapConfig(cfg)))
+}
+
+func TestValidateQuickMenuAcceptsValidConfig(t *testing.T) {
+	t.Parallel()
+	cfg := map[string]any{"gui": map[string]any{"quick_menu": []any{
+		quickMenuEntry("plus", "Open Project", "workspaceopen"),
+	}}}
+	assert.NoError(t, validateQuickMenu(cfg))
+	assert.NoError(t, validateQuickMenu(map[string]any{}))
+	assert.NoError(t, validateQuickMenu(map[string]any{"gui": map[string]any{}}))
 }

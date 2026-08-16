@@ -567,6 +567,7 @@ func TestCloseRequest(t *testing.T) {
 		assert.Empty(t, gui.processWindowClosed())
 	})
 }
+
 func newTestGUI(t *testing.T, mock *mockHandler) (*GUI, *mockInputManager) {
 	gui, err := New(mock)
 	require.NoError(t, err)

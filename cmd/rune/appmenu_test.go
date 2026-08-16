@@ -38,6 +38,15 @@ import (
 	"unstable.build/go-tui/term/gui/openpanel"
 )
 
+// testAppMenus builds the menu bar with the quick menu unavailable,
+// which is the shape every test that predates it expects.
+func testAppMenus(
+	bindings map[string]term.KeyComb, recents []recentEntry,
+	models, tutorials []string,
+) []appmenu.Menu {
+	return appMenus(bindings, recents, models, tutorials, appMenuQuickMenu{})
+}
+
 func menuCommands(menus []appmenu.Menu) []appmenu.Command {
 	var cmds []appmenu.Command
 	for _, menu := range menus {
@@ -116,7 +125,7 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 			require.NoError(t, yaml.Unmarshal(raw, &cfg))
 
 			bindings := ide.CommandKeyBindings(config.MapConfig(cfg))
-			menus := appMenus(bindings, nil, appMenuTestModels, appMenuTestTutorials)
+			menus := testAppMenus(bindings, nil, appMenuTestModels, appMenuTestTutorials)
 
 			cmds := menuCommands(menus)
 			require.NotEmpty(t, cmds)
@@ -156,7 +165,7 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 // in the title signalling that further input is required.
 func TestAppMenusItemInvariants(t *testing.T) {
 	titles := map[string]bool{}
-	for _, menu := range appMenus(
+	for _, menu := range testAppMenus(
 		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
 	) {
 		require.NotEmpty(t, menu.Title)
@@ -188,7 +197,7 @@ func TestAppMenusItemInvariants(t *testing.T) {
 // must not carry stale entries no menu item can reach.
 func TestAppMenusPanelCommands(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(
+	for _, cmd := range menuCommands(testAppMenus(
 		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
 	)) {
 		byTitle[cmd.Title] = cmd
@@ -236,7 +245,7 @@ func TestAppMenusPanelCommands(t *testing.T) {
 // subcommand", so the item must carry the interactive subcommand.
 func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(
+	for _, cmd := range menuCommands(testAppMenus(
 		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
 	)) {
 		byTitle[cmd.Title] = cmd
@@ -253,7 +262,7 @@ func TestGoMenuCursorHistoryOpensPicker(t *testing.T) {
 // user confirms in place, matching the other Find entries.
 func TestFindMenuLSPPrefills(t *testing.T) {
 	byTitle := map[string]appmenu.Command{}
-	for _, cmd := range menuCommands(appMenus(
+	for _, cmd := range menuCommands(testAppMenus(
 		map[string]term.KeyComb{}, nil, appMenuTestModels, appMenuTestTutorials,
 	)) {
 		byTitle[cmd.Title] = cmd
@@ -277,7 +286,7 @@ func TestFindMenuLSPPrefills(t *testing.T) {
 }
 
 func TestAppMenusToolsAgentAndTasks(t *testing.T) {
-	menus := appMenus(map[string]term.KeyComb{}, nil,
+	menus := testAppMenus(map[string]term.KeyComb{}, nil,
 		appMenuTestModels, appMenuTestTutorials)
 	tools := menuByTitle(t, menus, "Tools")
 	agent := submenuByTitle(t, tools.Items, "Agent")
@@ -335,7 +344,7 @@ func TestAppMenusToolsAgentAndTasks(t *testing.T) {
 
 func TestAppMenusTutorialActions(t *testing.T) {
 	help := menuByTitle(t,
-		appMenus(map[string]term.KeyComb{}, nil,
+		testAppMenus(map[string]term.KeyComb{}, nil,
 			appMenuTestModels, appMenuTestTutorials), "Help")
 	start := submenuByTitle(t, help.Items, "Start Tutorial")
 	assert.Equal(t, []appmenu.Item{
@@ -358,7 +367,7 @@ func TestAppMenusTutorialActions(t *testing.T) {
 // used to dispatch no longer exists.
 func TestAppMenuCheckForUpdatesOpensConsole(t *testing.T) {
 	help := menuByTitle(t,
-		appMenus(map[string]term.KeyComb{}, nil,
+		testAppMenus(map[string]term.KeyComb{}, nil,
 			appMenuTestModels, appMenuTestTutorials), "Help")
 	byTitle := map[string]appmenu.Command{}
 	for _, cmd := range itemCommands(help.Items) {
@@ -378,7 +387,7 @@ func TestAppMenuDirectChoicesAvailableFromHomeWorkspace(t *testing.T) {
 	assert.Contains(t, models, "openai/gpt-5")
 	assert.Equal(t, []string{"agent", "basics", "navigation"}, tutorials)
 
-	menus := appMenus(map[string]term.KeyComb{}, nil, models, tutorials)
+	menus := testAppMenus(map[string]term.KeyComb{}, nil, models, tutorials)
 	agent := submenuByTitle(t, menuByTitle(t, menus, "Tools").Items, "Agent")
 	modelItems := submenuByTitle(t, agent.Items, "Change Model").Items
 	assert.Contains(t, modelItems, appmenu.Command{
@@ -415,7 +424,7 @@ func TestQuitEventFollowsConfiguredBinding(t *testing.T) {
 }
 
 func TestAppMenusDeriveAccelerators(t *testing.T) {
-	menus := appMenus(map[string]term.KeyComb{
+	menus := testAppMenus(map[string]term.KeyComb{
 		"quit":                              {Mod: term.ModMeta, Ch: 'q'},
 		"lsp definition":                    {Mod: term.ModMeta, Ch: 'd'},
 		"echo {prompt}workspaceopen<space>": {Mod: term.ModMeta, Ch: 't'},
@@ -630,7 +639,7 @@ func TestAppMenusOpenRecentSubmenu(t *testing.T) {
 		{label: "app/web", path: "/home/app/web"},
 		{label: "api/web", path: "/home/api/web"},
 	}
-	sub := find(appMenus(map[string]term.KeyComb{}, recents,
+	sub := find(testAppMenus(map[string]term.KeyComb{}, recents,
 		appMenuTestModels, appMenuTestTutorials))
 	require.Len(t, sub.Items, 2)
 	assert.Equal(t, appmenu.Command{
@@ -644,7 +653,7 @@ func TestAppMenusOpenRecentSubmenu(t *testing.T) {
 		Args:    []string{"/home/api/web"},
 	}, sub.Items[1])
 
-	empty := find(appMenus(map[string]term.KeyComb{}, nil,
+	empty := find(testAppMenus(map[string]term.KeyComb{}, nil,
 		appMenuTestModels, appMenuTestTutorials))
 	require.Len(t, empty.Items, 1)
 	placeholder, ok := empty.Items[0].(appmenu.Command)
@@ -693,4 +702,38 @@ func TestMergedRecentWorkspacesPrefersMenuOpens(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "/home/me/beta", entries[0].path)
 	assert.Equal(t, "beta", entries[0].label)
+}
+
+// TestQuickMenuAppMenuItem covers the View menu's Quick Menu entry: it
+// appears only when a quick menu can actually be shown, carries the
+// toggle command, and its checkmark follows the bar's visibility.
+func TestQuickMenuAppMenuItem(t *testing.T) {
+	find := func(menus []appmenu.Menu) (appmenu.Command, bool) {
+		for _, cmd := range menuCommands(menus) {
+			if cmd.Command == cmdQuickMenu {
+				return cmd, true
+			}
+		}
+		return appmenu.Command{}, false
+	}
+
+	t.Run("omitted when unavailable", func(t *testing.T) {
+		_, ok := find(appMenus(map[string]term.KeyComb{}, nil, nil, nil,
+			appMenuQuickMenu{}))
+		assert.False(t, ok, "no toggle without a quick menu to toggle")
+	})
+
+	t.Run("checked while visible", func(t *testing.T) {
+		cmd, ok := find(appMenus(map[string]term.KeyComb{}, nil, nil, nil,
+			appMenuQuickMenu{available: true, visible: true}))
+		require.True(t, ok)
+		assert.True(t, cmd.Checked)
+	})
+
+	t.Run("unchecked while hidden", func(t *testing.T) {
+		cmd, ok := find(appMenus(map[string]term.KeyComb{}, nil, nil, nil,
+			appMenuQuickMenu{available: true, visible: false}))
+		require.True(t, ok)
+		assert.False(t, cmd.Checked)
+	})
 }

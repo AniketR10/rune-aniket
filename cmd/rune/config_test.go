@@ -61,6 +61,34 @@ func TestIDEConfigOverlaySubscriptResolvesDefaultTree(t *testing.T) {
 	assert.Equal(t, 2, got)
 }
 
+// TestDefaultQuickMenuButtons guards the quick menu shipped in rune.star
+// against an entry that validation rejects, which would silently drop a
+// button at runtime. It compares parsed buttons against raw entries
+// rather than pinning the list, so editing the menu does not fail here.
+func TestDefaultQuickMenuButtons(t *testing.T) {
+	cfg, err := ide.Config(filepath.Join(t.TempDir(), "config.star"),
+		runeDefaultConfig())
+	require.NoError(t, err)
+
+	guiCfg, err := cfg.GetConfig("gui")
+	require.NoError(t, err)
+	entries, err := guiCfg.GetSlice("quick_menu")
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+
+	buttons := ide.QuickMenuButtons(cfg)
+	assert.Len(t, buttons, len(entries),
+		"every shipped quick menu entry must survive validation")
+
+	seen := make(map[string]bool, len(buttons))
+	for _, button := range buttons {
+		assert.NotEmpty(t, button.Symbol, "%q has no symbol", button.ID())
+		assert.NotEmpty(t, button.Title, "%q has no title", button.ID())
+		assert.False(t, seen[button.ID()], "duplicate command %q", button.ID())
+		seen[button.ID()] = true
+	}
+}
+
 func TestGetGUIKeyMapping(t *testing.T) {
 	t.Run("parses valid mappings", func(t *testing.T) {
 		ctrl := gomock.NewController(t)

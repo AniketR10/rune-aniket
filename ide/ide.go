@@ -365,6 +365,19 @@ func (i *IDE) Size() (width, height int) {
 	return i.root.width, i.root.height
 }
 
+// SetRightInset resizes the column reserved along the right edge for a
+// UI element floating over it, relaying out every live workspace. Zero
+// gives the column back to the editor. It must run on the event loop.
+func (i *IDE) SetRightInset(cells int) {
+	i.workspaceHandler.setRightInset(cells)
+}
+
+// RightInset returns the width of the column currently reserved along
+// the right edge.
+func (i *IDE) RightInset() int {
+	return i.workspaceHandler.rightInset
+}
+
 // Open opens the given file, in the currently active workspace.
 func (i *IDE) Open(file workspaceapi.URI) error {
 	return i.workspaceHandler.openURI(file, true /* focus */)
@@ -662,7 +675,7 @@ func (i *IDE) init(
 			cfg.storage = i.ideConfig.storage
 			return cfg, err
 		}, op.workspaceConfig, op.tabBarOffset,
-		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
+		op.rightInset, op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,
 		op.releaseManager, &i.root, i.ideConfig.initialTerminalCapacity(),
 		op.dispatchOnPreview, op.debugCommands, op.streamingOpen,

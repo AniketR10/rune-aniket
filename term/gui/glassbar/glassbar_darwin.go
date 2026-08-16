@@ -23,7 +23,7 @@
 
 //go:build darwin && cgo
 
-package appmenu
+package glassbar
 
 /*
 #cgo CFLAGS: -x objective-c
@@ -31,71 +31,46 @@ package appmenu
 
 #include <stdlib.h>
 
-void runeAppMenuBegin(void);
-void runeAppMenuAddMenu(const char *title);
-void runeAppMenuBeginSubmenu(const char *title);
-void runeAppMenuEndSubmenu(void);
-void runeAppMenuAddSeparator(void);
-void runeAppMenuAddItem(const char *title, const char *selector,
-                        const char *keyEquiv, unsigned long modifiers, int tag,
-                        int disabled, int checked);
-void runeAppMenuCommit(void);
+void runeGlassBarBegin(void);
+void runeGlassBarAddButton(const char *id, const char *symbol,
+                           const char *tooltip);
+void runeGlassBarCommit(void);
+void runeGlassBarSetFrame(double x, double y, double width, double padding);
 */
 import "C"
 
 import "unsafe"
 
-func installMenus(menus []menuSpec) {
-	C.runeAppMenuBegin()
-	for _, menu := range menus {
-		title := C.CString(menu.title)
-		C.runeAppMenuAddMenu(title)
-		C.free(unsafe.Pointer(title))
+const supported = true
 
-		addItems(menu.items)
+// activate routes native button clicks back to the last Install caller.
+// Rune has a single window, so a single callback is enough.
+var activate func(string)
+
+func install(buttons []Button, fn func(string)) {
+	activate = fn
+	C.runeGlassBarBegin()
+	for _, button := range buttons {
+		id := C.CString(button.ID)
+		symbol := C.CString(button.Symbol)
+		tooltip := C.CString(button.Tooltip)
+		C.runeGlassBarAddButton(id, symbol, tooltip)
+		C.free(unsafe.Pointer(id))
+		C.free(unsafe.Pointer(symbol))
+		C.free(unsafe.Pointer(tooltip))
 	}
-	C.runeAppMenuCommit()
+	C.runeGlassBarCommit()
 }
 
-// addItems appends items to the current menu, descending into any
-// submenu children so the whole tree is materialized.
-func addItems(items []itemSpec) {
-	for _, item := range items {
-		switch {
-		case item.separator:
-			C.runeAppMenuAddSeparator()
-		case item.children != nil:
-			title := C.CString(item.title)
-			C.runeAppMenuBeginSubmenu(title)
-			C.free(unsafe.Pointer(title))
-			addItems(item.children)
-			C.runeAppMenuEndSubmenu()
-		default:
-			addItem(item)
-		}
+func setFrame(x, y, width float64) {
+	C.runeGlassBarSetFrame(C.double(x), C.double(y), C.double(width),
+		C.double(Padding))
+}
+
+//export runeGlassBarActivate
+func runeGlassBarActivate(id *C.char) {
+	if activate == nil {
+		return
 	}
-}
-
-func addItem(item itemSpec) {
-	title := C.CString(item.title)
-	defer C.free(unsafe.Pointer(title))
-	selector := C.CString(item.selector)
-	defer C.free(unsafe.Pointer(selector))
-	keyEquiv := C.CString(item.keyEquiv)
-	defer C.free(unsafe.Pointer(keyEquiv))
-
-	C.runeAppMenuAddItem(title, selector, keyEquiv, C.ulong(item.modifiers),
-		C.int(item.tag), cbool(item.disabled), cbool(item.checked))
-}
-
-func cbool(b bool) C.int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
-//export runeAppMenuActivate
-func runeAppMenuActivate(tag C.int) {
-	activateTag(int(tag))
+	activate(C.GoString(id))
 }

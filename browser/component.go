@@ -106,6 +106,21 @@ type Component struct {
 	drag        dragState
 	winDrop     winDropState
 	interrupter term.Interrupter
+
+	// rightInset is the live width of the reserved right column. It
+	// starts at Config.RightInset and SetRightInset changes it.
+	rightInset int
+	// bars records every Bar call so the union can be rebuilt, which
+	// is the only way to change a member's width: the union appends
+	// members and never resizes or removes them.
+	bars []barEntry
+}
+
+type barEntry struct {
+	orientation browserapi.Orientation
+	size        int
+	frame       bool
+	h           tui.Handler
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -154,17 +169,8 @@ func (c *Component) Init(config Config) {
 	c.wm.Init(c.wallpaper(), c.config.WindowManagerConfig)
 	c.focusWindow = c.wm.Focus()
 	_ = c.newWindow(c.focusWindow) // init handler with initial window
-	c.union.Init(&c.wm)
 	c.wm.Subscribe((*wmSubscriber)(c))
 	c.buffers = make([]*Tab, 0)
-
-	// make sure that frame union attrs are same as window manager attrs
-	c.union.Attributes = config.WindowManagerConfig.FrameAttr
-	c.union.Right = config.FrameUnionCharSet.Right
-	c.union.Left = config.FrameUnionCharSet.Left
-	c.union.Top = config.FrameUnionCharSet.Top
-	c.union.Bottom = config.FrameUnionCharSet.Bottom
-	c.union.Frame = c.config.Frame && c.config.FrameUnion
 
 	frameAttr := config.WindowManagerConfig.FrameAttr
 	highlightAttr := config.FocusTabHighlightAttr
@@ -180,19 +186,62 @@ func (c *Component) Init(config Config) {
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 	c.tabs.SetFocusFrameChar(config.FocusTabHighlightChar)
 
-	// if tab bar offset is set, the remove frame from tabs
-	// and install via union and no frame unioning.
-	if config.TabBarOffset > 0 {
-		vtabs := newOffsetTabs(&c.tabs, config.TabBarOffset)
-		c.tabs.SetBorder(false)
-		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
-	} else {
-		c.tabs.SetBorder(config.Frame)
-		c.union.UnionTop(&c.tabs, c.tabsSize())
-	}
+	c.rightInset = config.RightInset
+	c.initUnion()
 	if config.TabNameSeparator != "" {
 		c.tabs.SetNameSeparator(config.TabNameSeparator)
 	}
+}
+
+// initUnion builds the frame union from scratch. The union only ever
+// appends members, so changing the reserved column's width means
+// rebuilding and replaying everything stacked around the window
+// manager.
+func (c *Component) initUnion() {
+	c.union = thandler.FrameUnion{}
+	c.union.Init(&c.wm)
+
+	// make sure that frame union attrs are same as window manager attrs
+	c.union.Attributes = c.config.WindowManagerConfig.FrameAttr
+	c.union.Right = c.config.FrameUnionCharSet.Right
+	c.union.Left = c.config.FrameUnionCharSet.Left
+	c.union.Top = c.config.FrameUnionCharSet.Top
+	c.union.Bottom = c.config.FrameUnionCharSet.Bottom
+	c.union.Frame = c.config.Frame && c.config.FrameUnion
+
+	// if tab bar offset is set, the remove frame from tabs
+	// and install via union and no frame unioning.
+	if c.config.TabBarOffset > 0 {
+		vtabs := newOffsetTabs(&c.tabs, c.config.TabBarOffset)
+		c.tabs.SetBorder(false)
+		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
+	} else {
+		c.tabs.SetBorder(c.config.Frame)
+		c.union.UnionTop(&c.tabs, c.tabsSize())
+	}
+	// The union sizes top members before left/right ones, so an empty
+	// right member starts below the tab bar and narrows only the window
+	// manager. It also swallows clicks landing on whatever floats there.
+	if c.rightInset > 0 {
+		c.union.UnionRightFrame(handler.Nop(), c.rightInset, false)
+	}
+	for _, bar := range c.bars {
+		c.unionBar(bar)
+	}
+}
+
+// SetRightInset changes the width of the reserved right column and
+// relays the browser out around it.
+func (c *Component) SetRightInset(cells int) {
+	if cells < 0 {
+		cells = 0
+	}
+	if cells == c.rightInset {
+		return
+	}
+	c.rightInset = cells
+	c.initUnion()
+	c.Resize(c.width, c.height)
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
@@ -702,15 +751,23 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 	if cfg.Orientation == browserapi.OrientationDefault {
 		cfg.Orientation = c.nextSplit
 	}
-	switch cfg.Orientation {
+	// The entry is fully resolved so replaying it after a union rebuild
+	// neither re-wraps the handler nor grows the size again.
+	entry := barEntry{orientation: cfg.Orientation, size: cfg.Size, frame: frame, h: h}
+	c.bars = append(c.bars, entry)
+	c.unionBar(entry)
+}
+
+func (c *Component) unionBar(entry barEntry) {
+	switch entry.orientation {
 	case browserapi.OrientationTop:
-		c.union.UnionTopFrame(h, cfg.Size, frame)
+		c.union.UnionTopFrame(entry.h, entry.size, entry.frame)
 	case browserapi.OrientationBottom:
-		c.union.UnionBottomFrame(h, cfg.Size, frame)
+		c.union.UnionBottomFrame(entry.h, entry.size, entry.frame)
 	case browserapi.OrientationLeft:
-		c.union.UnionLeftFrame(h, cfg.Size, frame)
+		c.union.UnionLeftFrame(entry.h, entry.size, entry.frame)
 	case browserapi.OrientationRight:
-		c.union.UnionRightFrame(h, cfg.Size, frame)
+		c.union.UnionRightFrame(entry.h, entry.size, entry.frame)
 	}
 }
 

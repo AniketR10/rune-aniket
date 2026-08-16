@@ -24,10 +24,14 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/term/gui/glassbar"
 )
 
 // fakeHandler counts calls to each tui.Handler method so tests can
@@ -156,4 +160,93 @@ func TestBootstrapHandlerResizesAfterSwap(t *testing.T) {
 	require.Equal(t, 1, post.resizeCalls, "new inner must be Resized after swap")
 	require.Equal(t, 120, post.lastResizeW)
 	require.Equal(t, 40, post.lastResizeH)
+}
+
+// TestAttachGUIInstallsQuickMenu reproduces a bug where the native quick
+// menu only appeared after the first window resize: installing replays
+// the last frame, which stayed zero because SetFrame was only ever
+// reached from Resize. Attaching the GUI must publish the install, and
+// the install must reposition the bar itself.
+func TestAttachGUIInstallsQuickMenu(t *testing.T) {
+	var published []term.Event
+	bh := &bootstrapHandler{
+		inner: &fakeHandler{},
+		publishEvent: func(ev term.Event) bool {
+			published = append(published, ev)
+			return true
+		},
+		quickMenu: []ide.QuickMenuButton{
+			{Symbol: "plus", Title: "Open Project", Command: []string{"workspaceopen"}},
+		},
+	}
+
+	bh.attachGUI(nil, false)
+	require.Len(t, published, 1)
+	require.Equal(t, term.EventInterrupt, published[0].Type)
+	require.NotNil(t, published[0].UserFunc,
+		"attachGUI must publish a quick menu install without waiting for a Resize")
+}
+
+func TestQuickMenuCellsWithoutButtons(t *testing.T) {
+	b := &bootstrapHandler{}
+	require.Zero(t, b.quickMenuCells(),
+		"an empty quick menu must not reserve a grid column")
+}
+
+// TestQuickMenuToggleCollapsesReservedColumn pins that hiding the bar
+// gives its reserved column back and clears the native buttons, and
+// that showing it restores both.
+func TestQuickMenuToggleCollapsesReservedColumn(t *testing.T) {
+	if !glassbar.Supported() {
+		t.Skip("no native quick menu on this platform")
+	}
+	b := &bootstrapHandler{
+		publishEvent: func(term.Event) bool { return true },
+		quickMenu: []ide.QuickMenuButton{
+			{Symbol: "plus", Title: "Open Project", Command: []string{"workspaceopen"}},
+		},
+	}
+
+	require.True(t, b.quickMenuVisible())
+	require.Equal(t, quickMenuColumnCells, b.quickMenuCells())
+	require.Len(t, b.quickMenuButtons(), 1)
+
+	b.setQuickMenuVisible(false)
+	require.False(t, b.quickMenuVisible())
+	require.Zero(t, b.quickMenuCells(), "hiding must give the column back")
+	require.Empty(t, b.quickMenuButtons(), "hiding must clear the native buttons")
+
+	b.setQuickMenuVisible(true)
+	require.True(t, b.quickMenuVisible())
+	require.Equal(t, quickMenuColumnCells, b.quickMenuCells())
+}
+
+// TestQuickMenuUnavailableWithoutButtons keeps the toggle inert when
+// the user configured no buttons, so it can never reserve a column for
+// a bar that has nothing to show.
+func TestQuickMenuUnavailableWithoutButtons(t *testing.T) {
+	b := &bootstrapHandler{publishEvent: func(term.Event) bool { return true }}
+	require.False(t, b.quickMenuAvailable())
+
+	b.setQuickMenuVisible(true)
+	require.False(t, b.quickMenuVisible())
+	require.Zero(t, b.quickMenuCells())
+}
+
+// TestLoadQuickMenuKeepsValidButtons pins that one malformed entry does
+// not cost the user the whole bar: config validation neutralises the bad
+// entry and still hands back a usable tree, so the valid buttons load.
+func TestLoadQuickMenuKeepsValidButtons(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.star")
+	require.NoError(t, os.WriteFile(path, []byte(
+		`config["gui"]["quick_menu"] = [`+
+			`{"symbol": "terminal", "title": "New Terminal", "command": "terminalnew"},`+
+			`{"symbol": "not a symbol", "command": "help"},`+
+			`]`+"\n"), 0o644))
+
+	b := &bootstrapHandler{configPath: path}
+	b.loadQuickMenu()
+
+	require.Equal(t, []ide.QuickMenuButton{{Symbol: "terminal",
+		Title: "New Terminal", Command: []string{"terminalnew"}}}, b.quickMenu)
 }

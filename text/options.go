@@ -484,6 +484,14 @@ func WithTabBarOffset(offset int) Option {
 	}
 }
 
+// WithRightInset reserves a column of the given width in cells to the
+// right of the window manager.
+func WithRightInset(cells int) Option {
+	return func(cfg *Config) {
+		cfg.RightInset = cells
+	}
+}
+
 // WithTabBarHeight defines the height of the tab bar.
 func WithTabBarHeight(height int) Option {
 	return func(cfg *Config) {

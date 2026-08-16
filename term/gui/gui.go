@@ -675,6 +675,19 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 	g.needsDraw = true
 }
 
+// CellRect returns the origin and size, in points relative to the
+// window's content area, of the cell grid region starting at cell
+// (x, y) and spanning width by height cells. Native overlays use it to
+// align themselves with the grid.
+func (g *GUI) CellRect(x, y, width, height int) (px, py, pw, ph float64) {
+	scale := g.deviceScale
+	if scale <= 0 {
+		scale = 1
+	}
+	return g.fontManager.PixelX(x) / scale, g.fontManager.PixelY(y) / scale,
+		g.fontManager.PixelX(width) / scale, g.fontManager.PixelY(height) / scale
+}
+
 func (g *GUI) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return

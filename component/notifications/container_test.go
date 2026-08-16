@@ -487,6 +487,58 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 	comptest.TestComponent(t, c, w, tests)
 }
 
+// TestRightInsetKeepsNotificationsOutOfReservedColumn pins that
+// Config.RightInset shifts notifications left by the reserved width.
+// The inner component still receives the full width, so a native
+// element floating over the reserved column is no longer overdrawn.
+func TestRightInsetKeepsNotificationsOutOfReservedColumn(t *testing.T) {
+	inner := &component.TestComponent{Ch: 'X'}
+
+	c := New(inner, Config{
+		AutoClose:   1 * time.Hour,
+		ProgressBar: true,
+		Width:       10,
+		RightInset:  5,
+		ProgressRunes: ProgressRunes{
+			Start:      '{',
+			Current:    '-',
+			CurrentTip: '>',
+			Remain:     ' ',
+			End:        '}',
+		},
+	})
+	c.Resize(40, 6)
+
+	w := term.NewStringWriter(40, 6)
+	tests := []comptest.TestCase{{
+		func() { c.Notify(LevelInfo, "hello world") }, `
+XXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐XXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXX│ hello  │XXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXX│ world  │XXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXX{>       }XXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+	}}
+
+	comptest.TestComponent(t, c, w, tests)
+}
+
+// TestRightInsetWiderThanWindow falls back to the full width rather
+// than anchoring off-screen when the reserved column leaves no room.
+func TestRightInsetWiderThanWindow(t *testing.T) {
+	c := New(&component.TestComponent{Ch: 'X'}, Config{
+		AutoClose:  1 * time.Hour,
+		Width:      10,
+		RightInset: 12,
+	})
+	c.Resize(8, 4)
+	c.Notify(LevelInfo, "hi")
+
+	w := term.NewStringWriter(8, 4)
+	c.Draw(w)
+	assert.NoError(t, w.Flush())
+}
+
 func TestNotificationID(t *testing.T) {
 	t.Run("two notifications with the same message have the same ID", func(t *testing.T) {
 		c := New(&component.TestComponent{}, Config{Width: 10, AutoClose: 10 * time.Second})

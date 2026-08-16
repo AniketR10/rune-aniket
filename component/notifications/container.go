@@ -76,6 +76,13 @@ type Config struct {
 	// and between notifications if there's more than one being displayed.
 	Padding int
 
+	// RightInset is a column of this width, at the right edge, that
+	// notifications must not be drawn over. It matches the column the
+	// inner component reserves for another UI element floating over it,
+	// which the inner component cannot express by being narrower: it
+	// still occupies the full width.
+	RightInset int
+
 	// ProgressRunes determines the runes used to render progress.
 	// If not set, the corresponding characters in FrameCharSet are used.
 	ProgressRunes ProgressRunes
@@ -114,6 +121,9 @@ type Container struct {
 
 	mu    sync.RWMutex
 	vlist component.Virtual[*component.ResponsiveList]
+	// width and height are the last size, replayed when the reserved
+	// column changes.
+	width, height int
 
 	notifications map[string]*notificationTicket
 }
@@ -187,13 +197,18 @@ func (n *Container) Resize(width, height int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	n.width, n.height = width, height
 	padding := n.cfg.Padding
 
+	anchor := width - n.cfg.RightInset
+	if anchor <= 0 {
+		anchor = width
+	}
 	effectiveWidth := n.cfg.Width
-	offset := width - n.cfg.Width - padding
+	offset := anchor - n.cfg.Width - padding
 	if offset < 0 {
 		offset = 0
-		effectiveWidth = width
+		effectiveWidth = anchor
 	}
 	if height <= padding {
 		padding = 0
@@ -207,6 +222,20 @@ func (n *Container) Resize(width, height int) {
 // returned by Notify.
 func (n *Container) ID(level Level, msg string) string {
 	return nonCryptoHashString(fmt.Sprintf("noti_%q", msg))
+}
+
+// SetRightInset changes the reserved column notifications keep clear
+// and re-anchors them against it.
+func (n *Container) SetRightInset(cells int) {
+	n.mu.Lock()
+	if cells == n.cfg.RightInset {
+		n.mu.Unlock()
+		return
+	}
+	n.cfg.RightInset = cells
+	width, height := n.width, n.height
+	n.mu.Unlock()
+	n.Resize(width, height)
 }
 
 // Notify creates a new notification with the given msg and level.

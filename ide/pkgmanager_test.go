@@ -706,7 +706,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 			return true
 		}, runner, idepkgtest.TrustStore(), mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
+		".sixrc", 0, 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())
 	require.NoError(t, err)
 	m.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
@@ -796,7 +796,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 			return true
 		}, runner, idepkgtest.TrustStore(), mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
+		".sixrc", 0, 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry())
 	require.NoError(t, err)
 	for i, file := range files {

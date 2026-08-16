@@ -102,6 +102,12 @@ type Config struct {
 	FrameUnion       bool
 	OnTabsClick      func(int) bool
 
+	// RightInset reserves a column of this width in cells to the right
+	// of the window manager, leaving room for another UI element to
+	// float over it. The tab bar still spans the full width, so the
+	// reserved column starts right below it.
+	RightInset int
+
 	// DropTargetAttr styles the veil drawn over the window under the
 	// cursor while files are dragged over this browser.
 	DropTargetAttr term.Attributes

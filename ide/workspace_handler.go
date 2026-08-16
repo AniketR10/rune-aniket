@@ -155,6 +155,7 @@ type workspaceManagerHandler struct {
 	llmRouter               *llmrouter.Router
 	frameCharSet            component.FrameCharSet
 	tabBarOffset            int
+	rightInset              int
 	tabBarHeight            int
 	builtinExtensions       map[string]Extension
 	workspaceConfigFilename string
@@ -583,7 +584,7 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, trust *pkgtrust.Store, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int, workspacesIcon rune,
+	tabBarOffset, rightInset, tabBarHeight int, workspacesIcon rune,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
 	releaseManager release.Manager,
@@ -611,6 +612,7 @@ func (h *workspaceManagerHandler) init(
 	h.events = newEventRouter(publishEvent)
 	h.frameCharSet = cfg.windowFrameCharset()
 	notiConfig.Interrupter = h.events.globalInterrupter()
+	notiConfig.RightInset = rightInset
 	h.notifications = newWorkspaceNotifications(h.ideStorage, notiConfig, h)
 	h.shaderRunner = shaderRunner
 	h.mu = locker
@@ -642,6 +644,7 @@ func (h *workspaceManagerHandler) init(
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
+	h.rightInset = rightInset
 	h.tabBarHeight = tabBarHeight
 	h.debugCommands = debugCommands
 	h.streamingOpen = streamingOpen
@@ -1159,6 +1162,26 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 
 }
 
+// setRightInset resizes the column reserved along the right edge across
+// every live workspace, and keeps it as the default for workspaces
+// opened later.
+func (h *workspaceManagerHandler) setRightInset(cells int) {
+	if cells < 0 {
+		cells = 0
+	}
+	if cells == h.rightInset {
+		return
+	}
+	h.rightInset = cells
+	for _, w := range h.workspaces {
+		if w == nil || w.ex == nil {
+			continue
+		}
+		w.setRightInset(cells)
+	}
+	h.Resize(h.width, h.height)
+}
+
 func (h *workspaceManagerHandler) Draw(w term.Writer) {
 	target := h.focusHandler()
 	h.focusProxy.Target = target
@@ -1480,6 +1503,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithEventPublisher(h.events.newPublisher(uri)),
 		text.WithTabBarOffset(h.tabBarOffset),
+		text.WithRightInset(h.rightInset),
 		text.WithTabBarHeight(h.tabBarHeight),
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
 		text.WithPackageManager(h.pkgmanager),

@@ -54,6 +54,7 @@ import (
 	"unstable.build/go-tui/ide/pkgtrust"
 	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/term/gui/appmenu"
+	"unstable.build/go-tui/term/gui/glassbar"
 	"unstable.build/go-tui/term/gui/openpanel"
 )
 
@@ -88,6 +89,13 @@ type bootstrapHandler struct {
 	chosenEditor      string
 	closingPreIDE     bool
 	recent            *recentWorkspaces
+	// quickMenu is the configured native quick menu. It is parsed once
+	// per config load because the reserved grid column it implies is
+	// fixed at ide.New time.
+	quickMenu []ide.QuickMenuButton
+	// quickMenuOff is set while the user has toggled the bar off with
+	// the quickmenu command.
+	quickMenuOff bool
 }
 
 func newBootstrapHandler(
@@ -119,6 +127,7 @@ func newBootstrapHandler(
 		installBackupDir: installBackupDir,
 	}
 	bh.recent = newRecentWorkspaces(bh.storage)
+	bh.loadQuickMenu()
 
 	if isBootstrapped(dataDir) {
 		migrateBootstrappedConfig(configPath)
@@ -160,6 +169,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithLocker(b.mu),
 		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, false),
 		ide.WithTabBarOffset(13),
+		ide.WithRightInset(b.quickMenuCells()),
 		ide.WithTabBarHeight(2),
 		ide.WithWorkspacesBarHeight(2),
 		ide.WithWorkspacesBarOffset(2),
@@ -195,6 +205,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeThemedWallpaper(b.wallpaperTheme)),
 		ide.WithTabBarOffset(13),
+		ide.WithRightInset(b.quickMenuCells()),
 		ide.WithTabBarHeight(2),
 		ide.WithWorkspacesBarHeight(2),
 		ide.WithWorkspacesBarOffset(2),
@@ -257,6 +268,21 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.g = g
 	b.transparentWindow = transparentWindow
+	b.publishQuickMenuInstall()
+}
+
+// loadQuickMenu re-reads the configured quick menu. It loads the config
+// standalone because the reserved grid column must be known before
+// ide.New, and again after the bootstrap wizard writes the user config.
+// A validation error still yields a usable tree with the offending
+// entries neutralised, and the IDE reports it to the user, so the valid
+// buttons are kept rather than dropping the whole bar.
+func (b *bootstrapHandler) loadQuickMenu() {
+	cfg, err := ide.Config(b.configPath, runeDefaultConfig())
+	if err != nil {
+		log.Warnf("load config for quick menu: %v", err)
+	}
+	b.quickMenu = ide.QuickMenuButtons(cfg)
 }
 
 // setupPreIDE registers the GUI command family on the pre-config IDE
@@ -265,8 +291,10 @@ func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 // configured IDE gets them separately via setupConfiguredIDE after the
 // swap. Must run after attachGUI so b.g is set.
 func (b *bootstrapHandler) setupPreIDE() error {
-	return subscribeGUICommands(b.g, b.preIDE,
-		b.transparentWindow, b.launchCmd)
+	return errors.Join(
+		subscribeGUICommands(b.g, b.preIDE, b.transparentWindow, b.launchCmd),
+		b.subscribeQuickMenuCommand(b.preIDE),
+	)
 }
 
 // wallpaperTheme reports the live GUI theme name for the themed wallpaper.
@@ -293,6 +321,15 @@ func (b *bootstrapHandler) browser() browser.Browser {
 		return b.realIDE.Browser()
 	}
 	return b.preIDE.Browser()
+}
+
+// currentIDE is the IDE the bootstrap handler is currently delegating
+// to, which is the pre-config one until the wizard swaps it out.
+func (b *bootstrapHandler) currentIDE() *ide.IDE {
+	if b.realIDE != nil {
+		return b.realIDE
+	}
+	return b.preIDE
 }
 
 // dragObserver routes host file drags to the focused browser, so the
@@ -373,6 +410,9 @@ func (b *bootstrapHandler) setupConfiguredIDE(
 		b.transparentWindow, b.configPath, b.launchCmd); err != nil {
 		errs = append(errs, fmt.Errorf("subscribe to GUI commands: %w", err))
 	}
+	if err := b.subscribeQuickMenuCommand(i); err != nil {
+		errs = append(errs, fmt.Errorf("subscribe quick menu command: %w", err))
+	}
 
 	if client.TelemetryEnabled() {
 		err := i.SubscribeEvents(apiclient.TelemetryEvents(), client)
@@ -419,6 +459,19 @@ func (b *bootstrapHandler) Resize(w, h int) {
 	b.lastResizeW = w
 	b.lastResizeH = h
 	b.inner.Resize(w, h)
+	b.positionQuickMenu(w)
+}
+
+// positionQuickMenu keeps the native quick menu aligned with the grid
+// column browser.Config.RightInset reserves for it. GUI resizes run on
+// the main thread, which is where AppKit requires the frame change.
+func (b *bootstrapHandler) positionQuickMenu(width int) {
+	cells := b.quickMenuCells()
+	if cells == 0 || width <= cells || b.g == nil {
+		return
+	}
+	x, y, w, _ := b.g.CellRect(width-cells, quickMenuTopCell, cells, 1)
+	glassbar.SetFrame(x, y, w)
 }
 
 func (b *bootstrapHandler) Draw(w term.Writer) { b.inner.Draw(w) }
@@ -452,6 +505,7 @@ func (b *bootstrapHandler) performSwap() error {
 	}
 
 	b.configPath = filepath.Join(b.dataDir, configFilename)
+	b.loadQuickMenu()
 
 	b.mu.Unlock()
 	defer b.mu.Lock()
@@ -481,6 +535,7 @@ func (b *bootstrapHandler) performSwap() error {
 		b.preIDE = nil
 	}
 	b.publishAppMenuInstall()
+	b.publishQuickMenuInstall()
 	return errors.Join(setupErr, closeErr)
 }
 
@@ -490,7 +545,10 @@ func (b *bootstrapHandler) performSwap() error {
 func (b *bootstrapHandler) installAppMenu() {
 	appmenu.Install(
 		appMenus(appMenuKeyBindings(b.config()), b.mergedRecentWorkspaces(),
-			b.appMenuModels(), b.appMenuTutorials()),
+			b.appMenuModels(), b.appMenuTutorials(), appMenuQuickMenu{
+				available: b.quickMenuAvailable(),
+				visible:   b.quickMenuVisible(),
+			}),
 		b.activateAppMenuCommand)
 }
 
@@ -541,6 +599,34 @@ func (b *bootstrapHandler) mergedRecentWorkspaces() []recentEntry {
 // editor preset, so the menu is rebuilt after the IDE swap.
 func (b *bootstrapHandler) publishAppMenuInstall() {
 	b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: b.installAppMenu})
+}
+
+// publishQuickMenuInstall installs the native quick menu on the main
+// thread, once the application window exists. Installing also replays
+// the last frame, and repositioning here covers the install landing
+// before the first Resize, which would otherwise leave the bar
+// invisible until the window was resized.
+func (b *bootstrapHandler) publishQuickMenuInstall() {
+	b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: func() {
+		glassbar.Install(quickMenuGlassButtons(b.quickMenuButtons()),
+			b.activateQuickMenuButton)
+		b.positionQuickMenu(b.lastResizeW)
+	}})
+}
+
+func (b *bootstrapHandler) activateQuickMenuButton(id string) {
+	for _, button := range b.quickMenu {
+		if button.ID() != id {
+			continue
+		}
+		b.activateAppMenuCommand(appmenu.Command{
+			Title:   button.Title,
+			Command: button.Command[0],
+			Args:    button.Command[1:],
+			Key:     appMenuKeyBindings(b.config())[id],
+		})
+		return
+	}
 }
 
 func (b *bootstrapHandler) activateAppMenuCommand(cmd appmenu.Command) {

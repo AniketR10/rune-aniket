@@ -1494,6 +1494,12 @@ func (c *Component) WindowManagerSize() (width, height int) {
 	return c.comp.WindowManagerSize()
 }
 
+// SetRightInset changes the width of the reserved right column and
+// relays the editor out around it.
+func (c *Component) SetRightInset(cells int) {
+	c.comp.SetRightInset(cells)
+}
+
 // Floating satisfies browser.WindowManager.
 func (c *Component) Floating(
 	h browser.Floating, cfg browserapi.FloatingConfig,

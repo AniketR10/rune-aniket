@@ -58,6 +58,15 @@ var appMenuPanelCommands = map[string]openpanel.Options{
 // showOpenPanel is a seam over openpanel.Show for tests.
 var showOpenPanel = openpanel.Show
 
+// appMenuQuickMenu is the state the Quick Menu item reflects. The item
+// is omitted entirely when the platform draws no quick menu or the user
+// configured no buttons for it, so the menu never offers a toggle that
+// cannot do anything.
+type appMenuQuickMenu struct {
+	available bool
+	visible   bool
+}
+
 // cmdWorkspaceOpen is the command that opens a project; the Open Recent
 // items dispatch it with an explicit path.
 const cmdWorkspaceOpen = "workspaceopen"
@@ -98,7 +107,7 @@ func quitEvent(bindings map[string]term.KeyComb) term.Event {
 // shadow the preset binding.
 func appMenus(
 	bindings map[string]term.KeyComb, recents []recentEntry,
-	models, tutorials []string,
+	models, tutorials []string, quickMenu appMenuQuickMenu,
 ) []appmenu.Menu {
 	cmd := func(title string, cmdAndArgs ...string) appmenu.Command {
 		return appmenu.Command{
@@ -148,6 +157,15 @@ func appMenus(
 		effortItems = append(effortItems, cmd(effort.label, "chateffort", effort.value))
 	}
 	sep := appmenu.Separator{}
+	viewItems := []appmenu.Item{
+		cmd("File Explorer", "fexplorer"),
+		cmd("Command History", "history"),
+	}
+	if quickMenu.available {
+		item := cmd("Quick Menu", cmdQuickMenu)
+		item.Checked = quickMenu.visible
+		viewItems = append([]appmenu.Item{item, sep}, viewItems...)
+	}
 	return []appmenu.Menu{
 		{Title: "Rune", Items: []appmenu.Item{
 			appmenu.Native{Title: "About Rune", Selector: "orderFrontStandardAboutPanel:"},
@@ -181,9 +199,7 @@ func appMenus(
 			cmd("Format File", "lsp", "format"),
 			cmd("Trigger Completion", "lsp", "complete"),
 		}},
-		{Title: "View", Items: []appmenu.Item{
-			cmd("File Explorer", "fexplorer"),
-			cmd("Command History", "history"),
+		{Title: "View", Items: append(viewItems,
 			prefill("Change Opacity…", "guiopacity"),
 			cmd("Increase Font Size", "guifontsize", "increase"),
 			cmd("Decrease Font Size", "guifontsize", "decrease"),
@@ -209,7 +225,7 @@ func appMenus(
 				Selector: "toggleFullScreen:",
 				Key:      term.KeyComb{Mod: term.ModCtrlMeta, Ch: 'f'},
 			},
-		}},
+		)},
 		{Title: "Find", Items: []appmenu.Item{
 			cmd("Find File…", "searchfile"),
 			cmd("Find in Files…", "searchtext"),

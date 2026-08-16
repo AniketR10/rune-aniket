@@ -355,6 +355,16 @@ func WithTabBarOffset(offset int) Option {
 	}
 }
 
+// WithRightInset configures the IDE to reserve a column of the given
+// width in cells to the right of the window manager, to accomodate
+// perhaps another UI element floating over it. The tab bar keeps the
+// full width.
+func WithRightInset(cells int) Option {
+	return func(opts *options) {
+		opts.rightInset = cells
+	}
+}
+
 // WithTabBarHeight defines the height of the tab bar.
 func WithTabBarHeight(height int) Option {
 	return func(opts *options) {
@@ -463,6 +473,7 @@ type options struct {
 	extensionRunner     ExtensionsRunner
 	releaseManager      release.Manager
 	tabBarOffset        int
+	rightInset          int
 	tabsClickCallback   func(int) bool
 	tabBarHeight        int
 	workspacesBarFrame  bool

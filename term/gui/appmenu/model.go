@@ -48,6 +48,9 @@ type Command struct {
 	// Disabled renders the item greyed out and unclickable. It is used
 	// for placeholder entries such as an empty "Open Recent" list.
 	Disabled bool
+	// Checked renders a checkmark next to the item, for commands that
+	// toggle a setting the menu reflects.
+	Checked bool
 }
 
 // Native is a menu item wired to a standard AppKit action such as
@@ -99,6 +102,7 @@ type itemSpec struct {
 	tag       int
 	separator bool
 	disabled  bool
+	checked   bool
 	children  []itemSpec
 }
 
@@ -185,6 +189,7 @@ func buildItems(items []Item, byTag map[int]Command, nextTag *int) []itemSpec {
 				modifiers: mods,
 				tag:       *nextTag,
 				disabled:  it.Disabled,
+				checked:   it.Checked,
 			})
 			*nextTag++
 		}
