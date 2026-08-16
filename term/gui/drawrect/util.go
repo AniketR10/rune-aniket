@@ -46,7 +46,7 @@ var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
 		BlendFactorSourceRGB:      ebiten.BlendFactorOne,
 		BlendFactorDestinationRGB: ebiten.BlendFactorOneMinusSourceAlpha,
 		BlendOperationRGB:         ebiten.BlendOperationAdd,
-		BlendOperationAlpha:       ebiten.BlendOperationMax,
+		BlendOperationAlpha:       ebiten.BlendOperationAdd,
 	},
 	AntiAlias: false,
 }

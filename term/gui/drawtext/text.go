@@ -43,7 +43,7 @@ var (
 		BlendFactorSourceRGB:      ebiten.BlendFactorOne,
 		BlendFactorDestinationRGB: ebiten.BlendFactorOneMinusSourceAlpha,
 		BlendOperationRGB:         ebiten.BlendOperationAdd,
-		BlendOperationAlpha:       ebiten.BlendOperationMax,
+		BlendOperationAlpha:       ebiten.BlendOperationAdd,
 	}
 	additiveGlyphBlend = ebiten.Blend{
 		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
