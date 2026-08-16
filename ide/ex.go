@@ -158,8 +158,12 @@ type ex struct {
 	pluginWaitTimeout time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdV             handler.Virtual[*browser.Component]
-	cmdWin           browser.Window
+	cmdV   handler.Virtual[*browser.Component]
+	cmdWin browser.Window
+	// promptMouseDown latches while a mouse button is held over the
+	// prompt handling path so a drag that leaves the prompt rect and
+	// releases outside is not mistaken for an outside click.
+	promptMouseDown  bool
 	promptShader     *shader.Component
 	commandPromptCfg commandPromptConfig
 	// editorModeModal records whether the editor backing this ex runs in
@@ -2370,6 +2374,12 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 			continue
 		}
 		if keyComb.instructPrompt {
+			if i == len(keys)-1 && e.cmd != nil {
+				if err := e.closeCommandPrompt(); err != nil {
+					return err
+				}
+				continue
+			}
 			e.openCommandPrompt()
 			continue
 		}
@@ -2643,6 +2653,9 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 		_ = e.cmdWin.Close()
 	}
 	e.cmdWin = nil
+	// A latch left set by the previous prompt must not suppress the
+	// first outside click delivered to the new one.
+	e.promptMouseDown = false
 
 	commandCfg := command.DefaultConfig()
 	commandCfg.NoMarkdown = false
@@ -2687,6 +2700,24 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 }
 
 func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
+	if ev.Type == term.EventMouse {
+		switch ev.Key {
+		case term.MouseLeft, term.MouseMiddle, term.MouseRight:
+			press := !e.promptMouseDown
+			e.promptMouseDown = true
+			if press && e.promptClickOutside(ev) {
+				if err := e.closeCommandPrompt(); err != nil {
+					e.setError(err)
+				}
+				return false, true
+			}
+		case term.MouseRelease:
+			e.promptMouseDown = false
+		}
+		_, handled = e.cmdV.Handle(ev)
+		return
+	}
+
 	// special handling of paste on prompt via key binding
 	// which is the only keybinding that we want to enable while
 	// prompt is active.
@@ -2844,6 +2875,28 @@ func (e *ex) stopPromptShader() {
 	}
 	_ = e.promptShader.Close()
 	e.promptShader = nil
+}
+
+// promptClickOutside reports whether ev lands outside the command
+// prompt's screen rect. cmdWin.Position() is relative to the inner
+// browser's window manager, so reaching screen coordinates requires
+// stacking the editor's outer window-manager origin (cmdV.Position)
+// and the inner browser's wm origin, mirroring startPromptShader.
+func (e *ex) promptClickOutside(ev term.Event) bool {
+	if e.cmdWin == nil || e.cmdWin.Closed() {
+		return false
+	}
+	width, height := e.cmdWin.Width(), e.cmdWin.Height()
+	if width <= 0 || height <= 0 {
+		return false
+	}
+	pos := e.cmdWin.Position()
+	wmOff := e.cmdV.C.WindowManagerPosition()
+	off := e.cmdV.Position()
+	pos.X += off.X + wmOff.X
+	pos.Y += off.Y + wmOff.Y
+	return ev.MouseX < pos.X || ev.MouseY < pos.Y ||
+		ev.MouseX >= pos.X+width || ev.MouseY >= pos.Y+height
 }
 
 // closeCommandPrompt dismisses the command prompt if one is open. It is

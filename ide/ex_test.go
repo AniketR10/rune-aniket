@@ -4020,6 +4020,100 @@ func TestCloseCommandPrompt(t *testing.T) {
 	require.NoError(t, b.ex.closeCommandPrompt())
 }
 
+// TestCommandPromptClickOutsideDismisses pins that a mouse press
+// outside the floating command prompt's screen rect dismisses it, like
+// every other modal overlay in the IDE, while the click itself is
+// swallowed. A press inside, a drag that starts inside and releases
+// outside, and wheel events outside must not dismiss the prompt.
+func TestCommandPromptClickOutsideDismisses(t *testing.T) {
+	newPrompt := func(t *testing.T) (b testEx, pos term.Coordinates, width, height int) {
+		b = newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+		t.Cleanup(func() { _ = b.Close() })
+		b.Resize(40, 20)
+		b.ex.openCommandPrompt()
+		b.Draw(term.NewStringWriter(40, 20))
+
+		pos = b.ex.cmdWin.Position()
+		off := b.ex.cmdV.Position()
+		wmOff := b.ex.cmdV.C.WindowManagerPosition()
+		pos.X += off.X + wmOff.X
+		pos.Y += off.Y + wmOff.Y
+		return b, pos, b.ex.cmdWin.Width(), b.ex.cmdWin.Height()
+	}
+	press := func(b testEx, key term.Key, x, y int) {
+		b.Handle(term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y})
+	}
+
+	t.Run("press outside dismisses", func(t *testing.T) {
+		b, pos, _, _ := newPrompt(t)
+		press(b, term.MouseLeft, pos.X-1, pos.Y)
+		assert.Nil(t, b.ex.cmd)
+	})
+	t.Run("press inside keeps it open", func(t *testing.T) {
+		b, pos, _, _ := newPrompt(t)
+		press(b, term.MouseLeft, pos.X, pos.Y)
+		assert.NotNil(t, b.ex.cmd)
+	})
+	t.Run("drag from inside released outside keeps it open", func(t *testing.T) {
+		b, pos, width, _ := newPrompt(t)
+		press(b, term.MouseLeft, pos.X, pos.Y)
+		press(b, term.MouseLeft, pos.X+width+5, pos.Y)
+		press(b, term.MouseRelease, pos.X+width+5, pos.Y)
+		assert.NotNil(t, b.ex.cmd)
+	})
+	t.Run("wheel outside keeps it open", func(t *testing.T) {
+		b, pos, _, _ := newPrompt(t)
+		press(b, term.MouseWheelDown, pos.X-1, pos.Y)
+		assert.NotNil(t, b.ex.cmd)
+	})
+	t.Run("held-button latch does not leak across prompts", func(t *testing.T) {
+		b, pos, _, _ := newPrompt(t)
+		// Press and hold inside, then dismiss the prompt through a
+		// path other than releasing the mouse button.
+		press(b, term.MouseLeft, pos.X, pos.Y)
+		require.NoError(t, b.ex.closeCommandPrompt())
+
+		b.ex.openCommandPrompt()
+		b.Draw(term.NewStringWriter(40, 20))
+		newPos := b.ex.cmdWin.Position()
+		off := b.ex.cmdV.Position()
+		wmOff := b.ex.cmdV.C.WindowManagerPosition()
+		newPos.X += off.X + wmOff.X
+		newPos.Y += off.Y + wmOff.Y
+
+		press(b, term.MouseLeft, newPos.X-1, newPos.Y)
+		assert.Nil(t, b.ex.cmd, "a stale held-button latch must not suppress the first outside click of a new prompt")
+	})
+}
+
+// TestEchoPromptTogglesOpenPrompt pins that a bare trailing `{prompt}`
+// toggles: it opens the prompt when none is active and closes an
+// already-open one instead of replacing it, so a quick-menu button
+// bound to `echo {prompt}` can both open and dismiss the prompt.
+// Prefill bindings such as `echo {prompt}edit<space>` are not a
+// toggle and must keep installing a fresh prompt.
+func TestEchoPromptTogglesOpenPrompt(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+
+	require.NoError(t, b.ex.echo(bgctx, "{prompt}"))
+	require.NotNil(t, b.ex.cmd)
+	firstWin := b.ex.cmdWin
+
+	require.NoError(t, b.ex.echo(bgctx, "{prompt}"))
+	assert.Nil(t, b.ex.cmd, "a bare {prompt} on an open prompt must close it")
+	assert.True(t, firstWin.Closed())
+
+	require.NoError(t, b.ex.echo(bgctx, "{prompt}"))
+	require.NotNil(t, b.ex.cmd, "a bare {prompt} on a closed prompt must reopen it")
+	secondWin := b.ex.cmdWin
+
+	require.NoError(t, b.ex.echo(bgctx, "{prompt}edit<space>"))
+	assert.NotNil(t, b.ex.cmd, "a prefilled {prompt} is not a toggle")
+	assert.NotSame(t, secondWin, b.ex.cmdWin, "a prefilled {prompt} must install a fresh prompt")
+}
+
 type closeCountingPartitionStore struct {
 	storageapi.Service
 	partitionCloseCount atomic.Int32
