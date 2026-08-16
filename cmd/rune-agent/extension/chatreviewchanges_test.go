@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/applypatch"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -817,7 +818,7 @@ func TestReviewChangesOmitsApplyPatchRevertedByGitCheckout(t *testing.T) {
 
 	// This is intentionally not an apply_patch call and does not alter
 	// the transcript. It models the user's real `git checkout --`.
-	runGit(t, dir, "checkout", "--", "bluectx/first.go")
+	testgit.Run(t, dir, "checkout", "--", "bluectx/first.go")
 	require.Equal(t, before, string(mustReadFile(t, path)))
 
 	msgs := []llmapi.Message{
@@ -840,7 +841,7 @@ func TestCommandAdapterOmitsApplyPatchRevertedByGitCheckout(t *testing.T) {
 	require.False(t, result.IsError, result.Content)
 	require.NotEqual(t, before, string(mustReadFile(t, path)))
 
-	runGit(t, dir, "checkout", "--", "bluectx/first.go")
+	testgit.Run(t, dir, "checkout", "--", "bluectx/first.go")
 	require.Equal(t, before, string(mustReadFile(t, path)))
 
 	msgs := []llmapi.Message{
@@ -876,7 +877,7 @@ func TestReviewChangesNetsInverseApplyPatchesAfterGitCheckout(t *testing.T) {
 	require.False(t, restoredDoc.IsError, restoredDoc.Content)
 	require.Equal(t, before, string(mustReadFile(t, path)))
 
-	runGit(t, dir, "checkout", "--", "bluectx/first.go")
+	testgit.Run(t, dir, "checkout", "--", "bluectx/first.go")
 	require.Equal(t, before, string(mustReadFile(t, path)))
 
 	msgs := []llmapi.Message{
@@ -907,7 +908,7 @@ func TestCommandAdapterOmitsInverseApplyPatchesAfterGitCheckout(t *testing.T) {
 	restoreDocArgs := patchArgs(t, bluectxRestoreDocPatch())
 	restoredDoc := applyTool.Execute(context.Background(), restoreDocArgs)
 	require.False(t, restoredDoc.IsError, restoredDoc.Content)
-	runGit(t, dir, "checkout", "--", "bluectx/first.go")
+	testgit.Run(t, dir, "checkout", "--", "bluectx/first.go")
 	require.Equal(t, before, string(mustReadFile(t, path)))
 
 	msgs := []llmapi.Message{
@@ -1034,10 +1035,9 @@ func newGitPatchWorkspace(
 	path := filepath.Join(dir, "bluectx", "first.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(before), 0o600))
-	runGit(t, dir, "init", "-q")
-	runGit(t, dir, "add", "bluectx/first.go")
-	runGit(t, dir, "-c", "user.name=Rune Test", "-c",
-		"user.email=rune@example.test", "commit", "-qm", "baseline")
+	testgit.Run(t, dir, "init", "-q")
+	testgit.Run(t, dir, "add", "bluectx/first.go")
+	testgit.Run(t, dir, "commit", "-qm", "baseline")
 
 	root, err := workspaceapi.CurrentUserHostURI(dir)
 	require.NoError(t, err)
@@ -1058,12 +1058,39 @@ func newGitPatchWorkspace(
 	return "", "", nil, workspaceapi.URI{}, nil
 }
 
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "git %s: %s", strings.Join(args, " "), out)
+// git exports GIT_DIR and GIT_INDEX_FILE to hook subprocesses without
+// GIT_WORK_TREE, and those override cmd.Dir. When the commit comes from
+// a linked worktree, GIT_DIR is that worktree's admin directory, so a
+// fixture inheriting it runs `git init` against a repository git sees
+// as having no work tree: it writes core.bare=true into the *shared*
+// config and every worktree on the machine stops working.
+func TestGitPatchWorkspaceIgnoresHookGitEnv(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available on PATH")
+	}
+
+	hookRepo := t.TempDir()
+	testgit.Run(t, hookRepo, "init", "-q")
+	testgit.Run(t, hookRepo, "commit", "--allow-empty", "-m", "victim", "-q")
+	hookWorktree := filepath.Join(t.TempDir(), "linked")
+	testgit.Run(t, hookRepo, "worktree", "add", "-q", hookWorktree, "-b", "linked")
+
+	adminDir := filepath.Join(hookRepo, ".git", "worktrees", "linked")
+	t.Setenv("GIT_DIR", adminDir)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(adminDir, "index"))
+
+	dir, _, _, _, _ := newGitPatchWorkspace(t, "package bluectx\n")
+
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	require.NoError(t, err, "the repo must be created in the fixture's dir")
+
+	bare := strings.TrimSpace(string(testgit.Run(t, hookRepo,
+		"rev-parse", "--is-bare-repository")))
+	assert.Equal(t, "false", bare, "the hook repo must not be re-initialized")
+	log := strings.TrimSpace(string(testgit.Run(t, hookRepo,
+		"log", "--format=%s")))
+	assert.Equal(t, "victim", log,
+		"the hook repo must not receive the fixture's history")
 }
 
 // watchedFilesLSP supplies the one callback apply_patch invokes after a

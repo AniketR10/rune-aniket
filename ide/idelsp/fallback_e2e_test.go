@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -141,21 +142,13 @@ func ensurePinnedCheckout(
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-		gitRun(t, dir, "init", "-q")
-		gitRun(t, dir, "remote", "add", "origin", remote)
+		testgit.Run(t, dir, "init", "-q")
+		testgit.Run(t, dir, "remote", "add", "origin", remote)
 	}
-	gitRun(t, dir, "fetch", "-q", "--depth", "1", "origin", commit)
-	gitRun(t, dir, "checkout", "-q", commit)
+	testgit.Run(t, dir, "fetch", "-q", "--depth", "1", "origin", commit)
+	testgit.Run(t, dir, "checkout", "-q", commit)
 	require.NoError(t, os.WriteFile(marker, nil, 0o644))
 	return dir
-}
-
-func gitRun(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "git %v: %s", args, out)
 }
 
 // ensureZigGrammar compiles the checked-out grammar into a

@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -196,10 +197,9 @@ func TestReviewWorkingTreeE2E(t *testing.T) {
 
 	write("main.go", "package main\n\nfunc main() {\n\tprintln(\"one\")\n\tprintln(\"two\")\n}\n")
 	write("gone.go", "package main\n\nfunc gone() {}\n")
-	runGit(t, dir, "init", "-q")
-	runGit(t, dir, "add", "-A")
-	runGit(t, dir, "-c", "user.name=Rune Test", "-c",
-		"user.email=rune@example.test", "commit", "-qm", "baseline")
+	testgit.Run(t, dir, "init", "-q")
+	testgit.Run(t, dir, "add", "-A")
+	testgit.Run(t, dir, "commit", "-qm", "baseline")
 
 	write("main.go", "package main\n\nfunc main() {\n\tprintln(\"one\")\n\tprintln(\"2\")\n}\n")
 	require.NoError(t, os.Remove(filepath.Join(dir, "gone.go")))
