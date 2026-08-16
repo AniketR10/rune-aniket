@@ -25,6 +25,7 @@ package handler
 
 import (
 	"fmt"
+	"strings"
 
 	compapi "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -420,9 +421,15 @@ func (l *Less) setMessage(msg string) {
 	if l.config.SuperimposeMessage && attr.Bg == 0 {
 		attr.Bg = l.scroll.Attributes.Bg
 	}
+	// Layout decorations are laid out inline with the message, so on a
+	// multi-row message they end up detached beside the middle row.
+	decorate := layout.Template != "%s" && !strings.Contains(msg, "\n")
 	formatted := ""
 	if msg != "" {
-		formatted = fmt.Sprintf(layout.Template, msg)
+		formatted = msg
+		if decorate {
+			formatted = fmt.Sprintf(layout.Template, msg)
+		}
 	}
 	var newMsg compapi.Responsive = compapi.NewResponsiveString(formatted,
 		compapi.StringResponsiveConfig{
@@ -434,7 +441,7 @@ func (l *Less) setMessage(msg string) {
 		})
 	l.msgWidth = term.CalculateOptimalWidth(term.StringToCells(formatted))
 	l.msgFloating = false
-	if msg != "" && layout.Template != "%s" {
+	if msg != "" && decorate {
 		built := componenttemplate.Build(layout.Template, msg, term.Attributes{},
 			attr, l.scroll.Attributes.Bg)
 		inline := compapi.Inline(built, compapi.AlignmentRight)

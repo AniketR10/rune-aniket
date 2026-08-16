@@ -527,6 +527,33 @@ func TestLessDrawConfiguredMessageLayout(t *testing.T) {
 					"lidociousandt           "},
 			},
 		},
+		{
+			name:    "multi row message drops the layout decoration",
+			layout:  `░▒▓█ {{ .Message | fg "white" }} `,
+			config:  LessConfig{SuperimposeMessage: true},
+			content: "AAAA\nBBBB\nCCCC\nDDDD\nEEEE\nFFFF\nGGGG\nHHHH",
+			width:   24,
+			height:  8,
+			steps: []step{
+				{message: "single line", input: "", expected: "AAAA                    \n" +
+					"BBBB                    \n" +
+					"CCCC                    \n" +
+					"DDDD                    \n" +
+					"EEEE                    \n" +
+					"FFFF                    \n" +
+					"GGGG                    \n" +
+					" ▐     ░▒▓█ single line "},
+				{message: "first line of msg\nsecond line here\nthird line", input: "",
+					expected: "AAAA                    \n" +
+						"BBBB                    \n" +
+						"CCCC                    \n" +
+						"DDDD                    \n" +
+						"EEEE                    \n" +
+						"       first line of msg\n" +
+						"       second line here \n" +
+						" ▐     third line       "},
+			},
+		},
 	}
 
 	for _, tt := range tests {
