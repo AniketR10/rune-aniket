@@ -1,6 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package ide
 
@@ -10,12 +22,12 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"unstable.build/go-tui/browser"
-	tcomponent "unstable.build/go-tui/component"
-	"unstable.build/go-tui/ide/idehistory"
-	"unstable.build/go-tui/ide/idetask"
-	"unstable.build/go-tui/term/vte/vtereservoir"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/rune/browser"
+	tcomponent "unstable.build/rune/component"
+	"unstable.build/rune/ide/idehistory"
+	"unstable.build/rune/ide/idetask"
+	"unstable.build/rune/term/vte/vtereservoir"
+	"unstable.build/rune/workspace"
 )
 
 // exSnapshotter satisfies idehistory.Snapshotter by reading from an

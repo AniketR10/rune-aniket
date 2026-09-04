@@ -1,6 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package idehistory
 
@@ -27,9 +39,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	tcomponent "unstable.build/go-tui/component"
-	localstoragerpc "unstable.build/go-tui/localstorage/storagerpc"
-	"unstable.build/go-tui/term/vte"
+	tcomponent "unstable.build/rune/component"
+	localstoragerpc "unstable.build/rune/localstorage/storagerpc"
+	"unstable.build/rune/term/vte"
 )
 
 func mustURI(t *testing.T, s string) workspaceapi.URI {

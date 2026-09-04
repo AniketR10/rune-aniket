@@ -24,7 +24,7 @@ FUZZY_LINUX_OUTPUT_DIR ?= $(TARGET)/fuzzy-search_$(FUZZY_LINUX_TARGET_OS)_$(FUZZ
 FUZZY_LINUX_RELEASE_TAR ?= fuzzy-search-release-$(FUZZY_LINUX_TARGET_OS)-$(FUZZY_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
 
 # Build flags mirror the root Makefile's six package stamp.
-COMMON_LDFLAGS := -X unstable.build/go-tui/debug.Tag=$(VERSION) -X unstable.build/go-tui/debug.Commit=$(COMMIT) -X unstable.build/go-tui/debug.Package=six
+COMMON_LDFLAGS := -X unstable.build/rune/debug.Tag=$(VERSION) -X unstable.build/rune/debug.Commit=$(COMMIT) -X unstable.build/rune/debug.Package=six
 
 # darwin amd64 cross-builds on an Apple Silicon host need an explicit
 # -arch x86_64 cgo toolchain; arm64 is native and needs no extra flags.

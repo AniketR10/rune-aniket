@@ -19,8 +19,8 @@ import (
 	schemeapi "github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	workspaceapi "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	gomock "go.uber.org/mock/gomock"
-	cell "unstable.build/go-tui/cell"
-	workspace "unstable.build/go-tui/workspace"
+	cell "unstable.build/rune/cell"
+	workspace "unstable.build/rune/workspace"
 )
 
 // MockWorkspace is a mock of Workspace interface.

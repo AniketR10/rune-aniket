@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package lspcmd
 
@@ -42,7 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	idelsp "unstable.build/go-tui/ide/idelsp"
+	idelsp "unstable.build/rune/ide/idelsp"
 )
 
 func newTestRenameFloating(
@@ -707,15 +700,15 @@ func TestE2ERename(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// "Add" is at line 38 (0-indexed), col 5 in main.go.
+	// "Add" is at line 31 (0-indexed), col 5 in main.go.
 	cmd := textapi.Command{
 		Name:     "lsp",
 		Args:     []string{"rename"},
 		URI:      mainWSURI,
 		Resource: &mockHandler{uri: mainWSURI},
 	}
-	cmd.Cursor.Content = term.Coordinates{X: 5, Y: 38}
-	cmd.Cursor.Window = term.Coordinates{X: 5, Y: 38}
+	cmd.Cursor.Content = term.Coordinates{X: 5, Y: 31}
+	cmd.Cursor.Window = term.Coordinates{X: 5, Y: 31}
 
 	err = router.HandleCommand(ctx, cmd)
 	require.NoError(t, err)

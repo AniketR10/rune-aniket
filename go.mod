@@ -1,4 +1,4 @@
-module unstable.build/go-tui
+module unstable.build/rune
 
 go 1.26.0
 

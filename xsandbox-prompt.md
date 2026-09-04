@@ -2,7 +2,7 @@
 
 ## Mission
 
-Create a new executable `cmd/xsandbox` in this repository (module `unstable.build/go-tui`). `xsandbox` is a standalone tool that impersonates the Rune editor's side of the extension protocol so that an extension binary — built with `rune-go-sdk` or with an SDK port in another language — can be exercised end-to-end without running Rune itself.
+Create a new executable `cmd/xsandbox` in this repository (module `unstable.build/rune`). `xsandbox` is a standalone tool that impersonates the Rune editor's side of the extension protocol so that an extension binary — built with `rune-go-sdk` or with an SDK port in another language — can be exercised end-to-end without running Rune itself.
 
 Its two purposes:
 

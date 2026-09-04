@@ -10,7 +10,6 @@ Key entrypoints:
 
 - `cmd/rune` — the main Rune application
 - `cmd/rune-agent` — the Rune Agent extension binary and packages
-- `cmd/claudeimport` — a separate tool that compiles Claude Code conversations into the Go-based memory format used by Rune Agent
 
 The repository also contains substantial TUI/editor infrastructure built on `github.com/unstablebuild/rune-go-sdk`, and many UI/component patterns mirror the conventions used in the sibling `blue` repository.
 
@@ -24,7 +23,6 @@ make debug           # Build with race detection where applicable
 # Individual binaries
 make rune
 make rune-agent
-make claudeimport
 
 # Testing
 make test            # Run tests with race detector
@@ -53,7 +51,7 @@ files, force-apply the canonical header so a file that already carries
 a license-looking but non-canonical comment is rewritten:
 
 ```bash
-bluectl license -f LICENSE <new files>
+bluectl license -f LICENSE_HEADER <new files>
 ```
 
 ## Repository Architecture
@@ -72,7 +70,6 @@ bluectl license -f LICENSE <new files>
 - `cmd/rune-agent/agent/` — agent loop, tools, skills, prompts, task handling
 - `cmd/rune-agent/memory/` — memory retrieval and durable memory compilation support
 - `cmd/rune-agent/streamiterator/` — gRPC stream iteration helpers
-- `cmd/claudeimport/` — import pipeline for Claude conversation history into the memory workspace
 
 ### Key Rune Agent patterns
 

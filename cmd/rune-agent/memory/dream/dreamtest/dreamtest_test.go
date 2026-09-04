@@ -1,15 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Package dreamtest exercises the dream command end-to-end through a
 // real repl.Handler and a dream command handler that runs the real
@@ -46,10 +49,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
-	"unstable.build/go-tui/cmd/rune-agent/memory/dream/dreamcomponent"
-	"unstable.build/go-tui/term/sh"
+	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/rune/cmd/rune-agent/memory/dream"
+	"unstable.build/rune/cmd/rune-agent/memory/dream/dreamcomponent"
+	"unstable.build/rune/term/sh"
 )
 
 func TestDream_E2E_NoDialogues(t *testing.T) {

@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package main
 
@@ -56,22 +49,22 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cmd/rune/crashreport"
-	"unstable.build/go-tui/cmd/rune/ide/apiclient"
-	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/extension/extensionv2"
-	"unstable.build/go-tui/ide"
-	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/pkgtrust"
-	"unstable.build/go-tui/llm/llmrpc"
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term/gui"
-	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/workspacerpc"
-	"unstable.build/go-tui/workspace/workspacessh"
+	"unstable.build/rune/browser"
+	"unstable.build/rune/cmd/rune/crashreport"
+	"unstable.build/rune/cmd/rune/ide/apiclient"
+	"unstable.build/rune/component/shader"
+	"unstable.build/rune/debug"
+	"unstable.build/rune/extension/extensionv2"
+	"unstable.build/rune/ide"
+	"unstable.build/rune/ide/idepkg"
+	"unstable.build/rune/ide/pkgtrust"
+	"unstable.build/rune/llm/llmrpc"
+	"unstable.build/rune/rpc"
+	"unstable.build/rune/term/gui"
+	"unstable.build/rune/text"
+	"unstable.build/rune/workspace"
+	"unstable.build/rune/workspace/workspacerpc"
+	"unstable.build/rune/workspace/workspacessh"
 )
 
 const (

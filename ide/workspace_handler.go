@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package ide
 
@@ -57,48 +50,48 @@ import (
 	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell"
-	tcomponent "unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/markdown"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extensionv2"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/handler/command"
-	handlermarkdown "unstable.build/go-tui/handler/markdown"
-	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/ide/ideauthorizer"
-	"unstable.build/go-tui/ide/idecursor"
-	"unstable.build/go-tui/ide/idedebug"
-	"unstable.build/go-tui/ide/idehistory"
-	"unstable.build/go-tui/ide/idelsp"
-	"unstable.build/go-tui/ide/idelsp/lspcmd"
-	"unstable.build/go-tui/ide/idemacro"
-	"unstable.build/go-tui/ide/idenotice"
-	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/ide/idescavenger"
-	"unstable.build/go-tui/ide/ideshell/debugshell"
-	"unstable.build/go-tui/ide/ideshell/workspaceshell"
-	"unstable.build/go-tui/ide/llmshell"
-	"unstable.build/go-tui/ide/pkgshell"
-	"unstable.build/go-tui/ide/pkgtrust"
-	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/ide/syntax/symboldb"
-	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/ide/vctrl/gogit"
-	"unstable.build/go-tui/llm/llamaserver"
-	"unstable.build/go-tui/llm/llmrouter"
-	"unstable.build/go-tui/localstorage"
-	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/emacs"
-	"unstable.build/go-tui/text/exoeditor"
-	"unstable.build/go-tui/text/exofallback"
-	"unstable.build/go-tui/text/standard"
-	"unstable.build/go-tui/text/textrpc"
-	"unstable.build/go-tui/text/vi"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/rune/browser"
+	"unstable.build/rune/cell"
+	tcomponent "unstable.build/rune/component"
+	"unstable.build/rune/component/markdown"
+	"unstable.build/rune/component/notifications"
+	"unstable.build/rune/debug"
+	"unstable.build/rune/extension"
+	"unstable.build/rune/extension/extensionv2"
+	"unstable.build/rune/handler"
+	"unstable.build/rune/handler/command"
+	handlermarkdown "unstable.build/rune/handler/markdown"
+	"unstable.build/rune/handler/search"
+	"unstable.build/rune/ide/ideauthorizer"
+	"unstable.build/rune/ide/idecursor"
+	"unstable.build/rune/ide/idedebug"
+	"unstable.build/rune/ide/idehistory"
+	"unstable.build/rune/ide/idelsp"
+	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/ide/idemacro"
+	"unstable.build/rune/ide/idenotice"
+	"unstable.build/rune/ide/idepkg"
+	"unstable.build/rune/ide/idescavenger"
+	"unstable.build/rune/ide/ideshell/debugshell"
+	"unstable.build/rune/ide/ideshell/workspaceshell"
+	"unstable.build/rune/ide/llmshell"
+	"unstable.build/rune/ide/pkgshell"
+	"unstable.build/rune/ide/pkgtrust"
+	"unstable.build/rune/ide/syntax"
+	"unstable.build/rune/ide/syntax/symboldb"
+	"unstable.build/rune/ide/vctrl"
+	"unstable.build/rune/ide/vctrl/gogit"
+	"unstable.build/rune/llm/llamaserver"
+	"unstable.build/rune/llm/llmrouter"
+	"unstable.build/rune/localstorage"
+	"unstable.build/rune/text"
+	"unstable.build/rune/text/emacs"
+	"unstable.build/rune/text/exoeditor"
+	"unstable.build/rune/text/exofallback"
+	"unstable.build/rune/text/standard"
+	"unstable.build/rune/text/textrpc"
+	"unstable.build/rune/text/vi"
+	"unstable.build/rune/workspace"
 )
 
 const (

@@ -1,13 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package ide
 
@@ -18,8 +23,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/ide/ideshell/workspaceshell"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/rune/ide/ideshell/workspaceshell"
+	"unstable.build/rune/workspace"
 )
 
 // extensionsExecutor combines a local file scheme rooted at

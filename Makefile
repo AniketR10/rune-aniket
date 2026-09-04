@@ -11,7 +11,7 @@ GOTESTFLAGSNORACE = -timeout 180s
 # variable. Recursive (=) so target-specific overrides propagate to
 # prerequisites that re-expand COMMON_LDFLAGS.
 RUNE_DEBUG_BUILD ?=
-DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/debug.DebugBuild=true)
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/debug.DebugBuild=true)
 # RACE_FLAG mirrors RUNE_DEBUG_BUILD so the race detector is enabled
 # for every binary the `debug` target produces, including the rune
 # binary (which builds with RUNE_GOFLAGS rather than GOFLAGS). This is
@@ -35,10 +35,10 @@ REPO_ROOT := $(shell git rev-parse --show-toplevel)
 # inline $$(...) substitution could not enforce this because its non-zero
 # exit would not fail the surrounding go build.
 BUILD_DATE := $(shell out=$$($(GO) run $(REPO_ROOT)/cmd/buildstamp) && printf '%s' "$$out")
-BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/go-tui/debug.BuildDate=$(strip $(BUILD_DATE))
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
-GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
-RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune"
 OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X main.Commit=$$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)"
 OXPROBE_REGION ?= us-central1
 OXPROBE_REPO ?= docker
@@ -69,14 +69,13 @@ EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECMAIN=$(wildcard cmd/*/main.go)
 EXECDIRS=$(sort $(dir $(EXECMAIN)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
-CLAUDEIMPORT=$(BIN)/claudeimport
-SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api $(BIN)/rune-agent $(CLAUDEIMPORT)
+SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api $(BIN)/rune-agent
 GENERIC_EXECS=$(filter-out $(SPECIAL_EXECS),$(EXECS))
 EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate rune rune-agent ox-api claudeimport \
+.PHONY: debug clean test coverage generate rune rune-agent ox-api \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
@@ -164,12 +163,12 @@ BLUECTL_CONFIG = $(BLUECTL_CONFIG_ROOT)/$(1)/$(2)
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: .git/hooks/pre-commit deps $(EXECS) $(CLAUDEIMPORT)
+default: .git/hooks/pre-commit deps $(EXECS)
 
 debug: RUNE_DEBUG_BUILD := true
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-debug: deps $(EXECS) $(CLAUDEIMPORT)
+debug: deps $(EXECS)
 
 rune: CGO_ENABLED=CGO_ENABLED=1
 rune: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -182,10 +181,6 @@ rune-agent: $(BIN)/rune-agent
 ox-api: CGO_ENABLED=CGO_ENABLED=1
 ox-api: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 ox-api: ox-api-init $(BIN)/ox-api
-
-claudeimport: CGO_ENABLED=CGO_ENABLED=1
-claudeimport: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-claudeimport: $(CLAUDEIMPORT)
 
 .git/hooks/pre-commit: .pre-commit-config.yaml
 	@ pre-commit install
@@ -268,10 +263,10 @@ generate: docs-init
 	@ go generate ./...
 
 license:
-	@ bluectl license LICENSE `find . -name \*.go | grep -v gomock | grep -v .pb.go | xargs`
+	@ bluectl license LICENSE_HEADER `find . -name \*.go -not -path ./cmd/ox-api/\* -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
 
 assert_license:
-	@ bluectl license -d LICENSE `find . -name \*.go | grep -v gomock | grep -v .pb.go | xargs`
+	@ bluectl license -d LICENSE_HEADER `find . -name \*.go -not -path ./cmd/ox-api/\* -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
 
 format:
 	@ go fmt ./.../...
@@ -297,9 +292,6 @@ $(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
 
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@ .
-
-$(BIN)/claudeimport: $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd cmd/claudeimport && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 $(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/rune-agent && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@

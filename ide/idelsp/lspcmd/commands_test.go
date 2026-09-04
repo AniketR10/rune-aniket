@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package lspcmd
 
@@ -42,8 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/handler/locationpicker"
-	idelsp "unstable.build/go-tui/ide/idelsp"
+	"unstable.build/rune/handler/locationpicker"
+	idelsp "unstable.build/rune/ide/idelsp"
 )
 
 // collectIter drains an iterator into a string slice.
@@ -326,10 +319,10 @@ func TestE2ECommands(t *testing.T) {
 		searchFn: func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
 			if strings.Contains(query, "selector_expression") {
 				return iterator.FromSlice([]syntaxapi.Result{
-					{File: mainWSURI, Text: "fmt", From: term.Coordinates{X: 9, Y: 34}, CaptureName: "pkg"},
-					{File: mainWSURI, Text: "Sprintf", From: term.Coordinates{X: 13, Y: 34}, CaptureName: "symbol"},
-					{File: mainWSURI, Text: "fmt", From: term.Coordinates{X: 1, Y: 44}, CaptureName: "pkg"},
-					{File: mainWSURI, Text: "Println", From: term.Coordinates{X: 5, Y: 44}, CaptureName: "symbol"},
+					{File: mainWSURI, Text: "fmt", From: term.Coordinates{X: 9, Y: 27}, CaptureName: "pkg"},
+					{File: mainWSURI, Text: "Sprintf", From: term.Coordinates{X: 13, Y: 27}, CaptureName: "symbol"},
+					{File: mainWSURI, Text: "fmt", From: term.Coordinates{X: 1, Y: 37}, CaptureName: "pkg"},
+					{File: mainWSURI, Text: "Println", From: term.Coordinates{X: 5, Y: 37}, CaptureName: "symbol"},
 				}), nil
 			}
 			return iterator.Empty[syntaxapi.Result](), nil
@@ -337,7 +330,7 @@ func TestE2ECommands(t *testing.T) {
 		resolveFn: func(name string, _ syntaxapi.Progress) ([]syntaxapi.Match, error) {
 			if name == "fmt.Println" {
 				return []syntaxapi.Match{
-					{URI: mainWSURI.String(), Pos: term.Coordinates{X: 5, Y: 44}},
+					{URI: mainWSURI.String(), Pos: term.Coordinates{X: 5, Y: 37}},
 				}, nil
 			}
 			return nil, nil
@@ -376,8 +369,8 @@ func TestE2ECommands(t *testing.T) {
 			wm.floatingFn = nil
 		}()
 
-		// Add is at line 38 (0-indexed), col 5.
-		cmd := makeCmd("references", nil, 38, 5)
+		// Add is at line 34 (0-indexed), col 5.
+		cmd := makeCmd("references", nil, 31, 5)
 		err := router.HandleCommand(ctx, cmd)
 		require.NoError(t, err)
 		select {
@@ -412,8 +405,8 @@ func TestE2ECommands(t *testing.T) {
 			editor.setCursorFn = nil
 		}()
 
-		// Speaker is at line 50 (0-indexed), col 5.
-		cmd := makeCmd("implementation", nil, 50, 5)
+		// Speaker is at line 46 (0-indexed), col 5.
+		cmd := makeCmd("implementation", nil, 43, 5)
 		err := router.HandleCommand(ctx, cmd)
 		require.NoError(t, err)
 		select {
@@ -461,12 +454,12 @@ func TestE2ECommands(t *testing.T) {
 		assert.True(t, cellEditorCalled, "CellEditor must be called")
 		assert.Equal(t, cmd.Resource, cellEditorH, "CellEditor called with wrong handler")
 		assert.True(t, editCalled, "Edit must be called")
-		assert.Equal(t, term.Coordinates{X: 0, Y: 61}, editStart)
-		assert.Equal(t, term.Coordinates{X: 4, Y: 61}, editEnd)
+		assert.Equal(t, term.Coordinates{X: 0, Y: 54}, editStart)
+		assert.Equal(t, term.Coordinates{X: 4, Y: 54}, editEnd)
 		assert.Equal(t, "\t", editText)
 	})
 
-	// Hover tests use line 33, col 20 of testdata/main.go which
+	// Hover tests use line 29, col 20 of testdata/main.go which
 	// is inside the "Greet" method name on:
 	//   func (g *Greeter) Greet() string {
 	// The two sub-cases are not table-driven because "above cursor"
@@ -489,7 +482,7 @@ func TestE2ECommands(t *testing.T) {
 			}
 			defer func() { wm.floatingFn = nil }()
 
-			cmd := makeCmd("hover", nil, 33, 20)
+			cmd := makeCmd("hover", nil, 26, 20)
 			err := router.HandleCommand(ctx, cmd)
 			require.NoError(t, err)
 			select {
@@ -522,7 +515,7 @@ func TestE2ECommands(t *testing.T) {
 			}
 			defer func() { wm.floatingFn = nil }()
 
-			cmd := makeCmd("hover", nil, 33, 20)
+			cmd := makeCmd("hover", nil, 26, 20)
 			cmd.Cursor.Window.Y = 0
 			err := router.HandleCommand(ctx, cmd)
 			require.NoError(t, err)
@@ -905,7 +898,7 @@ func TestE2ESignatureHelpAutoTrigger(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, capturedHandler, "SubscribeEvents should have been called")
 
-	// Simulate typing "(" after "Add" on line 45 (0-indexed),
+	// Simulate typing "(" after "Add" on line 41 (0-indexed),
 	// where `fmt.Println(Add(1, 2))` is.
 	// The "(" after "Add" is at column 16 (0-indexed: col 16).
 
@@ -914,10 +907,10 @@ func TestE2ESignatureHelpAutoTrigger(t *testing.T) {
 		Type:     textapi.EventTypeEdit,
 		URI:      mainWSURI,
 		Resource: &mockHandler{uri: mainWSURI},
-		Start:    term.Coordinates{X: 16, Y: 45},
-		End:      term.Coordinates{X: 16, Y: 45},
-		From:     term.Coordinates{X: 16, Y: 45},
-		To:       term.Coordinates{X: 17, Y: 45},
+		Start:    term.Coordinates{X: 16, Y: 38},
+		End:      term.Coordinates{X: 16, Y: 38},
+		From:     term.Coordinates{X: 16, Y: 38},
+		To:       term.Coordinates{X: 17, Y: 38},
 		Content:  "(",
 	}
 	mgr.Handle(ctx, editEv)
@@ -960,7 +953,7 @@ func TestE2ESignatureHelpAutoTrigger(t *testing.T) {
 	capturedHandler.Handle(ctx, textapi.Event{
 		Type: textapi.EventTypeCursor,
 		URI:  mainWSURI,
-		From: term.Coordinates{X: 17, Y: 45},
+		From: term.Coordinates{X: 17, Y: 38},
 	})
 
 	// Fire a second cursor event (simulating a deliberate cursor
@@ -968,7 +961,7 @@ func TestE2ESignatureHelpAutoTrigger(t *testing.T) {
 	capturedHandler.Handle(ctx, textapi.Event{
 		Type: textapi.EventTypeCursor,
 		URI:  mainWSURI,
-		From: term.Coordinates{X: 18, Y: 45},
+		From: term.Coordinates{X: 18, Y: 38},
 	})
 
 	mu.Lock()

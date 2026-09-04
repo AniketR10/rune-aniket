@@ -44,7 +44,7 @@ RUNE_MIN_GLIBC   ?= 2.28
 # bake debug-only ex commands (:panic, :crash) into the binary. The
 # root `debug` target propagates this; release builds leave it empty.
 RUNE_DEBUG_BUILD ?=
-DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/debug.DebugBuild=true)
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/debug.DebugBuild=true)
 # RACE_FLAG mirrors RUNE_DEBUG_BUILD so direct cmd/rune builds (which
 # do not run through the root Makefile's GOFLAGS) still get -race when
 # the caller opts into a debug build.
@@ -59,10 +59,10 @@ RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
 # missing debug.BuildDate that would silently disable the one-off
 # upgrade-entitlement lockdown.
 BUILD_DATE := $(shell out=$$(cd $(ROOT_DIR) && $(GO) run ./cmd/buildstamp) && printf '%s' "$$out")
-BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/go-tui/debug.BuildDate=$(strip $(BUILD_DATE))
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
-GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
-OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
+OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune"
 
 # RUNE_ENV selects the API endpoints baked into the binary.
 #   - dev (default): point at api.unstable.build / rpc.unstable.build
@@ -70,12 +70,12 @@ OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package
 # Distribution / release rules below set RUNE_ENV=prod so user-facing builds
 # always target production. Local `make rune` keeps the dev defaults.
 RUNE_ENV ?= dev
-PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST) -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultWebsiteAddress=$(PROD_WEBSITE_ADDRESS)
+PROD_LDFLAGS=-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST) -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultWebsiteAddress=$(PROD_WEBSITE_ADDRESS)
 # Use `=` (recursive) so $(RUNE_ENV) is re-evaluated when RUNE_GOFLAGS is expanded
 # in a recipe — this lets target-specific overrides such as
 # `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
 # prerequisites without affecting the default `make rune` build.
-RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
 # Public download buckets that dist.sh uploads release tarballs / DMGs to.
 # `prod-dist-*` targets push to PROD_DOWNLOADS_BUCKET (user-facing) while
@@ -156,7 +156,6 @@ make-release:
 	@mkdir -p $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)
 	@cd $(ROOT_DIR) && ./cmd/rune/cgo-build-guard.sh '$(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune'
 	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
-	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/claudeimport
 	@go_files=$$(find $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH) -name '*.go'); \
 		if [ -n "$$go_files" ]; then \
 			echo "error: .go files found in package:" >&2; \

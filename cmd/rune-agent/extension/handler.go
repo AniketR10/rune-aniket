@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package extension
 
@@ -42,13 +35,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
-	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
-	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
-	"unstable.build/go-tui/cmd/rune-agent/agent/geminitools"
-	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/configedit"
+	"unstable.build/rune/cmd/rune-agent/agent"
+	"unstable.build/rune/cmd/rune-agent/agent/agentools"
+	"unstable.build/rune/cmd/rune-agent/agent/agentools/webfetch"
+	"unstable.build/rune/cmd/rune-agent/agent/audit"
+	"unstable.build/rune/cmd/rune-agent/agent/geminitools"
+	"unstable.build/rune/cmd/rune-agent/agent/taskstore"
+	"unstable.build/rune/cmd/rune-agent/configedit"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -65,22 +58,22 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/agentshell"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
+	"unstable.build/rune/cmd/rune-agent/agent/skills"
+	"unstable.build/rune/cmd/rune-agent/agentshell"
+	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/rune/cmd/rune-agent/hooks"
+	"unstable.build/rune/cmd/rune-agent/llm/llmarg"
 
-	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
-	"unstable.build/go-tui/cmd/rune-agent/memory"
-	"unstable.build/go-tui/component/markdown"
-	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/text"
+	runemcp "unstable.build/rune/cmd/rune-agent/mcp"
+	"unstable.build/rune/cmd/rune-agent/memory"
+	"unstable.build/rune/component/markdown"
+	"unstable.build/rune/debug"
+	"unstable.build/rune/extension/extutil"
+	"unstable.build/rune/ide/vctrl"
+	"unstable.build/rune/text"
 
-	tconfig "unstable.build/go-tui/api/config"
+	tconfig "unstable.build/rune/api/config"
 )
 
 const (

@@ -1,25 +1,18 @@
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
 //
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
 //
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package idelsp
 
@@ -110,7 +103,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 33, Character: 20,
+							Line: 26, Character: 20,
 						},
 					},
 				)
@@ -123,8 +116,8 @@ func TestE2E(t *testing.T) {
 					"Greet returns a greeting message.")
 				require.NotNil(t, result.Range)
 				assert.Equal(t, semanticapi.Range{
-					Start: semanticapi.Position{Line: 33, Character: 18},
-					End:   semanticapi.Position{Line: 33, Character: 23},
+					Start: semanticapi.Position{Line: 26, Character: 18},
+					End:   semanticapi.Position{Line: 26, Character: 23},
 				}, *result.Range)
 			},
 		},
@@ -137,7 +130,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 45, Character: 13,
+							Line: 38, Character: 13,
 						},
 					},
 				)
@@ -146,8 +139,8 @@ func TestE2E(t *testing.T) {
 				require.Len(t, locs, 1)
 				assert.Equal(t, mainURI, locs[0].URI)
 				assert.Equal(t, semanticapi.Range{
-					Start: semanticapi.Position{Line: 38, Character: 5},
-					End:   semanticapi.Position{Line: 38, Character: 8},
+					Start: semanticapi.Position{Line: 31, Character: 5},
+					End:   semanticapi.Position{Line: 31, Character: 8},
 				}, locs[0].Range)
 			},
 		},
@@ -161,7 +154,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 38, Character: 6,
+							Line: 31, Character: 6,
 						},
 						Context: semanticapi.ReferenceContext{
 							IncludeDeclaration: true,
@@ -174,29 +167,29 @@ func TestE2E(t *testing.T) {
 					{
 						URI: mainURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 38, Character: 5},
-							End:   semanticapi.Position{Line: 38, Character: 8},
+							Start: semanticapi.Position{Line: 31, Character: 5},
+							End:   semanticapi.Position{Line: 31, Character: 8},
 						},
 					},
 					{
 						URI: mainURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 45, Character: 13},
-							End:   semanticapi.Position{Line: 45, Character: 16},
+							Start: semanticapi.Position{Line: 38, Character: 13},
+							End:   semanticapi.Position{Line: 38, Character: 16},
 						},
 					},
 					{
 						URI: testURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 35, Character: 2},
-							End:   semanticapi.Position{Line: 35, Character: 5},
+							Start: semanticapi.Position{Line: 28, Character: 2},
+							End:   semanticapi.Position{Line: 28, Character: 5},
 						},
 					},
 					{
 						URI: testURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 28, Character: 4},
-							End:   semanticapi.Position{Line: 28, Character: 7},
+							Start: semanticapi.Position{Line: 21, Character: 4},
+							End:   semanticapi.Position{Line: 21, Character: 7},
 						},
 					},
 				}, locs)
@@ -230,11 +223,11 @@ func TestE2E(t *testing.T) {
 						Range: semanticapi.Range{
 							Start: semanticapi.Position{
 								Character: 0,
-								Line:      38,
+								Line:      31,
 							},
 							End: semanticapi.Position{
 								Character: 1,
-								Line:      40,
+								Line:      33,
 							},
 						},
 					},
@@ -259,11 +252,11 @@ func TestE2E(t *testing.T) {
 						Range: semanticapi.Range{
 							Start: semanticapi.Position{
 								Character: 5,
-								Line:      38,
+								Line:      31,
 							},
 							End: semanticapi.Position{
 								Character: 8,
-								Line:      38,
+								Line:      31,
 							},
 						},
 					},
@@ -279,7 +272,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 34, Character: 12,
+							Line: 27, Character: 12,
 						},
 					},
 				)
@@ -313,8 +306,8 @@ func TestE2E(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, []semanticapi.TextEdit{{
 					Range: semanticapi.Range{
-						Start: semanticapi.Position{Line: 61, Character: 0},
-						End:   semanticapi.Position{Line: 61, Character: 4},
+						Start: semanticapi.Position{Line: 54, Character: 0},
+						End:   semanticapi.Position{Line: 54, Character: 4},
 					},
 					NewText: "\t",
 				}}, edits)
@@ -354,7 +347,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 38, Character: 5,
+							Line: 31, Character: 5,
 						},
 					},
 				)
@@ -373,7 +366,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 38, Character: 5,
+							Line: 31, Character: 5,
 						},
 					},
 				)
@@ -381,8 +374,8 @@ func TestE2E(t *testing.T) {
 				require.NotNil(t, result)
 				assert.Equal(t, "Add", result.Placeholder)
 				assert.Equal(t, semanticapi.Range{
-					Start: semanticapi.Position{Line: 38, Character: 5},
-					End:   semanticapi.Position{Line: 38, Character: 8},
+					Start: semanticapi.Position{Line: 31, Character: 5},
+					End:   semanticapi.Position{Line: 31, Character: 8},
 				}, result.Range)
 			},
 		},
@@ -395,7 +388,7 @@ func TestE2E(t *testing.T) {
 							URI: utilURI,
 						},
 						Position: semanticapi.Position{
-							Line: 26, Character: 5,
+							Line: 19, Character: 5,
 						},
 						NewName: "Mul",
 					},
@@ -422,7 +415,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Positions: []semanticapi.Position{
-							{Line: 39, Character: 1},
+							{Line: 32, Character: 1},
 						},
 					},
 				)
@@ -439,8 +432,8 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 9, Character: 0},
-							End:   semanticapi.Position{Line: 19, Character: 0},
+							Start: semanticapi.Position{Line: 2, Character: 0},
+							End:   semanticapi.Position{Line: 12, Character: 0},
 						},
 					},
 				)
@@ -458,7 +451,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 38, Character: 5,
+							Line: 31, Character: 5,
 						},
 					},
 				)
@@ -478,7 +471,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 38, Character: 5,
+							Line: 31, Character: 5,
 						},
 					},
 				)
@@ -505,7 +498,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 42, Character: 5,
+							Line: 35, Character: 5,
 						},
 					},
 				)
@@ -538,8 +531,8 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 9, Character: 0},
-							End:   semanticapi.Position{Line: 27, Character: 0},
+							Start: semanticapi.Position{Line: 2, Character: 0},
+							End:   semanticapi.Position{Line: 20, Character: 0},
 						},
 					},
 				)
@@ -558,7 +551,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 43, Character: 1,
+							Line: 36, Character: 1,
 						},
 					},
 				)
@@ -567,8 +560,8 @@ func TestE2E(t *testing.T) {
 				require.Len(t, locs, 1)
 				assert.Equal(t, mainURI, locs[0].URI)
 				assert.Equal(t, semanticapi.Range{
-					Start: semanticapi.Position{Line: 28, Character: 5},
-					End:   semanticapi.Position{Line: 28, Character: 12},
+					Start: semanticapi.Position{Line: 21, Character: 5},
+					End:   semanticapi.Position{Line: 21, Character: 12},
 				}, locs[0].Range)
 			},
 		},
@@ -581,7 +574,7 @@ func TestE2E(t *testing.T) {
 							URI: mainURI,
 						},
 						Position: semanticapi.Position{
-							Line: 45, Character: 17,
+							Line: 38, Character: 17,
 						},
 					},
 				)
@@ -690,7 +683,7 @@ func TestE2E(t *testing.T) {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 36, Character: 13,
+								Line: 29, Character: 13,
 							},
 						},
 					)
@@ -710,7 +703,7 @@ func TestE2E(t *testing.T) {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 51, Character: 1,
+								Line: 44, Character: 1,
 							},
 						},
 					)
@@ -720,8 +713,8 @@ func TestE2E(t *testing.T) {
 					assert.Equal(t, mainURI, locs[0].URI)
 					// Robot.Speak is at line 60, chars 16-21
 					assert.Equal(t, semanticapi.Range{
-						Start: semanticapi.Position{Line: 60, Character: 16},
-						End:   semanticapi.Position{Line: 60, Character: 21},
+						Start: semanticapi.Position{Line: 53, Character: 16},
+						End:   semanticapi.Position{Line: 53, Character: 21},
 					}, locs[0].Range)
 				},
 			},
@@ -740,8 +733,8 @@ func TestE2E(t *testing.T) {
 					expected := []semanticapi.CodeLens{
 						{
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 23, Character: 0},
-								End:   semanticapi.Position{Line: 23, Character: 0},
+								Start: semanticapi.Position{Line: 16, Character: 0},
+								End:   semanticapi.Position{Line: 16, Character: 0},
 							},
 							Command: &semanticapi.Command{
 								Title:   "run file benchmarks",
@@ -755,8 +748,8 @@ func TestE2E(t *testing.T) {
 						},
 						{
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 27, Character: 0},
-								End:   semanticapi.Position{Line: 27, Character: 0},
+								Start: semanticapi.Position{Line: 20, Character: 0},
+								End:   semanticapi.Position{Line: 20, Character: 0},
 							},
 							Command: &semanticapi.Command{
 								Title:   "run test",
@@ -770,8 +763,8 @@ func TestE2E(t *testing.T) {
 						},
 						{
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 33, Character: 0},
-								End:   semanticapi.Position{Line: 33, Character: 0},
+								Start: semanticapi.Position{Line: 26, Character: 0},
+								End:   semanticapi.Position{Line: 26, Character: 0},
 							},
 							Command: &semanticapi.Command{
 								Title:   "run benchmark",
@@ -798,8 +791,8 @@ func TestE2E(t *testing.T) {
 								URI: mainURI,
 							},
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 29, Character: 0},
-								End:   semanticapi.Position{Line: 32, Character: 0},
+								Start: semanticapi.Position{Line: 22, Character: 0},
+								End:   semanticapi.Position{Line: 25, Character: 0},
 							},
 							Options: semanticapi.FormattingOptions{
 								TabSize:      4,
@@ -972,8 +965,8 @@ func Broken() {
 					// CodeLensResolve returns lens unchanged in this impl.
 					lens := semanticapi.CodeLens{
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 33, Character: 0},
-							End:   semanticapi.Position{Line: 33, Character: 4},
+							Start: semanticapi.Position{Line: 26, Character: 0},
+							End:   semanticapi.Position{Line: 26, Character: 4},
 						},
 						Command: &semanticapi.Command{
 							Title:   "run",
@@ -1012,8 +1005,8 @@ func Broken() {
 								Red: 1.0, Green: 0.0, Blue: 0.0, Alpha: 1.0,
 							},
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 16, Character: 7},
-								End:   semanticapi.Position{Line: 16, Character: 12},
+								Start: semanticapi.Position{Line: 9, Character: 7},
+								End:   semanticapi.Position{Line: 9, Character: 12},
 							},
 						},
 					)
@@ -1034,14 +1027,22 @@ func Broken() {
 					)
 					require.NoError(t, err)
 					// gopls returns links for import paths and URLs in comments
-					require.Len(t, links, 1)
+					require.Len(t, links, 2)
 					assert.Equal(t, semanticapi.DocumentLink{
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 25, Character: 8},
-							End:   semanticapi.Position{Line: 25, Character: 11},
+							Start: semanticapi.Position{Line: 18, Character: 8},
+							End:   semanticapi.Position{Line: 18, Character: 11},
 						},
 						Target: "https://pkg.go.dev/fmt",
 					}, links[0])
+					// The GPL license header carries a gnu.org URL.
+					assert.Equal(t, semanticapi.DocumentLink{
+						Range: semanticapi.Range{
+							Start: semanticapi.Position{Line: 14, Character: 41},
+							End:   semanticapi.Position{Line: 14, Character: 70},
+						},
+						Target: "https://www.gnu.org/licenses/",
+					}, links[1])
 				},
 			},
 			{
@@ -1049,8 +1050,8 @@ func Broken() {
 				fn: func(t *testing.T, mgr *Manager) {
 					link := semanticapi.DocumentLink{
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 25, Character: 7},
-							End:   semanticapi.Position{Line: 25, Character: 12},
+							Start: semanticapi.Position{Line: 18, Character: 7},
+							End:   semanticapi.Position{Line: 18, Character: 12},
 						},
 						Target: "fmt",
 					}
@@ -1069,7 +1070,7 @@ func Broken() {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 30, Character: 0,
+								Line: 23, Character: 0,
 							},
 							Character: "\n",
 							Options: semanticapi.FormattingOptions{
@@ -1093,7 +1094,7 @@ func Broken() {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 29, Character: 5,
+								Line: 22, Character: 5,
 							},
 						},
 					)
@@ -1112,7 +1113,7 @@ func Broken() {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 29, Character: 5,
+								Line: 22, Character: 5,
 							},
 						},
 					)
@@ -1164,7 +1165,7 @@ func Broken() {
 								URI: mainURI,
 							},
 							Position: semanticapi.Position{
-								Line: 28, Character: 6,
+								Line: 21, Character: 6,
 							},
 						},
 					)
@@ -1175,8 +1176,8 @@ func Broken() {
 					assert.Equal(t, semanticapi.SymbolKindClass, items[0].Kind)
 					assert.Equal(t, mainURI, items[0].URI)
 					assert.Equal(t, semanticapi.Range{
-						Start: semanticapi.Position{Line: 28, Character: 5},
-						End:   semanticapi.Position{Line: 28, Character: 12},
+						Start: semanticapi.Position{Line: 21, Character: 5},
+						End:   semanticapi.Position{Line: 21, Character: 12},
 					}, items[0].SelectionRange)
 				},
 			},
@@ -1190,12 +1191,12 @@ func Broken() {
 						Kind: semanticapi.SymbolKindStruct,
 						URI:  mainURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 28, Character: 0},
-							End:   semanticapi.Position{Line: 31, Character: 1},
+							Start: semanticapi.Position{Line: 21, Character: 0},
+							End:   semanticapi.Position{Line: 24, Character: 1},
 						},
 						SelectionRange: semanticapi.Range{
-							Start: semanticapi.Position{Line: 28, Character: 5},
-							End:   semanticapi.Position{Line: 28, Character: 12},
+							Start: semanticapi.Position{Line: 21, Character: 5},
+							End:   semanticapi.Position{Line: 21, Character: 12},
 						},
 					}
 					supertypes, err := mgr.TypeHierarchySupertypes(t.Context(),
@@ -1217,12 +1218,12 @@ func Broken() {
 						Kind: semanticapi.SymbolKindStruct,
 						URI:  mainURI,
 						Range: semanticapi.Range{
-							Start: semanticapi.Position{Line: 19, Character: 0},
-							End:   semanticapi.Position{Line: 22, Character: 1},
+							Start: semanticapi.Position{Line: 12, Character: 0},
+							End:   semanticapi.Position{Line: 15, Character: 1},
 						},
 						SelectionRange: semanticapi.Range{
-							Start: semanticapi.Position{Line: 19, Character: 5},
-							End:   semanticapi.Position{Line: 19, Character: 12},
+							Start: semanticapi.Position{Line: 12, Character: 5},
+							End:   semanticapi.Position{Line: 12, Character: 12},
 						},
 					}
 					subtypes, err := mgr.TypeHierarchySubtypes(t.Context(),
@@ -1245,62 +1246,62 @@ func Broken() {
 							},
 							Range: semanticapi.Range{
 								Start: semanticapi.Position{Line: 0, Character: 0},
-								End:   semanticapi.Position{Line: 60, Character: 0},
+								End:   semanticapi.Position{Line: 53, Character: 0},
 							},
 						},
 					)
 					require.NoError(t, err)
 					expected := []semanticapi.InlayHint{
 						{
-							Position:     semanticapi.Position{Line: 34, Character: 20},
+							Position:     semanticapi.Position{Line: 27, Character: 20},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "format:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 34, Character: 34},
+							Position:     semanticapi.Position{Line: 27, Character: 34},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "a...:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 44, Character: 13},
+							Position:     semanticapi.Position{Line: 37, Character: 13},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "a...:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 45, Character: 13},
+							Position:     semanticapi.Position{Line: 38, Character: 13},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "a...:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 45, Character: 17},
+							Position:     semanticapi.Position{Line: 38, Character: 17},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "a:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 45, Character: 20},
+							Position:     semanticapi.Position{Line: 38, Character: 20},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "b:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 61, Character: 20},
+							Position:     semanticapi.Position{Line: 54, Character: 20},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "format:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:     semanticapi.Position{Line: 61, Character: 48},
+							Position:     semanticapi.Position{Line: 54, Character: 48},
 							LabelParts:   []semanticapi.InlayHintLabelPart{{Value: "a...:"}},
 							Kind:         semanticapi.InlayHintKindParameter,
 							PaddingRight: true,
 						},
 						{
-							Position:    semanticapi.Position{Line: 43, Character: 2},
+							Position:    semanticapi.Position{Line: 36, Character: 2},
 							LabelParts:  []semanticapi.InlayHintLabelPart{{Value: "*Greeter"}},
 							Kind:        semanticapi.InlayHintKindType,
 							PaddingLeft: true,
@@ -1313,7 +1314,7 @@ func Broken() {
 				name: "InlayHintResolve",
 				fn: func(t *testing.T, mgr *Manager) {
 					hint := semanticapi.InlayHint{
-						Position: semanticapi.Position{Line: 36, Character: 17},
+						Position: semanticapi.Position{Line: 29, Character: 17},
 						Label:    "a:",
 						Kind:     semanticapi.InlayHintKindParameter,
 					}
@@ -1332,8 +1333,8 @@ func Broken() {
 								URI: mainURI,
 							},
 							Range: semanticapi.Range{
-								Start: semanticapi.Position{Line: 29, Character: 0},
-								End:   semanticapi.Position{Line: 32, Character: 0},
+								Start: semanticapi.Position{Line: 22, Character: 0},
+								End:   semanticapi.Position{Line: 25, Character: 0},
 							},
 						},
 					)
@@ -1402,7 +1403,7 @@ func Broken() {
 					)
 					require.NoError(t, err)
 					require.NotNil(t, tokens)
-					assert.Equal(t, 525, len(tokens.Data))
+					assert.Equal(t, 490, len(tokens.Data))
 				},
 			},
 		}...)
@@ -1942,10 +1943,10 @@ func TestE2ECallbackApplyEdit(t *testing.T) {
 						{
 							Range: semanticapi.Range{
 								Start: semanticapi.Position{
-									Line: 25, Character: 7,
+									Line: 18, Character: 7,
 								},
 								End: semanticapi.Position{
-									Line: 25, Character: 7,
+									Line: 18, Character: 7,
 								},
 							},
 							NewText: "(\n\t",
@@ -1953,10 +1954,10 @@ func TestE2ECallbackApplyEdit(t *testing.T) {
 						{
 							Range: semanticapi.Range{
 								Start: semanticapi.Position{
-									Line: 25, Character: 10,
+									Line: 18, Character: 10,
 								},
 								End: semanticapi.Position{
-									Line: 25, Character: 10,
+									Line: 18, Character: 10,
 								},
 							},
 							NewText: "t\"\n\t\"s",
@@ -1964,10 +1965,10 @@ func TestE2ECallbackApplyEdit(t *testing.T) {
 						{
 							Range: semanticapi.Range{
 								Start: semanticapi.Position{
-									Line: 25, Character: 11,
+									Line: 18, Character: 11,
 								},
 								End: semanticapi.Position{
-									Line: 25, Character: 11,
+									Line: 18, Character: 11,
 								},
 							},
 							NewText: "rings",
@@ -1975,10 +1976,10 @@ func TestE2ECallbackApplyEdit(t *testing.T) {
 						{
 							Range: semanticapi.Range{
 								Start: semanticapi.Position{
-									Line: 25, Character: 12,
+									Line: 18, Character: 12,
 								},
 								End: semanticapi.Position{
-									Line: 25, Character: 12,
+									Line: 18, Character: 12,
 								},
 							},
 							NewText: "\n)",
@@ -3154,7 +3155,7 @@ func TestE2EOutOfRootHover(t *testing.T) {
 	// workspace and outside any initialized root.
 	result, err := mgr.Definition(ctx, semanticapi.DefinitionParams{
 		TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
-		Position:     semanticapi.Position{Line: 34, Character: 13},
+		Position:     semanticapi.Position{Line: 27, Character: 13},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Locations)
