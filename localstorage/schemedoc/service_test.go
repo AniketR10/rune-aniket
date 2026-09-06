@@ -32,9 +32,9 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
 	"github.com/unstablebuild/blue/document/doctest"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/rune/localstorage/bluestore"
 	"unstable.build/rune/workspace"
 )
 

@@ -26,11 +26,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
 	"unstable.build/rune/component/markdown"
 )

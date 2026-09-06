@@ -103,7 +103,7 @@ func assertShimResolvesVenv(t *testing.T, env scenarioEnv) {
 }
 
 // TestE2E_NestedProjectDiscovery covers a workspace with no root Python
-// project but a nested one at deploy/cloudflare/oxprobe-worker. The
+// project but a nested one at services/edge-worker. The
 // extension must not initialize a language server on startup; only after
 // a nested .py is opened should it initialize exactly once, rooted at the
 // nested project. Opening a .py with no enclosing marker must not
@@ -118,7 +118,7 @@ func TestE2E_NestedProjectDiscovery(t *testing.T) {
 	require.Len(t, env.manuals, 1, "the python REPL command must be registered once")
 	assert.Equal(t, pyCommandName, env.manuals[0].Name)
 
-	workerRoot := filepath.Join(env.dir, "deploy", "cloudflare", "oxprobe-worker")
+	workerRoot := filepath.Join(env.dir, "services", "edge-worker")
 	env.editor.open(t, filepath.Join(workerRoot, "worker.py"))
 	env.lsp.waitForInit(t, 90*time.Second)
 

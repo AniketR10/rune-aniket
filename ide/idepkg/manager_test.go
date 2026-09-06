@@ -42,7 +42,6 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/cdnrelease"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -59,6 +58,7 @@ import (
 	"unstable.build/rune/ide/pkgtrust"
 	"unstable.build/rune/ide/starlarkconfig"
 	"unstable.build/rune/localstorage"
+	"unstable.build/rune/localstorage/bluestore"
 	"unstable.build/rune/workspace/walkdir"
 )
 

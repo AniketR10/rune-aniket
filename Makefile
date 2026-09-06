@@ -39,23 +39,6 @@ BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no 
 COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
 RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune"
-OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X main.Commit=$$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)"
-OXPROBE_REGION ?= us-central1
-OXPROBE_REPO ?= docker
-OXPROBE_SERVICE ?= oxprobe
-OXPROBE_DEV_GCP_PROJECT ?= unstable-build-blue-dev
-OXPROBE_PROD_GCP_PROJECT ?= rune-prod
-OXPROBE_IMAGE_TAG := $(or $(OXPROBE_IMAGE_TAG),$(shell git describe --tags --always --dirty))
-OXPROBE_DEV_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
-OXPROBE_DEV_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
-OXPROBE_PROD_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
-OXPROBE_PROD_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
-OXPROBE_GMP_SIDECAR_IMAGE ?= us-docker.pkg.dev/cloud-ops-agents-artifacts/cloud-run-gmp-sidecar/cloud-run-gmp-sidecar:1.2.0
-OXPROBE_DEV_CLOUDRUN = target/oxprobe/cloudrun-staging.yaml
-OXPROBE_PROD_CLOUDRUN = target/oxprobe/cloudrun-prod.yaml
-OXPROBE_WORKER_DIR ?= deploy/cloudflare/oxprobe-worker
-OXPROBE_PYWRANGLER ?= uv run pywrangler
-OXPROBE_WORKER_PYTHON ?= python3
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -69,27 +52,16 @@ EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECMAIN=$(wildcard cmd/*/main.go)
 EXECDIRS=$(sort $(dir $(EXECMAIN)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
-SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api $(BIN)/rune-agent
+SPECIAL_EXECS=$(BIN)/rune $(BIN)/rune-agent
 GENERIC_EXECS=$(filter-out $(SPECIAL_EXECS),$(EXECS))
 EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate rune rune-agent ox-api \
+.PHONY: debug clean test coverage generate rune rune-agent \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
-	rune-docker-build rune-docker-run \
-	ox-api-docker-build-gcp ox-api-docker-push-gcp-staging \
-	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
-	oxprobe-docker-build-gcp oxprobe-docker-push-gcp-staging \
-	oxprobe-docker-build-gcp-prod oxprobe-docker-push-gcp-prod \
-	oxprobe-wait-image-staging oxprobe-wait-image-prod \
-	oxprobe-cloud-monitoring-iam-staging oxprobe-cloud-monitoring-iam-prod \
-	oxprobe-cloudrun-deploy-staging oxprobe-cloudrun-deploy-prod \
-	oxprobe-worker-deploy-staging oxprobe-worker-deploy-prod \
-	oxprobe-worker-test \
-	oxprobe-deploy-staging oxprobe-deploy-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-prod-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
@@ -140,7 +112,7 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-beta-dist-linux-amd64-cross rune-beta-dist-linux-arm64-cross \
 	rune-beta-dist-darwin-arm64 rune-beta-dist-darwin-amd64 \
 	deps \
-	ox-api-init docs-init \
+	docs-init \
 	fuzz fuzz-list \
 	FORCE \
 	manual-ssh-test \
@@ -178,22 +150,12 @@ rune-agent: CGO_ENABLED=CGO_ENABLED=1
 rune-agent: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 rune-agent: $(BIN)/rune-agent
 
-ox-api: CGO_ENABLED=CGO_ENABLED=1
-ox-api: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-ox-api: ox-api-init $(BIN)/ox-api
-
 .git/hooks/pre-commit: .pre-commit-config.yaml
 	@ pre-commit install
 
 test: CI=$(CI)
-test: docs-init oxprobe-worker-test
+test: docs-init
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
-
-# oxprobe-worker-test runs the Cloudflare oxprobe worker's Python unit
-# tests. Its dependencies are vendored under python_modules (committed),
-# so the suite runs hermetically without a network install.
-oxprobe-worker-test:
-	@ cd $(OXPROBE_WORKER_DIR) && PYTHONPATH=python_modules $(OXPROBE_WORKER_PYTHON) -m unittest discover -s tests -v
 
 test: CI=$(CI)
 test-no-race: docs-init
@@ -263,10 +225,10 @@ generate: docs-init
 	@ go generate ./...
 
 license:
-	@ bluectl license LICENSE_HEADER `find . -name \*.go -not -path ./cmd/ox-api/\* -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
+	@ bluectl license LICENSE_HEADER `find . -name \*.go -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
 
 assert_license:
-	@ bluectl license -d LICENSE_HEADER `find . -name \*.go -not -path ./cmd/ox-api/\* -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
+	@ bluectl license -d LICENSE_HEADER `find . -name \*.go -not -path ./cmd/rune/docs/\* | grep -v gomock | grep -v .pb.go | xargs`
 
 format:
 	@ go fmt ./.../...
@@ -289,9 +251,6 @@ $(BIN):
 
 $(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
-
-$(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@ .
 
 $(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/rune-agent && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
@@ -343,128 +302,6 @@ rune-release-amd64:
 
 rune-release-arm64:
 	@$(MAKE) -C cmd/rune release-arm64
-
-rune-docker-build:
-	@$(MAKE) -C cmd/rune docker-build
-
-rune-docker-run:
-	@$(MAKE) -C cmd/rune docker-run
-
-ox-api-docker-build-gcp:
-	@$(MAKE) -C cmd/ox-api docker-build-gcp
-
-ox-api-docker-push-gcp-staging:
-	@$(MAKE) -C cmd/ox-api docker-push-gcp
-
-ox-api-docker-build-gcp-prod:
-	@$(MAKE) -C cmd/ox-api docker-build-gcp-prod
-
-ox-api-docker-push-gcp-prod:
-	@$(MAKE) -C cmd/ox-api docker-push-gcp-prod
-
-oxprobe-docker-build-gcp:
-	@mkdir -p target/oxprobe
-	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o target/oxprobe/oxprobe ./cmd/oxprobe
-	@docker build -f deploy/oxprobe/Dockerfile --platform linux/amd64 \
-		-t $(OXPROBE_DEV_IMAGE) \
-		-t $(OXPROBE_DEV_LATEST_IMAGE) .
-
-oxprobe-docker-push-gcp-staging: oxprobe-docker-build-gcp
-	@gcloud auth configure-docker $(OXPROBE_REGION)-docker.pkg.dev --quiet
-	@docker push $(OXPROBE_DEV_IMAGE)
-	@docker push $(OXPROBE_DEV_LATEST_IMAGE)
-
-oxprobe-docker-build-gcp-prod:
-	@mkdir -p target/oxprobe
-	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o target/oxprobe/oxprobe ./cmd/oxprobe
-	@docker build -f deploy/oxprobe/Dockerfile --platform linux/amd64 \
-		-t $(OXPROBE_PROD_IMAGE) \
-		-t $(OXPROBE_PROD_LATEST_IMAGE) .
-
-oxprobe-docker-push-gcp-prod: oxprobe-docker-build-gcp-prod
-	@gcloud auth configure-docker $(OXPROBE_REGION)-docker.pkg.dev --quiet
-	@docker push $(OXPROBE_PROD_IMAGE)
-	@docker push $(OXPROBE_PROD_LATEST_IMAGE)
-
-oxprobe-wait-image-staging: oxprobe-docker-push-gcp-staging
-	@for i in $$(seq 1 12); do \
-		gcloud artifacts docker images describe $(OXPROBE_DEV_IMAGE) --project=$(OXPROBE_DEV_GCP_PROJECT) --format='value(image_summary.digest)' >/dev/null 2>&1 && exit 0; \
-		sleep 5; \
-	done; \
-	echo "timed out waiting for $(OXPROBE_DEV_IMAGE)" >&2; \
-	exit 1
-
-oxprobe-wait-image-prod: oxprobe-docker-push-gcp-prod
-	@for i in $$(seq 1 12); do \
-		gcloud artifacts docker images describe $(OXPROBE_PROD_IMAGE) --project=$(OXPROBE_PROD_GCP_PROJECT) --format='value(image_summary.digest)' >/dev/null 2>&1 && exit 0; \
-		sleep 5; \
-	done; \
-	echo "timed out waiting for $(OXPROBE_PROD_IMAGE)" >&2; \
-	exit 1
-
-$(OXPROBE_DEV_CLOUDRUN): deploy/oxprobe/cloudrun.yaml.in FORCE
-	@mkdir -p target/oxprobe
-	@sed \
-		-e 's@%SERVICE%@$(OXPROBE_SERVICE)@g' \
-		-e 's@%IMAGE%@$(OXPROBE_DEV_IMAGE)@g' \
-		-e 's@%GMP_SIDECAR_IMAGE%@$(OXPROBE_GMP_SIDECAR_IMAGE)@g' \
-		-e 's@%ENV%@staging@g' \
-		-e 's@%PROJECT%@$(OXPROBE_DEV_GCP_PROJECT)@g' \
-		-e 's@%MIN_INSTANCES%@0@g' \
-		-e 's@%MAX_INSTANCES%@1@g' \
-		-e 's@%CPU_THROTTLING%@true@g' \
-		deploy/oxprobe/cloudrun.yaml.in > $@
-
-$(OXPROBE_PROD_CLOUDRUN): deploy/oxprobe/cloudrun.yaml.in FORCE
-	@mkdir -p target/oxprobe
-	@sed \
-		-e 's@%SERVICE%@$(OXPROBE_SERVICE)@g' \
-		-e 's@%IMAGE%@$(OXPROBE_PROD_IMAGE)@g' \
-		-e 's@%GMP_SIDECAR_IMAGE%@$(OXPROBE_GMP_SIDECAR_IMAGE)@g' \
-		-e 's@%ENV%@prod@g' \
-		-e 's@%PROJECT%@$(OXPROBE_PROD_GCP_PROJECT)@g' \
-		-e 's@%MIN_INSTANCES%@1@g' \
-		-e 's@%MAX_INSTANCES%@1@g' \
-		-e 's@%CPU_THROTTLING%@false@g' \
-		deploy/oxprobe/cloudrun.yaml.in > $@
-
-oxprobe-cloud-monitoring-iam-staging:
-	@gcloud services enable monitoring.googleapis.com logging.googleapis.com --project=$(OXPROBE_DEV_GCP_PROJECT) --quiet
-	@project_number=$$(gcloud projects describe $(OXPROBE_DEV_GCP_PROJECT) --format='value(projectNumber)'); \
-	member="serviceAccount:$${project_number}-compute@developer.gserviceaccount.com"; \
-	gcloud projects add-iam-policy-binding $(OXPROBE_DEV_GCP_PROJECT) --member="$${member}" --role=roles/monitoring.metricWriter --condition=None --quiet >/dev/null; \
-	gcloud projects add-iam-policy-binding $(OXPROBE_DEV_GCP_PROJECT) --member="$${member}" --role=roles/logging.logWriter --condition=None --quiet >/dev/null
-
-oxprobe-cloud-monitoring-iam-prod:
-	@gcloud services enable monitoring.googleapis.com logging.googleapis.com --project=$(OXPROBE_PROD_GCP_PROJECT) --quiet
-	@project_number=$$(gcloud projects describe $(OXPROBE_PROD_GCP_PROJECT) --format='value(projectNumber)'); \
-	member="serviceAccount:$${project_number}-compute@developer.gserviceaccount.com"; \
-	gcloud projects add-iam-policy-binding $(OXPROBE_PROD_GCP_PROJECT) --member="$${member}" --role=roles/monitoring.metricWriter --condition=None --quiet >/dev/null; \
-	gcloud projects add-iam-policy-binding $(OXPROBE_PROD_GCP_PROJECT) --member="$${member}" --role=roles/logging.logWriter --condition=None --quiet >/dev/null
-
-oxprobe-cloudrun-deploy-staging: oxprobe-wait-image-staging oxprobe-cloud-monitoring-iam-staging $(OXPROBE_DEV_CLOUDRUN)
-	@gcloud run services replace $(OXPROBE_DEV_CLOUDRUN) \
-		--project=$(OXPROBE_DEV_GCP_PROJECT) \
-		--region=$(OXPROBE_REGION) \
-		--quiet
-	@gcloud run services remove-iam-policy-binding $(OXPROBE_SERVICE) --project=$(OXPROBE_DEV_GCP_PROJECT) --region=$(OXPROBE_REGION) --member=allUsers --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
-
-oxprobe-cloudrun-deploy-prod: oxprobe-wait-image-prod oxprobe-cloud-monitoring-iam-prod $(OXPROBE_PROD_CLOUDRUN)
-	@gcloud run services replace $(OXPROBE_PROD_CLOUDRUN) \
-		--project=$(OXPROBE_PROD_GCP_PROJECT) \
-		--region=$(OXPROBE_REGION) \
-		--quiet
-	@gcloud run services remove-iam-policy-binding $(OXPROBE_SERVICE) --project=$(OXPROBE_PROD_GCP_PROJECT) --region=$(OXPROBE_REGION) --member=allUsers --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
-
-oxprobe-worker-deploy-staging:
-	@cd $(OXPROBE_WORKER_DIR) && $(OXPROBE_PYWRANGLER) deploy --env staging
-
-oxprobe-worker-deploy-prod:
-	@cd $(OXPROBE_WORKER_DIR) && $(OXPROBE_PYWRANGLER) deploy --env prod
-
-oxprobe-deploy-staging: oxprobe-cloudrun-deploy-staging oxprobe-worker-deploy-staging
-
-oxprobe-deploy-prod: oxprobe-cloudrun-deploy-prod oxprobe-worker-deploy-prod
 
 FORCE:
 
@@ -839,15 +676,7 @@ notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
 
 # deps brings in git-managed prerequisites that are needed for local builds.
-deps: ox-api-init docs-init
-
-# ox-api-init makes sure the ox-api git submodule is checked out so the
-# cmd/ox-api package compiles. Safe to run repeatedly.
-#
-# Guarded on `.git` so a checked-out submodule with uncommitted local
-# edits is not silently reset to the superproject's pinned SHA.
-ox-api-init:
-	@ [ -e cmd/ox-api/.git ] || git submodule update --init --recursive cmd/ox-api
+deps: docs-init
 
 # docs-init makes sure the cmd/rune/docs git submodule is checked out so the
 # //go:embed directives in cmd/rune/docs_scheme.go find the markdown sources

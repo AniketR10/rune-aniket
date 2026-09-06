@@ -24,9 +24,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"golang.org/x/oauth2"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/crashreport"
 )
 

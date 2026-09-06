@@ -36,9 +36,9 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/doctest"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/rune/localstorage/bluestore"
 )
 
 func TestDefaultConfiguration(t *testing.T) {

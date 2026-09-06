@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/doctest"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
@@ -44,6 +43,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"unstable.build/rune/localstorage/bluestore"
 )
 
 func tcpListener() (net.Listener, error) {

@@ -26,8 +26,8 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
 	"github.com/unstablebuild/blue/document/doctest"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/rune/localstorage/bluestore"
 )
 
 type miniDoc struct {

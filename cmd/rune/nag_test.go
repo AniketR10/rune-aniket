@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/ox-api/auth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/ide/idenag"
 )
 

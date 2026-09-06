@@ -16,7 +16,7 @@
 
 // Package boltdoc implements a storageapi.Service backed by bbolt.
 //
-// It wraps a blue/document/bolt.Store via the ox-api bluestore.AdaptTo
+// It wraps a blue/document/bolt.Store via the bluestore.AdaptTo
 // adapter so that all CRUD, List, and CAS Update operations (including
 // the Version-equality preconditions used by storageapi.ConsistentUpdate)
 // run inside a single bbolt RW transaction, providing serializable
@@ -34,9 +34,9 @@ import (
 	"path/filepath"
 
 	bluebolt "github.com/unstablebuild/blue/document/bolt"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
+	"unstable.build/rune/localstorage/bluestore"
 
 	bluedoc "github.com/unstablebuild/blue/document"
 	bluemarshal "github.com/unstablebuild/blue/document/docmarshal"

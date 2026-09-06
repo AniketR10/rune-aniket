@@ -136,7 +136,7 @@ func TestDetectProject(t *testing.T) {
 // given directory, so a nested project is classified the same way the
 // workspace-root project is.
 func TestDetectProjectAtNested(t *testing.T) {
-	const dir = "deploy/cloudflare/oxprobe-worker"
+	const dir = "services/edge-worker"
 	cases := []struct {
 		name  string
 		setup func(*fakeFS)
@@ -177,7 +177,7 @@ func TestDetectProjectAtNested(t *testing.T) {
 // uv operates on the nested project's environment rather than the
 // workspace root.
 func TestEnsureEnvironmentRunsInProjectDir(t *testing.T) {
-	const dir = "deploy/cloudflare/oxprobe-worker"
+	const dir = "services/edge-worker"
 	fs := newFakeFS().addFile(dir + "/requirements.txt")
 	ex := newFakeExecutor()
 	ex.respond("uv python find", scriptedCmd{})

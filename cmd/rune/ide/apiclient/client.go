@@ -32,8 +32,6 @@ import (
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
-	"github.com/unstablebuild/ox-api/api"
-	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
@@ -41,6 +39,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/credentials/oauth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/debug"
 )
 
@@ -283,8 +282,8 @@ func (a *Client) Dial() (*grpc.ClientConn, error) {
 	rpcCreds := oauth.TokenSource{TokenSource: a.tokenSource}
 	opts := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallSendMsgSize(api.MaxRecvMsgSize),
-			grpc.MaxCallRecvMsgSize(api.MaxSendMsgSize),
+			grpc.MaxCallSendMsgSize(auth.MaxRecvMsgSize),
+			grpc.MaxCallRecvMsgSize(auth.MaxSendMsgSize),
 		),
 	}
 
@@ -342,7 +341,7 @@ var (
 // auth.DefaultNativeConfig (to keep scopes and the ox-api token-proxy endpoint)
 // and overrides only the production-specific URLs and client id. auth's
 // package-level endpoints default to the development tenant unless overridden
-// via -ldflags at prod build time (see cmd/ox-api/Makefile), so the rune binary
+// via -ldflags at prod build time (see the ox-api repo), so the rune binary
 // must hardcode the production values here.
 func defaultProdNativeConfig(api *url.URL) auth.Config {
 	conf := auth.DefaultNativeConfig(api)

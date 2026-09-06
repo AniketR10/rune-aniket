@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/unstablebuild/ox-api/auth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/crashreport"
 )
 

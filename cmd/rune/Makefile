@@ -62,7 +62,6 @@ BUILD_DATE := $(shell out=$$(cd $(ROOT_DIR) && $(GO) run ./cmd/buildstamp) && pr
 BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/debug.BuildDate=$(strip $(BUILD_DATE))
 COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
-OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune"
 
 # RUNE_ENV selects the API endpoints baked into the binary.
 #   - dev (default): point at api.unstable.build / rpc.unstable.build
@@ -131,7 +130,7 @@ SED_INPLACE = ''
 endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
-	docker-build docker-run linux-cross-compile \
+	linux-cross-compile \
 	make-release-linux \
 	release-linux-amd64 release-linux-arm64 \
 	release-linux-amd64-native release-linux-arm64-native \
@@ -155,7 +154,6 @@ make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
 	@mkdir -p $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)
 	@cd $(ROOT_DIR) && ./cmd/rune/cgo-build-guard.sh '$(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune'
-	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
 	@go_files=$$(find $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH) -name '*.go'); \
 		if [ -n "$$go_files" ]; then \
 			echo "error: .go files found in package:" >&2; \
@@ -347,12 +345,6 @@ app-delve:
 	@echo "Created debug-enabled '$(APP_NAME)' in '$(APP_DIR)'"
 	@echo "Attach with: dlv attach \$$(pgrep -n rune)"
 endif
-
-docker-build:
-	@cd $(ROOT_DIR) && docker build -f deploy/ox-api/Dockerfile -t unstable.build/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
-
-docker-run:
-	@docker run -ti --rm -e PORT=80 -p 8080:80 unstable.build/ox-api:$(VERSION)
 
 linux-cross-compile:
 	@rm -rf $(RUNE_LINUX_OUTPUT_DIR)

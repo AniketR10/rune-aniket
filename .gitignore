@@ -50,3 +50,6 @@ __pycache__/
 python_modules/**
 *.egg-info/
 uv.lock
+
+# internal deploy machinery (private repo; symlink or check out at deploy/)
+/deploy/

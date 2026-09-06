@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
-	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
@@ -40,6 +39,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	tcomponent "unstable.build/rune/component"
+	"unstable.build/rune/localstorage/bluestore"
 	localstoragerpc "unstable.build/rune/localstorage/storagerpc"
 	"unstable.build/rune/term/vte"
 )

@@ -34,7 +34,6 @@ make clean           # remove bin/ and target/
 # individual binaries
 make rune            # the editor (bin/rune)
 make rune-agent      # the agent extension binary (bin/rune-agent)
-make ox-api          # the API server (bin/ox-api)
 
 # testing and code quality
 make test            # run the test suite with the race detector
@@ -50,7 +49,7 @@ make assert_license  # fail if any file is missing the canonical header
 ```
 
 The remaining targets (`dist`, `release`, `rune-dmg*`, `*-docker-*`,
-`oxprobe-*`, `*-notarize`, `*-dist*`) drive Unstable Build's internal
+`*-notarize`, `*-dist*`) drive Unstable Build's internal
 release, packaging, and cloud deployment pipelines and are not expected to
 work outside that environment.
 

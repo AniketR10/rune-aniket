@@ -1,5 +1,0 @@
-.git
-target
-bin
-llm/llamacpp/llama.cpp/_build
-llm/llamacpp/libs

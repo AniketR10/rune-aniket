@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/unstablebuild/ox-api/auth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
 	"unstable.build/rune/ide"
 	"unstable.build/rune/ide/idenag"

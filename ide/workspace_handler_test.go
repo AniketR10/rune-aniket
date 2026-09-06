@@ -3657,8 +3657,7 @@ func TestMoveWorkspace(t *testing.T) {
 }
 
 func TestExternalCommands(t *testing.T) {
-	// FIXME: unblock CI, working on it here:
-	// https://git.unstable.build/unstablebuild/go-tui/pulls/107
+	// FIXME: flaky under CI; skipped until stabilized.
 	if ci := os.Getenv("CI"); ci == "true" {
 		t.SkipNow()
 	}

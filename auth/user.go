@@ -1,0 +1,77 @@
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package auth
+
+import "time"
+
+// Role defines a user role.
+type Role uint8
+
+// List of roles.
+const (
+	RoleBasic Role = iota
+	RoleUser
+	RolePaid
+	RoleAdmin
+	RoleSuperAdmin
+	// RoleOneOff is a one-off purchase that entitles the user to a
+	// fixed window of upgrades rather than a recurring subscription.
+	// It is appended last to preserve the wire values of the existing
+	// roles in already-issued tokens and Auth0 metadata; it therefore
+	// sorts above RolePaid numerically and must be matched explicitly
+	// (not via role >= RolePaid) wherever subscription entitlement is
+	// checked.
+	RoleOneOff
+)
+
+// RPCUser represents a rune user, from an auth point of view.
+type RPCUser struct {
+	ID      string
+	Email   string
+	Role    Role
+	Account string
+
+	// PlanEnds is the timestamp at which the user's current paid plan
+	// period ends. Zero when the user has never had a paid plan. The
+	// client uses this to drive the 7-day soft-warn grace window after
+	// a subscription lapses without yet hitting hard lockdown.
+	PlanEnds time.Time `json:"plan_ends,omitzero"`
+}
+
+// String returns the string representation of this role.
+func (r Role) String() string {
+	switch r {
+	case RoleBasic:
+		return "basic"
+	case RoleUser:
+		return "user"
+	case RolePaid:
+		return "paid"
+	case RoleAdmin:
+		return "admin"
+	case RoleSuperAdmin:
+		return "superadmin"
+	case RoleOneOff:
+		return "oneoff"
+	default:
+		panic("unknown role")
+	}
+}
+
+// WebUser represents a website user, provided directly
+// from an oauth2 provider claims.
+type WebUser struct{}

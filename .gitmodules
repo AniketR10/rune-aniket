@@ -1,6 +1,3 @@
-[submodule "cmd/ox-api"]
-	path = cmd/ox-api
-	url = https://github.com/unstablebuild/ox-api.git
 [submodule "cmd/rune/docs"]
 	path = cmd/rune/docs
-	url = git@github.com:unstablebuild/docs-rune.git
+	url = https://github.com/unstablebuild/docs-rune.git
