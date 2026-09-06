@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-// Unstable Build LLC ("COMPANY") CONFIDENTIAL
 package llmrouter
 
 import (
