@@ -62,6 +62,14 @@ func init() {
 // triggers E929 (too many viminfo temp files) and prevents the
 // editor banner from appearing at all — the test then fails on a
 // golden screen mismatch rather than a vim error.
+//
+// PS1 is pinned here for the same reason, once, for the whole
+// process: tests run t.Parallel(), and per-test os.Setenv("PS1", ...)
+// plus a t.Cleanup restore races against sibling tests spawning their
+// own shell — a cleanup can zero PS1 between another test's Setenv
+// and its shell fork, so that shell starts with no prompt at all.
+// Setting it once before any test forks a shell removes the shared
+// mutable write entirely rather than trying to sequence it per test.
 func TestMain(m *testing.M) {
 	tmp, err := os.MkdirTemp("", "vte-home")
 	if err != nil {
@@ -69,6 +77,9 @@ func TestMain(m *testing.M) {
 	}
 	prev, hadPrev := os.LookupEnv("HOME")
 	if err := os.Setenv("HOME", tmp); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("PS1", "$ "); err != nil {
 		panic(err)
 	}
 	code := m.Run()
@@ -259,10 +270,6 @@ func TestHandlerPublishesEventOnPtyExit(t *testing.T) {
 	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
 	t.Cleanup(func() { scheme.Close() })
-
-	ps1 := os.Getenv("PS1")
-	os.Setenv("PS1", "$ ")
-	t.Cleanup(func() { os.Setenv("PS1", ps1) })
 
 	pub := &exitWakePublisher{}
 	cfg := DefaultConfig()
@@ -539,9 +546,6 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
 
-	ps1 := os.Getenv("PS1")
-	os.Setenv("PS1", "$ ")
-
 	ch := make(chan struct{}, 50 /* big enough for the max length sequence of events */)
 	cfg.WidthHint = 20
 	cfg.HeightHint = 10
@@ -560,7 +564,6 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 		handler.Close()
 		scheme.Close()
 		cancel()
-		os.Setenv("PS1", ps1)
 	})
 
 	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint,
