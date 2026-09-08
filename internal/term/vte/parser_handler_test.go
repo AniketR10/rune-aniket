@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -930,6 +931,55 @@ func TestBellFocusChangeRace(t *testing.T) {
 		ph.sync.mu.Unlock()
 	}
 	<-done
+}
+
+// TestBellReleasesLockBeforeInvokingCallback pins that Bell releases
+// ph.sync.mu before invoking the configured bell callback (in
+// production, Config.scheduleBell -> ScheduleNextTick). Callers often
+// run ScheduleNextTick synchronously under their own lock to model a
+// single-threaded event loop (see exo_go_test.go's `schedule`). If
+// Bell still held ph.sync.mu while calling into that foreign lock,
+// any other parserHandler method invoked while the caller's lock is
+// held (e.g. Draw/SetTitle) would deadlock against it — exactly the
+// hang reproduced by TestExoSyntaxHighlightsOverlayScrolling.
+func TestBellReleasesLockBeforeInvokingCallback(t *testing.T) {
+	var extMu sync.Mutex
+	extMu.Lock()
+
+	bellEntered := make(chan struct{})
+	bellFn := func() {
+		close(bellEntered)
+		extMu.Lock()
+		defer extMu.Unlock()
+	}
+
+	testURI, err := workspaceapi.ParseURI("memory:///radical")
+	require.NoError(t, err)
+	mockPtyFile := workspacetest.File{}
+	tm := mockTabManager{}
+	attrs := DefaultConfig().NeedsAttentionAttributes
+	pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
+	ph := newParserHandler(new(sync.Mutex), pty, &tm,
+		clipboard.NewInMemory(), bellFn, testURI, attrs, false, 10000, 0)
+
+	go ph.Bell()
+	<-bellEntered
+
+	lockAcquired := make(chan struct{})
+	go func() {
+		ph.SetTitle("probe")
+		close(lockAcquired)
+	}()
+
+	select {
+	case <-lockAcquired:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("ph.sync.mu is still held while Bell's callback is blocked on an " +
+			"external lock: Bell must release its lock before invoking the bell " +
+			"callback")
+	}
+
+	extMu.Unlock()
 }
 
 func firstRowCells(p *parserHandler) []term.Cell {
