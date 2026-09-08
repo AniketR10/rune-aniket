@@ -31,7 +31,7 @@ make rune-agent
 
 # Testing
 make test            # Run tests with race detector
-make test-e2e        # Also run the docker-driven suites (requires docker)
+make test-e2e        # Also run the e2e suites (requires docker)
 make coverage        # Generate coverage report
 
 # Code quality
@@ -140,8 +140,14 @@ Used for components that can calculate ideal dimensions from known content.
 - `tui.Component` implementations should use the `comptest` package when appropriate
 - `tui.Handler` implementations should use the `handlertest` package when appropriate
 - See examples in `cmd/rune-agent/dialogue/dialoguetui/*_test.go`
-- Tests that need a docker daemon must carry the `//go:build e2e` tag so they stay
-  out of `make test`, which must remain hermetic. Run them with `make test-e2e`.
+- Tests that spawn a real external process (a language server, a debugger, a
+  shell in a pty, a docker container) or depend on the host environment (a
+  toolchain on `PATH`, the network) must carry the `//go:build e2e` tag so they
+  stay out of `make test`, which must remain hermetic and fast. Run them with
+  `make test-e2e`. The `e2e` suffix in a filename is not the criterion: a test
+  that only uses in-process fakes or checked-in fixtures belongs in `make test`
+  regardless of its name. Keep shared fakes and harnesses in untagged files so
+  the hermetic tests in the same package can still use them.
 
 ### `handlertest.SequenceTestCase.InputSequence`
 

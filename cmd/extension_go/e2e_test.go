@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package main
 
 import (
@@ -333,23 +335,6 @@ import "C"
 func main() {}
 `
 )
-
-// stubResource implements textapi.Handler for tests.
-type stubResource struct {
-	uri workspaceapi.URI
-}
-
-func (s *stubResource) Handle(_ term.Event) (bool, bool) { return false, false }
-func (s *stubResource) Draw(_ term.Writer)               {}
-func (s *stubResource) Resize(_, _ int)                  {}
-func (s *stubResource) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return term.Coordinates{}, 0, false
-}
-func (s *stubResource) Selection() (string, bool)  { return "", false }
-func (s *stubResource) Close() error               { return nil }
-func (s *stubResource) Resource() workspaceapi.URI { return s.uri }
-
-var _ textapi.Handler = (*stubResource)(nil)
 
 func TestE2EGoplsLoggingConfigReachesProcess(t *testing.T) {
 	goplsBin := findGopls(t)

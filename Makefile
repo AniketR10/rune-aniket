@@ -8,7 +8,7 @@ CI ?= false
 # slowing the host and causing the next timeout.
 GOTESTFLAGS ?= -race -timeout 300s
 GOTESTFLAGSNORACE = -timeout 300s
-# The docker-driven suites are slower than anything in `make test` (~120s for the
+# The e2e suites are slower than anything in `make test` (~120s for the docker
 # containers) and the first run also builds the sshd image.
 E2E_GOTESTFLAGS ?= -race -timeout 900s
 # RUNE_DEBUG_BUILD, when set to "true", flips an in-binary feature
@@ -166,9 +166,9 @@ test: CI=$(CI)
 test:
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
-# Runs the whole suite with the docker-driven packages included. Those sit behind
-# the e2e build tag so `make test` stays hermetic, needs no docker daemon, and
-# does not pay for container startup.
+# Runs the whole suite including the tests that drive real external processes
+# (docker containers, a shell in a pty). Those sit behind the e2e build tag so
+# `make test` stays hermetic and is not exposed to their timing sensitivity.
 test-e2e: CI=$(CI)
 test-e2e:
 	@ go test -vet=off -tags e2e ./.../... $(E2E_GOTESTFLAGS)

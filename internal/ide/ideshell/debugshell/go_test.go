@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package debugshell
 
 import (
@@ -822,31 +824,6 @@ func (h *e2eHarness) waitStoppedOrCompleted(
 		h.cond.Wait()
 		close(done)
 	}
-}
-
-// stubPkgManager satisfies both idedebug.PkgManager and
-// syntax.PkgManager. For the "go" key it returns the configured
-// dlv binary path along with the tree-sitter grammar files in
-// `grammar` so the parser can parse Go source. For other keys
-// it returns just the dlv path.
-type stubPkgManager struct {
-	bin     string
-	grammar string
-}
-
-func (p *stubPkgManager) LibDir(
-	_ context.Context, langID string,
-) (iterator.Iterator[string], error) {
-	files := []string{p.bin}
-	if p.grammar != "" && langID == "go" {
-		entries, err := os.ReadDir(p.grammar)
-		if err == nil {
-			for _, e := range entries {
-				files = append(files, filepath.Join(p.grammar, e.Name()))
-			}
-		}
-	}
-	return iterator.FromSlice(files), nil
 }
 
 // localScheme implements schemeapi.Executor using the local OS

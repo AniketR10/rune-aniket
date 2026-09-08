@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package main
 
 import (
@@ -186,40 +188,6 @@ func findVersionedTool(t *testing.T, name, version string) string {
 	return bin
 }
 
-// realExecutor spawns real subprocesses, used by the e2e tests against
-// an installed uv. The watcher receives the process exit error. dir, when
-// set, is the default working directory for commands that do not specify
-// their own, mirroring the workspace executor being rooted at the
-// workspace directory in production.
-type realExecutor struct{ dir string }
-
-func (e realExecutor) Start(ctx context.Context, c workspaceapi.Cmd) (workspaceapi.Pid, error) {
-	cmd := exec.CommandContext(ctx, c.Path, c.Args...)
-	cmd.Dir = c.Dir
-	if cmd.Dir == "" {
-		cmd.Dir = e.dir
-	}
-	if c.Env != nil {
-		cmd.Env = c.Env
-	}
-	cmd.Stdout = c.Stdout
-	cmd.Stderr = c.Stderr
-	if err := cmd.Start(); err != nil {
-		return 0, err
-	}
-	pid := workspaceapi.Pid(cmd.Process.Pid)
-	go func() {
-		err := cmd.Wait()
-		if c.Watcher != nil {
-			c.Watcher.WatchProcess() <- err
-		}
-	}()
-	return pid, nil
-}
-
-func (realExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
-func (realExecutor) Close() error                                  { return nil }
-
 func findUV(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("uv"); err != nil {
@@ -274,10 +242,6 @@ func TestE2E_PyHandler_PythonList(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, out, 1)
 }
-
-// newDirExecutor returns a realExecutor rooted at dir, so commands that
-// do not set Cmd.Dir run in the workspace directory.
-func newDirExecutor(dir string) realExecutor { return realExecutor{dir: dir} }
 
 // TestE2E_ResolvePyTool resolves a tool from <dataDir>/bin/<name> against
 // a real filesystem.

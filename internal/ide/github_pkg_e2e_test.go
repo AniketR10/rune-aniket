@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package ide
 
 import (
@@ -32,14 +34,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/release"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"unstable.build/rune/internal/extension/extensionv2"
 	"unstable.build/rune/internal/ide/idepkg/idepkgtest"
 	"unstable.build/rune/internal/ide/pkgshell"
-	"unstable.build/rune/internal/localstorage"
 )
 
 // TestGitHubPkgExtensionEndToEnd installs complete, runnable extension
@@ -291,24 +290,6 @@ func runGitHubPkgE2E(t *testing.T, f ghE2EFixture) {
 		"%s extension must connect through the SDK and write its sentinel", f.lang)
 }
 
-// storageSentinelPresent reports whether the extension wrote its
-// sentinel document through the IDE storage API. Extension storage is
-// the multi-process-safe localstorage under <dataDir>/extensions,
-// partitioned by extension ID.
-func storageSentinelPresent(ctx context.Context, dataDir, extID, lang string) bool {
-	svc := localstorage.New(ctx, filepath.Join(dataDir, "extensions"),
-		docbson.Marshaler())
-	defer func() { _ = svc.Close() }()
-	part := storageapi.WithPartition(svc, extID)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	var doc struct{ Lang string }
-	if err := part.Get(ctx, "sentinel", &doc); err != nil {
-		return false
-	}
-	return doc.Lang == lang
-}
-
 // toolWrapperTarball builds a requirement-package tarball delivering a
 // single executable wrapper that execs the host's real toolchain
 // binary. Installing it exercises the same requirements chain the
@@ -330,10 +311,6 @@ func toolWrapperTarball(t *testing.T, name, hostBinary string) []byte {
 	require.NoError(t, tw.Close())
 	require.NoError(t, gzw.Close())
 	return buf.Bytes()
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func lookPathOrSkip(t *testing.T, name string) string {

@@ -19,8 +19,10 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -314,3 +316,41 @@ func runUVCaptureDir(t *testing.T, dir string, args ...string) (string, error) {
 // env+LSP and REPL suites. Add a folder here to cover a new in-the-wild
 // environment shape.
 var allScenarios = []string{"pyproject", "requirements", "venv_only"}
+
+// realExecutor spawns real subprocesses, used by the e2e tests against
+// an installed uv. The watcher receives the process exit error. dir, when
+// set, is the default working directory for commands that do not specify
+// their own, mirroring the workspace executor being rooted at the
+// workspace directory in production.
+type realExecutor struct{ dir string }
+
+func (e realExecutor) Start(ctx context.Context, c workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	cmd := exec.CommandContext(ctx, c.Path, c.Args...)
+	cmd.Dir = c.Dir
+	if cmd.Dir == "" {
+		cmd.Dir = e.dir
+	}
+	if c.Env != nil {
+		cmd.Env = c.Env
+	}
+	cmd.Stdout = c.Stdout
+	cmd.Stderr = c.Stderr
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := workspaceapi.Pid(cmd.Process.Pid)
+	go func() {
+		err := cmd.Wait()
+		if c.Watcher != nil {
+			c.Watcher.WatchProcess() <- err
+		}
+	}()
+	return pid, nil
+}
+
+func (realExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (realExecutor) Close() error                                  { return nil }
+
+// newDirExecutor returns a realExecutor rooted at dir, so commands that
+// do not set Cmd.Dir run in the workspace directory.
+func newDirExecutor(dir string) realExecutor { return realExecutor{dir: dir} }

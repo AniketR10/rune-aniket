@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package ociregistry_test
 
 // End-to-end tests that hit the real Hugging Face endpoint. These run by

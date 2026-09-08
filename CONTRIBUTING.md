@@ -40,7 +40,7 @@ make rune
 make rune-agent
 
 make test            # Run tests with race detector
-make test-e2e        # Also run the docker-driven suites (requires docker)
+make test-e2e        # Also run the e2e suites (requires docker)
 make coverage        # Generate coverage report
 
 make lint            # Run golangci-lint

@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 // ide-package tests that specifically test Go and its integration
 // with the Go tooling (gopls and the editor/workspace LSP wiring).
 package ide
