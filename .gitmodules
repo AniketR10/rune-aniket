@@ -1,3 +1,0 @@
-[submodule "cmd/rune/docs"]
-	path = cmd/rune/docs
-	url = https://github.com/unstablebuild/docs-rune.git

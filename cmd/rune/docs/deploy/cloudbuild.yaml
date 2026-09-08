@@ -1,0 +1,45 @@
+substitutions:
+  _REGION: us-central1
+  _SERVICE: docs-rune
+  _REPO: docker
+  # GA4 property baked into the build. Empty by default, so the build falls back
+  # to the staging property in docusaurus.config.ts; npm run deploy-prod
+  # overrides this with the prod property.
+  _GA_MEASUREMENT_ID: ''
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target=nginx
+      - --build-arg=GA_MEASUREMENT_ID=${_GA_MEASUREMENT_ID}
+      - -f=deploy/Dockerfile
+      - -t=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+      - -t=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --quiet
+
+options:
+  logging: CLOUD_LOGGING_ONLY

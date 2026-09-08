@@ -20,8 +20,12 @@ RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
 # REPO_ROOT anchors the buildstamp invocation to the module root so it
 # resolves no matter what cwd a recipe runs from (build recipes cd into
 # cmd/rune before expanding these flags, so a bare ./cmd/buildstamp
-# would look under cmd/rune and fail).
-REPO_ROOT := $(shell git rev-parse --show-toplevel)
+# would look under cmd/rune and fail). It is derived from this
+# makefile's own path rather than `git rev-parse --show-toplevel` so it
+# stays in the same symlink namespace as the shell's cwd: a clone under
+# /tmp on macOS resolves to /private/tmp, which `go run` then rejects as
+# "outside main module".
+REPO_ROOT := $(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
 # BUILD_DATE renders the build time as RFC3339 UTC via cmd/buildstamp so
 # Go, not the host's date(1), formats it and the debug.BuildDate ldflag
 # is identical across platforms. The `out=$(...) && printf` guard emits
@@ -34,7 +38,7 @@ REPO_ROOT := $(shell git rev-parse --show-toplevel)
 # at parse time) so non-build targets like `clean` are unaffected; an
 # inline $$(...) substitution could not enforce this because its non-zero
 # exit would not fail the surrounding go build.
-BUILD_DATE := $(shell out=$$($(GO) run $(REPO_ROOT)/cmd/buildstamp) && printf '%s' "$$out")
+BUILD_DATE := $(shell out=$$(cd $(REPO_ROOT) && $(GO) run ./cmd/buildstamp) && printf '%s' "$$out")
 BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/internal/debug.BuildDate=$(strip $(BUILD_DATE))
 COMMON_LDFLAGS=-X unstable.build/rune/internal/debug.Tag=$$(git describe --tags) -X unstable.build/rune/internal/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=six"
@@ -111,8 +115,6 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-beta-dist-linux-amd64-native rune-beta-dist-linux-arm64-native \
 	rune-beta-dist-linux-amd64-cross rune-beta-dist-linux-arm64-cross \
 	rune-beta-dist-darwin-arm64 rune-beta-dist-darwin-amd64 \
-	deps \
-	docs-init \
 	fuzz fuzz-list \
 	FORCE \
 	manual-ssh-test \
@@ -135,12 +137,12 @@ BLUECTL_CONFIG = $(BLUECTL_CONFIG_ROOT)/$(1)/$(2)
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: .git/hooks/pre-commit deps $(EXECS)
+default: .git/hooks/pre-commit $(EXECS)
 
 debug: RUNE_DEBUG_BUILD := true
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-debug: deps $(EXECS)
+debug: $(EXECS)
 
 rune: CGO_ENABLED=CGO_ENABLED=1
 rune: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -151,17 +153,18 @@ rune-agent: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 rune-agent: $(BIN)/rune-agent
 
 .git/hooks/pre-commit: .pre-commit-config.yaml
-	@ pre-commit install
+	@ command -v pre-commit >/dev/null 2>&1 && pre-commit install \
+		|| echo "pre-commit not installed; skipping git hook setup"
 
 test: CI=$(CI)
-test: docs-init
+test:
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
-test: CI=$(CI)
-test-no-race: docs-init
+test-no-race: CI=$(CI)
+test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
-coverage: docs-init $(BIN)
+coverage: $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage
 	@ go tool cover -html=$(BIN)/coverage
 
@@ -176,7 +179,7 @@ FUZZTIME ?= 10s
 FUZZ_PKG ?= ./...
 FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
 
-fuzz: docs-init
+fuzz:
 	@ set -e; \
 	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' $(FUZZ_PKG)); \
 	for pkg in $$pkgs; do \
@@ -212,7 +215,7 @@ fuzz-list:
 BENCH_COUNT ?= 10
 BENCHTIME   ?= 50x
 BENCH_GUI_OUT ?= benchmarks/results/$(shell git rev-parse --short HEAD).txt
-bench-gui: docs-init
+bench-gui:
 	@ mkdir -p benchmarks/results
 	@ echo "==> BenchmarkGUI -> $(BENCH_GUI_OUT)"
 	@ go test -run '^$$' -bench '^BenchmarkGUI$$' -benchmem \
@@ -220,7 +223,7 @@ bench-gui: docs-init
 		./cmd/rune/ 2>/dev/null | tee $(BENCH_GUI_OUT)
 
 generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-generate: docs-init
+generate:
 	@ rm -rf **/*rpc*/*.pb.go
 	@ go generate ./...
 
@@ -236,7 +239,7 @@ format:
 cross-compile:
 	@ . ./test_crosscompile.sh
 
-lint: docs-init
+lint:
 	@ golangci-lint run --timeout=600s
 
 clean:
@@ -249,7 +252,7 @@ clean:
 $(BIN):
 	@mkdir $(BIN)
 
-$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
+$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
 
 $(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN)
@@ -674,15 +677,3 @@ runectl-staging-dist-darwin-arm64: clean
 
 notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
-
-# deps brings in git-managed prerequisites that are needed for local builds.
-deps: docs-init
-
-# docs-init makes sure the cmd/rune/docs git submodule is checked out so the
-# //go:embed directives in cmd/rune/docs_scheme.go find the markdown sources
-# that back the in-memory docs:// workspace scheme. Safe to run repeatedly.
-#
-# Guarded on `.git` so a checked-out submodule with uncommitted local
-# edits is not silently reset to the superproject's pinned SHA.
-docs-init:
-	@ [ -e cmd/rune/docs/.git ] || git submodule update --init --recursive cmd/rune/docs

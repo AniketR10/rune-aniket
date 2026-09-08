@@ -1,0 +1,123 @@
+# Key remapping
+
+`gui.key_mapping` rewrites one key combination into another **before** it
+reaches the editor. It is useful when the operating system swallows a key, or
+when a physical key never produces a usable keystroke on its own. The classic
+example is **CapsLock**.
+
+This feature applies to the Rune GUI only. Both sides of a mapping use the same
+grammar as command bindings; see [Key combination syntax](./key-syntax.md) for
+the full reference.
+
+## How it works
+
+`gui.key_mapping` is a table of `source → target` entries. When you press a key
+whose combination matches a `source`, Rune delivers the `target` combination
+instead. The match is exact, including modifiers: `<ctrl-left>` only matches
+Ctrl held with the Left arrow, not a bare Left arrow.
+
+```yaml
+gui:
+  key_mapping:
+    "<capslock>": "<esc>"
+```
+
+```python
+config["gui"]["key_mapping"] = {"<capslock>": "<esc>"}
+```
+
+The example above makes CapsLock behave as Escape inside Rune. Targets can be
+printable characters or named keys, so `"<numlock>": "0"` and
+`"<ctrl-left>": "<home>"` are both valid.
+
+## Physical keys you can remap
+
+Some physical keys do not normally produce a keystroke Rune can act on. They are
+available **only** as remap sources and targets, and never do anything on their
+own unless you map them here:
+
+| Source | Physical key |
+| --- | --- |
+| `<capslock>` | Caps Lock |
+| `<numlock>` | Num Lock |
+| `<scrolllock>` | Scroll Lock |
+| `<menu>` | Menu / Context-menu key |
+
+If one of these keys is not listed in `gui.key_mapping`, pressing it does
+nothing.
+
+## Keys that cannot be remapped
+
+A few keys are never delivered when pressed and cannot be used as a mapping
+source or target, because no standard terminal escape sequence exists for them:
+
+- Function keys above F12 (F13 and up).
+- Print Screen.
+- Pause / Break.
+
+Pressing these in Rune has no effect, and listing them in `gui.key_mapping` does
+nothing.
+
+## Why remap CapsLock here instead of in the OS?
+
+Remapping CapsLock to Escape at the OS level changes the key *symbol*, but
+Rune's GUI reads physical keys directly and may not see that substitution.
+Mapping `<capslock>` in `gui.key_mapping` is reliable because it runs inside
+Rune, after the physical key is read.
+
+More generally, a keystroke can be intercepted before it reaches Rune by:
+
+- **macOS**: Keyboard Shortcuts, Mission Control, Spotlight, or Accessibility
+  settings.
+- **Linux**: the desktop environment, the window manager / compositor, or the
+  input-method framework.
+
+`gui.key_mapping` cannot recover a keystroke that one of those layers consumes
+entirely, but it does let you re-purpose keys that *do* reach Rune, including
+physical keys Rune would otherwise ignore.
+
+## Linux: Super, Meta, and Hyper
+
+On Linux, Rune reads four modifiers: `ctrl`, `shift`, `alt`, and `meta`. `meta`
+is the Super key, the one most keyboards label with the Windows logo, so a
+Super combination is written `<meta-...>` and pressing Super registers as
+`meta`. This is expected, not a lost keypress.
+
+If your xkb layout defines the historical Meta or Hyper modifiers on separate
+keys (for example Hyper on Caps Lock), Rune does not yet see them as their own
+modifiers, so pressing them does not register as a modifier. `gui.key_mapping`
+cannot conjure a modifier Rune never receives, but you can still put such a key
+to work by remapping it to something Rune does read. For example, send Escape
+from the Caps Lock key:
+
+```yaml
+gui:
+  key_mapping:
+    "<capslock>": "<esc>"
+```
+
+See [Key combination syntax](./key-syntax.md#modifiers) for the full modifier
+model on Linux.
+
+## Notes
+
+- The mapping is read once at startup. Edit your config and restart Rune to
+  pick up changes.
+- Invalid entries (an unparseable source or target, or a non-string target) are
+  skipped and reported as a notification; the remaining valid entries still
+  load.
+- Remapping happens before key bindings are resolved, so
+  [bind commands](./command-prompt.md#bind-a-command-to-a-key) under
+  `command.key_bindings` to the **target** key, not the source. For example,
+  with `"<capslock>": "<esc>"`, a binding on `<esc>` fires when you press
+  CapsLock; a binding on `<capslock>` never matches, because Rune has already
+  rewritten it to `<esc>` by then.
+
+## See also
+
+- [Key combination syntax](./key-syntax.md): the grammar for both sides of a
+  mapping.
+- [Bind a command to a key](./command-prompt.md#bind-a-command-to-a-key): how
+  `command.key_bindings` maps keys to commands.
+- [Configuration](../config.md): where `rune.star` / the YAML config live and
+  how to open them.

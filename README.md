@@ -21,6 +21,8 @@ See [docs.rune.build](https://docs.rune.build) for the full documentation.
 
 - `cmd/rune` — the main Rune application
 - `cmd/rune-agent` — the Rune Agent extension and packages
+- `cmd/rune/docs` — the documentation site published at docs.rune.build; its
+  markdown is embedded into the binary and served by the `docs:///` workspace
 - `internal/` — the editor, terminal, text, workspace, and LLM packages the
   binaries are built from
 
@@ -33,6 +35,16 @@ guarantees and are refactored freely.
 See [AGENTS.md](AGENTS.md) for a deeper tour of the architecture.
 
 ## Makefile
+
+A plain checkout builds with the standard Go tooling — no submodules or code
+generation steps required:
+
+```bash
+go run ./cmd/rune
+```
+
+The Makefile adds the version, commit, and build-date ldflags plus the
+release build tags:
 
 ```bash
 make                 # build all binaries into bin/

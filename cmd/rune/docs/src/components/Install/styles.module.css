@@ -1,0 +1,140 @@
+.ctaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border: 1px solid var(--rune-hair);
+  background: var(--rune-panel);
+  color: var(--rune-fg);
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  transition: all 0.15s;
+  border-radius: 2px;
+}
+.btn:hover {
+  border-color: var(--rune-fg-dim);
+  color: var(--rune-fg-high);
+  background: var(--rune-panel-2);
+}
+.primary {
+  background: var(--rune-cta);
+  color: var(--rune-cta-ink);
+  border-color: var(--rune-cta);
+  font-weight: 600;
+}
+.primary:hover {
+  background: color-mix(in srgb, var(--rune-cta) 88%, white);
+  border-color: color-mix(in srgb, var(--rune-cta) 88%, white);
+  color: var(--rune-cta-ink);
+}
+
+.dlMac {
+  position: relative;
+  display: inline-block;
+}
+.dlMacTrigger {
+  font: inherit;
+}
+.dlChevron {
+  font-size: 11px;
+  margin-left: 2px;
+  opacity: 0.85;
+  transition: transform 0.15s;
+}
+.dlMacTrigger[aria-expanded='true'] .dlChevron {
+  transform: rotate(180deg);
+}
+.dlMacMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--rune-panel);
+  border: 1px solid var(--rune-hair);
+  border-radius: 2px;
+  padding: 4px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.dlMacMenu[hidden] {
+  display: none;
+}
+.dlMacItem {
+  display: block;
+  padding: 8px 12px;
+  text-decoration: none;
+  color: var(--rune-fg);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  border-radius: 2px;
+}
+.dlMacItem:hover,
+.dlMacItem:focus-visible {
+  background: var(--rune-panel-2);
+  color: var(--rune-fg-high);
+  outline: none;
+}
+
+.install {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--rune-hair);
+  background: var(--rune-deepest);
+  border-radius: 2px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.prompt {
+  color: var(--rune-orange);
+  padding: 12px 8px 12px 14px;
+}
+.installCode {
+  padding: 12px 10px 12px 0;
+  color: var(--rune-fg);
+  white-space: nowrap;
+  overflow-x: auto;
+  font-size: 13px;
+  scrollbar-width: none;
+  background: transparent;
+}
+.installCode::-webkit-scrollbar {
+  display: none;
+}
+.copy {
+  background: transparent;
+  color: var(--rune-fg-dim);
+  border: none;
+  border-left: 1px solid var(--rune-hair);
+  padding: 0 14px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.copy:hover {
+  color: var(--rune-gold);
+}
+.copy.ok {
+  color: var(--rune-olive);
+}
+
+@media (max-width: 640px) {
+  .ctaRow > .btn,
+  .ctaRow > .install,
+  .ctaRow > .dlMac {
+    width: 100%;
+  }
+}

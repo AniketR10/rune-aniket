@@ -34,8 +34,8 @@ import (
 
 const docsScheme = "docs"
 
-// Only markdown is embedded: the docs submodule may carry gifs and
-// other assets that the in-memory workspace never serves, so baking
+// Only markdown is embedded: the docs tree also carries gifs and
+// other site assets that the in-memory workspace never serves, so baking
 // them into the binary would only bloat it. Patterns are listed per
 // nesting level because go:embed globs do not recurse; add a deeper
 // level here if the docs tree grows one.
@@ -49,8 +49,8 @@ var docsFS embed.FS
 // flattened so "docs/docs/develop/sdk.md" surfaces as "/develop/sdk.md".
 const docsSchemeRoot = "docs/docs"
 
-// docsAgentsMDTmpl lives in the main repo rather than the docs
-// submodule so we can change agent behavior independently of the
+// docsAgentsMDTmpl lives next to this file rather than in the docs
+// tree so we can change agent behavior independently of the
 // published documentation. It is parameterised on the user's resolved
 // config path so the agent can name the exact file to edit.
 //
@@ -139,7 +139,7 @@ func newDocsSchemeFunc(configPath string) schemeapi.SchemeFunc {
 
 // prefillDocsScheme walks docsFS (which always uses forward slashes,
 // even on Windows) and writes agentsMD and configYAML after the walk
-// so a stray AGENTS.md or .rune/config.yaml in the docs submodule
+// so a stray AGENTS.md or .rune/config.yaml in the docs tree
 // cannot win.
 func prefillDocsScheme(s schemeapi.Scheme, agentsMD, configYAML []byte) error {
 	if err := fs.WalkDir(docsFS, docsSchemeRoot, func(p string, d fs.DirEntry, err error) error {
