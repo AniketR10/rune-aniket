@@ -31,6 +31,7 @@ make rune-agent
 
 # Testing
 make test            # Run tests with race detector
+make test-e2e        # Also run the docker-driven suites (requires docker)
 make coverage        # Generate coverage report
 
 # Code quality
@@ -139,6 +140,8 @@ Used for components that can calculate ideal dimensions from known content.
 - `tui.Component` implementations should use the `comptest` package when appropriate
 - `tui.Handler` implementations should use the `handlertest` package when appropriate
 - See examples in `cmd/rune-agent/dialogue/dialoguetui/*_test.go`
+- Tests that need a docker daemon must carry the `//go:build e2e` tag so they stay
+  out of `make test`, which must remain hermetic. Run them with `make test-e2e`.
 
 ### `handlertest.SequenceTestCase.InputSequence`
 

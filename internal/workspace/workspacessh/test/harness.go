@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 // Package workspacetest contains the docker-driven integration helpers for
 // the workspacessh package. The harness builds and starts containers with
 // per-scenario environment / sshd_config and exposes the host:port pair

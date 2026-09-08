@@ -57,6 +57,7 @@ make rune-agent      # the agent extension binary (bin/rune-agent)
 
 # testing and code quality
 make test            # run the test suite with the race detector
+make test-e2e        # also run the docker-driven suites (requires docker)
 make test-no-race    # run the test suite without the race detector
 make coverage        # generate a coverage report
 make lint            # run golangci-lint

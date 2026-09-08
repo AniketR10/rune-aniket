@@ -1,4 +1,9 @@
 version: "2"
+# Lint the docker-driven suites too: they are excluded from the default build
+# by the e2e tag, so without this they would silently rot.
+run:
+  build-tags:
+    - e2e
 linters:
   enable:
     - revive

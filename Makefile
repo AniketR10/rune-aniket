@@ -2,12 +2,15 @@ GO=go
 CI ?= false
 # Per test binary, not a whole-suite budget: it exists to dump goroutines when a
 # package hangs, so it should stay close to the slowest legitimate run. The
-# median package takes ~5s and p95 ~34s; only the docker-driven SSH suite
-# (~120s), internal/ide (~100s) and cmd/rune (~95s) come close. 180s left the
-# slowest under 2x and timed them out on a loaded machine, which then skipped
-# their t.Cleanup and leaked containers, slowing the host further.
+# median package takes ~5s and p95 ~34s, and the slowest (internal/ide, cmd/rune)
+# sit at ~85-100s. 180s left those under 2x and timed them out on a loaded
+# machine, which then skipped their t.Cleanup and leaked docker containers,
+# slowing the host and causing the next timeout.
 GOTESTFLAGS ?= -race -timeout 300s
 GOTESTFLAGSNORACE = -timeout 300s
+# The docker-driven suites are slower than anything in `make test` (~120s for the
+# containers) and the first run also builds the sshd image.
+E2E_GOTESTFLAGS ?= -race -timeout 900s
 # RUNE_DEBUG_BUILD, when set to "true", flips an in-binary feature
 # flag that exposes debug-only ex commands such as :panic and :crash.
 # Defaults to off; the `debug` target sets it via a target-specific
@@ -65,7 +68,7 @@ EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate rune rune-agent \
+.PHONY: debug clean test test-e2e coverage generate rune rune-agent \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
@@ -162,6 +165,13 @@ rune-agent: $(BIN)/rune-agent
 test: CI=$(CI)
 test:
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
+
+# Runs the whole suite with the docker-driven packages included. Those sit behind
+# the e2e build tag so `make test` stays hermetic, needs no docker daemon, and
+# does not pay for container startup.
+test-e2e: CI=$(CI)
+test-e2e:
+	@ go test -vet=off -tags e2e ./.../... $(E2E_GOTESTFLAGS)
 
 test-no-race: CI=$(CI)
 test-no-race:
