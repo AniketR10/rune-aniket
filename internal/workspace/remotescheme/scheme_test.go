@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-package workspacessh
+package remotescheme
 
 import (
 	"context"
@@ -36,6 +36,8 @@ import (
 
 var _ workspace.RemoteScheme = (*remoteScheme)(nil)
 
+func alwaysRetry(error) bool { return true }
+
 func TestRemoteScheme(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("ssh://unsable.build/home/ernie")
 	require.NoError(t, err)
@@ -49,10 +51,10 @@ func TestRemoteScheme(t *testing.T) {
 
 		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()
-		scheme := newRemoteScheme(ctx,
+		scheme := New(ctx,
 			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (schemeapi.Scheme, error) {
 				return mock, nil
-			}, uri)
+			}, uri, alwaysRetry)
 		mu.Unlock()
 
 		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
@@ -70,7 +72,7 @@ func TestRemoteScheme(t *testing.T) {
 		var i int
 
 		mu.Lock()
-		scheme := newRemoteScheme(ctx, func(
+		scheme := New(ctx, func(
 			_ context.Context, uri workspaceapi.URI, closehook func(error),
 		) (schemeapi.Scheme, error) {
 			i++
@@ -78,7 +80,7 @@ func TestRemoteScheme(t *testing.T) {
 				return nil, errors.New("unable to connect")
 			}
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		mu.Unlock()
 
 		mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
@@ -106,7 +108,7 @@ func TestRemoteScheme(t *testing.T) {
 		var wg sync.WaitGroup
 		var reconnect bool
 		mu.Lock()
-		scheme := newRemoteScheme(ctx, func(
+		scheme := New(ctx, func(
 			_ context.Context, uri workspaceapi.URI, _closehook func(error),
 		) (schemeapi.Scheme, error) {
 			closeHook = _closehook
@@ -114,7 +116,7 @@ func TestRemoteScheme(t *testing.T) {
 				wg.Done()
 			}
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		mu.Unlock()
 		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
 
@@ -134,13 +136,13 @@ func TestRemoteScheme(t *testing.T) {
 
 		mock := schemetest.NewMockScheme(ctrl)
 		release := make(chan struct{})
-		scheme := newRemoteScheme(context.Background(), func(
+		scheme := New(context.Background(), func(
 			_ context.Context, _ workspaceapi.URI, _ func(error),
 		) (schemeapi.Scheme, error) {
 			// Simulate unbounded first-connect provisioning.
 			<-release
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		rs := scheme.(*remoteScheme)
 
 		// A caller-scoped context must be able to abandon the wait
@@ -175,10 +177,10 @@ func TestRemoteScheme(t *testing.T) {
 
 		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()
-		scheme := newRemoteScheme(ctx,
+		scheme := New(ctx,
 			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (schemeapi.Scheme, error) {
 				return mock, nil
-			}, uri)
+			}, uri, alwaysRetry)
 		mu.Unlock()
 
 		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
@@ -197,12 +199,12 @@ func TestRemoteScheme(t *testing.T) {
 		connections <- first
 		connections <- second
 		closeHooks := make(chan func(error), 2)
-		scheme := newRemoteScheme(context.Background(), func(
+		scheme := New(context.Background(), func(
 			_ context.Context, _ workspaceapi.URI, closeHook func(error),
 		) (schemeapi.Scheme, error) {
 			closeHooks <- closeHook
 			return <-connections, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		t.Cleanup(func() {
 			second.EXPECT().Close().Return(nil).AnyTimes()
 			require.NoError(t, scheme.Close())
@@ -256,7 +258,7 @@ func TestRemoteScheme(t *testing.T) {
 		ctx := context.Background()
 		mock := schemetest.NewMockScheme(ctrl)
 		hookCh := make(chan func(error), 1)
-		scheme := newRemoteScheme(ctx, func(
+		scheme := New(ctx, func(
 			_ context.Context, _ workspaceapi.URI, hook func(error),
 		) (schemeapi.Scheme, error) {
 			select {
@@ -264,7 +266,7 @@ func TestRemoteScheme(t *testing.T) {
 			default:
 			}
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		t.Cleanup(func() {
 			mock.EXPECT().Close().Return(nil).AnyTimes()
 			_ = scheme.Close()
@@ -301,7 +303,7 @@ func TestRemoteScheme(t *testing.T) {
 		mock := schemetest.NewMockScheme(ctrl)
 		hookCh := make(chan func(error), 1)
 		mu.Lock()
-		scheme := newRemoteScheme(ctx, func(
+		scheme := New(ctx, func(
 			_ context.Context, uri workspaceapi.URI, hook func(error),
 		) (schemeapi.Scheme, error) {
 			select {
@@ -309,7 +311,7 @@ func TestRemoteScheme(t *testing.T) {
 			default:
 			}
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		mu.Unlock()
 
 		rs, ok := scheme.(*remoteScheme)
@@ -345,7 +347,7 @@ func TestRemoteScheme(t *testing.T) {
 			"OnDisconnect must keep returning the same "+
 				"(now-closed) channel after a drop")
 
-		// A second close hook firing on the same remoteScheme
+		// A second close hook firing on the same remote scheme
 		// (e.g. SSH transport flapping) must not panic via
 		// double-close of the disconnect channel.
 		closeHook(errors.New("kaboom again"))
@@ -359,11 +361,11 @@ func TestRemoteScheme(t *testing.T) {
 
 		ctx := context.Background()
 		mock := schemetest.NewMockScheme(ctrl)
-		scheme := newRemoteScheme(ctx, func(
+		scheme := New(ctx, func(
 			_ context.Context, _ workspaceapi.URI, _ func(error),
 		) (schemeapi.Scheme, error) {
 			return mock, nil
-		}, uri)
+		}, uri, alwaysRetry)
 		mock.EXPECT().Close().Return(nil).AnyTimes()
 
 		rs, ok := scheme.(*remoteScheme)

@@ -154,6 +154,13 @@ func (c *cmdGitService) WorkingDiff(
 				OrigName: trimDiffPrefix(d.OrigName),
 				NewName:  trimDiffPrefix(d.NewName),
 			}
+			if len(d.Hunks) == 0 && fd.OrigName == fd.NewName {
+				// A mode-only change: no content moved and no path
+				// changed, and a patch review has no way to show a
+				// permission bit. A pure rename also has no hunks, but
+				// its two names are the reviewable part.
+				continue
+			}
 			for _, hunk := range d.Hunks {
 				fd.Hunks = append(fd.Hunks, Hunk{
 					OrigStartLine: hunk.OrigStartLine,

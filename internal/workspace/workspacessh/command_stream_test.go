@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/remotescheme"
 	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
 )
 
@@ -48,10 +49,10 @@ func TestNestedCommandStreamWaitsForProcessCompletion(t *testing.T) {
 
 	remoteURI, err := workspaceapi.ParseURI("ssh://test@host/tmp")
 	require.NoError(t, err)
-	remote := newRemoteScheme(context.Background(),
+	remote := remotescheme.New(context.Background(),
 		func(context.Context, workspaceapi.URI, func(error)) (schemeapi.Scheme, error) {
 			return innerClient, nil
-		}, remoteURI)
+		}, remoteURI, isRetryableConnectError)
 	t.Cleanup(func() { require.NoError(t, remote.Close()) })
 
 	outerClient := newNestedCommandRPCClient(t, remote)

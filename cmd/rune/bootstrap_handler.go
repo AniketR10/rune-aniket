@@ -75,6 +75,8 @@ type bootstrapHandler struct {
 	client            *apiclient.Client
 	upgradeMgr        *ideupgrade.Manager
 	upgradeCancel     context.CancelFunc
+	network           *network
+	rootCfg           config.Config
 	lastTabsClick     time.Time
 	clickCount        int
 	lastResizeW       int
@@ -121,10 +123,13 @@ func newBootstrapHandler(
 	}
 	bh.recent = newRecentWorkspaces(bh.storage)
 	bh.loadQuickMenu()
+	bh.rootCfg = rootCfg
 
 	if isBootstrapped(dataDir) {
 		migrateBootstrappedConfig(configPath)
 		client, releaseManager := newAPIClient(bh.storage, installBackupDir, rootCfg)
+		bh.network = newNetwork(rootCfg, dataDir, newNetworkGate(client))
+		bh.network.startAutoJoin()
 		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
@@ -248,6 +253,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		nagPromptOption(client),
 		ide.WithWatchedFilesChangeHook(client.RecordWatchedFilesChange),
 		ide.WithCommandDispatchHook(client.RecordCommand),
+		b.network.completerOption(),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
 		b.trust, b.storage, opts...)
@@ -423,6 +429,9 @@ func (b *bootstrapHandler) setupConfiguredIDE(
 	if err := registerUpgradeCommand(i, b.upgradeMgr); err != nil {
 		errs = append(errs, fmt.Errorf("register upgrade command: %w", err))
 	}
+	if err := b.network.register(i, b.scheduleNextTick); err != nil {
+		errs = append(errs, fmt.Errorf("register network: %w", err))
+	}
 	return errors.Join(errs...)
 }
 
@@ -507,6 +516,10 @@ func (b *bootstrapHandler) performSwap() error {
 		"editor": map[string]any{"mode": b.chosenEditor},
 	})
 	client, releaseManager := newAPIClient(b.storage, b.installBackupDir, rootCfg)
+	// The network gates on the account, so it exists only from the
+	// moment the API client that vouches for it does.
+	b.network = newNetwork(b.rootCfg, b.dataDir, newNetworkGate(client))
+	b.network.startAutoJoin()
 	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()
@@ -749,6 +762,12 @@ func (b *bootstrapHandler) writePresetConfig() error {
 func (b *bootstrapHandler) Close() error {
 	b.closingPreIDE = true
 	var errs []error
+	if b.network != nil {
+		if err := b.network.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		b.network = nil
+	}
 	if b.upgradeMgr != nil {
 		if err := b.upgradeMgr.Close(); err != nil {
 			errs = append(errs, err)

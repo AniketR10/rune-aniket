@@ -38,6 +38,13 @@ const (
 	RoleOneOff
 )
 
+// SubscriptionRequiredMessage is the response body the API server's
+// paid gate writes with its 403. It is what distinguishes "this
+// account holds no plan" from every other 403 the auth middleware
+// answers with, so clients must match it before telling a user to
+// upgrade.
+const SubscriptionRequiredMessage = "subscription required"
+
 // RPCUser represents a rune user, from an auth point of view.
 type RPCUser struct {
 	ID      string

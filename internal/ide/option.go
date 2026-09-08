@@ -40,6 +40,7 @@ import (
 	"unstable.build/rune/internal/component/shader"
 	"unstable.build/rune/internal/extension"
 	"unstable.build/rune/internal/extension/extensionv2"
+	"unstable.build/rune/internal/handler/command"
 	"unstable.build/rune/internal/ide/ideauthorizer"
 	"unstable.build/rune/internal/ide/idepkg"
 	"unstable.build/rune/internal/text"
@@ -167,6 +168,16 @@ func WithScheme(scheme string, fn schemeapi.SchemeFunc) Option {
 func WithConfigFilename(filename string) Option {
 	return func(opts *options) {
 		opts.workspaceConfig = filename
+	}
+}
+
+// WithWorkspaceOpenCompleter adds a completer to the `workspaceopen`
+// command prompt, after the built-in history and directory completers.
+// Schemes registered with [WithScheme] use it to offer the workspaces
+// they can reach, which the built-in completers cannot enumerate.
+func WithWorkspaceOpenCompleter(c command.Completer) Option {
+	return func(opts *options) {
+		opts.workspaceOpenCompleters = append(opts.workspaceOpenCompleters, c)
 	}
 }
 
@@ -485,6 +496,8 @@ type options struct {
 	afterFunc           func(time.Duration, func()) *time.Timer
 	debugCommands       bool
 	streamingOpen       bool
+
+	workspaceOpenCompleters []command.Completer
 
 	defaultConfigModeModal bool
 	defaultConfigTUI       bool

@@ -29,6 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/remotescheme"
 )
 
 type procRemote struct {
@@ -136,7 +137,7 @@ func (s *procSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 
 	cmd.Path, cmd.Args = s.CommandString(cmd.Path, cmd.Args...)
 	ctx, cancelFn := bluectx.First(s.ctx, ctx)
-	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
+	cmd.Watcher = remotescheme.NewCancelWatcher(cmd.Watcher, cancelFn)
 	pid, err := s.executor.StartCommand(ctx, cmd)
 	if err != nil {
 		return workspaceapi.Pid(0), fmt.Errorf("create ssh command: %s", err)

@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -39,9 +38,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/remotescheme"
 )
 
 const (
@@ -64,25 +63,6 @@ const (
 // hook when the underlying SSH transport drops mid-session.
 // Exposed so callers can match it via errors.Is.
 var ErrSSHConnectionClosed = errors.New("ssh connection closed unexpectedly")
-
-// clientKeepalive is how often the SSH-tunneled gRPC client pings to
-// detect a silently dead transport. serverEnforcement must permit this
-// cadence or the server sends GOAWAY too_many_pings and kills the
-// connection (dropping terminals, invalidating cached pty fds, and
-// forcing a reconnect that re-runs remote provisioning).
-var clientKeepalive = keepalive.ClientParameters{
-	Time:                10 * time.Second,
-	Timeout:             5 * time.Second,
-	PermitWithoutStream: true,
-}
-
-// serverEnforcement permits clientKeepalive: MinTime must be <=
-// clientKeepalive.Time and PermitWithoutStream must be true, since the
-// client pings even when no RPC stream is active.
-var serverEnforcement = keepalive.EnforcementPolicy{
-	MinTime:             5 * time.Second, // <= clientKeepalive.Time
-	PermitWithoutStream: true,
-}
 
 // Option customizes the ssh scheme constructed by New.
 type Option func(*scheme)
@@ -146,7 +126,7 @@ type scheme struct {
 
 	getUser         func() (*user.User, error)
 	remoteFn        func(context.Context, sshConfig, workspaceapi.URI) (remote, error)
-	connectSchemeFn connectSchemeFn
+	connectSchemeFn remotescheme.ConnectFn
 	ctx             context.Context
 	cancelCtx       func()
 	ui              UI
@@ -460,7 +440,7 @@ func (s *scheme) connectScheme(
 		// Detect dead SSH transports promptly: without keepalive
 		// pings, a remote save (Rename, Stat, ...) can block
 		// indefinitely when the transport is silently broken.
-		grpc.WithKeepaliveParams(clientKeepalive),
+		grpc.WithKeepaliveParams(remotescheme.ClientKeepalive),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
@@ -756,7 +736,8 @@ func (s *scheme) init(
 		return fmt.Errorf("URI from path %s: %v", uri.Path(), err)
 	}
 
-	s.Scheme = newRemoteScheme(ctx, s.connectSchemeFn, uri)
+	s.Scheme = remotescheme.New(ctx, s.connectSchemeFn, uri,
+		isRetryableConnectError)
 	return nil
 }
 

@@ -284,9 +284,8 @@ func TestCmdWorkingDiff(t *testing.T) {
 			}},
 		},
 		{
-			// A mode-only change carries neither a hunk nor a ---/+++
-			// pair, so nothing survives the unified diff parse. A patch
-			// review has no way to show a permission bit anyway.
+			// A mode-only change carries no hunks. A patch review has
+			// no way to show a permission bit anyway.
 			name: "mode change alone is not reviewable",
 			setup: func(t *testing.T, repo string) {
 				require.NoError(t, os.Chmod(

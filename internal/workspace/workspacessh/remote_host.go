@@ -26,16 +26,17 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
 	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/workspace/remotescheme"
 	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
 )
 
 // NewSchemeServer builds the gRPC server used to serve workspacerpc
 // over an SSH-tunneled stdio pipe. It always installs
-// serverEnforcement so the client's keepalive pings (clientKeepalive)
-// are not punished with GOAWAY too_many_pings.
+// [remotescheme.ServerEnforcement] so the client's keepalive pings are
+// not punished with GOAWAY too_many_pings.
 func NewSchemeServer(opts ...grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(append([]grpc.ServerOption{
-		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
+		grpc.KeepaliveEnforcementPolicy(remotescheme.ServerEnforcement),
 	}, opts...)...)
 }
 

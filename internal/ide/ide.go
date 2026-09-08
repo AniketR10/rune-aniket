@@ -410,6 +410,14 @@ func (i *IDE) CloseCommandPrompt() error {
 	return i.workspaceHandler.focusEx().closeCommandPrompt()
 }
 
+// RegisterScheme registers a workspace scheme after construction, for
+// schemes whose SchemeFunc needs the IDE itself (for example to
+// prompt) and therefore cannot exist before [New] returns. Schemes
+// known up front use [WithScheme] instead.
+func (i *IDE) RegisterScheme(scheme string, fn schemeapi.SchemeFunc) error {
+	return i.workspaceManager.RegisterScheme(scheme, fn)
+}
+
 // RecentWorkspaceOpens returns the paths previously passed to the
 // workspaceopen command from the command prompt, most-recent-first and
 // de-duplicated. It reflects only prompt-driven opens; menu-driven
@@ -654,6 +662,7 @@ func (i *IDE) init(
 	commandObserver := newCommandObserverRegistry()
 	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
 	i.workspaceHandler.watchedFilesChangeHook = op.watchedFilesChangeHook
+	i.workspaceHandler.workspaceOpenCompleters = op.workspaceOpenCompleters
 	i.workspaceHandler.tutorialsInstalled = i.onTutorialsInstalled
 	i.workspaceHandler.onboardingActive = func() bool {
 		return op.startingTutorial != ""

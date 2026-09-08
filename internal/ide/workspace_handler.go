@@ -205,6 +205,10 @@ type workspaceManagerHandler struct {
 	// workspaces alongside directory completion.
 	commandHistory command.HistoryAccessor
 
+	// workspaceOpenCompleters are scheme-provided completers appended to
+	// the built-in workspaceopen completion. See WithWorkspaceOpenCompleter.
+	workspaceOpenCompleters []command.Completer
+
 	union               handler.FrameUnion
 	bar                 handler.Tabs
 	barIdxToSlot        []int
@@ -3275,10 +3279,11 @@ func (h *workspaceManagerHandler) completeCommand(
 		// args[0] (required by HistoryCompleter to strip the prefix) is
 		// safe for both.
 		argv := append([]string{cmd.Name}, cmd.Args...)
-		return command.MultiCompleter(
+		completers := append([]command.Completer{
 			command.HistoryCompleter(h.commandHistory),
 			command.NonRecursiveDirsCompleter(h.empty.workspace),
-		).Complete(ctx, argv)
+		}, h.workspaceOpenCompleters...)
+		return command.MultiCompleter(completers...).Complete(ctx, argv)
 	case cmdMoveWorkspace:
 		if len(cmd.Args) <= 1 {
 			options := []string{"left", "right", "1", "2",

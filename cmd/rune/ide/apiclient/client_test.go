@@ -504,3 +504,97 @@ func makeAccountJWT(t *testing.T, user auth.RPCUser) string {
 	require.NoError(t, err)
 	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 }
+
+func TestNetworkCredentials(t *testing.T) {
+	tsuite := []struct {
+		name       string
+		status     int
+		body       string
+		wantErr    error
+		wantURL    string
+		wantKey    string
+		wantErrStr string
+	}{
+		{
+			name:    "entitled account",
+			status:  http.StatusOK,
+			body:    `{"control_url":"https://control.example.com","auth_key":"tskey-1"}`,
+			wantURL: "https://control.example.com",
+			wantKey: "tskey-1",
+		},
+		{
+			name:    "signed out",
+			status:  http.StatusUnauthorized,
+			wantErr: auth.ErrNotAuthenticated,
+		},
+		{
+			name:    "no plan",
+			status:  http.StatusForbidden,
+			body:    auth.SubscriptionRequiredMessage + "\n",
+			wantErr: ErrSubscriptionRequired,
+		},
+		{
+			name:    "payment required",
+			status:  http.StatusPaymentRequired,
+			wantErr: ErrSubscriptionRequired,
+		},
+		{
+			// blueauth answers 403 for every auth failure and prod
+			// 403s the whole /api/ subtree when the endpoint is not
+			// deployed, so a bare 403 must never read as "buy a
+			// plan" (an entitled admin was prompted to upgrade).
+			name:       "forbidden without the paid-gate message",
+			status:     http.StatusForbidden,
+			body:       "<!doctype html><title>403</title>403 Forbidden",
+			wantErrStr: "status 403",
+		},
+		{
+			name:       "server error",
+			status:     http.StatusInternalServerError,
+			wantErrStr: "status 500",
+		},
+		{
+			name:       "incomplete response",
+			status:     http.StatusOK,
+			body:       `{"control_url":"https://control.example.com"}`,
+			wantErrStr: "incomplete response",
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			var gotPath, gotMethod, gotAuth string
+			srv := httptest.NewServer(http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					gotPath, gotMethod = r.URL.Path, r.Method
+					gotAuth = r.Header.Get("Authorization")
+					w.WriteHeader(tcase.status)
+					_, _ = w.Write([]byte(tcase.body))
+				}))
+			defer srv.Close()
+
+			u, err := url.Parse(srv.URL)
+			require.NoError(t, err)
+			client := &Client{
+				httpEndpointURL: u,
+				tokenSource:     newValidTestTokenSource(),
+			}
+
+			controlURL, authKey, err := client.NetworkCredentials(context.Background())
+			assert.Equal(t, "/api/network/credentials", gotPath)
+			assert.Equal(t, http.MethodPost, gotMethod)
+			assert.Equal(t, "Bearer test-token", gotAuth)
+			switch {
+			case tcase.wantErr != nil:
+				assert.True(t, errors.Is(err, tcase.wantErr), "got %v", err)
+			case tcase.wantErrStr != "":
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tcase.wantErrStr)
+			default:
+				require.NoError(t, err)
+				assert.Equal(t, tcase.wantURL, controlURL)
+				assert.Equal(t, tcase.wantKey, authKey)
+			}
+		})
+	}
+}

@@ -1,0 +1,22 @@
+# Headscale coordination server for manually exercising the rune://
+# workspace scheme across two Rune instances. See README.md.
+#
+# Ports are published one-to-one because Headscale advertises its own
+# listen and STUN ports to the instances that register with it; a
+# remapped port would hand them an address that does not exist on the
+# host.
+services:
+  headscale:
+    image: headscale/headscale:v0.26.1
+    container_name: rune-headscale
+    command: serve
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "3478:3478/udp"
+    volumes:
+      - ./headscale.yaml:/etc/headscale/config.yaml:ro
+      - headscale-data:/var/lib/headscale
+
+volumes:
+  headscale-data:

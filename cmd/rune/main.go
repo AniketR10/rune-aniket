@@ -589,11 +589,18 @@ func runTUI(
 	client, releaseManager := newAPIClient(storage, os.TempDir(), rootCfg)
 	defer client.Close()
 
+	net := newNetwork(rootCfg, *flagDataPath, newNetworkGate(client))
+	net.startAutoJoin()
+	defer func() {
+		_ = net.Close()
+	}()
+
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		nagPromptOption(client),
 		ide.WithWatchedFilesChangeHook(client.RecordWatchedFilesChange),
 		ide.WithCommandDispatchHook(client.RecordCommand),
+		net.completerOption(),
 	)
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,
@@ -601,6 +608,9 @@ func runTUI(
 	if err != nil {
 		fmt.Printf("%s", err)
 		return 1
+	}
+	if err := net.register(i, scheduleNextTick); err != nil {
+		log.Errorf("register network: %v", err)
 	}
 
 	err = subscribeOtherCommands(i, client, *flagConfigPath)

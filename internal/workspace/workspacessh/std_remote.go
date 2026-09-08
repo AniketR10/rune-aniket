@@ -814,7 +814,7 @@ func translateDialError(hostport string, hasKeys, sessionPinned bool, err error)
 		// that is just an authentication failure.
 		strings.Contains(msg, "unexpected message type 51") {
 		methods := parseAdvertisedMethods(msg)
-		if len(methods) == 1 && methods[0] == "publickey" && !hasKeys {
+		if !hasKeys && (len(methods) == 0 || len(methods) == 1 && methods[0] == "publickey") {
 			return fmt.Errorf("%w (host %s)", ErrAuthRequiredKey, hostport)
 		}
 		if len(methods) > 0 {

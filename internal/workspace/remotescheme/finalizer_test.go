@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-package workspacessh
+package remotescheme
 
 import (
 	"context"
@@ -134,11 +134,11 @@ func TestRemoteSchemeTracksOpenedFiles(t *testing.T) {
 			}
 			t.Run(desc, func(t *testing.T) {
 				fake := &fakeSDKScheme{closes: make(chan uintptr, 8)}
-				scheme := newRemoteScheme(context.Background(), func(
+				scheme := New(context.Background(), func(
 					_ context.Context, _ workspaceapi.URI, _ func(error),
 				) (schemeapi.Scheme, error) {
 					return fake, nil
-				}, uri)
+				}, uri, alwaysRetry)
 				t.Cleanup(func() { require.NoError(t, scheme.Close()) })
 
 				target := scheme

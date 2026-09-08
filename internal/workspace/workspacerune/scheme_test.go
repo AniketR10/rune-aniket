@@ -1,0 +1,254 @@
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package workspacerune
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	sdkworkspacerpc "github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/runenet"
+	"unstable.build/rune/internal/workspace"
+	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
+)
+
+func TestParseWorkspaceURI(t *testing.T) {
+	tsuite := []struct {
+		name     string
+		uri      string
+		wantPeer string
+		wantPath string
+		wantErr  string
+	}{
+		{
+			name:     "peer and absolute path",
+			uri:      "rune://laptop/home/ernie/code",
+			wantPeer: "laptop",
+			wantPath: "/home/ernie/code",
+		},
+		{
+			name:     "peer without path opens the peer home",
+			uri:      "rune://laptop",
+			wantPeer: "laptop",
+			wantPath: "~",
+		},
+		{
+			name:     "trailing slash opens the peer home",
+			uri:      "rune://laptop/",
+			wantPeer: "laptop",
+			wantPath: "~",
+		},
+		{
+			name:     "explicit home path",
+			uri:      "rune://workstation/~/code",
+			wantPeer: "workstation",
+			wantPath: "/~/code",
+		},
+		{
+			name:    "empty peer",
+			uri:     "rune:///home/ernie",
+			wantErr: "empty peer",
+		},
+		{
+			name:    "user is rejected",
+			uri:     "rune://ernie@laptop/code",
+			wantErr: "does not take a user",
+		},
+		{
+			name:    "wrong scheme",
+			uri:     "ssh://laptop/code",
+			wantErr: "invalid non-rune scheme",
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI(tcase.uri)
+			require.NoError(t, err)
+
+			peer, path, err := parseWorkspaceURI(uri)
+			if tcase.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tcase.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tcase.wantPeer, peer)
+			assert.Equal(t, tcase.wantPath, path)
+		})
+	}
+}
+
+func TestIsRetryableConnectError(t *testing.T) {
+	assert.False(t, isRetryableConnectError(nil))
+	assert.False(t, isRetryableConnectError(
+		fmt.Errorf("dial laptop: %w", runenet.ErrPeerNotFound)))
+	assert.True(t, isRetryableConnectError(errors.New("connection refused")))
+
+	// A peer that refuses us will refuse the next attempt too, so the
+	// reconnect loop must stop. The status arrives wrapped by the
+	// connect path, so the check has to see through that.
+	for _, code := range []codes.Code{
+		codes.PermissionDenied, codes.Unauthenticated,
+	} {
+		err := fmt.Errorf("open /src on laptop: %w",
+			status.Error(code, "caller is not owned by ernie@example.com"))
+		assert.False(t, isRetryableConnectError(err), "code %s", code)
+	}
+	assert.True(t, isRetryableConnectError(
+		fmt.Errorf("open /src on laptop: %w",
+			status.Error(codes.Unavailable, "peer is asleep"))))
+}
+
+func TestConnectFailureReportsItsOwnError(t *testing.T) {
+	addr := servePeerWorkspace(t, t.TempDir())
+	dialer := dialerFunc(func(ctx context.Context, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", addr)
+	})
+
+	// A path that does not exist on the peer fails the connect. Tearing
+	// the connection down must not race a drop report over the real
+	// reason, or the reconnect loop's stop/retry decision becomes a
+	// coin flip.
+	uri, err := workspaceapi.ParseURI("rune://laptop/no/such/directory")
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	require.NoError(t, s.(workspace.RemoteScheme).WaitConnected(context.Background()))
+	_, err = s.Open("anything")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrConnectionClosed,
+		"the connect failure must survive its own cleanup: %v", err)
+}
+
+// dialerFunc adapts a function to Dialer.
+type dialerFunc func(ctx context.Context, peer string) (net.Conn, error)
+
+func (f dialerFunc) Dial(ctx context.Context, peer string) (net.Conn, error) {
+	return f(ctx, peer)
+}
+
+func TestSchemeConnectsOverDialer(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "hello.txt"), []byte("hi"), 0o600))
+
+	addr := servePeerWorkspace(t, dir)
+	var dialedPeer string
+	dialer := dialerFunc(func(ctx context.Context, peer string) (net.Conn, error) {
+		dialedPeer = peer
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", addr)
+	})
+
+	uri, err := workspaceapi.ParseURI("rune://laptop" + dir)
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	require.NoError(t, s.(workspace.RemoteScheme).WaitConnected(context.Background()))
+	assert.Equal(t, "laptop", dialedPeer)
+	assert.Equal(t, dir, s.Root())
+
+	entries, err := s.ReadDir(".")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "hello.txt", entries[0].Name())
+
+	// The workspace must keep identifying itself by peer, not by the
+	// peer's local filesystem layout.
+	fileURI, err := s.URI("hello.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "rune://laptop"+filepath.Join(dir, "hello.txt"),
+		fileURI.String())
+}
+
+func TestSchemeReportsDisconnect(t *testing.T) {
+	addr := servePeerWorkspace(t, t.TempDir())
+
+	var mu = make(chan net.Conn, 1)
+	dialer := dialerFunc(func(ctx context.Context, _ string) (net.Conn, error) {
+		var d net.Dialer
+		c, err := d.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			mu <- c
+		}
+		return c, err
+	})
+
+	uri, err := workspaceapi.ParseURI("rune://laptop/")
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	remote := s.(workspace.RemoteScheme)
+	require.NoError(t, remote.WaitConnected(context.Background()))
+	disconnected := remote.OnDisconnect()
+
+	require.NoError(t, (<-mu).Close())
+	<-disconnected
+}
+
+// servePeerWorkspace stands in for a peer running Rune: it serves root
+// over the same workspace RPC services runenet.ServeWorkspace registers.
+func servePeerWorkspace(t *testing.T, root string) string {
+	t.Helper()
+
+	uri, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(t, err)
+	fileScheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	grpcServer := grpc.NewServer()
+	rpcServer := tworkspacerpc.NewServer(fileScheme,
+		tworkspacerpc.CommandAuthorizerFunc(
+			func(context.Context, workspaceapi.Cmd) error { return nil }))
+	sdkworkspacerpc.RegisterSchemeServer(grpcServer, rpcServer)
+	sdkworkspacerpc.RegisterFilesServer(grpcServer, rpcServer)
+	sdkworkspacerpc.RegisterExecutorServer(grpcServer, rpcServer)
+	sdkworkspacerpc.RegisterTerminalServer(grpcServer, rpcServer)
+	go debug.CapturePanicReport(func() {
+		_ = grpcServer.Serve(lis)
+	})
+	t.Cleanup(func() {
+		grpcServer.Stop()
+		_ = rpcServer.Stop()
+		_ = fileScheme.Close()
+	})
+	return lis.Addr().String()
+}

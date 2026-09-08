@@ -37,25 +37,6 @@ import (
 	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
 )
 
-// TestKeepaliveContract pins the invariant that ties the SSH-tunneled
-// gRPC client's ping cadence to the server's enforcement policy. If a
-// future edit lowers clientKeepalive.Time below serverEnforcement.MinTime,
-// or flips PermitWithoutStream off, the server would answer the client's
-// keepalive pings with GOAWAY too_many_pings and tear down the single
-// HTTP/2 connection carried over the SSH pipe — dropping terminals,
-// invalidating cached pty fds, and forcing a reconnect that re-runs
-// remote provisioning.
-func TestKeepaliveContract(t *testing.T) {
-	assert.LessOrEqual(t, serverEnforcement.MinTime, clientKeepalive.Time,
-		"server MinTime must permit the client ping interval, else "+
-			"the server sends GOAWAY too_many_pings")
-	assert.True(t, serverEnforcement.PermitWithoutStream,
-		"client pings with PermitWithoutStream, so the server must "+
-			"permit pings without an active stream")
-	assert.Greater(t, serverEnforcement.MinTime, time.Duration(0),
-		"MinTime must be a positive floor against a genuinely abusive peer")
-}
-
 func TestReaderWriterListener(t *testing.T) {
 	t.Run("one accept", func(t *testing.T) {
 		inRead, inWrite, err := os.Pipe()

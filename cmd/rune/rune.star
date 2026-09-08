@@ -786,6 +786,22 @@ config = {
             "show":    "once",
         },
     },
+    # Private network of your own Rune instances. When joined, this
+    # machine serves its workspaces to your other machines, which can
+    # then be opened with
+    # `workspaceopen rune://<machine>/<path>`. Only machines signed in
+    # with your own account are allowed to connect. Manage it with the
+    # `network` console command.
+    "network": {
+        # Whether to join the network on startup. When off, the network
+        # stays available through `network up` — no restart needed.
+        "auto_join":   True,
+        # Name this machine is known by on the network, and the name used
+        # in rune:// addresses. Empty uses the machine's hostname.
+        "hostname":    "",
+        # Port workspaces are served on. Only reachable from the network.
+        "port":        7473,
+    },
     # Notification pop-up configuration.
     "notifications": {
         "auto_close":   "5s",

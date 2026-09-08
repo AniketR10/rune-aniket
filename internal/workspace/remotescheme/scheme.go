@@ -14,7 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-package workspacessh
+// Package remotescheme wraps a remote [schemeapi.Scheme] so it survives
+// transport drops: it reconnects in the background, invalidates the
+// file descriptors handed out by a previous connection, and reports
+// disconnects to the IDE.
+package remotescheme
 
 import (
 	"context"
@@ -23,7 +27,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -50,13 +53,22 @@ var (
 	// transport.
 	ErrLostConnection = errors.New("lost connection to remote")
 
-	// ErrRemoteClosed is reported when the remoteScheme is closed
+	// ErrRemoteClosed is reported when the remote scheme is closed
 	// explicitly by the caller.
 	ErrRemoteClosed = errors.New("remote closed")
 )
 
-type connectSchemeFn func(ctx context.Context,
+// ConnectFn establishes one connection to uri. closeHook is invoked by
+// the transport when the established connection drops, which triggers a
+// reconnect attempt.
+type ConnectFn func(ctx context.Context,
 	uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error)
+
+// RetryableFn reports whether a failed connect attempt is worth
+// retrying. Permanent failures (rejected credentials, a workspace path
+// that does not exist on the remote) must return false so the reconnect
+// loop stops instead of pestering the user forever.
+type RetryableFn func(error) bool
 
 type state struct {
 	lastSessionError error
@@ -78,6 +90,8 @@ type remoteScheme struct {
 	cancelCtx  func()
 	currState  atomic.Value
 	generation atomic.Uint64
+	retryable  RetryableFn
+	logClass   string
 
 	// firstAttempt is closed by maintainConnection after the first
 	// connect attempt completes (success or failure). state() blocks on
@@ -111,10 +125,10 @@ type remoteScheme struct {
 }
 
 func (s *remoteScheme) maintainConnection(
-	connect connectSchemeFn, uri workspaceapi.URI,
+	connect ConnectFn, uri workspaceapi.URI,
 	closeChan chan struct{},
 ) {
-	logger := log.WithField(logging.KeyClass, "ssh")
+	logger := log.WithField(logging.KeyClass, s.logClass)
 
 	var firstAttemptDone bool
 	_ = retry.Retry(s.ctx, retryStrategy,
@@ -165,7 +179,7 @@ func (s *remoteScheme) maintainConnection(
 			if err != nil {
 				cancel()
 				logger.Warnf("failed to connect to %s: %s", uri, err)
-				if !isRetryableConnectError(err) {
+				if !s.retryable(err) {
 					// Permanent failure: stop reconnecting so we don't
 					// pester the user with prompts forever (e.g. the
 					// password keeps failing, the host key changed, or
@@ -201,39 +215,6 @@ func (s *remoteScheme) maintainConnection(
 	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
-// isRetryableConnectError returns true when err looks transient enough
-// that re-running ssh.Dial may succeed (network hiccups, intermittent
-// timeouts). Permanent failures (auth rejected, host key mismatch, the
-// remote workspace path or rune binary missing) return false: retrying
-// only re-prompts the user for credentials they have already shown they
-// don't have.
-func isRetryableConnectError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Typed errors surfaced by std_remote.translateDialError.
-	if errors.Is(err, ErrAuthRequiredKey) ||
-		errors.Is(err, ErrHostKeyMismatch) ||
-		errors.Is(err, ErrHostKeyUnknown) ||
-		errors.Is(err, ErrKnownHostsUnparsable) {
-		return false
-	}
-	msg := err.Error()
-	// Generic auth failure strings from the Go ssh client.
-	if strings.Contains(msg, "unable to authenticate") ||
-		strings.Contains(msg, "no supported methods remain") ||
-		strings.Contains(msg, "ssh authentication") {
-		return false
-	}
-	// connectScheme verifies the remote workspace path / rune binary
-	// before returning. These are not transient.
-	if strings.Contains(msg, "executable was not found on remote") ||
-		strings.Contains(msg, "was not found on remote") {
-		return false
-	}
-	return true
-}
-
 func (s *remoteScheme) setError(logger *log.Entry, err error) {
 	// state() relies on (err != nil) <=> (scheme == nil); never
 	// store a (nil, nil) state or callers will nil-deref the
@@ -264,17 +245,23 @@ func (s *remoteScheme) setError(logger *log.Entry, err error) {
 	s.broadcastDisconnect()
 }
 
-// newRemoteScheme constructs a remoteScheme and starts a background
+// New constructs a remote scheme and starts a background
 // maintain-connection goroutine. The constructor returns immediately;
 // callers that need to observe the first connect attempt block via
 // state() instead. This split lets the constructor be invoked from the
 // IDE event loop without preventing the dial from posting interactive
 // auth prompts back to that loop.
-func newRemoteScheme(
-	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
+//
+// retryable decides which connect failures are worth another attempt;
+// see [RetryableFn].
+func New(
+	ctx context.Context, connect ConnectFn, uri workspaceapi.URI,
+	retryable RetryableFn,
 ) schemeapi.Scheme {
 	ret := &remoteScheme{
 		uri:          uri,
+		retryable:    retryable,
+		logClass:     uri.Scheme(),
 		closeChan:    make(chan struct{}),
 		firstAttempt: make(chan struct{}),
 		disconnectCh: make(chan struct{}),
@@ -488,8 +475,14 @@ func (s *remoteScheme) Readlink(path string) (string, error) {
 	return scheme.Readlink(path)
 }
 
+// URI resolves path against the remote, so "~" and relative paths
+// expand on the machine that owns them rather than locally.
 func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
-	panic("unused")
+	err, scheme := s.state()
+	if err != nil {
+		return workspaceapi.URI{}, err
+	}
+	return scheme.URI(path)
 }
 
 func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
@@ -500,7 +493,7 @@ func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		return 0, err
 	}
 	ctx, cancelFn := bluectx.First(s.ctx, ctx)
-	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
+	cmd.Watcher = NewCancelWatcher(cmd.Watcher, cancelFn)
 	if remoteFile, ok := cmd.Stdin.(*remoteFile); ok {
 		cmd.Stdin, err = remoteFile.newFileForState(scheme, generation)
 		if err != nil {
@@ -632,7 +625,7 @@ func (s *remoteScheme) Close() (ret error) {
 }
 
 // OnDisconnect satisfies [workspace.RemoteScheme]: it returns the
-// same stable channel for the entire lifetime of the remoteScheme.
+// same stable channel for the entire lifetime of the remote scheme.
 // The channel is closed exactly once when the underlying transport
 // drops (or Close is called), so:
 //   - subscribing before a drop blocks on the channel until the
@@ -642,7 +635,7 @@ func (s *remoteScheme) Close() (ret error) {
 //   - the channel is never re-opened. The semantic is
 //     "invalidate everything once" — callers that want to track
 //     subsequent drops should call OnDisconnect on a freshly
-//     resolved remoteScheme.
+//     resolved remote scheme.
 //
 // The signal must be interpreted as "every file descriptor handed
 // out by this scheme up to now is invalid"; callers should drop
@@ -684,7 +677,12 @@ type wrapWatcher struct {
 	ch      chan error
 }
 
-func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWatcher {
+// NewCancelWatcher wraps watcher so cancelFn runs once the watched
+// process reports its exit status, releasing the per-command context
+// derived with [bluectx.First].
+func NewCancelWatcher(
+	watcher workspaceapi.ProcessWatcher, cancelFn func(),
+) workspaceapi.ProcessWatcher {
 	ret := wrapWatcher{
 		watcher: watcher,
 		// Buffered so the producer (fileScheme.StartCommand) is not

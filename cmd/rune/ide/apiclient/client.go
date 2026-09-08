@@ -22,9 +22,13 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/browser"
@@ -272,6 +276,82 @@ func parseAccountClaims(token string) (auth.RPCUser, error) {
 		return auth.RPCUser{}, fmt.Errorf("jwt: unmarshal payload: %w", err)
 	}
 	return payload.Extra, nil
+}
+
+const networkCredentialsTimeout = 30 * time.Second
+
+// ErrSubscriptionRequired is returned when the signed-in account holds
+// no plan that covers the requested feature.
+var ErrSubscriptionRequired = errors.New("an active Rune plan is required")
+
+// NetworkCredentials asks the API for the coordination server this
+// machine may join and a single-use key that pre-authorizes it. Both
+// are short-lived and decided server-side, which is where the network
+// entitlement is enforced.
+func (a *Client) NetworkCredentials(
+	ctx context.Context,
+) (controlURL, authKey string, err error) {
+	u := *a.httpEndpointURL
+	u.Path = "/api/network/credentials"
+
+	ctx, cancel := context.WithTimeout(ctx, networkCredentialsTimeout)
+	defer cancel()
+
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	if err != nil {
+		return "", "", fmt.Errorf("new request: %w", err)
+	}
+	token, err := a.tokenSource.Token()
+	if err != nil {
+		if errors.Is(err, auth.ErrNotAuthenticated) {
+			return "", "", auth.ErrNotAuthenticated
+		}
+		return "", "", fmt.Errorf("get auth token: %w", err)
+	}
+	if !token.Valid() {
+		return "", "", auth.ErrNotAuthenticated
+	}
+	r.Header.Set("Authorization",
+		fmt.Sprintf("%s %s", token.TokenType, token.AccessToken))
+
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		return "", "", fmt.Errorf("network credentials: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return "", "", auth.ErrNotAuthenticated
+	case http.StatusPaymentRequired:
+		return "", "", ErrSubscriptionRequired
+	case http.StatusForbidden:
+		// The auth middleware answers 403 for every failure and a
+		// deployment without the endpoint 403s the whole /api/
+		// subtree, so only the paid gate's own message may be read
+		// as a missing plan.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if strings.Contains(string(body), auth.SubscriptionRequiredMessage) {
+			return "", "", ErrSubscriptionRequired
+		}
+		return "", "", fmt.Errorf("network credentials: status 403: %s",
+			strings.TrimSpace(string(body)))
+	default:
+		return "", "", fmt.Errorf("network credentials: status %d", resp.StatusCode)
+	}
+
+	var body struct {
+		ControlURL string `json:"control_url"`
+		AuthKey    string `json:"auth_key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", fmt.Errorf("network credentials: decode response: %w", err)
+	}
+	if body.ControlURL == "" || body.AuthKey == "" {
+		return "", "", errors.New("network credentials: incomplete response")
+	}
+	return body.ControlURL, body.AuthKey, nil
 }
 
 // Dial creates a new grpc.ClientConn that uses the underlying

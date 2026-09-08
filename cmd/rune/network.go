@@ -1,0 +1,312 @@
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/networkshell"
+	"unstable.build/rune/internal/runenet"
+	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/workspacerune"
+)
+
+// network holds the process-wide mesh node and the workspace server it
+// exposes to peers. The stack is always fully assembled, whatever the
+// configuration says: `network.auto_join` only decides whether boot
+// joins the mesh, so the `network up` console command works later
+// without a restart.
+type network struct {
+	node *runenet.Node
+	gate *networkGate
+	// gated is false only when the node joins with credentials it was
+	// given directly, which is a debug-build escape hatch: that mesh
+	// is the developer's own, not the paid one, so the account is
+	// never consulted.
+	gated    bool
+	autoJoin bool
+
+	mu     sync.Mutex
+	server *runenet.WorkspaceServer
+	closed bool
+}
+
+// newNetwork assembles the mesh node and its entitlement gate. A
+// malformed `network` config section falls back to defaults with a
+// logged error rather than crippling the stack: config validation is
+// the user's mistake to surface, not a reason to run partially
+// constructed.
+func newNetwork(
+	rootCfg config.Config, dataDir string, gate *networkGate,
+) *network {
+	if gate == nil {
+		panic("newNetwork: gate must not be nil")
+	}
+	cfg, err := networkConfig(rootCfg, dataDir)
+	if err != nil {
+		log.Errorf("network: %v (using defaults)", err)
+		cfg, _ = runenet.FromConfig(config.NopConfig(), dataDir)
+	}
+	ret := &network{
+		gate:     gate,
+		autoJoin: cfg.AutoJoin,
+		// A key configured out of band belongs to a debug build
+		// driving a coordination server of its own, which the paid
+		// mesh must not be mixed up with.
+		gated: cfg.AuthKey == "",
+	}
+	if ret.gated {
+		cfg.Credentials = gate.credentials
+	}
+	ret.node = runenet.New(cfg)
+	return ret
+}
+
+// startAutoJoin joins the mesh off the boot path when the user asked
+// for it. Failures stay out of the UI on purpose: a signed-out or
+// unentitled account simply does not join, and the prompt comes when
+// the user asks for the network explicitly.
+func (n *network) startAutoJoin() {
+	if !n.autoJoin {
+		return
+	}
+	go debug.CapturePanicReport(func() {
+		if err := n.join(context.Background()); err != nil {
+			if errors.Is(err, runenet.ErrNotAuthenticated) ||
+				errors.Is(err, runenet.ErrSubscriptionRequired) {
+				log.Infof("network: not joining: %v", err)
+			} else {
+				log.Errorf("could not join network: %v", err)
+			}
+		}
+	})
+}
+
+// join brings the node online and serves this machine's workspaces to
+// its peers. It is idempotent, so a machine that could not join at
+// startup joins on the first `network up` or rune:// open that follows.
+func (n *network) join(ctx context.Context) error {
+	if err := n.node.Start(ctx); err != nil {
+		return err
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.closed || n.server != nil {
+		return nil
+	}
+	server, err := serveNetworkWorkspaces(n.node)
+	if err != nil {
+		return fmt.Errorf("could not serve workspaces on the network: %w", err)
+	}
+	n.server = server
+	return nil
+}
+
+// check reports whether this account may use the network.
+func (n *network) check(ctx context.Context) error {
+	if !n.gated {
+		return nil
+	}
+	return n.gate.check(ctx)
+}
+
+func networkConfig(rootCfg config.Config, dataDir string) (runenet.Config, error) {
+	cfg, err := rootCfg.GetConfig("network")
+	if errors.Is(err, config.ErrNotFound) {
+		cfg = config.NopConfig()
+	} else if err != nil {
+		return runenet.Config{}, fmt.Errorf("get 'network' section from config: %w", err)
+	}
+	return runenet.FromConfig(cfg, dataDir)
+}
+
+// serveNetworkWorkspaces exposes the whole filesystem to peers, rooted
+// at "/", so a rune:// URI can name any path the user could open
+// locally. Only machines owned by the same account get that far; see
+// runenet.PeerAuthorizer.
+func serveNetworkWorkspaces(node *runenet.Node) (*runenet.WorkspaceServer, error) {
+	uri, err := workspaceapi.CurrentUserHostURI("/")
+	if err != nil {
+		return nil, fmt.Errorf("root workspace URI: %w", err)
+	}
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri)
+	if err != nil {
+		return nil, fmt.Errorf("root workspace scheme: %w", err)
+	}
+	server, err := runenet.ServeWorkspace(node, scheme)
+	if err != nil {
+		_ = scheme.Close()
+		return nil, err
+	}
+	return server, nil
+}
+
+// completerOption feeds mesh peers to `workspaceopen` completion. The
+// completer deliberately never prompts — a completion runs on a
+// keystroke, and a keystroke must not open a modal — so unlike the
+// scheme it needs no IDE and is wired at IDE construction.
+func (n *network) completerOption() ide.Option {
+	return ide.WithWorkspaceOpenCompleter(
+		workspacerune.PeerCompleter(gatedPeerLister{n}))
+}
+
+// register wires the network into a live IDE: the rune:// workspace
+// scheme and the `network` console command. Both prompt the user to
+// sign in or upgrade when the plan does not cover the network, which
+// is why they are registered here rather than at IDE construction —
+// the prompter cannot exist before the IDE does.
+func (n *network) register(
+	i *ide.IDE, scheduleNextTick func(func()) bool,
+) error {
+	prompter := newNetworkPrompter(i, scheduleNextTick)
+	if err := i.RegisterScheme(
+		workspacerune.Scheme, n.schemeFunc(prompter)); err != nil {
+		return fmt.Errorf("register %s scheme: %w", workspacerune.Scheme, err)
+	}
+	// The mesh round-trips run off the editor's event loop, which is
+	// why `network` is a console command rather than an ex-command.
+	h := networkshell.New(networkshell.Config{
+		Network: gatedNetwork{n: n, prompter: prompter},
+	})
+	if err := i.RegisterREPLCommand(networkshell.Manual(), h); err != nil {
+		return fmt.Errorf("register '%s': %w", networkshell.CommandName, err)
+	}
+	return nil
+}
+
+// schemeFunc gates rune:// workspaces on the account's plan. The check
+// reads cached claims only, because a workspace is opened on the event
+// loop; a machine that has not joined yet does so in the background
+// while the scheme's reconnect loop waits for it.
+func (n *network) schemeFunc(prompter *networkPrompter) schemeapi.SchemeFunc {
+	inner := workspacerune.New(n.node)
+	return func(
+		ctx context.Context, cfg config.Config, uri workspaceapi.URI,
+	) (schemeapi.Scheme, error) {
+		if err := n.check(ctx); err != nil {
+			prompter.prompt(err)
+			return nil, err
+		}
+		n.joinAsync()
+		return inner(ctx, cfg, uri)
+	}
+}
+
+// joinAsync joins the mesh off the event loop. Failures are logged
+// rather than reported: the caller's reconnect loop is what tells the
+// user whether the peer became reachable.
+func (n *network) joinAsync() {
+	go debug.CapturePanicReport(func() {
+		if err := n.join(context.Background()); err != nil {
+			log.Warnf("could not join network: %v", err)
+		}
+	})
+}
+
+// gatedPeerLister hides the peers from an account whose plan does not
+// cover the network: a completion runs on a keystroke, and a keystroke
+// must not open a modal.
+type gatedPeerLister struct {
+	n *network
+}
+
+func (g gatedPeerLister) Peers(ctx context.Context) ([]runenet.Peer, error) {
+	if err := g.n.check(ctx); err != nil {
+		return nil, nil
+	}
+	return g.n.node.Peers(ctx)
+}
+
+// gatedNetwork is what the `network` command operates on: the two
+// subcommands that need the mesh check the plan first, so a user
+// without one is told how to get it instead of being told the node is
+// not running.
+type gatedNetwork struct {
+	n        *network
+	prompter *networkPrompter
+}
+
+func (g gatedNetwork) Status(ctx context.Context) (runenet.Status, error) {
+	if err := g.n.check(ctx); err != nil {
+		g.prompter.prompt(err)
+		return runenet.Status{}, err
+	}
+	return g.n.node.Status(ctx)
+}
+
+// joinWaitTimeout bounds how long `network up` waits for membership.
+// The backend keeps retrying past it, so on expiry the user is pointed
+// at `network status` rather than left hanging on a console command.
+const joinWaitTimeout = 30 * time.Second
+
+func (g gatedNetwork) Up(ctx context.Context) error {
+	if err := g.n.join(ctx); err != nil {
+		g.prompter.prompt(err)
+		return err
+	}
+	upCtx, cancel := context.WithTimeout(ctx, joinWaitTimeout)
+	defer cancel()
+	if err := g.n.node.Up(upCtx); err != nil {
+		if upCtx.Err() != nil && ctx.Err() == nil {
+			return fmt.Errorf("not a member after %s; joining continues "+
+				"in the background — run `network status`", joinWaitTimeout)
+		}
+		return err
+	}
+	return nil
+}
+
+func (g gatedNetwork) Peers(ctx context.Context) ([]runenet.Peer, error) {
+	return g.n.node.Peers(ctx)
+}
+
+func (g gatedNetwork) Down(ctx context.Context) error {
+	return g.n.node.Down(ctx)
+}
+
+// Close leaves the mesh and stops serving workspaces to peers.
+func (n *network) Close() error {
+	n.mu.Lock()
+	if n.closed {
+		n.mu.Unlock()
+		return nil
+	}
+	n.closed = true
+	server := n.server
+	n.server = nil
+	n.mu.Unlock()
+
+	var errs []error
+	if server != nil {
+		errs = append(errs, server.Close())
+	}
+	// The node outlives Close so a rune:// open racing shutdown reads
+	// a closed node rather than a nil one.
+	errs = append(errs, n.node.Close())
+	return errors.Join(errs...)
+}

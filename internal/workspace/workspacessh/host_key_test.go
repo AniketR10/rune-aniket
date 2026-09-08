@@ -710,3 +710,12 @@ func TestTranslateDialErrorPassesThroughHostKeyError(t *testing.T) {
 	require.True(t, errors.As(got, &hk))
 	assert.Same(t, unknown, hk)
 }
+
+func TestTranslateDialErrorRequiresKeyWhenNoAuthMethodWasAttempted(t *testing.T) {
+	err := errors.New("ssh: handshake failed: ssh: unable to authenticate, " +
+		"attempted methods [none], no supported methods remain")
+
+	got := translateDialError("host:22", false, false, err)
+
+	assert.ErrorIs(t, got, ErrAuthRequiredKey)
+}
