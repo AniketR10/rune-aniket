@@ -27,7 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/component/shader/glslshader"
+	"unstable.build/rune/internal/component/shader/glslshader"
 )
 
 type fakeCompleter struct {

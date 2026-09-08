@@ -30,8 +30,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/handler/locationpicker"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/handler/locationpicker"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // pickEntry is one row of a location-list command's result: where <enter>

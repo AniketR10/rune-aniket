@@ -28,9 +28,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tconfig "unstable.build/rune/api/config"
-	"unstable.build/rune/handler/finder"
-	"unstable.build/rune/workspace/walkdir"
+	tconfig "unstable.build/rune/internal/config"
+	"unstable.build/rune/internal/handler/finder"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 const lineHistoryDocumentID = "extension-fuzzy-line-history"

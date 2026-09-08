@@ -28,10 +28,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/browser"
-	"unstable.build/rune/cell"
-	fileexplorercomp "unstable.build/rune/component/fileexplorer"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/cell"
+	fileexplorercomp "unstable.build/rune/internal/component/fileexplorer"
+	"unstable.build/rune/internal/text"
 )
 
 func (r *Root) toggleFileExplorer() error {

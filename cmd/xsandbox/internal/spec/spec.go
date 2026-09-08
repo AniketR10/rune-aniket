@@ -31,7 +31,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/syntax"
 	"unstable.build/rune/cmd/xsandbox/internal/record"
-	"unstable.build/rune/ide/starlarkconfig"
+	"unstable.build/rune/internal/ide/starlarkconfig"
 )
 
 // RPCExpectation describes one expect_rpc invocation.

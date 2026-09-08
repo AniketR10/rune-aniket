@@ -22,8 +22,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/component/shader"
-	"unstable.build/rune/component/shader/glslshader"
+	"unstable.build/rune/internal/component/shader"
+	"unstable.build/rune/internal/component/shader/glslshader"
 )
 
 const (

@@ -20,7 +20,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tterm "unstable.build/rune/term"
+	tterm "unstable.build/rune/internal/term"
 )
 
 func newMouseDelegate(

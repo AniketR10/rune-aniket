@@ -29,7 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/rune/cmd/rune-agent/agent/agentools"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // cursorLocation is the last known caret position in an editable

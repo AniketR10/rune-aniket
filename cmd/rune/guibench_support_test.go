@@ -37,14 +37,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/browser"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/idelsp/languages"
-	"unstable.build/rune/ide/pkgtrust"
-	"unstable.build/rune/ide/syntax"
-	"unstable.build/rune/term/gui"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/idelsp/languages"
+	"unstable.build/rune/internal/ide/pkgtrust"
+	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/term/gui"
+	"unstable.build/rune/internal/text"
 )
 
 // guiBenchConfig parametrizes a production GUI benchmark session.
@@ -136,11 +136,11 @@ upgrade:
 }
 
 // stageSyntaxFixture copies the committed tree-sitter grammar fixture
-// for langID from ide/syntax/syntaxtest into the data dir's installed
+// for langID from internal/ide/syntax/syntaxtest into the data dir's installed
 // package layout (<dataDir>/lib/<langID>).
 func stageSyntaxFixture(tb testing.TB, dataDir, langID string) {
 	tb.Helper()
-	src := filepath.Join("..", "..", "ide", "syntax", "syntaxtest", langID)
+	src := filepath.Join("..", "..", "internal", "ide", "syntax", "syntaxtest", langID)
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		tb.Fatalf("read syntax fixture %s: %v", src, err)

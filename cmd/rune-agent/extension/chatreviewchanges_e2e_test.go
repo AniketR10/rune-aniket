@@ -31,11 +31,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax"
 )
 
 // grammarPkgManager serves the prebuilt tree-sitter grammars checked in
-// under ide/syntax/syntaxtest. Each call re-reads the directory so a
+// under internal/ide/syntax/syntaxtest. Each call re-reads the directory so a
 // review issuing several Highlight calls gets a fresh iterator.
 type grammarPkgManager struct{ root string }
 
@@ -61,7 +61,7 @@ func realParser(t *testing.T, languages ...string) syntaxapi.Parser {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	root, err := filepath.Abs(filepath.Join(
-		wd, "..", "..", "..", "ide", "syntax", "syntaxtest"))
+		wd, "..", "..", "..", "internal", "ide", "syntax", "syntaxtest"))
 	require.NoError(t, err)
 	for _, lang := range languages {
 		so := filepath.Join(root, lang, "tree-sitter.so")

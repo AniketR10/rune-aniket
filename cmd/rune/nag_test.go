@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/rune/auth"
-	"unstable.build/rune/ide/idenag"
+	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/internal/ide/idenag"
 )
 
 func TestNagStateFromAccount(t *testing.T) {

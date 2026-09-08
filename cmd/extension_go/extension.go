@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/extension/langext"
+	"unstable.build/rune/internal/extension/langext"
 )
 
 // goMarkers are the project-root markers that drive nested discovery: an

@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 func main() {

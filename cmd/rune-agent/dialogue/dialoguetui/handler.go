@@ -28,9 +28,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/handler/search"
-	tterm "unstable.build/rune/term"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/handler/search"
+	tterm "unstable.build/rune/internal/term"
 )
 
 // SubmitMessage is a user message sent through the tx channel.

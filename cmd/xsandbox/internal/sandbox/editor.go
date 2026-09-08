@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/rune/text"
-	"unstable.build/rune/text/texttest"
+	"unstable.build/rune/internal/text"
+	"unstable.build/rune/internal/text/texttest"
 )
 
 // recordingEditor is the sandbox's host-side text.Editor. It records

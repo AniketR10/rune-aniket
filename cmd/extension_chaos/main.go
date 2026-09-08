@@ -22,7 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/rune/cmd/extension_chaos/extension"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 var (

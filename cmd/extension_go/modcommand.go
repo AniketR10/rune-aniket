@@ -28,7 +28,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // modCommandHandler creates a handler for module management commands

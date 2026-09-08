@@ -28,8 +28,8 @@ import (
 	"github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/rune/extension"
-	"unstable.build/rune/ide/syntax"
+	"unstable.build/rune/internal/extension"
+	"unstable.build/rune/internal/ide/syntax"
 )
 
 type parser struct {

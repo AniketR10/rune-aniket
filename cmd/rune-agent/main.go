@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/rune/cmd/rune-agent/extension"
 	"unstable.build/rune/cmd/rune-agent/headless"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 var (

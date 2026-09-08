@@ -22,8 +22,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/handler/search"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/handler/search"
 )
 
 // ContextCompleter supplies the candidates offered when the user types

@@ -35,10 +35,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
-	"unstable.build/rune/ide/gitpkg"
-	"unstable.build/rune/ide/idepkg"
-	"unstable.build/rune/workspace"
-	"unstable.build/rune/workspace/workspacessh"
+	"unstable.build/rune/internal/ide/gitpkg"
+	"unstable.build/rune/internal/ide/idepkg"
+	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/workspacessh"
 )
 
 // setFlagForTest temporarily points a *string flag at value and restores it.

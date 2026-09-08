@@ -22,9 +22,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 
-	"unstable.build/rune/browser"
-	mdcomp "unstable.build/rune/component/markdown"
-	mdhandler "unstable.build/rune/handler/markdown"
+	"unstable.build/rune/internal/browser"
+	mdcomp "unstable.build/rune/internal/component/markdown"
+	mdhandler "unstable.build/rune/internal/handler/markdown"
 )
 
 const shellTabName = "shell"

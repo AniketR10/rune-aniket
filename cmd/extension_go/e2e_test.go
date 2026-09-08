@@ -34,9 +34,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/extension/langext"
-	"unstable.build/rune/ide/idelsp"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/extension/langext"
+	"unstable.build/rune/internal/ide/idelsp"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // Source files used across tests.

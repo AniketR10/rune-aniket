@@ -31,8 +31,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/handler/finder"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/handler/finder"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 var cmdSearchSyntax = textapi.CommandManual{

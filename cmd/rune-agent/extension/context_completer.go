@@ -30,9 +30,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 // contextCompleter backs the chat's '#' completion band with workspace

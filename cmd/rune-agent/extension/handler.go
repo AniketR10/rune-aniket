@@ -67,13 +67,13 @@ import (
 
 	runemcp "unstable.build/rune/cmd/rune-agent/mcp"
 	"unstable.build/rune/cmd/rune-agent/memory"
-	"unstable.build/rune/component/markdown"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/extension/extutil"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/component/markdown"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/extension/extutil"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/text"
 
-	tconfig "unstable.build/rune/api/config"
+	tconfig "unstable.build/rune/internal/config"
 )
 
 const (

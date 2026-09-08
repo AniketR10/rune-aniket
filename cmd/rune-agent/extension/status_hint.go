@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // statusPhase describes the current phase of the agent turn.

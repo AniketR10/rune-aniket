@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"net/url"
 
-	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/idenag"
+	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/idenag"
 )
 
 // nagPromptOption wires the weekly sign-in/upgrade reminder against

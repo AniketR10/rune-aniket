@@ -32,8 +32,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/extension/langext"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/extension/langext"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // zigMarkers are the project-root markers that drive nested discovery.

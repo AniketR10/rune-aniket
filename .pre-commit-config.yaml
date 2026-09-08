@@ -6,6 +6,9 @@ repos:
     -   id: check-yaml
         exclude: .drone.yml
     -   id: end-of-file-fixer
+        # Golden files and language fixtures are byte-exact test inputs;
+        # appending a trailing newline silently changes what they assert.
+        exclude: (^|/)testdata(_[a-z_]+)?/|\.asc$
 
 -   repo: https://github.com/golangci/golangci-lint
     rev: v2.5.0

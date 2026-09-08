@@ -26,10 +26,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/ideupgrade"
-	"unstable.build/rune/ide/upgradeshell"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/ideupgrade"
+	"unstable.build/rune/internal/ide/upgradeshell"
 )
 
 // upgradeConfig captures the values read from the "upgrade" stanza of

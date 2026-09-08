@@ -39,9 +39,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/cell"
-	"unstable.build/rune/ide/ideshell"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/ide/ideshell"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // collectWidth is intentionally large so ResponsiveString.String() never

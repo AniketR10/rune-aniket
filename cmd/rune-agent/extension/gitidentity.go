@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/gitenv"
+	"unstable.build/rune/internal/gitenv"
 )
 
 const gitTimeout = 10 * time.Second

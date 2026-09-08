@@ -26,10 +26,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/browser"
 	"unstable.build/rune/cmd/rune/crashreport"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide"
 )
 
 const (

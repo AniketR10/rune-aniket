@@ -25,7 +25,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"google.golang.org/grpc/status"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // posParams builds a TextDocumentPositionParams from a command's URI and

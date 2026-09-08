@@ -25,8 +25,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/rune/handler/finder"
-	"unstable.build/rune/ide/vctrl"
+	"unstable.build/rune/internal/handler/finder"
+	"unstable.build/rune/internal/ide/vctrl"
 )
 
 // NewExtension returns the combined fuzzy search extension and its metadata.

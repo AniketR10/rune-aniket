@@ -25,7 +25,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // teeExecutor wraps the executor that launches the extension binary.

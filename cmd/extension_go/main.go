@@ -21,7 +21,7 @@ import (
 	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 func main() {

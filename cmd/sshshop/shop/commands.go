@@ -25,7 +25,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 
-	"unstable.build/rune/handler/command"
+	"unstable.build/rune/internal/handler/command"
 )
 
 func (r *Root) commandManuals() []command.Manual {

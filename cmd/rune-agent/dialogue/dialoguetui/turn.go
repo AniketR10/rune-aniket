@@ -24,7 +24,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tcomponent "unstable.build/rune/component"
+	tcomponent "unstable.build/rune/internal/component"
 )
 
 // collapseMode controls how a Turn renders its tool calls.

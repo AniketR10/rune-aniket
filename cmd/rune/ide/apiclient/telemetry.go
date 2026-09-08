@@ -35,8 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/oauth2"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide/idelsp/languages"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide/idelsp/languages"
 )
 
 const telemetryPath = "/telemetry"

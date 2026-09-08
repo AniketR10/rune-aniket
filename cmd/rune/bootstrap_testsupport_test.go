@@ -28,11 +28,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/browser"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/extension"
-	"unstable.build/rune/ide/ideauthorizer"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/extension"
+	"unstable.build/rune/internal/ide/ideauthorizer"
+	"unstable.build/rune/internal/text"
 )
 
 type bootstrapFlagOverrides struct {

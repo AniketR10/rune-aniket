@@ -31,7 +31,7 @@ import (
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // terminateGrace is how long a stdio server is given to exit after its

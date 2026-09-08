@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"unstable.build/rune/cell"
+	"unstable.build/rune/internal/cell"
 )
 
 var allLogoThemes = []string{

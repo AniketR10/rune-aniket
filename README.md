@@ -21,6 +21,14 @@ See [docs.rune.build](https://docs.rune.build) for the full documentation.
 
 - `cmd/rune` — the main Rune application
 - `cmd/rune-agent` — the Rune Agent extension and packages
+- `internal/` — the editor, terminal, text, workspace, and LLM packages the
+  binaries are built from
+
+Everything outside `cmd/` lives under `internal/`. Rune is an application, not
+a library: the supported, semver-stable API for writing extensions is
+[rune-go-sdk](https://github.com/unstablebuild/rune-go-sdk), which is a
+separate Apache-2.0 module. Packages in this repository carry no compatibility
+guarantees and are refactored freely.
 
 See [AGENTS.md](AGENTS.md) for a deeper tour of the architecture.
 

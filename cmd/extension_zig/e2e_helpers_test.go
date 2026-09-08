@@ -33,7 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/ide/idelsp"
+	"unstable.build/rune/internal/ide/idelsp"
 )
 
 // findZlsBin locates the zls binary or skips the test. It mirrors

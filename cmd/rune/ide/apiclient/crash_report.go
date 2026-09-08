@@ -24,8 +24,8 @@ import (
 	"net/http"
 	"time"
 
-	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/crashreport"
+	"unstable.build/rune/internal/auth"
 )
 
 const reportUploadTimeout = 30 * time.Second

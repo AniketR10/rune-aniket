@@ -34,10 +34,10 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/cell"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/extension"
-	"unstable.build/rune/ide/idelsp/languages"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/extension"
+	"unstable.build/rune/internal/ide/idelsp/languages"
 )
 
 var (

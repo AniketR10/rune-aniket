@@ -34,10 +34,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
 	"unstable.build/rune/cmd/rune/loginshell"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui"
+	"unstable.build/rune/internal/text"
 )
 
 const (

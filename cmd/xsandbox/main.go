@@ -47,7 +47,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 	"unstable.build/rune/cmd/xsandbox/internal/sandbox"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 func main() {

@@ -19,7 +19,7 @@ package main
 import (
 	_ "embed"
 
-	"unstable.build/rune/ide"
+	"unstable.build/rune/internal/ide"
 )
 
 //go:embed tutorials/basics.star

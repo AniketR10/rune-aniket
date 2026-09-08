@@ -30,13 +30,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/gitpkg"
-	"unstable.build/rune/ide/idepkg"
-	"unstable.build/rune/ide/multipkg"
-	"unstable.build/rune/ide/pkgtrust"
-	"unstable.build/rune/workspace"
-	"unstable.build/rune/workspace/workspacessh"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/gitpkg"
+	"unstable.build/rune/internal/ide/idepkg"
+	"unstable.build/rune/internal/ide/multipkg"
+	"unstable.build/rune/internal/ide/pkgtrust"
+	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/workspacessh"
 )
 
 // provisionRemote runs on the remote `rune -x` server before it starts

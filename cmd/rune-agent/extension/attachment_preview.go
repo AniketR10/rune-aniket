@@ -32,9 +32,9 @@ import (
 	"unstable.build/rune/cmd/rune-agent/agent/agentools"
 	"unstable.build/rune/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/rune/component/markdown"
-	"unstable.build/rune/debug"
-	mdhandler "unstable.build/rune/handler/markdown"
+	"unstable.build/rune/internal/component/markdown"
+	"unstable.build/rune/internal/debug"
+	mdhandler "unstable.build/rune/internal/handler/markdown"
 )
 
 // Legacy attachment content parts double as the durable record of what

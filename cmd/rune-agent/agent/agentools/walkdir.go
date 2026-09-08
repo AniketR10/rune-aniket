@@ -23,7 +23,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 const maxAgentWalkdirWorkers = 4

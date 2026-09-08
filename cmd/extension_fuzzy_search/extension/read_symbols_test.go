@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/cell"
+	"unstable.build/rune/internal/cell"
 )
 
 // TestMakeSymbolItemEndOfBufferRow reproduces a crash where a tree-sitter

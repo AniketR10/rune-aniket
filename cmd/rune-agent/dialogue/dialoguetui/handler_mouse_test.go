@@ -28,8 +28,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/component/markdown"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/component/markdown"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // mouseEv builds a mouse term.Event for the given position and key.

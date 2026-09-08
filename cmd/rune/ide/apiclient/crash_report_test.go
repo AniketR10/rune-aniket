@@ -26,8 +26,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"golang.org/x/oauth2"
-	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/crashreport"
+	"unstable.build/rune/internal/auth"
 )
 
 // newValidTestTokenSource creates a CachedTokenSource backed by a static

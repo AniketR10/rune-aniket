@@ -44,10 +44,10 @@ import (
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/rune/cmd/rune-agent/llm/llmarg"
-	"unstable.build/rune/component/markdown"
-	mdhandler "unstable.build/rune/handler/markdown"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/component/markdown"
+	mdhandler "unstable.build/rune/internal/handler/markdown"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/text"
 )
 
 // commandAdapter wraps a repl.CommandHandler into a dialoguetui.CommandHandler

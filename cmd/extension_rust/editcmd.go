@@ -25,7 +25,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // editDeps are the shared dependencies of the edit-applying subcommands.

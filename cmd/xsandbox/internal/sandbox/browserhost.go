@@ -29,11 +29,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/browser"
-	tbrowserrpc "unstable.build/rune/browser/browserrpc"
-	"unstable.build/rune/browser/browsertest"
-	"unstable.build/rune/extension"
-	"unstable.build/rune/rpc"
+	"unstable.build/rune/internal/browser"
+	tbrowserrpc "unstable.build/rune/internal/browser/browserrpc"
+	"unstable.build/rune/internal/browser/browsertest"
+	"unstable.build/rune/internal/extension"
+	"unstable.build/rune/internal/rpc"
 )
 
 // browserHost is the sandbox's real headless browser backend. It wraps

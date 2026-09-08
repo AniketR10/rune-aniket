@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 const (

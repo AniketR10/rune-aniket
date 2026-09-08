@@ -30,7 +30,7 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/rune/cmd/rune-agent/agent"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 // conversationAuditPrefix is the key prefix used for audit entries in

@@ -33,8 +33,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/extension/langext"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/extension/langext"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // rustMarkers are the project-root markers that drive nested discovery.

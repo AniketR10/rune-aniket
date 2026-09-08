@@ -33,8 +33,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 func testHandler(

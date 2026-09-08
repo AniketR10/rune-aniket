@@ -29,7 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/rune/cmd/rune-agent/agent"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // Options configures a single headless run.

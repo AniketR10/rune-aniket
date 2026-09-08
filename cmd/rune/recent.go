@@ -24,7 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"unstable.build/rune/handler/search"
+	"unstable.build/rune/internal/handler/search"
 )
 
 // recentWorkspacesDocumentID is the storage key for the projects opened

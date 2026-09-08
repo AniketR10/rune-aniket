@@ -26,9 +26,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui/appmenu"
-	"unstable.build/rune/term/gui/openpanel"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui/appmenu"
+	"unstable.build/rune/internal/term/gui/openpanel"
 )
 
 // testAppMenus builds the menu bar with the quick menu unavailable,

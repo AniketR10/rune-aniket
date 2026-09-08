@@ -21,9 +21,9 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui/appmenu"
-	"unstable.build/rune/term/gui/openpanel"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui/appmenu"
+	"unstable.build/rune/internal/term/gui/openpanel"
 )
 
 // appMenuCommands are the Rune commands reachable from the menu bar.

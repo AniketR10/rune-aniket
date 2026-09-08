@@ -27,7 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/component/markdown"
+	"unstable.build/rune/internal/component/markdown"
 )
 
 var (

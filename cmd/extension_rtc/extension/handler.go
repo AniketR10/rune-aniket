@@ -34,8 +34,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/component/asciiart"
-	"unstable.build/rune/component/asciiart/capture"
+	"unstable.build/rune/internal/component/asciiart"
+	"unstable.build/rune/internal/component/asciiart/capture"
 )
 
 const defaultFPS = 30

@@ -26,7 +26,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // detectRustProject reports whether the workspace root looks like a Rust

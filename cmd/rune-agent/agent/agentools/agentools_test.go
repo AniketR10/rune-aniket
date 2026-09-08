@@ -41,8 +41,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/rune/cmd/rune-agent/agent"
 	"unstable.build/rune/cmd/rune-agent/configedit"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 // localFS implements workspaceapi.FileSystem using local OS calls for testing.

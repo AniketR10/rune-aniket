@@ -24,7 +24,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
-	"unstable.build/rune/ide"
+	"unstable.build/rune/internal/ide"
 )
 
 func TestOptionToChoiceMapping(t *testing.T) {

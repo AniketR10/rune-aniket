@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // Stream abstract a GRPC protoc-generated wrapper of grpc.ClientStream.

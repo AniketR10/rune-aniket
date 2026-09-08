@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 func main() {

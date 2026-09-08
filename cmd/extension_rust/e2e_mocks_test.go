@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // raCallback implements idelsp.Callback for e2e tests, recording applied

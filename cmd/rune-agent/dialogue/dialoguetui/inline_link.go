@@ -21,7 +21,7 @@ import (
 	"slices"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/cell"
+	"unstable.build/rune/internal/cell"
 )
 
 // InlineAttachmentLink binds a range of the compose text to a pending

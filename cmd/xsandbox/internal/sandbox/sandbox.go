@@ -39,9 +39,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"unstable.build/rune/cmd/xsandbox/internal/record"
 	"unstable.build/rune/cmd/xsandbox/internal/spec"
-	"unstable.build/rune/extension"
-	"unstable.build/rune/text"
-	"unstable.build/rune/text/textrpc"
+	"unstable.build/rune/internal/extension"
+	"unstable.build/rune/internal/text"
+	"unstable.build/rune/internal/text/textrpc"
 )
 
 // Options configure a sandbox run.

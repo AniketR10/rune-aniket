@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/upgradeshell"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/upgradeshell"
 )
 
 // TestRegisterUpgradeCommandWithoutManager covers the configuration

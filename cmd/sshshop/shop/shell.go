@@ -25,8 +25,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
-	"unstable.build/rune/browser"
-	"unstable.build/rune/ide/ideshell"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/ide/ideshell"
 )
 
 func (r *Root) mustInitShellTab() {

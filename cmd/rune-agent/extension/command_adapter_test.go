@@ -32,9 +32,9 @@ import (
 	"unstable.build/rune/cmd/rune-agent/agent"
 	"unstable.build/rune/cmd/rune-agent/agent/skills"
 	"unstable.build/rune/cmd/rune-agent/llm/llmtest"
-	"unstable.build/rune/llm/anthropic"
-	"unstable.build/rune/llm/codex"
-	"unstable.build/rune/llm/gemini"
+	"unstable.build/rune/internal/llm/anthropic"
+	"unstable.build/rune/internal/llm/codex"
+	"unstable.build/rune/internal/llm/gemini"
 )
 
 // newMaxTokensAdapter builds a commandAdapter whose agent is bound to a

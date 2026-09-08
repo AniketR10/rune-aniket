@@ -24,8 +24,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/browser"
-	"unstable.build/rune/component/asciiart"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/component/asciiart"
 )
 
 //go:embed unstable_build_logo.png

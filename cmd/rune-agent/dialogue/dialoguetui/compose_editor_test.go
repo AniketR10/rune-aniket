@@ -27,8 +27,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/text/standard"
-	"unstable.build/rune/text/vi"
+	"unstable.build/rune/internal/text/standard"
+	"unstable.build/rune/internal/text/vi"
 )
 
 func TestComposeEditorNilUsesModelessEditor(t *testing.T) {

@@ -51,8 +51,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/workspace"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/workspace"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 func main() {

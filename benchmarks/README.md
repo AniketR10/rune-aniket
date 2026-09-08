@@ -1,7 +1,7 @@
 # GUI renderer benchmark battery
 
 `BenchmarkGUI` (in `cmd/rune`) is an end-to-end benchmark battery for the
-ebiten GUI renderer (`term/gui`). Each benchmark drives the **production**
+ebiten GUI renderer (`internal/term/gui`). Each benchmark drives the **production**
 GUI stack — a real `ide.IDE` built through the same `bootstrapHandler`
 construction path `runGUI` uses, dispatched through the real
 `gui.GUI.Update` / `gui.GUI.Draw`, with GPU commands flushed by the
@@ -49,8 +49,8 @@ signals for renderer regressions and are what `benchstat` compares.
 
 Draw-call batching (background rects collapsing into one `DrawTriangles`,
 glyph runs collapsing to one `DrawTriangles` per atlas page per blend)
-is verified structurally in the `term/gui/drawrect` and
-`term/gui/drawtext` unit tests rather than via a per-frame GPU-command
+is verified structurally in the `internal/term/gui/drawrect` and
+`internal/term/gui/drawtext` unit tests rather than via a per-frame GPU-command
 metric, so the benchmark battery needs no engine-level counter.
 
 ## Scenarios
@@ -164,7 +164,7 @@ blend, regardless of how many cells changed.
 
 Because this batching applies to both repaint modes it does not show up
 in the reference/optimized `ns/op` delta above; it is instead verified
-**structurally** in the `term/gui/drawrect` and `term/gui/drawtext` unit
+**structurally** in the `internal/term/gui/drawrect` and `internal/term/gui/drawtext` unit
 tests — one `Batch.Flush` emits a single `DrawTriangles`, and an open
 glyph run of N same-page/same-blend quads stays a single run (4N
 vertices, one flush). That is a deterministic, hardware-independent

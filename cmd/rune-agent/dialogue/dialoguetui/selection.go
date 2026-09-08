@@ -22,7 +22,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tcomponent "unstable.build/rune/component"
+	tcomponent "unstable.build/rune/internal/component"
 )
 
 var _ component.Responsive = (*Selection)(nil)

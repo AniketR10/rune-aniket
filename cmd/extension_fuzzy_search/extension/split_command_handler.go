@@ -24,7 +24,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/handler/finder"
+	"unstable.build/rune/internal/handler/finder"
 )
 
 type splitCommandHandler struct {

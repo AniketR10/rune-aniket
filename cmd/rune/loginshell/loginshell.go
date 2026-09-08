@@ -30,9 +30,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
-	"unstable.build/rune/component/markdown"
+	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/internal/component/markdown"
 )
 
 // Client is the subset of *apiclient.Client the login shell needs.

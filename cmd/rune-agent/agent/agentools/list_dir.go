@@ -27,7 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/rune/cmd/rune-agent/agent"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 const (

@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"unstable.build/rune/handler/finder"
+	"unstable.build/rune/internal/handler/finder"
 )
 
 func TestNewExtensionMetadata(t *testing.T) {

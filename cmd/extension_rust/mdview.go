@@ -27,8 +27,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	mdcomp "unstable.build/rune/component/markdown"
-	mdhandler "unstable.build/rune/handler/markdown"
+	mdcomp "unstable.build/rune/internal/component/markdown"
+	mdhandler "unstable.build/rune/internal/handler/markdown"
 )
 
 // markdownView is the floating viewer used for rust-analyzer's textual

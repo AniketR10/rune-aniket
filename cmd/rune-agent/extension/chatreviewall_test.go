@@ -29,9 +29,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/ide/vctrl/testgit"
-	"unstable.build/rune/workspace"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/ide/vctrl/testgit"
+	"unstable.build/rune/internal/workspace"
 )
 
 func TestReviewWorkingTree(t *testing.T) {

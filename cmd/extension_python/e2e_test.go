@@ -35,9 +35,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/extension/langext"
-	"unstable.build/rune/ide/idelsp"
-	"unstable.build/rune/workspace"
+	"unstable.build/rune/internal/extension/langext"
+	"unstable.build/rune/internal/ide/idelsp"
+	"unstable.build/rune/internal/workspace"
 )
 
 type synchronizedBuffer struct {

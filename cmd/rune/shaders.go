@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/component/shader"
+	"unstable.build/rune/internal/component/shader"
 )
 
 const (

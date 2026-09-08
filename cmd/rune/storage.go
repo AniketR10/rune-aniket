@@ -22,8 +22,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
-	"unstable.build/rune/localstorage"
-	"unstable.build/rune/term/gui"
+	"unstable.build/rune/internal/localstorage"
+	"unstable.build/rune/internal/term/gui"
 )
 
 const (

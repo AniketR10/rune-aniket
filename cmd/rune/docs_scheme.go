@@ -29,7 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/rune/workspace"
+	"unstable.build/rune/internal/workspace"
 )
 
 const docsScheme = "docs"

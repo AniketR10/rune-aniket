@@ -42,7 +42,7 @@ import (
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/rune/cmd/rune-agent/llm/llmtest"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // recordingWindowManager is a stub browserapi.WindowManager that records the

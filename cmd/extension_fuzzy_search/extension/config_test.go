@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/rune/ide/starlarkconfig"
+	"unstable.build/rune/internal/ide/starlarkconfig"
 )
 
 // TestBundledConfigStar locks in the mode/tui-aware fuzzy-search package

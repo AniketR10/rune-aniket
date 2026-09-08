@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"unstable.build/rune/cmd/extension_python/pyshim"
-	"unstable.build/rune/extension/langext"
+	"unstable.build/rune/internal/extension/langext"
 )
 
 // initRootHarness runs initializeProjectRoot against an empty workspace

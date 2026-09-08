@@ -40,8 +40,8 @@ import (
 	"unstable.build/rune/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/hooks"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/ide/idelsp/languages"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide/idelsp/languages"
 )
 
 // Config holds agent configuration.

@@ -23,8 +23,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui/glassbar"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui/glassbar"
 )
 
 // fakeHandler counts calls to each tui.Handler method so tests can

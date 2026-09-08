@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // TestFormatStampNormalizesToUTC pins that a non-UTC input is rendered

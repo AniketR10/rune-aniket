@@ -39,7 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/ide/idelsp"
+	"unstable.build/rune/internal/ide/idelsp"
 )
 
 // findGopls locates the gopls binary or skips the test.

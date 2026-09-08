@@ -29,7 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // actionCmdName is the command-prompt command that exposes

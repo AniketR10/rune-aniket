@@ -31,8 +31,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/browser/browsertest"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/rune/internal/browser/browsertest"
 )
 
 func cellRows(lines ...string) [][]term.Cell {

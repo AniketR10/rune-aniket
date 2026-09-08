@@ -24,7 +24,7 @@ RUNE_AGENT_LINUX_RELEASE_TAR ?= rune-agent-release-$(RUNE_AGENT_LINUX_TARGET_OS)
 HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 
 # Build flags mirror the root Makefile's six package stamp.
-COMMON_LDFLAGS := -X unstable.build/rune/debug.Tag=$(VERSION) -X unstable.build/rune/debug.Commit=$(COMMIT) -X unstable.build/rune/debug.Package=six
+COMMON_LDFLAGS := -X unstable.build/rune/internal/debug.Tag=$(VERSION) -X unstable.build/rune/internal/debug.Commit=$(COMMIT) -X unstable.build/rune/internal/debug.Package=six
 
 # darwin amd64 cross-builds on an Apple Silicon host need an explicit
 # -arch x86_64 cgo toolchain; arm64 is native and needs no extra flags.
@@ -123,7 +123,7 @@ make-release-linux:
 	@cd $(ROOT_DIR) && CGO_ENABLED=1 CGO_LDFLAGS='-Wl,-rpath,$$ORIGIN/../lib' \
 		GOOS=linux GOARCH=$(RUNE_AGENT_LINUX_TARGET_ARCH) \
 		$(GO) build \
-		-ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune" \
+		-ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune" \
 		-o $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/bin/rune-agent ./cmd/rune-agent
 	@set -eu; \
 	BIN=$(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/bin/rune-agent; \

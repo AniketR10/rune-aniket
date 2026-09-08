@@ -38,9 +38,9 @@ import (
 	"unstable.build/rune/cmd/rune-agent/agent/agentools"
 	"unstable.build/rune/cmd/rune-agent/agent/agentools/applypatch"
 	"unstable.build/rune/cmd/rune-agent/configedit"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/ide/vctrl/testgit"
-	"unstable.build/rune/workspace"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/ide/vctrl/testgit"
+	"unstable.build/rune/internal/workspace"
 )
 
 func TestReviewChanges(t *testing.T) {

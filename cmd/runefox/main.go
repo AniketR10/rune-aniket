@@ -25,8 +25,8 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/debug"
-	htmlhandler "unstable.build/rune/handler/html"
+	"unstable.build/rune/internal/debug"
+	htmlhandler "unstable.build/rune/internal/handler/html"
 )
 
 func main() {

@@ -25,9 +25,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/rune/browser"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui"
 )
 
 //go:embed rune.star

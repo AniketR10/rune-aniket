@@ -27,7 +27,7 @@ package main
 import (
 	"time"
 
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 // formatStamp renders t as the debug.BuildDate string: RFC3339 in UTC,

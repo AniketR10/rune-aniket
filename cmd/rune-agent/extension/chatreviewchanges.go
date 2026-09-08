@@ -36,9 +36,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/cell"
 	"unstable.build/rune/cmd/rune-agent/agent/agentools/applypatch"
-	"unstable.build/rune/ide/vctrl"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/ide/vctrl"
 )
 
 const applyPatchToolName = "apply_patch"

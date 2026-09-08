@@ -1,7 +1,7 @@
 GO=go
 CI ?= false
 # The 600s budget accommodates the docker-driven SSH integration
-# suite (workspace/workspacessh/test), which exceeds 4 minutes when
+# suite (internal/workspace/workspacessh/test), which exceeds 4 minutes when
 # the rest of the repository's tests run in parallel with it.
 GOTESTFLAGS ?= -race -timeout 180s
 GOTESTFLAGSNORACE = -timeout 180s
@@ -11,7 +11,7 @@ GOTESTFLAGSNORACE = -timeout 180s
 # variable. Recursive (=) so target-specific overrides propagate to
 # prerequisites that re-expand COMMON_LDFLAGS.
 RUNE_DEBUG_BUILD ?=
-DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/debug.DebugBuild=true)
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/internal/debug.DebugBuild=true)
 # RACE_FLAG mirrors RUNE_DEBUG_BUILD so the race detector is enabled
 # for every binary the `debug` target produces, including the rune
 # binary (which builds with RUNE_GOFLAGS rather than GOFLAGS). This is
@@ -35,10 +35,10 @@ REPO_ROOT := $(shell git rev-parse --show-toplevel)
 # inline $$(...) substitution could not enforce this because its non-zero
 # exit would not fail the surrounding go build.
 BUILD_DATE := $(shell out=$$($(GO) run $(REPO_ROOT)/cmd/buildstamp) && printf '%s' "$$out")
-BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/debug.BuildDate=$(strip $(BUILD_DATE))
-COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
-GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
-RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune"
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/internal/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/rune/internal/debug.Tag=$$(git describe --tags) -X unstable.build/rune/internal/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=six"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune"
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -117,7 +117,7 @@ RELEASE_FILES=$(wildcard release/*)
 	FORCE \
 	manual-ssh-test \
 	dist-tar-with-src dist-dmg-with-src dist-min-macos dist-min-linux \
-	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
+	$(filter internal/workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 # bluectl config matrix. Each leaf config pins BOTH auth.project-id and
 # release.collection so the publishing env + destination bucket are
@@ -171,7 +171,7 @@ coverage: docs-init $(BIN)
 #
 # Override defaults on the command line:
 #   make fuzz FUZZTIME=30s         # longer per-target budget
-#   make fuzz FUZZ_PKG=./component/markdown/...
+#   make fuzz FUZZ_PKG=./internal/component/markdown/...
 FUZZTIME ?= 10s
 FUZZ_PKG ?= ./...
 FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
@@ -440,17 +440,17 @@ dist-min-linux:
 # We pick the linux arch that matches the docker host's native
 # architecture so the openssh test container runs the rune binary
 # without QEMU emulation (the harness's e2e tests do the same; see
-# containerGOARCH() in workspace/workspacessh/test/harness.go).
+# containerGOARCH() in internal/workspace/workspacessh/test/harness.go).
 #
 # Usage:
-#   make manual-ssh-test workspace/workspacessh/manual_test/01_host_key_match.sh
+#   make manual-ssh-test internal/workspace/workspacessh/manual_test/01_host_key_match.sh
 RUNE_LINUX_HOST_ARCH := $(shell uname -m | sed -e 's/^arm64$$/arm64/' -e 's/^aarch64$$/arm64/' -e 's/^x86_64$$/amd64/' -e 's/^amd64$$/amd64/')
 RUNE_LINUX_REMOTE_BIN := $(TARGET)/rune_linux_$(RUNE_LINUX_HOST_ARCH)/rune.app/bin/rune
-MANUAL_SSH_SCRIPT := $(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
+MANUAL_SSH_SCRIPT := $(filter internal/workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 manual-ssh-test: rune-release-linux-$(RUNE_LINUX_HOST_ARCH)
 	@if [ -z "$(MANUAL_SSH_SCRIPT)" ]; then \
-		echo "usage: make manual-ssh-test workspace/workspacessh/manual_test/<file>.sh" >&2; \
+		echo "usage: make manual-ssh-test internal/workspace/workspacessh/manual_test/<file>.sh" >&2; \
 		exit 2; \
 	fi
 	@RUNE_REMOTE_BIN=$(RUNE_LINUX_REMOTE_BIN) ./$(MANUAL_SSH_SCRIPT)
@@ -458,7 +458,7 @@ manual-ssh-test: rune-release-linux-$(RUNE_LINUX_HOST_ARCH)
 # Swallow the script path argument so make doesn't try to (re)build
 # the .sh file as a target. The actual script is invoked by the
 # manual-ssh-test recipe above.
-workspace/workspacessh/manual_test/%.sh:
+internal/workspace/workspacessh/manual_test/%.sh:
 	@:
 
 rune-app-amd64:

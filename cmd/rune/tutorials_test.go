@@ -30,11 +30,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
-	"unstable.build/rune/browser"
-	"unstable.build/rune/handler/command"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/idetutorial"
-	"unstable.build/rune/ide/idetutorial/starlarktutorial"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/handler/command"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/idetutorial"
+	"unstable.build/rune/internal/ide/idetutorial/starlarktutorial"
 )
 
 // TestBasicsTutorialParses asserts that the embedded basics.star

@@ -29,9 +29,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/handler/handlertest"
-	"unstable.build/rune/ide/ideshell"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/handler/handlertest"
+	"unstable.build/rune/internal/ide/ideshell"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // TestGoREPLEndToEndEval drives the Go REPL handler against the real go

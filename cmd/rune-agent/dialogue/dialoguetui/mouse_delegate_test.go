@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tterm "unstable.build/rune/term"
+	tterm "unstable.build/rune/internal/term"
 )
 
 var _ mouse.Delegate = (*mouseDelegate)(nil)

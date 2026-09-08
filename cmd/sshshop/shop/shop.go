@@ -38,12 +38,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
-	"unstable.build/rune/browser"
-	"unstable.build/rune/cell"
-	"unstable.build/rune/handler/command"
-	"unstable.build/rune/ide/ideshell"
-	"unstable.build/rune/text"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/handler/command"
+	"unstable.build/rune/internal/ide/ideshell"
+	"unstable.build/rune/internal/text"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // Root is the storefront's top-level tui.Handler. One per SSH session.

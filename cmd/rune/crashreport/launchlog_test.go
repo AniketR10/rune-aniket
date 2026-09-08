@@ -35,7 +35,7 @@ runtime stack:
 runtime.throw({0x1015a4f8d?, 0x100750c94?})
 	/go/src/runtime/panic.go:1229 +0x38
 goroutine 1228 [running]:
-unstable.build/rune/term/vte.(*viHandler).Edit(...)
+unstable.build/rune/internal/term/vte.(*viHandler).Edit(...)
 	/Users/x/term/vte/vi.go:375 +0x6b8
 `
 

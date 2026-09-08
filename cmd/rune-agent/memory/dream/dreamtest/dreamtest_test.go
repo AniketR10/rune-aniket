@@ -52,7 +52,7 @@ import (
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/memory/dream"
 	"unstable.build/rune/cmd/rune-agent/memory/dream/dreamcomponent"
-	"unstable.build/rune/term/sh"
+	"unstable.build/rune/internal/term/sh"
 )
 
 func TestDream_E2E_NoDialogues(t *testing.T) {

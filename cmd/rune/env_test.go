@@ -34,10 +34,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"gopkg.in/yaml.v3"
 
-	"unstable.build/rune/ide"
-	"unstable.build/rune/ide/idepkg"
-	"unstable.build/rune/ide/pkgtrust"
-	"unstable.build/rune/ide/starlarkconfig"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/idepkg"
+	"unstable.build/rune/internal/ide/pkgtrust"
+	"unstable.build/rune/internal/ide/starlarkconfig"
 )
 
 // TestGUIEnvLiveApplyHookAppliesNewlyMergedVar is the black-box regression for

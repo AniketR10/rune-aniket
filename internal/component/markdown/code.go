@@ -1,0 +1,276 @@
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package markdown
+
+import (
+	"context"
+
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/ide/idelsp/languages"
+)
+
+type codeBlock struct {
+	cells  [][]term.Cell
+	cfg    *Config
+	w      int // width from last Height call
+	cancel context.CancelFunc
+}
+
+var _ block = (*codeBlock)(nil)
+
+func newCodeBlock(language, code string, cfg *Config) *codeBlock {
+	cells := term.StringToCells(code)
+	// Strip trailing empty line (goldmark includes trailing newline).
+	if len(cells) > 0 && len(cells[len(cells)-1]) == 0 {
+		cells = cells[:len(cells)-1]
+	}
+
+	// Apply base CodeBlock attributes to every cell.
+	for y := range cells {
+		for x := range cells[y] {
+			cells[y][x].SetAttributes(cfg.CodeBlock)
+		}
+	}
+
+	cb := &codeBlock{cells: cells, cfg: cfg}
+
+	if cfg.Parser == nil || language == "" {
+		return cb
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cb.cancel = cancel
+
+	parser := cfg.Parser
+	codeBlock := cfg.CodeBlock
+	schedule := cfg.ScheduleNextTick
+	go debug.CapturePanicReport(func() {
+
+		hls := collectHighlights(ctx, parser, language, code)
+		if len(hls) == 0 {
+			return
+		}
+		schedule(func() {
+			applyHighlights(cb.cells, hls, codeBlock)
+		})
+
+	})
+
+	return cb
+}
+
+// collectHighlights performs I/O by calling Parser.Highlight and
+// collects all resulting locations into a slice. The context controls
+// cancellation of the iterator consumption.
+func collectHighlights(ctx context.Context, parser syntaxapi.Parser, language, code string) []textapi.Location {
+	filename := languages.FilenameForLanguage(language)
+	uri, err := workspaceapi.ParseURI("file:///" + filename)
+	if err != nil {
+		return nil
+	}
+	iter, err := parser.Highlight(uri, code)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = iter.Close() }()
+
+	var hls []textapi.Location
+	for hl, ok := iter.Next(ctx); ok; hl, ok = iter.Next(ctx) {
+		hls = append(hls, hl)
+	}
+	return hls
+}
+
+func (c *codeBlock) close() {
+	if c.cancel != nil {
+		c.cancel()
+	}
+}
+
+// applyHighlights writes highlight attributes into pre-built cells.
+// Must only be called on the event-loop thread (or synchronously
+// before the codeBlock is used).
+func applyHighlights(cells [][]term.Cell, hls []textapi.Location, codeBlock term.Attributes) {
+	for _, hl := range hls {
+		for y := hl.From.Y; y <= hl.To.Y && y < len(cells); y++ {
+			startX := 0
+			if y == hl.From.Y {
+				startX = hl.From.X
+			}
+			endX := len(cells[y])
+			if y == hl.To.Y {
+				endX = hl.To.X
+			}
+			for x := startX; x < endX && x < len(cells[y]); x++ {
+				attr := hl.Attr
+				// Preserve the code block background color.
+				if codeBlock.Bg != term.ColorDefault {
+					attr.Bg = codeBlock.Bg
+				}
+				cells[y][x].SetAttributes(attr)
+			}
+		}
+	}
+}
+
+func (c *codeBlock) Height(width int) int {
+	if width <= 0 {
+		return 0
+	}
+	lines := 0
+	for _, row := range c.cells {
+		lines += len(splitRow(row, width))
+	}
+	return lines + 1
+}
+
+func (c *codeBlock) Resize(width, _ int) {
+	c.w = width
+}
+
+func (c *codeBlock) Draw(w term.Writer) {
+	if c.w <= 0 {
+		return
+	}
+
+	if c.cfg.CodeBlock.Bg != term.ColorDefault {
+		bgAttr := term.Attributes{Bg: c.cfg.CodeBlock.Bg}
+		for y := range c.Height(c.w) - 1 {
+			for x := range c.w {
+				w.UnionAttributes(term.Coordinates{X: x, Y: y}, bgAttr)
+			}
+		}
+	}
+
+	drawY := 0
+	for _, row := range c.cells {
+		for _, line := range splitRow(row, c.w) {
+			x := 0
+			for _, cell := range line {
+				width := max(1, int(cell.Width))
+				if x+width > c.w {
+					break
+				}
+				w.SetCell(term.Coordinates{X: x, Y: drawY}, cell)
+				x += width
+			}
+			drawY++
+		}
+	}
+}
+
+func (c *codeBlock) Dimensions() (width, height int) {
+	return c.maxLineWidth(), len(c.cells) + 1
+}
+
+func (c *codeBlock) SpanAt(x, y int) (text, url string, ok bool) {
+	if c.w <= 0 {
+		return
+	}
+	row, _, ok := c.cellAt(x, y)
+	if !ok {
+		return
+	}
+	return cellsToString(row), "", true
+}
+
+func (c *codeBlock) CharAt(x, y int) (rune, bool) {
+	if c.w <= 0 {
+		return 0, false
+	}
+	_, cell, ok := c.cellAt(x, y)
+	if ok {
+		return cell.Ch, true
+	}
+	return 0, false
+}
+
+func (c *codeBlock) maxLineWidth() int {
+	maxWidth := 0
+	for _, row := range c.cells {
+		rowWidth := 0
+		for _, cell := range row {
+			rowWidth += max(1, int(cell.Width))
+		}
+		if rowWidth > maxWidth {
+			maxWidth = rowWidth
+		}
+	}
+	return maxWidth
+}
+
+// splitRow slices a source row into the visual lines it occupies at the given
+// width. The slices share the row's storage. A cell wider than the remaining
+// columns starts the next line instead of straddling the boundary; one wider
+// than the whole width gets a line of its own and is clipped when drawn.
+func splitRow(row []term.Cell, width int) [][]term.Cell {
+	if width <= 0 {
+		return nil
+	}
+	if len(row) == 0 {
+		return [][]term.Cell{nil}
+	}
+
+	var lines [][]term.Cell
+	start, cols := 0, 0
+	for i, cell := range row {
+		cellWidth := max(1, int(cell.Width))
+		if i > start && cols+cellWidth > width {
+			lines = append(lines, row[start:i])
+			start, cols = i, 0
+		}
+		cols += cellWidth
+	}
+	return append(lines, row[start:])
+}
+
+func (c *codeBlock) cellAt(x, y int) ([]term.Cell, term.Cell, bool) {
+	if x < 0 || x >= c.w || y < 0 {
+		return nil, term.Cell{}, false
+	}
+
+	rowY := 0
+	for _, row := range c.cells {
+		lines := splitRow(row, c.w)
+		if y < rowY+len(lines) {
+			col := 0
+			for _, cell := range lines[y-rowY] {
+				cellWidth := max(1, int(cell.Width))
+				if x >= col && x < col+cellWidth {
+					return row, cell, true
+				}
+				col += cellWidth
+			}
+			return nil, term.Cell{}, false
+		}
+		rowY += len(lines)
+	}
+
+	return nil, term.Cell{}, false
+}
+
+func cellsToString(row []term.Cell) string {
+	runes := make([]rune, len(row))
+	for i, c := range row {
+		runes[i] = c.Ch
+	}
+	return string(runes)
+}

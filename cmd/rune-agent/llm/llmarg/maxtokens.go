@@ -20,11 +20,11 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
-	"unstable.build/rune/llm/anthropic"
-	"unstable.build/rune/llm/claude"
-	"unstable.build/rune/llm/codex"
-	"unstable.build/rune/llm/gemini"
-	"unstable.build/rune/llm/openai"
+	"unstable.build/rune/internal/llm/anthropic"
+	"unstable.build/rune/internal/llm/claude"
+	"unstable.build/rune/internal/llm/codex"
+	"unstable.build/rune/internal/llm/gemini"
+	"unstable.build/rune/internal/llm/openai"
 )
 
 // MaxOutputTokens returns entry's documented, client-settable output-token

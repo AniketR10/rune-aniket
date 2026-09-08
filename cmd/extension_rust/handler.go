@@ -28,7 +28,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/rune/component/markdown"
+	"unstable.build/rune/internal/component/markdown"
 )
 
 // rustCommandName is the top-level REPL command exposed by this extension.

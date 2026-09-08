@@ -22,9 +22,9 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/rune/ide"
-	"unstable.build/rune/term/gui/glassbar"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/term/gui/glassbar"
+	"unstable.build/rune/internal/text"
 )
 
 const (

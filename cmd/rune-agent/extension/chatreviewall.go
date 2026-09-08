@@ -23,7 +23,7 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 
 	"unstable.build/rune/cmd/rune-agent/agent/agentools/applypatch"
-	"unstable.build/rune/ide/vctrl"
+	"unstable.build/rune/internal/ide/vctrl"
 )
 
 // devNullPath is how a unified diff names the absent side of an added or

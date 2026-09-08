@@ -29,8 +29,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/rune/cmd/extension_python/pyshim"
-	"unstable.build/rune/debug"
-	"unstable.build/rune/extension/langext"
+	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/extension/langext"
 )
 
 // NewExtension returns the Python extension and its metadata.

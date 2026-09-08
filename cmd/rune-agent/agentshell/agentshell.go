@@ -46,9 +46,9 @@ import (
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/llm/llmarg"
 	"unstable.build/rune/cmd/rune-agent/mcp"
-	"unstable.build/rune/component/markdown"
-	mdhandler "unstable.build/rune/handler/markdown"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/component/markdown"
+	mdhandler "unstable.build/rune/internal/handler/markdown"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 // ErrExit is a sentinel error returned by the exit command.

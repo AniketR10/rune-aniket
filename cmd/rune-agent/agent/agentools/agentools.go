@@ -25,8 +25,8 @@ import (
 	"unstable.build/rune/cmd/rune-agent/agent/skills"
 	"unstable.build/rune/cmd/rune-agent/configedit"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/rune/ide/vctrl"
-	"unstable.build/rune/workspace/walkdir"
+	"unstable.build/rune/internal/ide/vctrl"
+	"unstable.build/rune/internal/workspace/walkdir"
 )
 
 // Config holds optional configuration for the default tool set.

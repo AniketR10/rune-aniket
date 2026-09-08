@@ -35,12 +35,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
-	"unstable.build/rune/cell"
 	"unstable.build/rune/cmd/rune-agent/agent/skills"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/rune/text"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/text"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // reviewWindowManager records the floating windows opened by /diff.

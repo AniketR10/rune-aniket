@@ -25,8 +25,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/cell"
-	"unstable.build/rune/text"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/text"
 )
 
 // dialogueComposeURI is the synthetic resource opened by a compose

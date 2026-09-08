@@ -21,7 +21,7 @@ import (
 
 	"go.starlark.net/starlark"
 	"unstable.build/rune/cmd/xsandbox/internal/record"
-	"unstable.build/rune/ide/starlarkconfig"
+	"unstable.build/rune/internal/ide/starlarkconfig"
 )
 
 // predicateValue wraps a record.Predicate as an opaque Starlark value

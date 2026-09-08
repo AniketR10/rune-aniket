@@ -33,8 +33,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
-	"unstable.build/rune/localstorage"
-	"unstable.build/rune/localstorage/storagerpc"
+	"unstable.build/rune/internal/localstorage"
+	"unstable.build/rune/internal/localstorage/storagerpc"
 )
 
 // newRealBackend stands up the production storage stack used by the agent:

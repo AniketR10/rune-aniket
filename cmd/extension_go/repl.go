@@ -46,12 +46,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/rune/cell"
-	"unstable.build/rune/extension/extutil"
-	"unstable.build/rune/handler/command"
-	"unstable.build/rune/ide/ideshell"
-	"unstable.build/rune/text"
-	"unstable.build/rune/text/standard"
+	"unstable.build/rune/internal/cell"
+	"unstable.build/rune/internal/extension/extutil"
+	"unstable.build/rune/internal/handler/command"
+	"unstable.build/rune/internal/ide/ideshell"
+	"unstable.build/rune/internal/text"
+	"unstable.build/rune/internal/text/standard"
 )
 
 // replTabURI is the stable URI used to identify the single Go REPL tab.

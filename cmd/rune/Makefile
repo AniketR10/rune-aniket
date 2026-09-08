@@ -44,7 +44,7 @@ RUNE_MIN_GLIBC   ?= 2.28
 # bake debug-only ex commands (:panic, :crash) into the binary. The
 # root `debug` target propagates this; release builds leave it empty.
 RUNE_DEBUG_BUILD ?=
-DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/debug.DebugBuild=true)
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/rune/internal/debug.DebugBuild=true)
 # RACE_FLAG mirrors RUNE_DEBUG_BUILD so direct cmd/rune builds (which
 # do not run through the root Makefile's GOFLAGS) still get -race when
 # the caller opts into a debug build.
@@ -59,9 +59,9 @@ RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
 # missing debug.BuildDate that would silently disable the one-off
 # upgrade-entitlement lockdown.
 BUILD_DATE := $(shell out=$$(cd $(ROOT_DIR) && $(GO) run ./cmd/buildstamp) && printf '%s' "$$out")
-BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/debug.BuildDate=$(strip $(BUILD_DATE))
-COMMON_LDFLAGS=-X unstable.build/rune/debug.Tag=$$(git describe --tags) -X unstable.build/rune/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
-GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=six"
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/rune/internal/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/rune/internal/debug.Tag=$$(git describe --tags) -X unstable.build/rune/internal/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=six"
 
 # RUNE_ENV selects the API endpoints baked into the binary.
 #   - dev (default): point at api.unstable.build / rpc.unstable.build
@@ -74,7 +74,7 @@ PROD_LDFLAGS=-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAd
 # in a recipe — this lets target-specific overrides such as
 # `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
 # prerequisites without affecting the default `make rune` build.
-RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
 # Public download buckets that dist.sh uploads release tarballs / DMGs to.
 # `prod-dist-*` targets push to PROD_DOWNLOADS_BUCKET (user-facing) while

@@ -27,7 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/ide/idelsp/lspcmd"
+	"unstable.build/rune/internal/ide/idelsp/lspcmd"
 )
 
 // hoverRangeCmd asks rust-analyzer for the type of the current selection

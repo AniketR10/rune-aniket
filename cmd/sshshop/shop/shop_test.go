@@ -30,7 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
-	"unstable.build/rune/handler/handlertest"
+	"unstable.build/rune/internal/handler/handlertest"
 )
 
 const (

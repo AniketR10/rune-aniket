@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/rune/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/rune/ide/vctrl/testgit"
+	"unstable.build/rune/internal/ide/vctrl/testgit"
 )
 
 func TestParseDialogueID(t *testing.T) {

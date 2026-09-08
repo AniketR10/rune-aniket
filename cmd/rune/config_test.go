@@ -27,8 +27,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/mock/gomock"
 
-	"unstable.build/rune/browser/browsertest"
-	"unstable.build/rune/ide"
+	"unstable.build/rune/internal/browser/browsertest"
+	"unstable.build/rune/internal/ide"
 )
 
 // TestIDEConfigOverlaySubscriptResolvesDefaultTree is a regression test for

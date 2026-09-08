@@ -33,7 +33,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"golang.org/x/text/language"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/debug"
 )
 
 const fallbackLocale = "UTF-8"

@@ -10,8 +10,13 @@ Key entrypoints:
 
 - `cmd/rune` — the main Rune application
 - `cmd/rune-agent` — the Rune Agent extension binary and packages
+- `internal/` — every non-`main` package (`ide`, `text`, `term`, `workspace`,
+  `handler`, `component`, `llm`, `cell`, `debug`, ...)
 
 The repository also contains substantial TUI/editor infrastructure built on `github.com/unstablebuild/rune-go-sdk`, and many UI/component patterns mirror the conventions used in the sibling `blue` repository.
+
+New non-`main` packages go under `internal/`. The module exports no public API;
+the supported extension API is the separate `rune-go-sdk` module.
 
 ## Common Commands
 
@@ -81,7 +86,7 @@ bluectl license -f LICENSE_HEADER <new files>
 ## Goroutines
 
 All spawned goroutines must run their body under
-`debug.CapturePanicReport` (from this repository's `debug` package) so
+`debug.CapturePanicReport` (from this repository's `internal/debug` package) so
 that any panic is captured into a crash report and logged instead of
 silently taking down the process. This applies to every goroutine
 spawn site, including short-lived helpers, background workers, and

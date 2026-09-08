@@ -39,8 +39,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/credentials/oauth"
-	"unstable.build/rune/auth"
-	"unstable.build/rune/debug"
+	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/internal/debug"
 )
 
 //go:embed callback_page.html
