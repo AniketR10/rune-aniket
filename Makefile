@@ -1,10 +1,13 @@
 GO=go
 CI ?= false
-# The 600s budget accommodates the docker-driven SSH integration
-# suite (internal/workspace/workspacessh/test), which exceeds 4 minutes when
-# the rest of the repository's tests run in parallel with it.
-GOTESTFLAGS ?= -race -timeout 180s
-GOTESTFLAGSNORACE = -timeout 180s
+# Per test binary, not a whole-suite budget: it exists to dump goroutines when a
+# package hangs, so it should stay close to the slowest legitimate run. The
+# median package takes ~5s and p95 ~34s; only the docker-driven SSH suite
+# (~120s), internal/ide (~100s) and cmd/rune (~95s) come close. 180s left the
+# slowest under 2x and timed them out on a loaded machine, which then skipped
+# their t.Cleanup and leaked containers, slowing the host further.
+GOTESTFLAGS ?= -race -timeout 300s
+GOTESTFLAGSNORACE = -timeout 300s
 # RUNE_DEBUG_BUILD, when set to "true", flips an in-binary feature
 # flag that exposes debug-only ex commands such as :panic and :crash.
 # Defaults to off; the `debug` target sets it via a target-specific
