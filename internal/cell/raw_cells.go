@@ -49,19 +49,17 @@ const (
 
 // rawCells is a matrix of term.Cell.
 type rawCells struct {
-	columnCap  int
-	rowCap     int
-	cells      [][]term.Cell
-	rowMeta    []rawRowMeta
-	ringHead   int
-	free       [][]term.Cell
-	fillInChar rune
-	// blank is fillInChar's measured cell, kept in step by
-	// setFillInChar so appendBlankRows does not re-measure the grapheme
-	// width on every linefeed.
-	blank  term.Cell
-	zwj    bool
-	zwjPos term.Coordinates
+	columnCap   int
+	rowCap      int
+	cells       [][]term.Cell
+	rowMeta     []rawRowMeta
+	ringHead    int
+	free        [][]term.Cell
+	fillInChar  rune
+	performance bool
+	blank       term.Cell
+	zwj         bool
+	zwjPos      term.Coordinates
 }
 
 type rawRowMeta struct {
@@ -76,6 +74,7 @@ func (c *rawCells) init() {
 }
 
 func (c *rawCells) initWithCap(rowCap, columnCap int, fillInChar rune) {
+	c.performance = true
 	c.setFillInChar(fillInChar)
 	c.resetWithCap(rowCap, columnCap)
 }
@@ -1030,6 +1029,9 @@ func (c *rawCells) String() string {
 }
 
 func (c *rawCells) RawCells() [][]term.Cell {
+	if !c.performance {
+		return c.cells
+	}
 	c.ensureRowMeta()
 	for i, row := range c.cells {
 		c.rowMeta[i].occupied = len(row)

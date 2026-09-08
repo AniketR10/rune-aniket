@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -980,4 +981,71 @@ func TestResetCapacityHonorsSmallCaps(t *testing.T) {
 	b.ResetCapacity(0)
 	b.cells.fillInRows(2)
 	assert.Equal(t, defColumnCap, cap(b.cells.cells[2]))
+}
+
+// TestRawCellsIsReadOnlyOutsidePerformanceMode pins that RawCells is a
+// pure query for buffers that were not initialized via InitPerformance.
+// Only the ring-buffer recycling paths (appendBlankRowsBounded,
+// resetRowRange, rotateRows) consume rowMeta.occupied, and those panic
+// outside performance mode, so resyncing the metadata on every read is
+// both wasted work and an unsynchronized write that turns two concurrent
+// readers into a data race.
+func TestRawCellsIsReadOnlyOutsidePerformanceMode(t *testing.T) {
+	b := NewBuffer()
+	b.InsertString(term.Coordinates{}, "hello\nworld")
+
+	// Edit clears rowMeta, so a mutating RawCells reallocates it here.
+	require.Empty(t, b.cells.rowMeta)
+
+	before := b.RawCells()
+	assert.Empty(t, b.cells.rowMeta,
+		"RawCells must not rebuild rowMeta outside performance mode")
+	assert.Zero(t, b.cells.ringHead)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { _ = b.RawCells() })
+	}
+	wg.Wait()
+
+	assert.Equal(t, before, b.RawCells())
+}
+
+// TestRawCellsResyncsRowMetaInPerformanceMode pins the complementary
+// contract: RawCells hands out the live backing array, so a performance
+// buffer must still normalize the ring and refresh occupied before a
+// caller can mutate row lengths behind the recycler's back.
+func TestRawCellsResyncsRowMetaInPerformanceMode(t *testing.T) {
+	var b Buffer
+	b.InitPerformance(4, 8, ' ')
+	b.AppendBlankRowsBounded(6, 4, 3)
+
+	require.NotZero(t, b.cells.ringHead,
+		"bounded append past the limit must leave the ring rotated")
+
+	rows := b.RawCells()
+	assert.Zero(t, b.cells.ringHead, "RawCells must normalize the ring")
+	require.Len(t, b.cells.rowMeta, len(rows))
+	for i, row := range rows {
+		assert.Equal(t, len(row), b.cells.rowMeta[i].occupied)
+	}
+}
+
+// TestCellsToBufferPerformanceEnablesRingSemantics guards the second way
+// into performance mode: CellsToBufferPerformance builds rawCells through
+// resetWithCap rather than initWithCap, so the ring bookkeeping must be
+// enabled from the Buffer side or RawCells would hand out a rotated
+// matrix.
+func TestCellsToBufferPerformanceEnablesRingSemantics(t *testing.T) {
+	b := CellsToBufferPerformance([][]term.Cell{
+		{{Ch: 'a'}}, {{Ch: 'b'}}, {{Ch: 'c'}},
+	}, ' ')
+	require.True(t, b.cells.performance)
+
+	b.AppendBlankRowsBounded(2, 1, 3)
+	require.NotZero(t, b.cells.ringHead)
+
+	b.RawCells()
+	assert.Zero(t, b.cells.ringHead,
+		"performance buffers must normalize the ring on RawCells")
 }

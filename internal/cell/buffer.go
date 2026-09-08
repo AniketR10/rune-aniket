@@ -658,7 +658,9 @@ func (b *Buffer) RotateRows(start, end, count int) {
 	b.cells.rotateRows(start, end, count)
 }
 
-// RawCells gives clients access to the underlying cell matrix.
+// RawCells gives clients read-only access to the underlying cell matrix.
+// The rows alias the buffer's live storage, so callers must not mutate
+// them or retain them across an edit; use term.CloneCells to snapshot.
 func (b *Buffer) RawCells() [][]term.Cell {
 	return b.view.RawCells()
 }
@@ -1115,6 +1117,7 @@ func (b *Buffer) initWithCells(cells *rawCells) {
 
 func (b *Buffer) initPerformanceWithCells(cells *rawCells) {
 	b.cells = cells
+	b.cells.performance = true
 
 	b.setEditor(b.cells)
 	b.setView(b.cells)
