@@ -51,5 +51,10 @@ python_modules/**
 *.egg-info/
 uv.lock
 
-# internal deploy machinery (private repo; symlink or check out at deploy/)
-/deploy/
+# The container build recipes for the public release artifacts are tracked;
+# everything else under deploy/ is internal machinery provided by a checkout
+# or symlink of the private repo.
+/deploy/*
+!/deploy/rune-linux/
+!/deploy/rune-agent/
+!/deploy/fuzzy-search/
