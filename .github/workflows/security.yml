@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -17,6 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
+      actions: read
       contents: read
       security-events: write
     steps:
@@ -53,6 +55,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ pkg-config \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev \
+            libasound2-dev libwayland-dev libxkbcommon-dev
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

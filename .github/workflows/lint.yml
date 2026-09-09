@@ -34,7 +34,7 @@ jobs:
             libxinerama-dev libxi-dev libxxf86vm-dev \
             libasound2-dev libwayland-dev libxkbcommon-dev
 
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.3
           args: --timeout=600s
