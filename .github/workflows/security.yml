@@ -44,6 +44,13 @@ jobs:
       - uses: github/codeql-action/analyze@v3
         with:
           category: /language:go
+          # This account's plan does not include GitHub Advanced Security,
+          # so private-repo code scanning uploads are rejected with
+          # "Advanced Security must be enabled for this repository". Still
+          # run the queries so regressions in the analysis itself are
+          # caught; drop this once the repository is public (GHAS is free
+          # for public repos).
+          upload: never
 
   govulncheck:
     name: govulncheck
