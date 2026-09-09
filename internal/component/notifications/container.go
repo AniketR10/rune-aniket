@@ -92,6 +92,12 @@ type Config struct {
 	// ColorError determines the style of the progress bar for error notifications.
 	// By default, term.ColorRed is used.
 	ColorError term.Attributes
+
+	// Observer, when set, is invoked with every notification posted
+	// via Notify before it is rendered. Tests use it to surface
+	// notification text that would otherwise only exist as styled
+	// cells in a rendered frame.
+	Observer func(level Level, msg string)
 }
 
 // ProgressRunes contains the runes used by a Container to render progress.
@@ -233,6 +239,9 @@ func (n *Container) SetRightInset(cells int) {
 
 // Notify creates a new notification with the given msg and level.
 func (n *Container) Notify(level Level, msg string) string {
+	if n.cfg.Observer != nil {
+		n.cfg.Observer(level, msg)
+	}
 	const baselineChars = len("this is a simple notification.")
 	duration := n.cfg.AutoClose
 	if len(msg) > baselineChars {

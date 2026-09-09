@@ -74,14 +74,10 @@ func TestEventRouterDropsNonFocusPureInterrupts(t *testing.T) {
 	m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil,
 		nopShutdownShaderConfig())
 
-	m.mu.Lock()
 	require.NoError(t, m.addOrCreateWorkspace(uriA))
-	m.mu.Unlock()
 	m.waitForWorkspace(t, uriA)
 
-	m.mu.Lock()
 	require.NoError(t, m.addOrCreateWorkspace(uriB))
-	m.mu.Unlock()
 	m.waitForWorkspace(t, uriB)
 
 	// Focus workspace A.

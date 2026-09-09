@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -54,6 +55,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/rune/internal/browser"
 	tcomponent "unstable.build/rune/internal/component"
+	"unstable.build/rune/internal/component/notifications"
 	"unstable.build/rune/internal/component/shader"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/extension"
@@ -319,9 +321,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDirs(t,
 		defaultConfigWithWrap(false), dir, t.TempDir(),
 		nopShutdownShaderConfig())
-	m.mu.Lock()
 	err = m.addOrCreateWorkspace(uri)
-	m.mu.Unlock()
 	require.NoError(t, err)
 	m.drainPendingWorkspaces()
 	t.Cleanup(func() { _ = m.Close() })
@@ -721,15 +721,43 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 		_ = os.RemoveAll(dir)
 	})
 
-	uri1, err := workspaceapi.ParseURI("file://" + dir)
-	require.NoError(t, err)
 	cfg := defaultConfigWithWrap(false)
-	var wg sync.WaitGroup
+	bellRung := make(chan struct{}, 8)
 	cfg.ringBell = func() {
-		wg.Done()
+		select {
+		case bellRung <- struct{}{}:
+		default:
+		}
 	}
-	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
-		nopShutdownShaderConfig())
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cfg)
+	manager := workspace.NewManager(config.NopConfig(), sched)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	// A fake pty scheme keeps the terminal hermetic: the bell byte is
+	// injected straight into the pty output stream instead of typing
+	// into a host shell, whose startup output (prompts, the macOS bash
+	// deprecation banner) would otherwise race the rendered frames.
+	ptys := new(bellPtyState)
+	const bellScheme = "bellpty"
+	require.NoError(t, manager.RegisterScheme(bellScheme,
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+			schemeapi.Scheme, error,
+		) {
+			base, err := newTerminalSessionTestScheme(ctx, cfg, uri)
+			if err != nil {
+				return nil, err
+			}
+			return &bellPtyScheme{Scheme: base, state: ptys}, nil
+		}))
+
+	bootURI, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerMu(t, manager, mu, drain,
+		&bootURI, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+
+	uri1, err := workspaceapi.ParseURI(bellScheme + ":///workspace")
+	require.NoError(t, err)
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
 	m.drainPendingWorkspaces()
 	m.tabAttentionNameSuffix = "*"
@@ -756,29 +784,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	// goroutine, so any host-scheduled work is already
 	// serialized with handler input through the same lock.
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
-	keys, err := term.ParseKeys("sleep<space>2<space>&&<space>printf<space>'\\\\a'<enter>")
-	require.NoError(t, err)
-	wg.Add(1)
-	for _, key := range keys {
-		ev := term.Event{
-			Type: term.EventKey,
-			Ch:   key.Ch,
-			Mod:  key.Mod,
-			Key:  key.Key,
-		}
-		if ev.Ch != 0 {
-			ev.Raw = []byte(string(ev.Ch))
-		} else if ev.Key == term.KeySpace {
-			ev.Raw = []byte(" ")
-		} else if ev.Key == term.KeyEnter {
-			ev.Raw = []byte{0x0d, 0x0a}
-		} else if ev.Mod == term.ModShift && ev.Ch == '7' {
-			ev.Raw = []byte("&")
-		}
-		_, handled := h.Handle(ev)
-		require.True(t, handled, "%s", ev.KeyComb().String())
-	}
-	keys, err = term.ParseKeys("<c-\\\\>workspacefocus<space>1<enter>")
+	keys, err := term.ParseKeys("<c-\\\\>workspacefocus<space>1<enter>")
 	require.NoError(t, err)
 	for _, key := range keys {
 		ev := term.Event{
@@ -790,11 +796,18 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 		_, handled := h.Handle(ev)
 		require.True(t, handled, "%s", ev.KeyComb().String())
 	}
-	wg.Wait()
+	// Ring the bell in the now-unfocused terminal workspace by
+	// injecting BEL into the fake pty output stream.
+	ptys.ring(t)
+	select {
+	case <-bellRung:
+	case <-time.After(10 * time.Second):
+		t.Fatal("bell never rang after injecting BEL into the pty")
+	}
 	// SetTabName routes the attention attribute through
 	// f.parent.scheduleNextTick, which under the default test stub
 	// dispatches on a fresh goroutine. The bell fires from the vte
-	// parser path before that scheduled tick runs, so wg.Wait above
+	// parser path before that scheduled tick runs, so bellRung above
 	// only proves the bell was rung — it does not guarantee the
 	// attention attr propagated to workspaces[1] yet. Block here
 	// until the bar tab actually reflects the attention attr so the
@@ -3158,6 +3171,65 @@ func (s *terminalSessionTestScheme) Signal(workspaceapi.Pid, syscall.Signal) err
 	return nil
 }
 
+// bellPtyState records every pty master pipe created by a
+// bellPtyScheme so a test can inject bytes into the terminal's
+// output stream.
+type bellPtyState struct {
+	mu      sync.Mutex
+	writers []*io.PipeWriter
+}
+
+// ring writes BEL into every pty created so far.
+func (s *bellPtyState) ring(t *testing.T) {
+	t.Helper()
+	s.mu.Lock()
+	writers := append([]*io.PipeWriter(nil), s.writers...)
+	s.mu.Unlock()
+	require.NotEmpty(t, writers, "no pty was created")
+	for _, w := range writers {
+		_, err := w.Write([]byte{'\a'})
+		require.NoError(t, err)
+	}
+}
+
+// bellPtyScheme overrides NewPty to hand the emulator a pipe-backed
+// master whose write end stays with the test, so terminal output can
+// be injected without a host process.
+type bellPtyScheme struct {
+	schemeapi.Scheme
+	state *bellPtyState
+}
+
+func (s *bellPtyScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	base, err := s.Scheme.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+	return &bellPtyScheme{Scheme: base, state: s.state}, nil
+}
+
+func (s *bellPtyScheme) NewPty(context.Context) (workspaceapi.Pty, error) {
+	r, w := io.Pipe()
+	s.state.mu.Lock()
+	s.state.writers = append(s.state.writers, w)
+	s.state.mu.Unlock()
+	return workspaceapi.Pty{
+		Master: bellPtyMaster{File: workspacetest.NewFile(), r: r},
+		Slave:  workspacetest.NewFile(),
+	}, nil
+}
+
+// bellPtyMaster reads terminal output from the test-fed pipe and
+// swallows emulator writes (keystrokes, probe responses).
+type bellPtyMaster struct {
+	workspaceapi.File
+	r *io.PipeReader
+}
+
+func (f bellPtyMaster) Read(b []byte) (int, error)  { return f.r.Read(b) }
+func (f bellPtyMaster) Write(b []byte) (int, error) { return len(b), nil }
+func (f bellPtyMaster) Close() error                { return f.r.Close() }
+
 func TestInitializeNoCwd(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t,
 		defaultConfigWithWrap(false), "", nopShutdownShaderConfig())
@@ -4222,8 +4294,8 @@ func TestWorkspaceCommands(t *testing.T) {
 	err = m.SubscribeCommandForWorkspace(uri1, abcCmd, sub)
 	require.NoError(t, err)
 
-	require.NoError(t, m.addOrCreateWorkspace(uri2))
-	require.NoError(t, m.addOrCreateWorkspace(uri3))
+	require.NoError(t, m.workspaceManagerHandler.addOrCreateWorkspace(uri2))
+	require.NoError(t, m.workspaceManagerHandler.addOrCreateWorkspace(uri3))
 	// Release mu so the install goroutines (Phase B) can lock it
 	// when they reach the rollback path / WaitGroup, then drain
 	// pending workspaces, then re-acquire mu.
@@ -4964,6 +5036,14 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	}
 
 	notiConfig := notificationsConfig()
+	// Frames only render notifications as styled cells, so a CI-only
+	// failure banner (e.g. "Failed to load workspace ...") is
+	// undiagnosable from a frame diff alone. Record every posted
+	// notification in the test log; t.Log output is only printed for
+	// failing tests.
+	notiConfig.Observer = func(level notifications.Level, msg string) {
+		t.Logf("notification posted (level %d): %s", level, msg)
+	}
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	var storage storageapi.Service = localstorage.New(
 		context.Background(), dir, docbson.Marshaler())
@@ -5281,6 +5361,22 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 func (t *testWorkspaceManagerHandler) drainPendingWorkspaces() {
 	t.workspaceManagerHandler.waitClosing()
 	t.workspaceManagerHandler.pendingWG.Wait()
+}
+
+// addOrCreateWorkspace shadows the embedded handler method to take
+// the event-loop lock first. Production only invokes it from the
+// event loop with mu held, and the test scheduler runs Phase C
+// callbacks under the same mu on its own goroutine, so calling the
+// embedded method bare from the test goroutine races on the
+// handler's pending/closing maps. Tests that already hold mu for a
+// wider critical section must call
+// t.workspaceManagerHandler.addOrCreateWorkspace directly.
+func (t *testWorkspaceManagerHandler) addOrCreateWorkspace(
+	uri workspaceapi.URI,
+) error {
+	t.workspaceManagerHandler.mu.Lock()
+	defer t.workspaceManagerHandler.mu.Unlock()
+	return t.workspaceManagerHandler.addOrCreateWorkspace(uri)
 }
 
 func defaultCfg() ideConfig {
@@ -6693,7 +6789,7 @@ func TestWorkspaceReadyCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		m.mu.Lock()
-		require.NoError(t, m.addOrCreateWorkspace(uri2))
+		require.NoError(t, m.workspaceManagerHandler.addOrCreateWorkspace(uri2))
 		require.NotNil(t, m.lastReservedPending,
 			"addWorkspace must reserve a pending entry "+
 				"and record it as the most recent")
@@ -7065,7 +7161,7 @@ func TestExtensionReadyCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		m.mu.Lock()
-		require.NoError(t, m.addOrCreateWorkspace(uri2))
+		require.NoError(t, m.workspaceManagerHandler.addOrCreateWorkspace(uri2))
 		require.NotNil(t, m.lastReservedPending)
 		pending := m.lastReservedPending
 		require.NoError(t,
