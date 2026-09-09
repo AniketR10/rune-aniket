@@ -6,12 +6,45 @@ change.
 
 ## Licensing
 
-Rune is licensed under the GNU General Public License, version 3 or (at
-your option) any later version; see [LICENSE](LICENSE) for the full text.
+Rune is licensed under the GNU General Public License, version 3 or (at your
+option) any later version; see [LICENSE](LICENSE) for the full text.
 
 Contributions are accepted under that same license: unless you state otherwise,
 anything you intentionally submit for inclusion in Rune is licensed under
-GPL-3.0-or-later. You keep ownership of your contribution, and there is no separate agreement to sign.
+GPL-3.0-or-later. You keep ownership of your contribution, and the Developer
+Certificate of Origin below is how you certify that you have the right to
+submit it.
+
+## Sign your work
+
+Rune uses the [Developer Certificate of Origin](DCO) rather than a contributor
+license agreement. There is nothing to sign and no account to create. Instead
+you certify the DCO once per commit, by adding a `Signed-off-by` trailer.
+
+Git writes the trailer for you with `-s`:
+
+```bash
+git commit -s -m "Fix the thing"
+```
+
+which appends a line like:
+
+```
+Signed-off-by: Jane Developer <jane@example.com>
+```
+
+Use your real name and an address you can be reached at; they must match the
+commit author. A status check verifies that every commit in a pull request
+carries the trailer.
+
+If you forget, amend the most recent commit with:
+
+```bash
+git commit -s --amend --no-edit
+```
+
+or sign off an entire branch at once with `git rebase --signoff main`, then
+force-push.
 
 All participation in the project is subject to our
 [Code of Conduct](CODE_OF_CONDUCT.md).
