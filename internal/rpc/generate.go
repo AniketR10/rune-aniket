@@ -17,4 +17,4 @@
 package rpc
 
 //go:generate mockgen -destination=./rpctest/grpc_gomock.go -package rpctest google.golang.org/grpc ClientConnInterface
-//go:generate mockgen -destination=./rpctest/gomock_broker.go -package rpctest -self_package unstable.build/rune/internal/rpc/rpctest -source ./broker.go
+//go:generate mockgen -destination=./rpctest/broker_gomock.go -package rpctest -self_package unstable.build/rune/internal/rpc/rpctest -source ./broker.go
