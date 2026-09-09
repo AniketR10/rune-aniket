@@ -1,5 +1,10 @@
 GO=go
 CI ?= false
+# The skip-on-CI guards in the test suites read this with os.Getenv, so the
+# recipes need it in their environment. Export it once rather than per target:
+# `test: CI=$(CI)` self-references once CI already comes from the environment,
+# as it does on GitHub Actions, and make refuses to expand it.
+export CI
 # Per test binary, not a whole-suite budget: it exists to dump goroutines when a
 # package hangs, so it should stay close to the slowest legitimate run. The
 # median package takes ~5s and p95 ~34s, and the slowest (internal/ide, cmd/rune)
@@ -158,18 +163,15 @@ rune-agent: $(BIN)/rune-agent
 	@ command -v pre-commit >/dev/null 2>&1 && pre-commit install \
 		|| echo "pre-commit not installed; skipping git hook setup"
 
-test: CI=$(CI)
 test:
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 # Runs the whole suite including the tests that drive real external processes
 # (docker containers, a shell in a pty). Those sit behind the e2e build tag so
 # `make test` stays hermetic and is not exposed to their timing sensitivity.
-test-e2e: CI=$(CI)
 test-e2e:
 	@ go test -vet=off -tags e2e ./.../... $(E2E_GOTESTFLAGS)
 
-test-no-race: CI=$(CI)
 test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
