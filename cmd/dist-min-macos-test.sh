@@ -73,11 +73,11 @@ else
     echo "ok: gate passed at-floor artifact"
 fi
 
-# A fake PATH where gsutil/bluectl abort loudly: reaching either means a
+# A fake PATH where gh/bluectl abort loudly: reaching either means a
 # publish was attempted past the gate, which is itself the bug.
 fakebin="$work/fakebin"
 mkdir -p "$fakebin"
-for tool in gsutil bluectl; do
+for tool in gh bluectl; do
     cat >"$fakebin/$tool" <<EOF
 #!/bin/bash
 echo "FAIL: $tool ran — the min-macos gate did not abort the publish." >&2
@@ -109,7 +109,7 @@ run_dist() {
         cd "$gitrepo" || exit 1
         export PATH="$fakebin:$PATH"
         export BLUE_RELEASE_TAR="$1" BLUE_TARGET_OS=darwin BLUE_TARGET_ARCH=arm64
-        export DOWNLOADS_BUCKET="gs://example-downloads" DOWNLOAD_HOST="https://example.com"
+        export RELEASE_REPO="example/rune" DOWNLOAD_HOST="https://example.com"
         if [[ $# -ge 2 ]]; then
             export RUNE_MIN_MACOS="$2"
         else

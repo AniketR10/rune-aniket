@@ -85,7 +85,7 @@ func TestDarwinE2E_HappyPath(t *testing.T) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(dmg)
 	})
-	mux.HandleFunc("/"+manifestArch+"/manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/manifest-"+manifestArch+".json", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(Manifest{
 			Version:  "v9.9.9",
 			OS:       runtime.GOOS,

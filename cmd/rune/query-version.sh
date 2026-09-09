@@ -1,10 +1,10 @@
 #!/bin/bash
-# Query the latest published Rune version from the per-arch manifest.json
-# objects on the public downloads CDN.
+# Query the latest published Rune version from the per-arch manifest
+# assets on the public GitHub releases.
 #
 # The release pipeline (cmd/rune/dist.sh) publishes one manifest per
 # "<os>-<arch>" target at:
-#   <host>/<os>-<arch>/manifest.json
+#   <host>/manifest-<os>-<arch>.json
 #
 # This script fetches each manifest and prints version, commit, and
 # publish time so you can see the latest version across all targets.
@@ -22,8 +22,8 @@
 #   DOWNLOAD_HOST   Override the manifest host entirely (https://...).
 set -euo pipefail
 
-PROD_HOST="https://downloads.rune.build"
-STAGING_HOST="https://downloads.unstable.build"
+PROD_HOST="https://github.com/unstablebuild/rune/releases/latest/download"
+STAGING_HOST="https://github.com/unstablebuild/rune-staging/releases/latest/download"
 
 ALL_ARCHES=(darwin-arm64 darwin-amd64 linux-amd64 linux-arm64)
 
@@ -89,7 +89,7 @@ fi
 # returns non-zero (with the HTTP status on stderr) when unavailable.
 fetch_manifest() {
 	local arch="$1" url body status
-	url="${host}/${arch}/manifest.json"
+	url="${host}/manifest-${arch}.json"
 	body="$(curl -fsSL -w $'\n%{http_code}' "$url" 2>/dev/null)" || {
 		echo "  (no manifest at ${url})" >&2
 		return 1

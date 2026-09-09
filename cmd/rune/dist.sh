@@ -1,5 +1,5 @@
 #!/bin/bash
-# Publish a Rune release artifact to the public GCS download bucket.
+# Publish a Rune release artifact as a GitHub release asset.
 #
 # Required environment:
 #   BLUE_RELEASE_TAR    - path to the artifact (.tar.gz or .dmg)
@@ -7,33 +7,16 @@
 #   BLUE_TARGET_ARCH    - target arch (e.g. amd64, arm64)
 #
 # Optional:
-#   DOWNLOADS_BUCKET    - GCS bucket (default: gs://downloads.rune.build)
-#   DOWNLOAD_HOST       - public HTTP origin used to print download URLs
-#                         (default: https://<bucket-fqdn>). Use
-#                         https://storage.googleapis.com/<bucket> for
-#                         buckets that are NOT fronted by an HTTPS load
-#                         balancer with a custom domain.
-#   RELEASE_CHANNEL     - release channel (default: empty/"stable"). "beta"
-#                         publishes the versioned artifact alongside stable
-#                         but writes its own "-beta" pointer
-#                         (rune-beta.tar.gz / Rune-beta.dmg) and
-#                         "manifest-beta.json" instead of the shared "-latest"
-#                         pointers and "manifest.json", so prod auto-upgrade
-#                         clients never see beta builds.
+#   RELEASE_REPO        - GitHub repo to publish to
+#                         (default: unstablebuild/rune)
+#   DOWNLOAD_HOST       - public origin clients resolve manifests from
+#                         (default: https://github.com/<repo>/releases/latest/download)
+#
+# Requires the `gh` CLI, authenticated via `gh auth login` or GH_TOKEN.
 set -e
 
-DOWNLOADS_BUCKET="${DOWNLOADS_BUCKET:-gs://downloads.rune.build}"
-DOWNLOAD_HOST="${DOWNLOAD_HOST:-https://${DOWNLOADS_BUCKET#gs://}}"
-RELEASE_CHANNEL="${RELEASE_CHANNEL:-}"
-
-case "$RELEASE_CHANNEL" in
-    ""|stable) manifest_name="manifest.json";      channel_slug="latest" ;;
-    beta)      manifest_name="manifest-beta.json"; channel_slug="beta"   ;;
-    *)
-        echo "ERROR: RELEASE_CHANNEL must be one of '', 'stable', or 'beta'; got '${RELEASE_CHANNEL}'."
-        exit 1
-        ;;
-esac
+RELEASE_REPO="${RELEASE_REPO:-unstablebuild/rune}"
+DOWNLOAD_HOST="${DOWNLOAD_HOST:-https://github.com/${RELEASE_REPO}/releases/latest/download}"
 
 # Reject anything that the in-product upgrader would refuse so we never
 # publish a manifest that downgrade/version checks treat as garbage. The
@@ -100,25 +83,50 @@ if [[ "$BLUE_TARGET_OS" == "linux" ]]; then
         "$BLUE_RELEASE_TAR" "$RUNE_MIN_GLIBC"
 fi
 
-# Publish to public GCS bucket.
-gcs_arch="${BLUE_TARGET_OS}-${BLUE_TARGET_ARCH}"
-gcs_dir="${DOWNLOADS_BUCKET}/${gcs_arch}"
+release_arch="${BLUE_TARGET_OS}-${BLUE_TARGET_ARCH}"
 
-# Determine the public filenames based on artifact extension. `pointer` is
-# the mutable per-channel alias (rune-latest / rune-beta): stable clients
-# fetch rune-latest, beta clients fetch rune-beta. Beta never overwrites the
-# stable "-latest" pointer, so prod auto-upgrade clients never see beta.
+# Release asset names are flat — GitHub rejects a path separator — so the
+# arch that used to be a bucket directory becomes part of the filename.
+# `alias` is the unversioned name: because release assets are addressable
+# as releases/latest/download/<name>, an unversioned asset is what gives
+# the stable download link the old mutable "-latest" pointer provided.
 case "$BLUE_RELEASE_TAR" in
-	*.dmg)  versioned="Rune-${GIT_TAG}.dmg";  pointer="Rune-${channel_slug}.dmg"  ;;
-	*)      versioned="rune-${GIT_TAG}.tar.gz"; pointer="rune-${channel_slug}.tar.gz" ;;
+	*.dmg)  asset="Rune-${GIT_TAG}-${release_arch}.dmg"
+	        alias="Rune-${release_arch}.dmg" ;;
+	*)      asset="rune-${GIT_TAG}-${release_arch}.tar.gz"
+	        alias="rune-${release_arch}.tar.gz" ;;
 esac
+manifest_name="manifest-${release_arch}.json"
 
-echo "Publishing to ${gcs_dir}/${versioned} ..."
-gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${versioned}"
-gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${pointer}"
+if ! command -v gh >/dev/null 2>&1; then
+	echo "ERROR: the gh CLI is required to publish; see https://cli.github.com." >&2
+	exit 1
+fi
+
+# Each arch publishes independently, so the release may already exist from
+# a sibling dist-* run. Create it once, then upload into it.
+if ! gh release view "$GIT_TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+	echo "Creating release ${GIT_TAG} in ${RELEASE_REPO} ..."
+	gh release create "$GIT_TAG" --repo "$RELEASE_REPO" \
+		--title "$GIT_TAG" --generate-notes
+fi
+
+stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/rune-dist-XXXXXX")"
+cp "$BLUE_RELEASE_TAR" "${stage_dir}/${asset}"
+cp "$BLUE_RELEASE_TAR" "${stage_dir}/${alias}"
+
+echo "Uploading ${asset} and ${alias} to ${RELEASE_REPO}@${GIT_TAG} ..."
+gh release upload "$GIT_TAG" \
+	"${stage_dir}/${asset}" "${stage_dir}/${alias}" \
+	--repo "$RELEASE_REPO" --clobber
+rm -rf "$stage_dir"
+
+# The manifest points at the immutable tagged asset rather than the
+# latest/download alias so version and url can never disagree.
+artifact_url="https://github.com/${RELEASE_REPO}/releases/download/${GIT_TAG}/${asset}"
 echo "Public download URLs:"
-echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${versioned}"
-echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${pointer}"
+echo "  ${artifact_url}"
+echo "  ${DOWNLOAD_HOST}/${alias}"
 
 # Compute the SHA256 of the artifact using whichever tool is available.
 # `shasum -a 256` is shipped on macOS; `sha256sum` is the GNU utility on Linux.
@@ -158,19 +166,19 @@ sys.stdout.write(json.dumps(sys.stdin.read()))
 	fi
 fi
 
-# Write the release manifest. Rune clients fetch this object directly
-# from the public downloads CDN at:
-#   ${DOWNLOAD_HOST}/${gcs_arch}/${manifest_name}
+# Write the release manifest. Rune clients fetch this asset directly at:
+#   ${DOWNLOAD_HOST}/${manifest_name}
 # There is no server-side proxy; the file IS the manifest endpoint.
-manifest_tmp="$(mktemp "${TMPDIR:-/tmp}/rune-manifest-XXXXXX.json")"
+manifest_dir="$(mktemp -d "${TMPDIR:-/tmp}/rune-manifest-XXXXXX")"
+manifest_tmp="${manifest_dir}/${manifest_name}"
 cat >"$manifest_tmp" <<EOF
 {
   "version": "${GIT_TAG}",
   "commit": "$(git rev-parse --short HEAD)",
   "os": "${BLUE_TARGET_OS}",
   "arch": "${BLUE_TARGET_ARCH}",
-  "filename": "${versioned}",
-  "url": "${DOWNLOAD_HOST}/${gcs_arch}/${versioned}",
+  "filename": "${asset}",
+  "url": "${artifact_url}",
   "sha256": "${artifact_sha256}",
   "size": ${artifact_size},
   "published_at": "${published_at}",
@@ -178,7 +186,7 @@ cat >"$manifest_tmp" <<EOF
 }
 EOF
 
-echo "Publishing manifest to ${gcs_dir}/${manifest_name} ..."
-gsutil -h "Content-Type:application/json" -h "Cache-Control:max-age=300" \
-	cp "$manifest_tmp" "${gcs_dir}/${manifest_name}"
-rm -f "$manifest_tmp"
+echo "Publishing manifest ${manifest_name} to ${RELEASE_REPO}@${GIT_TAG} ..."
+gh release upload "$GIT_TAG" "$manifest_tmp" --repo "$RELEASE_REPO" --clobber
+echo "  ${DOWNLOAD_HOST}/${manifest_name}"
+rm -rf "$manifest_dir"

@@ -39,14 +39,15 @@ var (
 )
 
 // DefaultDownloadsHost is the public CDN origin that hosts the
-// per-arch release manifest (`<host>/<os>-<arch>/manifest.json`) and
+// per-arch release manifest (`<host>/manifest-<os>-<arch>.json`) and
 // artifacts. The in-product `:upgrade` flow reads from this host.
 //
-// Defaults to the staging downloads bucket. Production release builds
-// override it via `-ldflags -X` to point at the prod CDN — users
-// should never have to think about this. Not a constant so the linker
-// can replace it; do not assign to it at runtime.
-var DefaultDownloadsHost = "https://downloads.unstable.build"
+// Points at the GitHub releases download endpoint, which always
+// resolves to the newest non-prerelease release, so beta releases
+// published as prereleases stay invisible to stable clients. Not a
+// constant so the linker can replace it via `-ldflags -X`; do not
+// assign to it at runtime.
+var DefaultDownloadsHost = "https://github.com/unstablebuild/rune/releases/latest/download"
 
 // DefaultWebsiteAddress is the public www-rune origin used by the
 // OAuth callback page to redirect users to /checkout after sign-in.

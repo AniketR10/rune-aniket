@@ -3,7 +3,7 @@
 #
 # For every component's dist.sh, this drives the real script against a
 # STUB artifact that intentionally contains a .go file and asserts the
-# script aborts before reaching the publish step. A fake bluectl/gsutil
+# script aborts before reaching the publish step. A fake bluectl/gh
 # is placed first on PATH so any attempt to publish is itself a failure:
 # the gate must fire first.
 #
@@ -35,11 +35,11 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/dist-with-src-XXXXXX")"
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 
-# A fake PATH where bluectl/gsutil abort loudly. Reaching either means
+# A fake PATH where bluectl/gh abort loudly. Reaching either means
 # the gate did NOT stop the publish, which is the bug we guard against.
 fakebin="$work/fakebin"
 mkdir -p "$fakebin"
-for tool in bluectl gsutil; do
+for tool in bluectl gh; do
     cat >"$fakebin/$tool" <<EOF
 #!/bin/bash
 echo "FAIL: $tool was invoked — the .go-source gate did not abort the publish." >&2
@@ -93,7 +93,7 @@ export BLUE_PGP_KEYRING="$work/keyring.gpg"
 export BLUE_RELEASE_TAR="$artifact"
 export BLUE_TARGET_OS="darwin"
 export BLUE_TARGET_ARCH="arm64"
-export DOWNLOADS_BUCKET="gs://example-downloads"
+export RELEASE_REPO="example/rune"
 export DOWNLOAD_HOST="https://example.com"
 
 failures=0

@@ -79,7 +79,7 @@ func TestLinuxE2E_HappyPath(t *testing.T) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(tarData)
 	})
-	mux.HandleFunc("/"+manifestArch+"/manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/manifest-"+manifestArch+".json", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(Manifest{
 			Version:  "v0.42.1",
 			OS:       runtime.GOOS,
@@ -169,7 +169,7 @@ func TestLinuxE2E_RealReleaseTarballLayout(t *testing.T) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(tarData)
 	})
-	mux.HandleFunc("/"+manifestArch+"/manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/manifest-"+manifestArch+".json", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(Manifest{
 			Version:  "v0.42.1",
 			OS:       runtime.GOOS,
@@ -255,7 +255,7 @@ func TestLinuxE2E_ChecksumMismatchRollsBack(t *testing.T) {
 	mux.HandleFunc("/rune.tar.gz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(tarData)
 	})
-	mux.HandleFunc("/"+manifestArch+"/manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/manifest-"+manifestArch+".json", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(Manifest{
 			Version:  "v2",
 			OS:       runtime.GOOS,

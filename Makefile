@@ -69,7 +69,7 @@ RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 .PHONY: debug clean test test-e2e coverage generate rune rune-agent \
-	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
+	format cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
@@ -117,10 +117,6 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64-native rune-staging-dist-linux-arm64-native \
 	rune-staging-dist-linux-amd64-cross rune-staging-dist-linux-arm64-cross \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
-	rune-beta-dist-linux-amd64 rune-beta-dist-linux-arm64 \
-	rune-beta-dist-linux-amd64-native rune-beta-dist-linux-arm64-native \
-	rune-beta-dist-linux-amd64-cross rune-beta-dist-linux-arm64-cross \
-	rune-beta-dist-darwin-arm64 rune-beta-dist-darwin-amd64 \
 	fuzz fuzz-list \
 	FORCE \
 	manual-ssh-test \
@@ -301,12 +297,6 @@ dist: clean release
 	@ git fetch origin --tags
 	@ ./dist.sh
 
-docker-build-ci-gcp:
-	@ docker buildx build -f deploy/build/Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
-
-docker-push-ci-gcp:
-	@ docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
-
 rune-make-release:
 	@$(MAKE) -C cmd/rune make-release TARGET_OS="$(TARGET_OS)" TARGET_ARCH="$(TARGET_ARCH)" TARGET_ARCH_FLAGS="$(TARGET_ARCH_FLAGS)"
 
@@ -343,10 +333,10 @@ rune-release-linux-arm64-cross:
 	@$(MAKE) -C cmd/rune release-linux-arm64-cross
 
 # rune-prod-dist-* / rune-staging-dist-*: build a release artifact and
-# upload it to the corresponding public download bucket.
+# publish it as an asset on the corresponding GitHub release.
 #
-#   prod    -> gs://downloads.rune.build       (api.rune.build / rpc.rune.build:443)
-#   staging -> gs://downloads.unstable.build   (api.unstable.build / rpc.unstable.build:443)
+#   prod    -> unstablebuild/rune          (api.rune.build / rpc.rune.build:443)
+#   staging -> unstablebuild/rune-staging  (api.unstable.build / rpc.unstable.build:443)
 rune-prod-dist-linux-amd64: clean
 	@$(MAKE) -C cmd/rune prod-dist-linux-amd64
 
@@ -394,33 +384,6 @@ rune-staging-dist-darwin-arm64: clean
 
 rune-staging-dist-darwin-amd64: clean
 	@$(MAKE) -C cmd/rune staging-dist-darwin-amd64
-
-# rune-beta-dist-*: build with prod ldflags and upload to the public prod
-# download bucket on the beta channel — a separate manifest-beta.json that
-# never overwrites the shared -latest pointers or manifest.json.
-rune-beta-dist-linux-amd64: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-amd64
-
-rune-beta-dist-linux-arm64: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-arm64
-
-rune-beta-dist-linux-amd64-native: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-amd64-native
-
-rune-beta-dist-linux-arm64-native: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-arm64-native
-
-rune-beta-dist-linux-amd64-cross: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-amd64-cross
-
-rune-beta-dist-linux-arm64-cross: clean
-	@$(MAKE) -C cmd/rune beta-dist-linux-arm64-cross
-
-rune-beta-dist-darwin-arm64: clean
-	@$(MAKE) -C cmd/rune beta-dist-darwin-arm64
-
-rune-beta-dist-darwin-amd64: clean
-	@$(MAKE) -C cmd/rune beta-dist-darwin-amd64
 
 # dist-tar-with-src / dist-dmg-with-src exercise the .go-source publish
 # gate (cmd/verify-no-go-source.sh) by driving every component's dist.sh

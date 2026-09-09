@@ -76,14 +76,17 @@ PROD_LDFLAGS=-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAd
 # prerequisites without affecting the default `make rune` build.
 RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
-# Public download buckets that dist.sh uploads release tarballs / DMGs to.
-# `prod-dist-*` targets push to PROD_DOWNLOADS_BUCKET (user-facing) while
-# `staging-dist-*` targets push to STAGING_DOWNLOADS_BUCKET (internal).
-PROD_DOWNLOADS_BUCKET    ?= gs://downloads.rune.build
-STAGING_DOWNLOADS_BUCKET ?= gs://downloads.unstable.build
+# GitHub repositories dist.sh uploads release tarballs / DMGs to.
+# `prod-dist-*` targets publish to PROD_RELEASE_REPO (user-facing) while
+# `staging-dist-*` targets publish to STAGING_RELEASE_REPO (internal).
+PROD_RELEASE_REPO    ?= unstablebuild/rune
+STAGING_RELEASE_REPO ?= unstablebuild/rune-staging
 
-PROD_DOWNLOAD_HOST       ?= https://downloads.rune.build
-STAGING_DOWNLOAD_HOST    ?= https://downloads.unstable.build
+# The download host is derived from the repo: GitHub's
+# `releases/latest/download` alias always resolves to the newest
+# non-prerelease release, which is what stable clients follow.
+PROD_DOWNLOAD_HOST    ?= https://github.com/$(PROD_RELEASE_REPO)/releases/latest/download
+STAGING_DOWNLOAD_HOST ?= https://github.com/$(STAGING_RELEASE_REPO)/releases/latest/download
 
 # Public www-rune origin baked into the binary for the OAuth callback
 # redirect. Prod builds use the user-facing website; the default var in
@@ -91,18 +94,11 @@ STAGING_DOWNLOAD_HOST    ?= https://downloads.unstable.build
 PROD_WEBSITE_ADDRESS     ?= https://rune.build
 STAGING_WEBSITE_ADDRESS  ?= https://rune.unstable.build
 
-# DIST_BUCKET / DIST_DOWNLOAD_HOST are set per-target by prod-dist-* /
-# staging-dist-* and threaded into dist.sh via DOWNLOADS_BUCKET and
+# DIST_REPO / DIST_DOWNLOAD_HOST are set per-target by prod-dist-* /
+# staging-dist-* and threaded into dist.sh via RELEASE_REPO and
 # DOWNLOAD_HOST.
-DIST_BUCKET       ?= $(PROD_DOWNLOADS_BUCKET)
+DIST_REPO          ?= $(PROD_RELEASE_REPO)
 DIST_DOWNLOAD_HOST ?= $(PROD_DOWNLOAD_HOST)
-
-# RELEASE_CHANNEL is threaded into dist.sh to select the release channel.
-# Empty (the default) is the stable channel — the existing prod/staging
-# behavior. beta-dist-* targets set it to "beta" so dist.sh publishes a
-# separate "-beta" pointer and manifest-beta.json instead of the shared
-# "-latest" pointers and manifest.json.
-RELEASE_CHANNEL ?=
 
 TARGET := $(abspath $(ROOT_DIR)/target)
 RUNE_RELEASE_DIR := $(TARGET)/rune_darwin_app
@@ -145,9 +141,6 @@ endif
 	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
 	staging-dist-linux-amd64-native staging-dist-linux-arm64-native \
 	staging-dist-linux-amd64-cross staging-dist-linux-arm64-cross \
-	beta-dist-linux-amd64 beta-dist-linux-arm64 beta-dist-darwin-amd64 beta-dist-darwin-arm64 \
-	beta-dist-linux-amd64-native beta-dist-linux-arm64-native \
-	beta-dist-linux-amd64-cross beta-dist-linux-arm64-cross \
 	app-delve
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
@@ -456,7 +449,7 @@ release-linux-arm64-cross: release-linux-arm64
 
 # dist-* are the underlying upload rules. They build the artifact via
 # their prerequisite (release-linux-* cross build or DMG-notarize) and
-# publish to $(DIST_BUCKET). They do NOT pin RUNE_ENV or DIST_BUCKET
+# publish to $(DIST_REPO). They do NOT pin RUNE_ENV or DIST_REPO
 # themselves — callers (prod-dist-* / staging-dist-*) set those via
 # target-specific variables which propagate to all prerequisites in the
 # same make invocation.
@@ -471,9 +464,8 @@ dist-linux-amd64: check-release-tag release-linux-amd64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64: check-release-tag release-linux-arm64
@@ -482,9 +474,8 @@ dist-linux-arm64: check-release-tag release-linux-arm64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # dist-linux-*-native mirror dist-linux-* but build the tarball with the
@@ -496,9 +487,8 @@ dist-linux-amd64-native: check-release-tag release-linux-amd64-native
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64-native: check-release-tag release-linux-arm64-native
@@ -507,9 +497,8 @@ dist-linux-arm64-native: check-release-tag release-linux-arm64-native
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # dist-linux-*-cross are retained as aliases for the now-default cross build.
@@ -522,9 +511,8 @@ dist-darwin-arm64: check-release-tag dmg-notarize
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=arm64 \
 		RUNE_MIN_MACOS=$(DARWIN_ARM64_MIN_MACOS) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-darwin-amd64: check-release-tag dmg-amd64-notarize
@@ -533,9 +521,8 @@ dist-darwin-amd64: check-release-tag dmg-amd64-notarize
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=amd64 \
 		RUNE_MIN_MACOS=$(DARWIN_AMD64_MIN_MACOS) \
-		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		RELEASE_REPO=$(DIST_REPO) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
-		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # check-release-tag aborts before any build runs when HEAD does not
@@ -545,145 +532,91 @@ check-release-tag:
 	@cd $(ROOT_DIR) && ./cmd/rune/check-release-tag.sh
 
 # prod-dist-*: build with prod ldflags (api.rune.build / rpc.rune.build:443)
-# and upload to $(PROD_DOWNLOADS_BUCKET).
+# and upload to $(PROD_RELEASE_REPO).
 prod-dist-linux-amd64:  RUNE_ENV := prod
-prod-dist-linux-amd64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-amd64:  dist-linux-amd64
 
 prod-dist-linux-arm64:  RUNE_ENV := prod
-prod-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64:  dist-linux-arm64
 
 prod-dist-linux-amd64-native:  RUNE_ENV := prod
-prod-dist-linux-amd64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64-native:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-amd64-native:  dist-linux-amd64-native
 
 prod-dist-linux-arm64-native:  RUNE_ENV := prod
-prod-dist-linux-arm64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64-native:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64-native:  dist-linux-arm64-native
 
 # prod-dist-linux-*-cross are retained as aliases for the now-default cross build.
 prod-dist-linux-amd64-cross:  RUNE_ENV := prod
-prod-dist-linux-amd64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64-cross:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-amd64-cross:  dist-linux-amd64
 
 prod-dist-linux-arm64-cross:  RUNE_ENV := prod
-prod-dist-linux-arm64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64-cross:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64-cross:  dist-linux-arm64
 
 prod-dist-darwin-amd64: RUNE_ENV := prod
-prod-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-amd64: DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-darwin-amd64: dist-darwin-amd64
 
 prod-dist-darwin-arm64: RUNE_ENV := prod
-prod-dist-darwin-arm64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-arm64: DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-darwin-arm64: dist-darwin-arm64
 
 # staging-dist-*: build with the default dev ldflags
 # (api.unstable.build / rpc.unstable.build:443) and upload to
-# $(STAGING_DOWNLOADS_BUCKET).
+# $(STAGING_RELEASE_REPO).
 staging-dist-linux-amd64:  RUNE_ENV := dev
-staging-dist-linux-amd64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64:  dist-linux-amd64
 
 staging-dist-linux-arm64:  RUNE_ENV := dev
-staging-dist-linux-arm64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64:  dist-linux-arm64
 
 staging-dist-linux-amd64-native:  RUNE_ENV := dev
-staging-dist-linux-amd64-native:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64-native:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64-native:  dist-linux-amd64-native
 
 staging-dist-linux-arm64-native:  RUNE_ENV := dev
-staging-dist-linux-arm64-native:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64-native:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64-native:  dist-linux-arm64-native
 
 # staging-dist-linux-*-cross are retained as aliases for the now-default cross build.
 staging-dist-linux-amd64-cross:  RUNE_ENV := dev
-staging-dist-linux-amd64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64-cross:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64-cross:  dist-linux-amd64
 
 staging-dist-linux-arm64-cross:  RUNE_ENV := dev
-staging-dist-linux-arm64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64-cross:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64-cross:  dist-linux-arm64
 
 staging-dist-darwin-amd64: RUNE_ENV := dev
-staging-dist-darwin-amd64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-amd64: DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-amd64: dist-darwin-amd64
 
 staging-dist-darwin-arm64: RUNE_ENV := dev
-staging-dist-darwin-arm64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-arm64: DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-arm64: dist-darwin-arm64
-
-# beta-dist-*: build with prod ldflags and upload to the same public
-# PROD_DOWNLOADS_BUCKET as prod-dist-*, but with RELEASE_CHANNEL=beta so
-# dist.sh publishes a separate manifest-beta.json and never overwrites the
-# shared -latest pointers or manifest.json. Beta ships real API endpoints
-# (RUNE_ENV=prod); the only difference from prod-dist-* is the channel.
-beta-dist-linux-amd64:  RUNE_ENV := prod
-beta-dist-linux-amd64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-amd64:  RELEASE_CHANNEL := beta
-beta-dist-linux-amd64:  dist-linux-amd64
-
-beta-dist-linux-arm64:  RUNE_ENV := prod
-beta-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-arm64:  RELEASE_CHANNEL := beta
-beta-dist-linux-arm64:  dist-linux-arm64
-
-beta-dist-linux-amd64-native:  RUNE_ENV := prod
-beta-dist-linux-amd64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-amd64-native:  RELEASE_CHANNEL := beta
-beta-dist-linux-amd64-native:  dist-linux-amd64-native
-
-beta-dist-linux-arm64-native:  RUNE_ENV := prod
-beta-dist-linux-arm64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-arm64-native:  RELEASE_CHANNEL := beta
-beta-dist-linux-arm64-native:  dist-linux-arm64-native
-
-# beta-dist-linux-*-cross are retained as aliases for the now-default cross build.
-beta-dist-linux-amd64-cross:  RUNE_ENV := prod
-beta-dist-linux-amd64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-amd64-cross:  RELEASE_CHANNEL := beta
-beta-dist-linux-amd64-cross:  dist-linux-amd64
-
-beta-dist-linux-arm64-cross:  RUNE_ENV := prod
-beta-dist-linux-arm64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-linux-arm64-cross:  RELEASE_CHANNEL := beta
-beta-dist-linux-arm64-cross:  dist-linux-arm64
-
-beta-dist-darwin-amd64: RUNE_ENV := prod
-beta-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-darwin-amd64: RELEASE_CHANNEL := beta
-beta-dist-darwin-amd64: dist-darwin-amd64
-
-beta-dist-darwin-arm64: RUNE_ENV := prod
-beta-dist-darwin-arm64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
-beta-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-beta-dist-darwin-arm64: RELEASE_CHANNEL := beta
-beta-dist-darwin-arm64: dist-darwin-arm64
 
 clean:
 	@rm -rf $(RUNE_RELEASE_DIR)

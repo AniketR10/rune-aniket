@@ -84,10 +84,9 @@ type Config struct {
 	// Defaults to runtime.GOOS + "-" + runtime.GOARCH.
 	Arch string
 
-	// ManifestURL is the base URL of the public downloads CDN where
-	// release manifests live (without a trailing arch). The Manager
-	// appends "/<arch>/manifest.json" to derive the per-arch
-	// endpoint.
+	// ManifestURL is the base URL the release manifests are published
+	// under, without a trailing arch. The Manager appends
+	// "/manifest-<arch>.json" to derive the per-arch endpoint.
 	ManifestURL string
 
 	// Storage is the persistent storage used to throttle checks and
@@ -417,10 +416,11 @@ func (m *Manager) fetchManifest(ctx context.Context) (Manifest, bool, error) {
 	return manifest, true, nil
 }
 
-// manifestEndpoint joins base with `<arch>/manifest.json` and validates
-// the URL. Manifests live on the public downloads CDN (the same bucket
-// dist.sh publishes artifacts to), one per-arch object at
-// `<base>/<arch>/manifest.json` — there is no server-side proxy.
+// manifestEndpoint joins base with `manifest-<arch>.json` and validates
+// the URL. Manifests are GitHub release assets published alongside the
+// artifacts by dist.sh, one per arch at `<base>/manifest-<arch>.json` —
+// there is no server-side proxy. The name is flat because release asset
+// names cannot contain a path separator.
 //
 // Any path prefix on base is preserved so callers can host the CDN
 // under a sub-path (e.g. https://example.test/cdn/...) for local
@@ -430,7 +430,7 @@ func manifestEndpoint(base, arch string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse manifest base: %w", err)
 	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/" + arch + "/manifest.json"
+	u.Path = strings.TrimRight(u.Path, "/") + "/manifest-" + arch + ".json"
 	endpoint := u.String()
 	if err := requireSecureURL(endpoint); err != nil {
 		return "", err

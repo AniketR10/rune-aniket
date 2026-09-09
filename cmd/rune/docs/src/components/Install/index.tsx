@@ -1,8 +1,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import styles from './styles.module.css';
 
-const DARWIN_ARM64 = 'https://downloads.rune.build/darwin-arm64/Rune-latest.dmg';
-const DARWIN_AMD64 = 'https://downloads.rune.build/darwin-amd64/Rune-latest.dmg';
+const RELEASES = 'https://github.com/unstablebuild/rune/releases/latest/download';
+const DARWIN_ARM64 = `${RELEASES}/Rune-darwin-arm64.dmg`;
+const DARWIN_AMD64 = `${RELEASES}/Rune-darwin-amd64.dmg`;
 const INSTALL_CMD = 'curl -fsSL https://api.rune.build/install.sh | sh';
 
 function fallbackCopy(text: string): boolean {

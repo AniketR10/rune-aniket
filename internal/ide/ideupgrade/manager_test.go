@@ -67,7 +67,7 @@ func TestManagerFetchManifest(t *testing.T) {
 	var requested atomic.Int32
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requested.Add(1)
-		require.Equal(t, "/darwin-arm64/manifest.json", r.URL.Path)
+		require.Equal(t, "/manifest-darwin-arm64.json", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(manifest)
 	}))
@@ -291,14 +291,16 @@ func TestManifestEndpoint(t *testing.T) {
 	tests := []struct {
 		base, arch, want string
 	}{
-		{"https://downloads.rune.build", "darwin-arm64",
-			"https://downloads.rune.build/darwin-arm64/manifest.json"},
-		{"https://downloads.rune.build/", "linux-amd64",
-			"https://downloads.rune.build/linux-amd64/manifest.json"},
+		{"https://github.com/unstablebuild/rune/releases/latest/download",
+			"darwin-arm64",
+			"https://github.com/unstablebuild/rune/releases/latest/download/manifest-darwin-arm64.json"},
+		{"https://github.com/unstablebuild/rune/releases/latest/download/",
+			"linux-amd64",
+			"https://github.com/unstablebuild/rune/releases/latest/download/manifest-linux-amd64.json"},
 		// Any base-path prefix is preserved so callers can host the
 		// downloads CDN under a sub-path if needed.
 		{"https://example.test/cdn", "linux-arm64",
-			"https://example.test/cdn/linux-arm64/manifest.json"},
+			"https://example.test/cdn/manifest-linux-arm64.json"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.base+"+"+tc.arch, func(t *testing.T) {
@@ -309,7 +311,7 @@ func TestManifestEndpoint(t *testing.T) {
 			// Sanity-check the result is parseable.
 			_, err = url.Parse(got)
 			require.NoError(t, err)
-			require.True(t, strings.HasSuffix(got, "/"+tc.arch+"/manifest.json"))
+			require.True(t, strings.HasSuffix(got, "/manifest-"+tc.arch+".json"))
 		})
 	}
 }

@@ -95,7 +95,7 @@ func newHandler(
 ) *Handler {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/"+runtime.GOOS+"-"+runtime.GOARCH+"/manifest.json",
+	mux.HandleFunc("/manifest-"+runtime.GOOS+"-"+runtime.GOARCH+".json",
 		func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(status)
 			if body != nil {

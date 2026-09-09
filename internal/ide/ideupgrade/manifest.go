@@ -24,7 +24,7 @@ package ideupgrade
 
 // Manifest describes a release artifact for one "<os>-<arch>" target.
 // The shape matches the JSON written by `cmd/rune/dist.sh` and
-// uploaded to `<downloads-host>/<os>-<arch>/manifest.json`.
+// uploaded as the `manifest-<os>-<arch>.json` release asset.
 type Manifest struct {
 	Version             string `json:"version"`
 	Commit              string `json:"commit,omitempty"`

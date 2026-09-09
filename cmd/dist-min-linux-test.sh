@@ -118,9 +118,9 @@ else
     echo "ok: gate passed at-floor artifact"
 fi
 
-# Extend the fake PATH so gsutil/bluectl abort loudly: reaching either
+# Extend the fake PATH so gh/bluectl abort loudly: reaching either
 # means a publish was attempted past the gate, which is itself the bug.
-for tool in gsutil bluectl; do
+for tool in gh bluectl; do
     cat >"$fakebin/$tool" <<EOF
 #!/bin/bash
 echo "FAIL: $tool ran — the min-linux gate did not abort the publish." >&2
@@ -154,7 +154,7 @@ run_dist() {
         export PATH="$fakebin:$PATH"
         export RUNE_TEST_VERNEED="$2"
         export BLUE_RELEASE_TAR="$1" BLUE_TARGET_OS=linux BLUE_TARGET_ARCH=amd64
-        export DOWNLOADS_BUCKET="gs://example-downloads" DOWNLOAD_HOST="https://example.com"
+        export RELEASE_REPO="example/rune" DOWNLOAD_HOST="https://example.com"
         if [[ $# -ge 3 ]]; then
             export RUNE_MIN_GLIBC="$floor_glibc"
         else
