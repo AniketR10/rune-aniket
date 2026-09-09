@@ -1,5 +1,14 @@
 # Rune
 
+[![Linux](https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml)
+[![macOS](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml)
+[![Lint](https://github.com/unstablebuild/rune/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/lint.yml)
+[![codecov](https://codecov.io/gh/unstablebuild/rune/branch/main/graph/badge.svg)](https://codecov.io/gh/unstablebuild/rune)
+[![Go Report Card](https://goreportcard.com/badge/unstable.build/rune)](https://goreportcard.com/report/unstable.build/rune)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/2pdrdj6xJ)
+[![Reddit](https://img.shields.io/badge/reddit-r%2FUnstableBuild-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/UnstableBuild/Rune)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+
 Rune is a fast, GPU-rendered, keyboard-driven IDE for power users. The Unix way, finished
 as a product: code, terminals, CLI tools, language intelligence, debugging, and AI agents,
 all in one composable, multi-workspace environment.
@@ -33,6 +42,19 @@ separate Apache-2.0 module. Packages in this repository carry no compatibility
 guarantees and are refactored freely.
 
 See [AGENTS.md](AGENTS.md) for a deeper tour of the architecture.
+
+## Build prerequisites
+
+Rune links a GPU renderer through cgo, so a C toolchain is required. macOS
+needs only the Xcode command line tools. On Debian/Ubuntu:
+
+```bash
+sudo apt-get install -y --no-install-recommends \
+  gcc g++ pkg-config \
+  libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
+  libxinerama-dev libxi-dev libxxf86vm-dev \
+  libasound2-dev libwayland-dev libxkbcommon-dev
+```
 
 ## Makefile
 

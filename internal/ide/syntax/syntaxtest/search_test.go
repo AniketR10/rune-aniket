@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -291,11 +292,7 @@ func setupSearcherForTests(t *testing.T, filesAvail ...string) (
 	require.NoError(t, err)
 	var fullPathFiles []string
 	for _, file := range filesAvail {
-		if !filepath.IsAbs(file) {
-			fullPathFiles = append(fullPathFiles, filepath.Join(wd, file))
-		} else {
-			fullPathFiles = append(fullPathFiles, file)
-		}
+		fullPathFiles = append(fullPathFiles, resolveFixture(t, wd, file))
 	}
 	pkgs := &mockPkgManager{
 		fullPathFiles: fullPathFiles,
@@ -349,7 +346,7 @@ func TestSearchExcludesNoiseDirs(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	pkgs := &mockPkgManager{fullPathFiles: []string{
-		filepath.Join(wd, "go/tree-sitter.so"),
+		grammarfixture.ParserPath(t, filepath.Join(wd, "go")),
 		filepath.Join(wd, "go/locals.scm"),
 	}}
 

@@ -20,8 +20,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/rune/internal/ide/syntax"
 )
 
 // stubPkgManager satisfies both idedebug.PkgManager and
@@ -39,12 +41,27 @@ func (p *stubPkgManager) LibDir(
 ) (iterator.Iterator[string], error) {
 	files := []string{p.bin}
 	if p.grammar != "" && langID == "go" {
+		files = append(files, filepath.Join(p.grammar, hostParserRel()))
 		entries, err := os.ReadDir(p.grammar)
 		if err == nil {
 			for _, e := range entries {
+				if e.IsDir() || e.Name() == syntax.ParserFilename {
+					continue
+				}
 				files = append(files, filepath.Join(p.grammar, e.Name()))
 			}
 		}
 	}
 	return iterator.FromSlice(files), nil
+}
+
+// hostParserRel is the fixture-relative path of the tree-sitter parser
+// built for the host platform. The committed darwin fixture sits at the
+// root of the language directory; the Linux ones live in a
+// GOOS_GOARCH subdirectory.
+func hostParserRel() string {
+	if runtime.GOOS == "darwin" {
+		return syntax.ParserFilename
+	}
+	return filepath.Join(runtime.GOOS+"_"+runtime.GOARCH, syntax.ParserFilename)
 }

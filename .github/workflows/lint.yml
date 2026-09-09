@@ -1,0 +1,79 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  golangci:
+    name: golangci-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ pkg-config \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev \
+            libasound2-dev libwayland-dev libxkbcommon-dev
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.11.3
+          args: --timeout=600s
+
+  format:
+    name: gofmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: |
+          make format
+          if ! git diff --quiet; then
+            echo "::error::go fmt produced changes; run 'make format' and commit"
+            git --no-pager diff --stat
+            exit 1
+          fi
+
+  license:
+    name: License headers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check GPL-3.0 headers
+        run: |
+          missing=0
+          while IFS= read -r f; do
+            case "$f" in
+              ./cmd/rune/docs/*|*_gomock.go|*.pb.go) continue ;;
+            esac
+            if ! head -3 "$f" | grep -q 'Copyright (C) .* Unstable Build, LLC'; then
+              echo "missing license header: $f"
+              missing=1
+            fi
+          done < <(find . -name '*.go' -not -path './.git/*')
+          exit $missing

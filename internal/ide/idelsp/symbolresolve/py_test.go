@@ -33,6 +33,7 @@ import (
 
 	"unstable.build/rune/internal/ide/idelsp/symbolresolve"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -575,7 +576,7 @@ func pythonPkgManager(t *testing.T) syntax.PkgManager {
 
 	pyDir := filepath.Join(wd, "..", "..", "syntax", "syntaxtest", "python")
 	files := []string{
-		filepath.Join(pyDir, "tree-sitter.so"),
+		grammarfixture.ParserPath(t, pyDir),
 		filepath.Join(pyDir, "locals.scm"),
 		filepath.Join(pyDir, "highlights.scm"),
 		filepath.Join(pyDir, "indents.scm"),

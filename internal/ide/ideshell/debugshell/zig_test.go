@@ -100,7 +100,7 @@ func zigGrammarDir(t *testing.T) string {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	dir := filepath.Join(wd, "..", "..", "syntax", "syntaxtest", "zig")
-	if _, err := os.Stat(filepath.Join(dir, "tree-sitter.so")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, hostParserRel())); err != nil {
 		t.Fatalf("missing zig tree-sitter fixture in %s: %v", dir, err)
 	}
 	return dir

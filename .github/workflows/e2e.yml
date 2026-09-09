@@ -1,0 +1,50 @@
+name: E2E
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ pkg-config \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev \
+            libasound2-dev libwayland-dev libxkbcommon-dev
+
+      # The e2e suites drive real toolchains; each one skips when its
+      # binary is absent, so a missing tool degrades coverage rather
+      # than failing the run.
+      - name: Install language toolchains
+        run: |
+          go install golang.org/x/tools/gopls@latest
+          go install github.com/go-delve/delve/cmd/dlv@latest
+          rustup component add rust-analyzer || true
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Run e2e suite
+        run: make test-e2e

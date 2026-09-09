@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -47,7 +48,7 @@ func (m langPkgManager) LibDir(_ context.Context, langID string) (iterator.Itera
 		return iterator.FromSlice([]string(nil)), nil
 	}
 	return iterator.FromSlice([]string{
-		filepath.Join(dir, "tree-sitter.so"),
+		grammarfixture.Parser(dir),
 		filepath.Join(dir, "locals.scm"),
 		filepath.Join(dir, "highlights.scm"),
 		filepath.Join(dir, "indents.scm"),

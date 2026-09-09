@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/text"
 	"unstable.build/rune/internal/text/vi"
 	"unstable.build/rune/internal/workspace"
@@ -172,7 +173,7 @@ func TestCommandsIntegration(t *testing.T) {
 	wg.Add(1)
 	c.Browser().RemoveWindowContent(c.Browser().Focus())
 	pkg.ret = iterator.FromSlice([]string{ // re-hydrate files iterator
-		"go/tree-sitter.so",
+		grammarfixture.Parser("go"),
 		"go/highlights.scm",
 		"go/indents.scm",
 		"go/folds.scm",

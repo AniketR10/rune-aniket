@@ -32,6 +32,7 @@ import (
 
 	"unstable.build/rune/internal/ide/idelsp/symbolresolve"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -287,7 +288,7 @@ func rustPkgManager(t *testing.T) syntax.PkgManager {
 
 	rsDir := filepath.Join(wd, "..", "..", "syntax", "syntaxtest", "rust")
 	files := []string{
-		filepath.Join(rsDir, "tree-sitter.so"),
+		grammarfixture.ParserPath(t, rsDir),
 		filepath.Join(rsDir, "locals.scm"),
 		filepath.Join(rsDir, "highlights.scm"),
 		filepath.Join(rsDir, "indents.scm"),

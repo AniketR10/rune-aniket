@@ -33,6 +33,7 @@ import (
 
 	"unstable.build/rune/internal/ide/idelsp/symbolresolve"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -581,8 +582,7 @@ func treeSitterPkgManager(t testing.TB) syntax.PkgManager {
 
 	goDir := filepath.Join(wd, "go")
 	for _, name := range []string{
-		"tree-sitter.so", "locals.scm", "highlights.scm",
-		"indents.scm", "folds.scm",
+		"locals.scm", "highlights.scm", "indents.scm", "folds.scm",
 	} {
 		p := filepath.Join(goDir, name)
 		_, err := os.Stat(p)
@@ -591,7 +591,7 @@ func treeSitterPkgManager(t testing.TB) syntax.PkgManager {
 
 	return &stubPkgManager{
 		files: []string{
-			filepath.Join(goDir, "tree-sitter.so"),
+			grammarfixture.ParserPath(t, goDir),
 			filepath.Join(goDir, "locals.scm"),
 			filepath.Join(goDir, "highlights.scm"),
 			filepath.Join(goDir, "indents.scm"),

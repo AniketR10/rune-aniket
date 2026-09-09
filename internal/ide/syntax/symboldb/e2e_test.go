@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/localstorage/boltdoc"
 	"unstable.build/rune/internal/workspace"
 )
@@ -64,8 +65,7 @@ func fixtureDir(t testing.TB, rel string) string {
 	require.NoError(t, err)
 	dir := filepath.Join(wd, rel)
 	for _, name := range []string{
-		"tree-sitter.so", "locals.scm", "highlights.scm",
-		"indents.scm", "folds.scm",
+		"locals.scm", "highlights.scm", "indents.scm", "folds.scm",
 	} {
 		_, err := os.Stat(filepath.Join(dir, name))
 		require.NoErrorf(t, err, "missing tree-sitter fixture %s/%s", dir, name)
@@ -77,7 +77,7 @@ func pkgManagerFor(t testing.TB, fixtures string) syntax.PkgManager {
 	t.Helper()
 	dir := fixtureDir(t, fixtures)
 	return &stubPkgManager{files: []string{
-		filepath.Join(dir, "tree-sitter.so"),
+		grammarfixture.ParserPath(t, dir),
 		filepath.Join(dir, "locals.scm"),
 		filepath.Join(dir, "highlights.scm"),
 		filepath.Join(dir, "indents.scm"),

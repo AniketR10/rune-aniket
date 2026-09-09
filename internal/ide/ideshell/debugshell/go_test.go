@@ -1115,7 +1115,7 @@ func grammarDir(t *testing.T) string {
 	abs, err := filepath.Abs(filepath.Join(
 		wd, "..", "..", "syntax", "syntaxtest", "go"))
 	require.NoError(t, err)
-	if _, err := os.Stat(filepath.Join(abs, "tree-sitter.so")); err != nil {
+	if _, err := os.Stat(filepath.Join(abs, hostParserRel())); err != nil {
 		t.Skipf("tree-sitter grammar not found at %s: %v", abs, err)
 	}
 	return abs

@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 )
 
 // grammarPkgManager serves the prebuilt tree-sitter grammars checked in
@@ -47,8 +48,11 @@ func (p grammarPkgManager) LibDir(
 	if err != nil {
 		return iterator.FromSlice[string](nil), nil
 	}
-	var files []string
+	files := []string{grammarfixture.Parser(dir)}
 	for _, e := range entries {
+		if e.IsDir() || e.Name() == syntax.ParserFilename {
+			continue
+		}
 		files = append(files, filepath.Join(dir, e.Name()))
 	}
 	return iterator.FromSlice(files), nil
@@ -64,10 +68,7 @@ func realParser(t *testing.T, languages ...string) syntaxapi.Parser {
 		wd, "..", "..", "..", "internal", "ide", "syntax", "syntaxtest"))
 	require.NoError(t, err)
 	for _, lang := range languages {
-		so := filepath.Join(root, lang, "tree-sitter.so")
-		if _, err := os.Stat(so); err != nil {
-			t.Skipf("tree-sitter grammar not found at %s: %v", so, err)
-		}
+		grammarfixture.ParserPath(t, filepath.Join(root, lang))
 	}
 	wuri, err := workspaceapi.ParseURI("memory:///")
 	require.NoError(t, err)

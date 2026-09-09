@@ -34,6 +34,7 @@ import (
 	"go.uber.org/goleak"
 	"unstable.build/rune/internal/ide/idelsp/symbolresolve"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -162,7 +163,7 @@ func goPkgManager(t testing.TB) syntax.PkgManager {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	return goFixturePkgManager{files: []string{
-		filepath.Join(wd, "go", "tree-sitter.so"),
+		grammarfixture.ParserPath(t, filepath.Join(wd, "go")),
 		filepath.Join(wd, "go", "locals.scm"),
 		filepath.Join(wd, "go", "highlights.scm"),
 		filepath.Join(wd, "go", "indents.scm"),

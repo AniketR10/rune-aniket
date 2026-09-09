@@ -137,7 +137,7 @@ func rustGrammarDir(t *testing.T) string {
 			continue
 		}
 		lib := filepath.Join(base, v.Name(), "lib")
-		if _, err := os.Stat(filepath.Join(lib, "tree-sitter.so")); err == nil {
+		if _, err := os.Stat(filepath.Join(lib, hostParserRel())); err == nil {
 			return lib
 		}
 	}

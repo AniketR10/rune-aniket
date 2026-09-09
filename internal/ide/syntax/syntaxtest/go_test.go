@@ -41,6 +41,7 @@ import (
 	"unstable.build/rune/internal/component/notifications"
 	"unstable.build/rune/internal/handler/handlertest"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/text"
 	"unstable.build/rune/internal/text/texttest"
 	"unstable.build/rune/internal/text/vi"
@@ -2159,15 +2160,24 @@ func newInstalledPkgManagerWithFiles(t testing.TB, files ...string) *mockPkgMana
 	require.NoError(t, err)
 	var fullPathFiles []string
 	for _, file := range files {
-		if !filepath.IsAbs(file) {
-			fullPathFiles = append(fullPathFiles, filepath.Join(wd, file))
-		} else {
-			fullPathFiles = append(fullPathFiles, file)
-		}
+		fullPathFiles = append(fullPathFiles, resolveFixture(t, wd, file))
 	}
 	return &mockPkgManager{
 		ret: iterator.FromSlice(fullPathFiles),
 	}
+}
+
+// resolveFixture turns a "<lang>/<file>" fixture reference into an
+// absolute path. Callers name the parser as "<lang>/tree-sitter.so",
+// which is only where the darwin fixture lives.
+func resolveFixture(t testing.TB, wd, file string) string {
+	if filepath.IsAbs(file) {
+		return file
+	}
+	if filepath.Base(file) == syntax.ParserFilename {
+		return grammarfixture.ParserPath(t, filepath.Join(wd, filepath.Dir(file)))
+	}
+	return filepath.Join(wd, file)
 }
 
 type mockPkgManager struct {

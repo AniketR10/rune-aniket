@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -892,7 +893,7 @@ func (m fixturePkgManager) LibDir(
 		return nil, fmt.Errorf("package %s not installed", langID)
 	}
 	return iterator.FromSlice([]string{
-		filepath.Join(dir, "tree-sitter.so"),
+		grammarfixture.Parser(dir),
 		filepath.Join(dir, "locals.scm"),
 		filepath.Join(dir, "highlights.scm"),
 		filepath.Join(dir, "indents.scm"),

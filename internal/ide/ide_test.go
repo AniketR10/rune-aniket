@@ -69,6 +69,7 @@ import (
 	"unstable.build/rune/internal/ide/idepkg/idepkgtest"
 	"unstable.build/rune/internal/ide/pkgshell"
 	"unstable.build/rune/internal/ide/pkgtrust"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/ide/syntax/symboldb"
 	"unstable.build/rune/internal/ide/vctrl"
 	"unstable.build/rune/internal/localstorage"
@@ -2073,13 +2074,11 @@ func stageTreeSitterGo(t *testing.T, dataDir string) {
 	src := filepath.Join("idelsp", "symbolresolve", "go")
 	dst := filepath.Join(dataDir, "lib", "go")
 	require.NoError(t, os.MkdirAll(dst, 0o755))
-	for _, name := range []string{
-		"tree-sitter.so", "locals.scm", "highlights.scm",
-		"indents.scm", "folds.scm",
-	} {
-		data, err := os.ReadFile(filepath.Join(src, name))
-		require.NoErrorf(t, err, "missing tree-sitter fixture %s", name)
-		require.NoError(t, os.WriteFile(filepath.Join(dst, name), data, 0o644))
+	for _, path := range grammarfixture.LibDir(t, src) {
+		data, err := os.ReadFile(path)
+		require.NoErrorf(t, err, "missing tree-sitter fixture %s", path)
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dst, filepath.Base(path)), data, 0o644))
 	}
 }
 

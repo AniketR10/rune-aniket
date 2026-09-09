@@ -32,6 +32,7 @@ import (
 
 	"unstable.build/rune/internal/ide/idelsp/symbolresolve"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/workspace"
 )
 
@@ -286,7 +287,7 @@ func zigPkgManager(t *testing.T) syntax.PkgManager {
 
 	zigDir := filepath.Join(wd, "..", "..", "syntax", "syntaxtest", "zig")
 	files := []string{
-		filepath.Join(zigDir, "tree-sitter.so"),
+		grammarfixture.ParserPath(t, zigDir),
 		filepath.Join(zigDir, "locals.scm"),
 		filepath.Join(zigDir, "highlights.scm"),
 		filepath.Join(zigDir, "indents.scm"),
