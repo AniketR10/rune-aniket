@@ -4,7 +4,7 @@ import styles from './styles.module.css';
 const RELEASES = 'https://github.com/unstablebuild/rune/releases/latest/download';
 const DARWIN_ARM64 = `${RELEASES}/Rune-darwin-arm64.dmg`;
 const DARWIN_AMD64 = `${RELEASES}/Rune-darwin-amd64.dmg`;
-const INSTALL_CMD = 'curl -fsSL https://api.rune.build/install.sh | sh';
+const INSTALL_CMD = 'curl -fsSL https://rune.build/install.sh | sh';
 
 function fallbackCopy(text: string): boolean {
   try {

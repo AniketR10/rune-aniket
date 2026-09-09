@@ -26,7 +26,7 @@ connection, to serve files and run commands. Install it with the same one-line
 installer used for a desktop install:
 
 ```
-curl -fsSL https://api.rune.build/install.sh | sh
+curl -fsSL https://rune.build/install.sh | sh
 ```
 
 This installs Rune to `~/.local/rune.app` and links the binary at
