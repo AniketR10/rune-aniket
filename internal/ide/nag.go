@@ -51,8 +51,8 @@ func WithNagPrompt(cfg NagPromptConfig) Option {
 }
 
 const nagSignedOutMessage = "**Enjoying Rune?**\n\n" +
-	"Rune is free for personal use. Create a free account to hear about\n" +
-	"new releases and to participate in what we're building next.\n\n" +
+	"Rune is free to use, at work and at home. Create a free account to hear\n" +
+	"about new releases and to participate in what we're building next.\n\n" +
 	"It takes a minute, and it means a lot to a small, self-funded company."
 
 const nagNoPlanMessage = "**Rune seems to be working out for you.**\n\n" +
@@ -61,13 +61,12 @@ const nagNoPlanMessage = "**Rune seems to be working out for you.**\n\n" +
 	"hackers who love this craft, and the ones who'd rather read the source than the\n" +
 	"docs, will outlive every company betting against them. " +
 	"When prod is down at 3am, nobody pages the product manager.\n\n" +
-	"Buying Rune supports a small, self-funded company that wants to keep you in the driver's seat."
+	"Rune Pro supports a small, self-funded company that wants to keep you in the driver's seat."
 
-const nagExpiredMessage = "**Your plan has expired.**\n\n" +
-	"Thank you for backing Rune — support from people like you is what keeps\n" +
-	"a small, self-funded company independent. Your paid plan has lapsed;\n" +
-	"renew it to keep supporting the craft and the tool built for the people\n" +
-	"who'd rather read the source than the docs."
+const nagExpiredMessage = "**Your Rune Pro plan has expired.**\n\n" +
+	"Thank you for backing Rune. Support from people like you is what keeps\n" +
+	"a small, self-funded company independent. Rune keeps working; renewing\n" +
+	"restores Rune Network and premium support."
 
 const (
 	nagOptSignIn  = "  Sign in  "

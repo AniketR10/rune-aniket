@@ -172,7 +172,7 @@ func formatAccountStatus(u auth.RPCUser) string {
 		fmt.Fprintf(&b, "- **Renews**: %s\n", u.PlanEnds.Format("2006-01-02"))
 	}
 	if u.Role != auth.RoleOneOff && u.Role < auth.RolePaid {
-		b.WriteString("\nUpgrade to a paid plan to unlock Rune.\n")
+		b.WriteString("\nUpgrade to Rune Pro to access Rune networking features and premium support\n")
 	}
 	return b.String()
 }
@@ -182,9 +182,9 @@ func planLabel(role auth.Role) string {
 	case role == auth.RoleOneOff:
 		return "One-off"
 	case role >= auth.RolePaid:
-		return "Paid"
+		return "Rune Pro"
 	default:
-		return "Free"
+		return "Rune"
 	}
 }
 

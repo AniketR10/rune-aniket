@@ -94,7 +94,7 @@ func TestLoginRendersPaidAccountStatus(t *testing.T) {
 	require.Len(t, out, 2)
 	assert.Contains(t, out[1], "Login successful")
 	assert.Contains(t, out[1], "user@example.com")
-	assert.Contains(t, out[1], "Paid")
+	assert.Contains(t, out[1], "Plan: Rune Pro")
 	assert.Contains(t, out[1], "2026-07-01")
 }
 
@@ -110,8 +110,28 @@ func TestLoginRendersFreeAccountStatus(t *testing.T) {
 
 	require.Len(t, out, 2)
 	assert.Contains(t, out[1], "free@example.com")
-	assert.Contains(t, out[1], "Free")
-	assert.Contains(t, out[1], "Upgrade")
+	assert.Contains(t, out[1],
+		"Upgrade to Rune Pro to access Rune networking features and premium support")
+}
+
+func TestPlanLabel(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		role auth.Role
+		want string
+	}{
+		{"never subscribed", auth.RoleUser, "Rune"},
+		{"basic", auth.RoleBasic, "Rune"},
+		{"paid", auth.RolePaid, "Rune Pro"},
+		{"one-off", auth.RoleOneOff, "One-off"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, planLabel(tt.role))
+		})
+	}
 }
 
 func TestLoginReportsFailure(t *testing.T) {
