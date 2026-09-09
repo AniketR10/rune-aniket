@@ -251,7 +251,19 @@ func (m *Manager) startWatch(t *Task, ctx context.Context) {
 			select {
 			case <-watchCtx.Done():
 				return
-			case ev := <-ch:
+			case ev, ok := <-ch:
+				if !ok {
+					// Schemes that proxy the watch over a stream close
+					// the channel when it ends, and so does closing the
+					// workspace; a receive then yields a nil EventInfo.
+					// A cancelled watchCtx means this watcher is already
+					// being torn down or replaced, so the task it points
+					// at must not be halted by a stale watcher.
+					if watchCtx.Err() == nil {
+						t.watchEnded()
+					}
+					return
+				}
 				isDir, _ := ev.IsDir()
 				if ignore.Match(ev.URI(), isDir) {
 					m.log(log.TraceLevel, "ignoring %s due to gitignore", ev.URI().Path())

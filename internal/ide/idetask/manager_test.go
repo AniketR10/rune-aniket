@@ -161,6 +161,22 @@ func TestManager(t *testing.T) {
 			"failed watch must leave no live watch to retrigger the task")
 	})
 
+	t.Run("a closed watch channel halts the task instead of panicking", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		// Schemes that proxy the watch over a stream (workspacerpc) close
+		// the caller's channel when that stream ends, and closing the
+		// workspace closes it too. A receive then yields a nil EventInfo.
+		close(watchChan(t, m, exec, "task"))
+
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+	})
+
 	t.Run("OnFocus task unminimizes it", func(t *testing.T) {
 		wm := newFakeBrowser()
 		exec := newFakeScheme()
@@ -936,15 +952,22 @@ func sendEvent(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename st
 }
 
 // sendEventInfo pushes a fully-specified event onto the task's watch
-// channel, locking the fake scheme so the lookup does not race the
-// watcher's StopWatch.
+// channel.
 func sendEventInfo(t *testing.T, m *Manager, exec *fakeScheme, taskname string, ev testEventInfo) {
+	t.Helper()
+	watchChan(t, m, exec, taskname) <- ev
+}
+
+// watchChan returns the task's watch channel, locking the fake scheme so
+// the lookup does not race the watcher's StopWatch. The watch arms
+// asynchronously in startWatch, so poll until it is registered.
+func watchChan(
+	t *testing.T, m *Manager, exec *fakeScheme, taskname string,
+) chan<- schemeapi.EventInfo {
 	t.Helper()
 	taskIfc, ok := m.tasks.Load(taskname)
 	require.True(t, ok)
 	task := taskIfc.(*Task)
-	// The watch arms asynchronously in startWatch, so poll until the
-	// task's channel is registered with the fake scheme.
 	var ch chan<- schemeapi.EventInfo
 	require.Eventually(t, func() bool {
 		task.mu.Lock()
@@ -955,7 +978,7 @@ func sendEventInfo(t *testing.T, m *Manager, exec *fakeScheme, taskname string, 
 		exec.mu.Unlock()
 		return ch != nil
 	}, time.Second, 5*time.Millisecond, "watch never armed for task %q", taskname)
-	ch <- ev
+	return ch
 }
 
 func mustURI(t *testing.T, filename string) workspaceapi.URI {

@@ -18,6 +18,7 @@ package idetask
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -539,6 +540,19 @@ func (t *Task) watchFailed(watchErr error) {
 		"the workspace file watch could not be started, so this task will no "+
 			"longer re-run automatically when files change. Recreate the task "+
 			"to restore it: %w", watchErr))
+}
+
+func (t *Task) watchEnded() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.loopHalted {
+		return
+	}
+	t.haltWith(errors.New(
+		"the workspace file watch ended, so this task will no longer " +
+			"re-run automatically when files change. Recreate the task " +
+			"to restore it"))
 }
 
 // haltWith marks the task as permanently halted and replaces its handler
