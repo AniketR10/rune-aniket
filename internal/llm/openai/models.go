@@ -27,6 +27,8 @@ import (
 const LLMProvider = "openai"
 
 const (
+	// GPT6Astra is the GPT-6 Astra model.
+	GPT6Astra = "gpt-6-astra"
 	// GPT5Dot6 is the GPT-5.6 Sol alias.
 	GPT5Dot6 = "gpt-5.6"
 	// GPT5Dot6Sol is the GPT-5.6 Sol model.
@@ -110,12 +112,12 @@ func IsReasoningModel(model string) bool {
 
 // SupportsReasoning returns true for models that support reasoning
 // parameters (ReasoningEffort, MaxCompletionTokens). This includes
-// o-series models and GPT-5.x models.
+// o-series models, GPT-5.x models, and GPT-6 models.
 func SupportsReasoning(model string) bool {
 	if IsReasoningModel(model) {
 		return true
 	}
-	return strings.HasPrefix(model, "gpt-5")
+	return strings.HasPrefix(model, "gpt-5") || strings.HasPrefix(model, "gpt-6")
 }
 
 // oSeriesEfforts are the effort levels supported by o-series reasoning models
@@ -185,6 +187,16 @@ var gpt5Dot6Efforts = map[string]bool{
 	"ultra":  true,
 }
 
+// gpt6Efforts covers GPT-6 Astra.
+var gpt6Efforts = map[string]bool{
+	"low":    true,
+	"medium": true,
+	"high":   true,
+	"xhigh":  true,
+	"max":    true,
+	"ultra":  true,
+}
+
 // gpt5Dot4ProEfforts covers GPT-5.4-pro.
 // Per OpenAI docs: medium, high, xhigh.
 var gpt5Dot4ProEfforts = map[string]bool{
@@ -194,10 +206,12 @@ var gpt5Dot4ProEfforts = map[string]bool{
 }
 
 // supportedEfforts returns the set of supported effort levels for a given
-// GPT-5.x model. Returns nil if the model is not a known GPT-5 variant
+// GPT-5.x or GPT-6 model. Returns nil if the model is not a known GPT variant
 // (caller should fall back to gpt5Dot4Efforts for unknown gpt-5 prefixes).
 func supportedEfforts(model string) map[string]bool {
 	switch {
+	case strings.HasPrefix(model, "gpt-6"):
+		return gpt6Efforts
 	case model == GPT5Dot4Pro:
 		return gpt5Dot4ProEfforts
 	case strings.HasPrefix(model, "gpt-5.6"):
@@ -262,6 +276,7 @@ func NormalizeEffort(model, effort string) (normalized string, warning string) {
 // provider at runtime for account- or region-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		GPT6Astra:        1050000,
 		GPT5Dot6:         1050000,
 		GPT5Dot6Sol:      1050000,
 		GPT5Dot6Terra:    1050000,
@@ -317,12 +332,13 @@ func ModelEntries() []llmapi.ModelEntry {
 // FlagshipModel returns the provider's top model identifier. It is
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
-func FlagshipModel() string { return GPT5Dot6Sol }
+func FlagshipModel() string { return GPT6Astra }
 
 // maxOutputTokens maps each model to its documented maximum output-token
 // (API max_completion_tokens / max_tokens) ceiling. Models absent from the
 // map have an unknown ceiling; MaxOutputTokens returns 0 for them.
 var maxOutputTokens = map[string]int{
+	GPT6Astra:        128000,
 	GPT5Dot6:         128000,
 	GPT5Dot6Sol:      128000,
 	GPT5Dot6Terra:    128000,

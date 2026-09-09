@@ -25,7 +25,13 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, GPT5Dot6Sol, FlagshipModel())
+	assert.Equal(t, GPT6Astra, FlagshipModel())
+}
+
+func TestGPT6AstraCatalog(t *testing.T) {
+	assert.Equal(t, 1050000, AvailableModels()[GPT6Astra])
+	assert.Equal(t, 128000, MaxOutputTokens(GPT6Astra))
+	assert.True(t, SupportsReasoning(GPT6Astra))
 }
 
 func TestMaxOutputTokens(t *testing.T) {
@@ -34,6 +40,7 @@ func TestMaxOutputTokens(t *testing.T) {
 		want  int
 	}{
 		{GPT5Dot6, 128000},
+		{GPT6Astra, 128000},
 		{GPT5Dot6Sol, 128000},
 		{GPT5Dot6Terra, 128000},
 		{GPT5Dot6Luna, 128000},
@@ -105,6 +112,7 @@ func TestSupportsReasoning(t *testing.T) {
 		{"gpt-5.6-sol", true},
 		{"gpt-5.6-terra", true},
 		{"gpt-5.6-luna", true},
+		{"gpt-6-astra", true},
 		// Older models do not support reasoning.
 		{"gpt-4", false},
 		{"gpt-4-turbo", false},
@@ -174,6 +182,16 @@ func TestNormalizeEffort(t *testing.T) {
 		{"gpt-5.6-terra ultra", "gpt-5.6-terra", "ultra", "ultra", false},
 		{"gpt-5.6-luna ultra", "gpt-5.6-luna", "ultra", "ultra", false},
 		{"gpt-5.6-luna minimal", "gpt-5.6-luna", "minimal", "", true},
+
+		// GPT-6 Astra: low/medium/high/xhigh/max/ultra are supported.
+		{"gpt-6-astra low", "gpt-6-astra", "low", "low", false},
+		{"gpt-6-astra medium", "gpt-6-astra", "medium", "medium", false},
+		{"gpt-6-astra high", "gpt-6-astra", "high", "high", false},
+		{"gpt-6-astra xhigh", "gpt-6-astra", "xhigh", "xhigh", false},
+		{"gpt-6-astra max", "gpt-6-astra", "max", "max", false},
+		{"gpt-6-astra ultra", "gpt-6-astra", "ultra", "ultra", false},
+		{"gpt-6-astra none", "gpt-6-astra", "none", "", true},
+		{"gpt-6-astra minimal", "gpt-6-astra", "minimal", "", true},
 
 		// GPT-5.4-mini: none/low/medium/high/xhigh (same as gpt-5.4).
 		{"gpt-5.4-mini none", "gpt-5.4-mini", "none", "none", false},

@@ -75,7 +75,7 @@ func TestCommandAdapterMaxTokensValidatesAgainstModel(t *testing.T) {
 
 func TestCommandAdapterMaxTokensRejectsCodex(t *testing.T) {
 	model := llmapi.ModelEntry{
-		Provider: codex.LLMProvider, Name: codex.GPT5Dot6Sol, ContextWindow: 372_000,
+		Provider: codex.LLMProvider, Name: codex.GPT5Dot6Sol, ContextWindow: 872_000,
 	}
 
 	a := newMaxTokensAdapter(t, model)

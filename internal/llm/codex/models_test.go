@@ -25,7 +25,7 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, GPT5Dot6Sol, FlagshipModel())
+	assert.Equal(t, GPT6Astra, FlagshipModel())
 }
 
 func TestMaxOutputTokens(t *testing.T) {
@@ -62,9 +62,10 @@ func TestModelEntries(t *testing.T) {
 	assert.Equal(t, "gpt-5.4", GPT5Dot4)
 	_, hasBareGPT56 := byName["gpt-5.6"]
 	assert.False(t, hasBareGPT56)
-	assert.Equal(t, 372000, byName["gpt-5.6-sol"])
-	assert.Equal(t, 372000, byName["gpt-5.6-terra"])
-	assert.Equal(t, 372000, byName["gpt-5.6-luna"])
+	assert.Equal(t, 872000, byName["gpt-6-astra"])
+	assert.Equal(t, 872000, byName["gpt-5.6-sol"])
+	assert.Equal(t, 872000, byName["gpt-5.6-terra"])
+	assert.Equal(t, 872000, byName["gpt-5.6-luna"])
 	assert.Equal(t, 1000000, byName["gpt-5.4"])
 	assert.Equal(t, 272000, byName["gpt-5.5"])
 	assert.Equal(t, 1000000, byName["codex-auto-review"])
