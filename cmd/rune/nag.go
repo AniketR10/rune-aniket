@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
-	"unstable.build/rune/internal/auth"
 	"unstable.build/rune/internal/ide"
 	"unstable.build/rune/internal/ide/idenag"
 )

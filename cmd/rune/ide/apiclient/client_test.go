@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"golang.org/x/oauth2"
-	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/auth"
 )
 
 func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {

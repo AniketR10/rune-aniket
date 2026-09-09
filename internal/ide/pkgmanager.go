@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/ide/gitpkg"
 	"unstable.build/rune/internal/ide/idepkg"

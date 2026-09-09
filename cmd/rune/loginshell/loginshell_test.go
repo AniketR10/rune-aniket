@@ -31,8 +31,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/cmd/rune/ide/apiclient"
-	"unstable.build/rune/internal/auth"
 )
 
 type fakeClient struct {

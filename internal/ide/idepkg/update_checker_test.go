@@ -29,7 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/rune/internal/auth"
+	"unstable.build/rune/auth"
 	"unstable.build/rune/internal/ide/idepkg/idepkgtest"
 )
 

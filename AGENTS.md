@@ -10,13 +10,20 @@ Key entrypoints:
 
 - `cmd/rune` — the main Rune application
 - `cmd/rune-agent` — the Rune Agent extension binary and packages
+- `auth` — the account contract shared with the API server
 - `internal/` — every non-`main` package (`ide`, `text`, `term`, `workspace`,
   `handler`, `component`, `llm`, `cell`, `debug`, ...)
 
 The repository also contains substantial TUI/editor infrastructure built on `github.com/unstablebuild/rune-go-sdk`, and many UI/component patterns mirror the conventions used in the sibling `blue` repository.
 
-New non-`main` packages go under `internal/`. The module exports no public API;
-the supported extension API is the separate `rune-go-sdk` module.
+New non-`main` packages go under `internal/`. The supported extension API is the
+separate `rune-go-sdk` module.
+
+`auth` is the one exception: the account claims, roles and endpoint paths in it
+are a wire contract with the API server, which lives in a different module and
+therefore cannot import `internal/`. Both ends must deserialize the same token,
+so the package is public to keep them from drifting. Keep it that way — nothing
+else here is public API, and `auth` should stay free of editor concerns.
 
 ## Common Commands
 
