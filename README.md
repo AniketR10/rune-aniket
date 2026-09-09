@@ -4,9 +4,8 @@
 [![macOS](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml)
 [![Lint](https://github.com/unstablebuild/rune/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/lint.yml)
 [![codecov](https://codecov.io/gh/unstablebuild/rune/branch/main/graph/badge.svg)](https://codecov.io/gh/unstablebuild/rune)
-[![Go Report Card](https://goreportcard.com/badge/unstable.build/rune)](https://goreportcard.com/report/unstable.build/rune)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/2pdrdj6xJ)
-[![Reddit](https://img.shields.io/badge/reddit-r%2FUnstableBuild-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/UnstableBuild/Rune)
+[![Reddit](https://img.shields.io/badge/reddit-r%2FUnstableBuild-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/UnstableBuild/)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 Rune is a fast, GPU-rendered, keyboard-driven IDE for power users. The Unix way, finished
