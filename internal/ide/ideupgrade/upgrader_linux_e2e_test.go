@@ -128,7 +128,7 @@ func TestLinuxE2E_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "v0.42.1", manifest.Version)
 
-	require.NoError(t, mgr.runUpgrade(context.Background(), manifest))
+	require.NoError(t, mgr.Upgrade(context.Background(), manifest, nil))
 
 	got, err := os.ReadFile(filepath.Join(installRoot, "rune.app", "bin", "rune"))
 	require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestLinuxE2E_RealReleaseTarballLayout(t *testing.T) {
 
 	manifest, _, err := mgr.fetchManifest(context.Background())
 	require.NoError(t, err)
-	require.NoError(t, mgr.runUpgrade(context.Background(), manifest))
+	require.NoError(t, mgr.Upgrade(context.Background(), manifest, nil))
 
 	// New binary lands at <install>/rune.app/bin/rune, never nested.
 	got, err := os.ReadFile(filepath.Join(installRoot, "rune.app", "bin", "rune"))
@@ -295,7 +295,7 @@ func TestLinuxE2E_ChecksumMismatchRollsBack(t *testing.T) {
 
 	manifest, _, err := mgr.fetchManifest(context.Background())
 	require.NoError(t, err)
-	require.Error(t, mgr.runUpgrade(context.Background(), manifest))
+	require.Error(t, mgr.Upgrade(context.Background(), manifest, nil))
 
 	// Existing install untouched.
 	got, err := os.ReadFile(existing)
