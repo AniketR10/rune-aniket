@@ -149,6 +149,29 @@ func TestPubSub(t *testing.T) {
 		cleanupNodes(t, follower)
 	})
 
+	t.Run("subscriptions survive a leader that dies without a goodbye", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 1)
+		follower := followers[0]
+		topic := "1234"
+		ctx := context.Background()
+		require.NoError(t, follower.Subscribe(ctx, topic))
+
+		// A crashed leader never sends the goodbye that carries the
+		// subscription hand-over, so the follower learns of the
+		// handoff from the dead connection alone.
+		testHookSuppressBye.Store(true)
+		defer testHookSuppressBye.Store(false)
+
+		require.NoError(t, leader.Close())
+		require.NoError(t, follower.Publish(ctx, topic, []byte("block")))
+		receiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		data, err := follower.Receive(receiveCtx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+		cleanupNodes(t, follower)
+	})
+
 	t.Run("publish while the new leader is still resubscribing is delivered", func(t *testing.T) {
 		leader, followers := makeLeaderFollowerPair(t, 1)
 		follower := followers[0]

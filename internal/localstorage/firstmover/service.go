@@ -64,6 +64,10 @@ var ErrMessageTooLarge = errors.New("message exceeds maximum size")
 // the subscriptions recovered from its predecessor.
 var testHookLeadBeforeResubscribe atomic.Pointer[func()]
 
+// testHookSuppressBye lets tests reproduce a leader that disappears
+// without the goodbye handshake, the way a crashed peer does.
+var testHookSuppressBye atomic.Bool
+
 // StorageFactory opens the backing storageapi.Service for a peer that
 // has just won leader election. The leader owns the returned service
 // for the duration of its leadership and closes it when leadership
@@ -117,7 +121,12 @@ type Service struct {
 
 	followFailures int
 	subscriptions  map[string][][]byte
-	active         storageapi.Service
+	// subscribed is every topic this peer subscribed to, tracked
+	// independently of the pubsub client streams: those are dropped
+	// the moment a leader connection breaks, so they cannot serve as
+	// the record of what to restore on the next incarnation.
+	subscribed map[string]struct{}
+	active     storageapi.Service
 }
 
 const unixSocketPathMax = 103
@@ -151,6 +160,7 @@ func (s *Service) Init(open StorageFactory, lockFile string, cfg Config) {
 	s.lockFileRead = lockFile
 	s.lockFileRemoveSync = lockFile + ".sync"
 	s.subscriptions = make(map[string][][]byte)
+	s.subscribed = make(map[string]struct{})
 	s.pubsub = new(pubsub)
 	s.pubsub.mu = &s.mu
 	s.readyCtx, s.ready = context.WithCancel(context.Background())
@@ -380,6 +390,9 @@ func (s *Service) Subscribe(
 			return false, nil
 		}
 		i++
+		if err == nil {
+			s.trackSubscription(topic)
+		}
 		return s.isRetriableError(ctx, err), err
 	})
 }
@@ -409,6 +422,9 @@ func (s *Service) Receive(
 		}
 		s.mu.Unlock()
 		data, err = s.pubsub.receive(ctx, topic)
+		if err == nil {
+			s.trackSubscription(topic)
+		}
 		return s.isRetriableError(ctx, err), err
 	}, s.receiveRetryStrategy)
 	return
@@ -434,7 +450,9 @@ func (s *Service) Close() (ret error) {
 		s.mu.Unlock()
 		// best effort, use server method directly so we guarantee delivery
 		req := pubsubpb.PublishRequest{Topic: internalTopic, Data: internalMessageBye}
-		_, _ = s.pubsub.Publish(context.Background(), &req)
+		if !testHookSuppressBye.Load() {
+			_, _ = s.pubsub.Publish(context.Background(), &req)
+		}
 		s.mu.Lock()
 		close(s.quitCh)
 	} else {
@@ -526,8 +544,7 @@ loop:
 			s.pubsub.initFollower(conn)
 			// set active svc and unlock API
 			s.setActiveAndUnlock(client)
-			subscriptions := s.subscriptions
-			s.subscriptions = make(map[string][][]byte)
+			subscriptions := s.takeSubscriptions()
 			s.mu.Unlock()
 			s.resubscribe(ctx, subscriptions)
 			s.monitorLeader(ctx, conn)
@@ -554,6 +571,7 @@ loop:
 	}
 
 	// monitor connection and quit if it exits
+	defer s.recoverSubscriptions()
 	for {
 		state := conn.GetState()
 		s.log(log.TraceLevel, "Monitoring for state changes. Current: %s", state)
@@ -616,19 +634,7 @@ func (s *Service) monitorLeader(ctx context.Context, conn *grpc.ClientConn) {
 				return
 			}
 			if string(data) == internalMessageByeString {
-				s.mu.Lock()
-				// collect buffered messages and subscriptions
-				// before killing connection and resetting pubsub instance.
-				for topic, stream := range s.pubsub.clientStreams {
-					var msgs [][]byte
-					for len(stream) > 0 {
-						msg := <-stream
-						msgs = append(msgs, msg.msg.GetData())
-					}
-					s.subscriptions[topic] = append(s.subscriptions[topic], msgs...)
-				}
-				s.log(log.DebugLevel, "leader is signaling close, recovered %+v", s.subscriptions)
-				s.mu.Unlock()
+				s.recoverSubscriptions()
 				err := conn.Close()
 				if err != nil {
 					s.log(log.WarnLevel, "force close connection to leader: %v", err)
@@ -645,6 +651,51 @@ func (s *Service) monitorLeader(ctx context.Context, conn *grpc.ClientConn) {
 func (s *Service) setActiveAndUnlock(svc storageapi.Service) {
 	s.ready()
 	s.active = svc
+}
+
+// recoverSubscriptions moves this follower's subscribed topics and
+// their buffered messages out of the pubsub instance and into
+// s.subscriptions, so the next incarnation can restore them: the
+// instance is reset — dropping every client stream — as soon as this
+// peer re-connects or takes over as leader.
+//
+// It must run on every way a follower can lose its leader, not just
+// on the goodbye handshake: a leader that crashes, or whose goodbye
+// races the connection teardown, would otherwise leave the follower
+// silently unsubscribed from topics it still believes it is watching.
+func (s *Service) recoverSubscriptions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for topic, stream := range s.pubsub.clientStreams {
+		var msgs [][]byte
+		for len(stream) > 0 {
+			msg := <-stream
+			msgs = append(msgs, msg.msg.GetData())
+		}
+		s.subscriptions[topic] = append(s.subscriptions[topic], msgs...)
+	}
+	s.log(log.DebugLevel, "leader lost, recovered %+v", s.subscriptions)
+}
+
+func (s *Service) trackSubscription(topic string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscribed[topic] = struct{}{}
+}
+
+// takeSubscriptions hands the caller everything the next incarnation
+// must restore: every topic this peer subscribed to, along with the
+// messages buffered for topics whose stream was drained during the
+// handoff. It must be called with s.mu held.
+func (s *Service) takeSubscriptions() map[string][][]byte {
+	subscriptions := s.subscriptions
+	s.subscriptions = make(map[string][][]byte)
+	for topic := range s.subscribed {
+		if _, ok := subscriptions[topic]; !ok {
+			subscriptions[topic] = nil
+		}
+	}
+	return subscriptions
 }
 
 func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bool, err error) {
@@ -718,8 +769,7 @@ func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bo
 	// set active svc and unlock API
 	s.log(log.DebugLevel, "Successfully assumed position of leader. Unlocking API...")
 	s.setActiveAndUnlock(svc)
-	subscriptions := s.subscriptions
-	s.subscriptions = make(map[string][][]byte)
+	subscriptions := s.takeSubscriptions()
 	s.mu.Unlock()
 
 	// clean lock remove sync file, after a while to allow for reconnections
