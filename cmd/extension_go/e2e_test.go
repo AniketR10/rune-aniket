@@ -347,7 +347,8 @@ func TestE2EGoplsLoggingConfigReachesProcess(t *testing.T) {
 
 	scheme := newTestSchemeRooted(dir)
 	mgr := idelsp.New(uri, scheme, scheme, &stubPkgManager{bin: goplsBin}, nil, nil,
-		idelsp.Config{MaxRetries: 1, Callback: &testCallback{}})
+		idelsp.Config{MaxRetries: 1, Callback: &testCallback{},
+			CloseTimeout: realLSPCloseTimeout})
 	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
 
 	cfg := config.JSONFromMap(map[string]any{
@@ -1993,6 +1994,7 @@ func TestE2EHandleOpenWorksWithNoInitializeServer(t *testing.T) {
 			MaxRetries:         1,
 			Callback:           cb,
 			NoInitializeServer: true,
+			CloseTimeout:       realLSPCloseTimeout,
 		},
 	)
 	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
@@ -2072,6 +2074,7 @@ func TestE2EHandleOpenRaceWithInitialize(t *testing.T) {
 			MaxRetries:         1,
 			Callback:           cb,
 			NoInitializeServer: true,
+			CloseTimeout:       realLSPCloseTimeout,
 		},
 	)
 	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
@@ -2155,6 +2158,7 @@ func TestE2EHandleOpenCloseRaceWithInitialize(t *testing.T) {
 			MaxRetries:         1,
 			Callback:           cb,
 			NoInitializeServer: true,
+			CloseTimeout:       realLSPCloseTimeout,
 		},
 	)
 	t.Cleanup(func() { require.NoError(t, mgr.Close()) })

@@ -70,14 +70,16 @@ func TestMain(m *testing.M) {
 
 // buildSampleExtension compiles testdata/sampleext, which is a
 // self-contained Go module depending on rune-go-sdk, using the local
-// Go toolchain. Its go.sum is committed so the build resolves from the
-// module cache without network access.
+// Go toolchain. Its go.sum is committed, so on a machine that has
+// built it before the build resolves entirely from the module cache;
+// a fresh CI runner only has the main module's dependencies cached
+// and must be allowed to fetch sampleext's own pins.
 func buildSampleExtension(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "sampleext")
 	cmd := exec.Command("go", "build", "-o", bin, ".")
 	cmd.Dir = "testdata/sampleext"
-	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOFLAGS=-mod=mod")
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build sampleext: %v\n%s", err, out)
 	}

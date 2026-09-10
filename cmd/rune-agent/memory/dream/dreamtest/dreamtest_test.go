@@ -500,11 +500,36 @@ func (a *asyncFlusher) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Key == term.KeyEnter && a.drawWhileRunning != nil {
 		<-a.drawWhileRunning
 		a.drawWhileRunning = nil
+		// drawWhileRunning only means the pipeline reached the blocked
+		// LLM call. The in-progress conversation row travels through
+		// the REPL pump goroutine on its own time, so poll until it is
+		// rendered before the golden compare.
+		a.waitFrameContains("conversation")
 	} else {
 		a.f.h.Wait()
 	}
 	a.f.sched.flush()
 	return
+}
+
+// waitFrameContains flushes scheduled callbacks and redraws until the
+// frame contains want.
+func (a *asyncFlusher) waitFrameContains(want string) {
+	a.f.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		a.f.sched.flush()
+		w := term.NewStringWriter(testWidth, testHeight)
+		a.f.h.Draw(w)
+		if err := w.Flush(); err == nil &&
+			strings.Contains(w.String(), want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			a.f.t.Fatalf("frame never showed %q", want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func (a *asyncFlusher) Resize(w, h int)    { a.f.h.Resize(w, h) }

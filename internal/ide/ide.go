@@ -753,8 +753,14 @@ func (i *IDE) init(
 		textapi.AllEvents(),
 		tutorialEventObserver(i.options.scheduleFn, i.tutorial.observeEvent),
 	)
+	// The boot workspace build launched by workspaceHandler.init above
+	// reaches the shader runner from its own goroutine (e.g.
+	// abortPendingBuild -> stopLoading) under the locker; take it here
+	// too so this init does not race that access.
+	i.locker.Lock()
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
+	i.locker.Unlock()
 	if op.nagPrompt.State != nil {
 		i.nag = idenag.New(idenag.Config{
 			Storage: storageapi.WithPartition(i.storage, idenag.Partition),

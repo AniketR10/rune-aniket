@@ -42,6 +42,13 @@ import (
 	"unstable.build/rune/internal/ide/idelsp"
 )
 
+// realLSPCloseTimeout bounds Manager.Close's shutdown call against a
+// real gopls. The default 3s is enough for a settled server, but on
+// loaded CI runners gopls can still be indexing when shutdown arrives
+// and takes longer to answer, failing the cleanup of tests that
+// otherwise passed. Mirrors idelsp/go_test.go.
+const realLSPCloseTimeout = 15 * time.Second
+
 // findGopls locates the gopls binary or skips the test.
 func findGopls(t *testing.T) string {
 	t.Helper()
@@ -137,7 +144,8 @@ func initGoplsFromDir(
 		},
 		onProgress: readyOnProgressCh(&once, ready),
 	}
-	cfg := idelsp.Config{MaxRetries: 1, Callback: cb}
+	cfg := idelsp.Config{MaxRetries: 1, Callback: cb,
+		CloseTimeout: realLSPCloseTimeout}
 
 	mgr := idelsp.New(
 		uri,
@@ -275,8 +283,9 @@ func initGoplsWithApplyEdit(
 		onProgress: readyOnProgressCh(&once, ready),
 	}
 	cfg := idelsp.Config{
-		MaxRetries: 1,
-		Callback:   cb,
+		MaxRetries:   1,
+		Callback:     cb,
+		CloseTimeout: realLSPCloseTimeout,
 	}
 
 	mgr := idelsp.New(
@@ -420,8 +429,9 @@ func initGoplsWithAutoInitParams(
 		onProgress: readyOnProgressCh(&once, ready),
 	}
 	cfg := idelsp.Config{
-		MaxRetries: 1,
-		Callback:   cb,
+		MaxRetries:   1,
+		Callback:     cb,
+		CloseTimeout: realLSPCloseTimeout,
 	}
 
 	mgr := idelsp.New(

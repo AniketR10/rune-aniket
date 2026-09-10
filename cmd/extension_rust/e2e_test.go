@@ -286,7 +286,7 @@ func TestE2E(t *testing.T) {
 		me.Register(resource)
 
 		cmd := rustCmdAt("organize-imports", uri, resource, 0, 0)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 
 		// organize-imports either edits the buffer directly, applies via
 		// workspace/applyEdit, or reports nothing to do — all valid. When
@@ -473,7 +473,7 @@ func TestE2E(t *testing.T) {
 		me.Register(resource)
 
 		cmd := rustCmdAt("parent-module", uri, resource, 0, 0)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		opened := opener.openedURIs()
 		require.NotEmpty(t, opened, "parent-module should open the declaring file")
 		assert.Contains(t, opened[0], "lib.rs", "extract_var's parent is declared in lib.rs")
@@ -488,7 +488,7 @@ func TestE2E(t *testing.T) {
 		me.Register(resource)
 
 		cmd := rustCmdAt("open-cargo-toml", uri, resource, 0, 0)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		opened := opener.openedURIs()
 		require.NotEmpty(t, opened, "open-cargo-toml should open a Cargo.toml")
 		assert.Contains(t, opened[0], "Cargo.toml")
@@ -508,7 +508,7 @@ func TestE2E(t *testing.T) {
 		// `HashMap::new()` on line 4. With localDocs advertised the response
 		// is the {web, local} object and parseExternalDocs prefers web.
 		cmd := rustCmdAt("external-docs", uri, resource, 4, 20)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		assert.True(t, mn.hasMessage("https://doc.rust-lang.org"),
 			"external-docs reports the HashMap documentation URL; got %v", mn.messages)
 	})
@@ -529,7 +529,7 @@ func TestE2E(t *testing.T) {
 			End:   term.Coordinates{X: 6, Y: 3},
 		})
 		cmd := rustCmdAt("join-lines", uri, resource, 1, 14)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		combined := allEdits(me, resource, env)
 		require.NotEmpty(t, combined, "join-lines should produce an edit")
 		assert.NotContains(t, combined, "\n", "joined arguments collapse onto one line")
@@ -547,7 +547,7 @@ func TestE2E(t *testing.T) {
 		cmd.Args = []string{"ssr", "foo($a) ==>> bar($a)"}
 		cmd.Cursor.Content = term.Coordinates{X: 4, Y: 1}
 		// The router strips the leading subcommand name from Args.
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		combined := allEdits(me, resource, env)
 		require.NotEmpty(t, combined, "ssr should produce an edit")
 		assert.Contains(t, combined, "bar", "ssr rewrites foo(...) into bar(...)")
@@ -563,7 +563,7 @@ func TestE2E(t *testing.T) {
 
 		// Cursor on first()'s signature (line 0).
 		cmd := rustCmdAt("move-item-down", uri, resource, 0, 3)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		combined := allEdits(me, resource, env)
 		require.NotEmpty(t, combined, "move-item-down should produce an edit")
 		assert.NotContains(t, combined, "$0", "snippet tab stops must not leak into the buffer")
@@ -580,7 +580,7 @@ func TestE2E(t *testing.T) {
 
 		// Cursor at the end of the `/// first line` doc comment (line 0).
 		cmd := rustCmdAt("on-enter", uri, resource, 0, 14)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		combined := allEdits(me, resource, env)
 		if combined == "" {
 			return // some rust-analyzer builds decline onEnter here.
@@ -598,7 +598,7 @@ func TestE2E(t *testing.T) {
 
 		// Cursor on the opening paren in `(1 + 2)` (line 1, col 12).
 		cmd := rustCmdAt("matching-brace", uri, resource, 1, 12)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		got := me.lastCursor(resource)
 		assert.Greater(t, got.X, 12, "cursor should move to the matching close paren")
 	})
@@ -612,7 +612,7 @@ func TestE2E(t *testing.T) {
 		me.Register(resource)
 
 		for _, sub := range []string{"run-flycheck", "clear-flycheck", "cancel-flycheck"} {
-			require.NoError(t, handler.HandleCommand(t.Context(), rustCmdAt(sub, uri, resource, 0, 0)),
+			requireHandleCommand(t, handler, rustCmdAt(sub, uri, resource, 0, 0),
 				"%s must not error", sub)
 		}
 	})
@@ -625,7 +625,7 @@ func TestE2E(t *testing.T) {
 		resource := &stubResource{uri: uri}
 		me.Register(resource)
 
-		require.NoError(t, handler.HandleCommand(t.Context(), rustCmdAt("reload-workspace", uri, resource, 0, 0)))
+		requireHandleCommand(t, handler, rustCmdAt("reload-workspace", uri, resource, 0, 0))
 		assert.True(t, mn.hasMessage("Reloaded"), "reload-workspace reports completion")
 	})
 
@@ -692,7 +692,7 @@ func TestE2E(t *testing.T) {
 		// childModules returns the declaration locations, all in lib.rs, and
 		// the command opens the first one.
 		cmd := rustCmdAt("child-modules", uri, resource, 14, 0)
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		opened := opener.openedURIs()
 		require.NotEmpty(t, opened, "child-modules must open a declaration location")
 		assert.Contains(t, opened[0], "lib.rs",
@@ -717,7 +717,7 @@ func TestE2E(t *testing.T) {
 		// not exercise their narrowing.
 		cmd := rustCmd("symbols", uri, resource)
 		cmd.Args = []string{"symbols", "Widget"}
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
+		requireHandleCommand(t, handler, cmd)
 		opened := opener.openedURIs()
 		require.Len(t, opened, 1, "exactly one symbol is named Widget")
 		assert.Contains(t, opened[0], "types.rs")
@@ -740,7 +740,7 @@ func TestE2E(t *testing.T) {
 
 		cmd := rustCmd("symbols", uri, resource)
 		cmd.Args = []string{"symbols", "Widget", "deps"}
-		require.NoError(t, handler.HandleCommand(t.Context(), cmd),
+		requireHandleCommand(t, handler, cmd,
 			"workspace/symbol with searchScope/searchKind must be accepted")
 		assert.False(t, mn.hasMessage("No matching"), "Widget resolves with dependency scope")
 		assert.NotEmpty(t, opener.openedURIs())
@@ -1030,6 +1030,28 @@ func allEdits(me *mockEditor, resource textapi.Handler, env *rustEnvE2E) string 
 
 // handlerWM extracts the fakeWM the handler's subcommands were wired
 // with, so the picker it shows can be driven.
+
+// requireHandleCommand runs cmd, retrying while rust-analyzer answers
+// ContentModified — its standard reply when a request lands while it
+// is (re)indexing, which happens routinely on loaded CI runners.
+func requireHandleCommand(
+	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command,
+	msgAndArgs ...any,
+) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := handler.HandleCommand(t.Context(), cmd)
+		if err != nil && strings.Contains(err.Error(), "content modified") &&
+			time.Now().Before(deadline) {
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		require.NoError(t, err, msgAndArgs...)
+		return
+	}
+}
+
 func handlerWM(t *testing.T, handler textapi.CommandHandler) *fakeWM {
 	t.Helper()
 	router, ok := handler.(*rustActionRouter)
