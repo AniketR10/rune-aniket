@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -68,7 +69,9 @@ type file struct {
 
 	buf             *cell.Buffer
 	view            UnixFileView
-	reloading       bool
+	// reloading is flipped by the reload worker and read by
+	// OnDidEdit on the host event loop, so it is atomic.
+	reloading       atomic.Bool
 	swapDir         string
 	swapFileName    string
 	fileName        string
@@ -518,7 +521,7 @@ func (f *file) OnWillEdit(ctx context.Context, start, end term.Coordinates, str 
 }
 
 func (f *file) OnDidEdit(ctx context.Context, from, to term.Coordinates, old string) {
-	if f.reloading {
+	if f.reloading.Load() {
 		f.wg.Done()
 		return
 	}
@@ -626,9 +629,9 @@ func (f *file) Reload(ctx context.Context) (<-chan error, error) {
 // preserving the startAsync invariant that the result channel only
 // fires once the buffer is fully reloaded.
 func (f *file) reload() error {
-	f.reloading = true
+	f.reloading.Store(true)
 	defer func() {
-		f.reloading = false
+		f.reloading.Store(false)
 	}()
 
 	f.wg.Wait()

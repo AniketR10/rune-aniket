@@ -879,10 +879,6 @@ func newPkgInstallExtHandler(
 
 	cfg := defaultCfg()
 	cfg.configPath = configPath
-	cfg.scheduleNextTick = func(fn func()) bool {
-		fn()
-		return true
-	}
 
 	homeURI, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
@@ -895,7 +891,12 @@ func newPkgInstallExtHandler(
 		m.gitRemoteURL = gitRemoteURL[0]
 	}
 
-	mu := new(sync.Mutex)
+	// The scheduler, the workspace manager and the handler share one
+	// lock: an inline scheduler would run the workspace install and
+	// the buffer mutations of a reload on whichever worker goroutine
+	// scheduled them, racing the fs-watcher goroutine that dispatches
+	// under the same lock.
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cfg)
 	interrupter := term.NopInterrupter()
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
@@ -904,7 +905,7 @@ func newPkgInstallExtHandler(
 
 	dir := t.TempDir()
 
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	manager := workspace.NewManager(cfg.workspace(), sched)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
 	notiCfg := notificationsConfig()
@@ -926,5 +927,6 @@ func newPkgInstallExtHandler(
 		runner, idepkgtest.TrustStore(), mu, nil, reload,
 		".sixrc", 0, 0, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry()))
+	m.schedDrain = drain
 	return m
 }

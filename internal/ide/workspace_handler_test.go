@@ -1341,10 +1341,6 @@ func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
 	require.NoError(t, os.WriteFile(foreignPath, []byte("foreign contents"), 0o666))
 
 	cfg := defaultConfigWithWrap(false)
-	cfg.scheduleNextTick = func(fn func()) bool {
-		fn()
-		return true
-	}
 	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
 	defer func() {
 		require.NoError(t, m.Close())
@@ -1360,25 +1356,34 @@ func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
 	m.drainPendingWorkspaces()
 
-	require.True(t, m.switchToWorkspace(0))
 	currentURI, err := workspaceapi.ParseURI("file://" + currentPath)
 	require.NoError(t, err)
-	_, err = m.workspaces[0].ex.editFileURI(currentURI, m.workspaces[0].ex.invokeWindow(), false)
+	m.locked(func() {
+		require.True(t, m.switchToWorkspace(0))
+		_, err = m.workspaces[0].ex.editFileURI(
+			currentURI, m.workspaces[0].ex.invokeWindow(), false)
+	})
 	require.NoError(t, err)
 	m.workspaces[0].ex.Wait()
 
 	foreignURI, err := workspaceapi.ParseURI("file://" + foreignPath)
 	require.NoError(t, err)
-	require.NoError(t, m.workspaces[0].ex.readfile(context.Background(), foreignURI.String()))
+	m.locked(func() {
+		err = m.workspaces[0].ex.readfile(context.Background(), foreignURI.String())
+	})
+	require.NoError(t, err)
 	m.workspaces[0].ex.Wait()
 
-	assert.Equal(t, 0, m.focus)
-	_, h, ok := m.workspaces[0].ex.handlerInFocus()
-	require.True(t, ok)
-	assert.Equal(t, "current\nforeign contents", term.CellsToString(h.CellView().RawCells()))
-	assert.Empty(t, m.workspaces[1].ex.comp.Tabs())
-	_, ok = m.workspaces[1].ex.comp.FocusTab()
-	assert.False(t, ok)
+	m.locked(func() {
+		assert.Equal(t, 0, m.focus)
+		_, h, ok := m.workspaces[0].ex.handlerInFocus()
+		require.True(t, ok)
+		assert.Equal(t, "current\nforeign contents",
+			term.CellsToString(h.CellView().RawCells()))
+		assert.Empty(t, m.workspaces[1].ex.comp.Tabs())
+		_, ok = m.workspaces[1].ex.comp.FocusTab()
+		assert.False(t, ok)
+	})
 }
 
 func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
@@ -1415,15 +1420,17 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 	}
 
 	setAliases := func(m *testWorkspaceManagerHandler, aliases map[string]text.CommandAlias) {
-		for _, wh := range m.workspaces {
-			if wh == nil || wh.ex == nil {
-				continue
+		m.locked(func() {
+			for _, wh := range m.workspaces {
+				if wh == nil || wh.ex == nil {
+					continue
+				}
+				if wh.ex.config.CommandAliases == nil {
+					wh.ex.config.CommandAliases = make(map[string]text.CommandAlias)
+				}
+				maps.Copy(wh.ex.config.CommandAliases, aliases)
 			}
-			if wh.ex.config.CommandAliases == nil {
-				wh.ex.config.CommandAliases = make(map[string]text.CommandAlias)
-			}
-			maps.Copy(wh.ex.config.CommandAliases, aliases)
-		}
+		})
 	}
 
 	tests := []integrationCase{
@@ -1536,7 +1543,10 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				require.NoError(t, os.WriteFile(sharedPath, []byte("package main\n"), 0o666))
 				sharedURI, err := workspaceapi.ParseURI("file://" + sharedPath)
 				require.NoError(t, err)
-				_, err = m.workspaces[1].ex.editFileURI(sharedURI, m.workspaces[1].ex.invokeWindow(), false)
+				m.locked(func() {
+					_, err = m.workspaces[1].ex.editFileURI(
+						sharedURI, m.workspaces[1].ex.invokeWindow(), false)
+				})
 				require.NoError(t, err)
 				m.workspaces[1].ex.Wait()
 				setAliases(m, map[string]text.CommandAlias{
@@ -2730,8 +2740,13 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				// the scheme, so a mem:// buffer would disappear with
 				// the scheme even after :write.
 				dir := t.TempDir()
-				manager := workspace.NewManager(
-					config.NopConfig(), inlineSchedule)
+				// The manager shares the event-loop scheduler: reload
+				// mutates the buffer from its worker goroutine through
+				// ScheduleNextTick, and an inline scheduler would run
+				// that mutation off the lock, concurrently with Draw.
+				cfg := defaultConfigWithWrap(wrap)
+				mu, sched, drain := buildTestSchedulerForCfg(t, &cfg)
+				manager := workspace.NewManager(config.NopConfig(), sched)
 				require.NoError(t, manager.RegisterScheme(
 					workspace.MemoryScheme, workspace.NewMemoryScheme))
 				require.NoError(t, manager.RegisterScheme(
@@ -2739,8 +2754,8 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				uri, err := workspaceapi.ParseURI("file://" + dir)
 				require.NoError(t, err)
 				runner := FuncExtensionsRunner(testRunnerFn)
-				m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(
-					t, manager, &uri, defaultConfigWithWrap(wrap),
+				m := newTestWorkspaceManagerHandlerWithManagerMu(
+					t, manager, mu, drain, &uri, cfg,
 					runner, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
@@ -5361,6 +5376,15 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 func (t *testWorkspaceManagerHandler) drainPendingWorkspaces() {
 	t.workspaceManagerHandler.waitClosing()
 	t.workspaceManagerHandler.pendingWG.Wait()
+}
+
+// locked runs fn under the event-loop lock. Tests that poke handler
+// or ex state directly need it: every installed workspace has an
+// fs-watcher goroutine dispatching events under the same lock.
+func (t *testWorkspaceManagerHandler) locked(fn func()) {
+	t.workspaceManagerHandler.mu.Lock()
+	defer t.workspaceManagerHandler.mu.Unlock()
+	fn()
 }
 
 // addOrCreateWorkspace shadows the embedded handler method to take

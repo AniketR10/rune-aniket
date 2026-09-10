@@ -103,7 +103,20 @@ func TestFileExplorerExoEnter(t *testing.T) {
 		"file explorer handler must be cached")
 
 	explorer := ex.fileExplorerHandler
-	beforeRows := explorer.ed.CellView().Rows()
+	// The workspace fs watcher refreshes the tree from its own
+	// goroutine under m.mu, so every read of explorer state has to
+	// take the same lock.
+	explorerRows := func() int {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return explorer.ed.CellView().Rows()
+	}
+	searchMode := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return explorer.ed.IsSearchMode()
+	}
+	beforeRows := explorerRows()
 	require.Greater(t, beforeRows, 0,
 		"explorer tree must render at least one row")
 
@@ -115,9 +128,9 @@ func TestFileExplorerExoEnter(t *testing.T) {
 		Type: term.EventKey, Key: term.KeyEnter,
 	})
 	require.True(t, handled, "<Enter> must be handled")
-	require.False(t, explorer.ed.IsSearchMode(),
+	require.False(t, searchMode(),
 		"modeless fallback must not enter search mode on <Enter>")
-	assert.NotEqual(t, beforeRows, explorer.ed.CellView().Rows(),
+	assert.NotEqual(t, beforeRows, explorerRows(),
 		"<Enter> on a directory row must toggle the tree")
 }
 
