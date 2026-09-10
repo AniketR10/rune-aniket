@@ -34,6 +34,7 @@ import (
 type Workspace interface {
 	Loader
 	schemeapi.Scheme
+	InstallDataDirProvider
 }
 
 // RemoteScheme is implemented by schemes whose underlying transport
@@ -72,6 +73,11 @@ type RemoteScheme interface {
 	// deadline to scheme RPCs should wait here first so the
 	// deadline measures the RPC, not the connect.
 	WaitConnected(ctx context.Context) error
+}
+
+// InstallDataDirProvider reports the workspace host's Rune data directory.
+type InstallDataDirProvider interface {
+	InstallDataDir(ctx context.Context) (string, error)
 }
 
 // Loader abstracts the ability to load resource data into a working buffer

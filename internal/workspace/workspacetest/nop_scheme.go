@@ -18,6 +18,7 @@ package workspacetest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,6 +94,13 @@ func (t *NopScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 // Signal satisfies schemeapi.Scheme
 func (t *NopScheme) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
+}
+
+// InstallDataDir satisfies workspace.InstallDataDirProvider with the "host
+// cannot say" default, so Workspace fakes embedding NopScheme keep
+// exercising callers' fallback paths.
+func (t *NopScheme) InstallDataDir(context.Context) (string, error) {
+	return "", errors.ErrUnsupported
 }
 
 // NewFile satisfies schemeapi.Scheme

@@ -170,6 +170,10 @@ func (w *testLoader) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }
 
+func (w *testLoader) InstallDataDir(context.Context) (string, error) {
+	return "", errors.ErrUnsupported
+}
+
 func (w *testLoader) Load(
 	filePath workspaceapi.URI, buf *cell.Buffer,
 	swapDir workspaceapi.URI, readOnly bool,

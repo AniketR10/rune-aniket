@@ -300,6 +300,58 @@ func TestManager(t *testing.T) {
 
 		require.NoError(t, m.Close())
 	})
+
+	// InstallRoot is part of the Workspace interface, so unlike
+	// OnDisconnect it is promoted through Manager's wrapper; this
+	// pins that AddWorkspace surfaces the wrapped workspace's answer
+	// rather than a wrapper default.
+	t.Run("AddWorkspace result surfaces the workspace InstallRoot", func(t *testing.T) {
+		m := workspace.NewManagerWithWorkspaceFunc(config.NopConfig(),
+			inlineSchedule,
+			func(uri workspaceapi.URI, _ schemeapi.Scheme, _ func(func()) bool) workspace.Workspace {
+				return installRootWorkspace{
+					Workspace: workspace.NewSchemeWorkspace(uri, &NopScheme{}, inlineSchedule),
+					root:      "/home/peer/.rune",
+				}
+			})
+		require.NoError(t, m.RegisterScheme("test", NewNopScheme("test")))
+
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
+		require.NoError(t, err)
+
+		root, err := w.InstallDataDir(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "/home/peer/.rune", root)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("InstallRoot reports ErrUnsupported for a non-provider scheme", func(t *testing.T) {
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
+		require.NoError(t, m.RegisterScheme("test", NewNopScheme("test")))
+
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
+		require.NoError(t, err)
+
+		root, err := w.InstallDataDir(ctx)
+		require.ErrorIs(t, err, errors.ErrUnsupported,
+			"a host that cannot report its install root must degrade "+
+				"to the caller's fallback, not fail the workspace")
+		assert.Empty(t, root)
+
+		require.NoError(t, m.Close())
+	})
+}
+
+// installRootWorkspace is a workspace.Workspace answering InstallRoot
+// with a fixed root.
+type installRootWorkspace struct {
+	workspace.Workspace
+	root string
+}
+
+func (w installRootWorkspace) InstallDataDir(context.Context) (string, error) {
+	return w.root, nil
 }
 
 func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {

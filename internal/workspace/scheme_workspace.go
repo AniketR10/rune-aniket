@@ -56,6 +56,16 @@ func (w *schemeWorkspace) WaitConnected(ctx context.Context) error {
 	return nil
 }
 
+// InstallDataDir forwards [InstallDataDirProvider.InstallDataDir] when the
+// embedded scheme supports it; otherwise the host cannot report its
+// install root and callers must fall back to their own guess.
+func (w *schemeWorkspace) InstallDataDir(ctx context.Context) (string, error) {
+	if p, ok := w.Scheme.(InstallDataDirProvider); ok {
+		return p.InstallDataDir(ctx)
+	}
+	return "", errors.ErrUnsupported
+}
+
 // NewSchemeWorkspace wraps a schemeapi.Scheme and implements a workspace.Loader,
 // effectively converting a schemeapi.Scheme into a workspace.Workspace.
 //

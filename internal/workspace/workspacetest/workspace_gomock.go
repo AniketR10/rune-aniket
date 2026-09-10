@@ -90,6 +90,21 @@ func (mr *MockWorkspaceMockRecorder) Create(filename any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockWorkspace)(nil).Create), filename)
 }
 
+// InstallDataDir mocks base method.
+func (m *MockWorkspace) InstallDataDir(ctx context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InstallDataDir", ctx)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InstallDataDir indicates an expected call of InstallDataDir.
+func (mr *MockWorkspaceMockRecorder) InstallDataDir(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstallDataDir", reflect.TypeOf((*MockWorkspace)(nil).InstallDataDir), ctx)
+}
+
 // Join mocks base method.
 func (m *MockWorkspace) Join(elem ...string) string {
 	m.ctrl.T.Helper()
@@ -483,6 +498,44 @@ func (m *MockRemoteScheme) WaitConnected(ctx context.Context) error {
 func (mr *MockRemoteSchemeMockRecorder) WaitConnected(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitConnected", reflect.TypeOf((*MockRemoteScheme)(nil).WaitConnected), ctx)
+}
+
+// MockInstallDataDirProvider is a mock of InstallDataDirProvider interface.
+type MockInstallDataDirProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockInstallDataDirProviderMockRecorder
+}
+
+// MockInstallDataDirProviderMockRecorder is the mock recorder for MockInstallDataDirProvider.
+type MockInstallDataDirProviderMockRecorder struct {
+	mock *MockInstallDataDirProvider
+}
+
+// NewMockInstallDataDirProvider creates a new mock instance.
+func NewMockInstallDataDirProvider(ctrl *gomock.Controller) *MockInstallDataDirProvider {
+	mock := &MockInstallDataDirProvider{ctrl: ctrl}
+	mock.recorder = &MockInstallDataDirProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockInstallDataDirProvider) EXPECT() *MockInstallDataDirProviderMockRecorder {
+	return m.recorder
+}
+
+// InstallDataDir mocks base method.
+func (m *MockInstallDataDirProvider) InstallDataDir(ctx context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InstallDataDir", ctx)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InstallDataDir indicates an expected call of InstallDataDir.
+func (mr *MockInstallDataDirProviderMockRecorder) InstallDataDir(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstallDataDir", reflect.TypeOf((*MockInstallDataDirProvider)(nil).InstallDataDir), ctx)
 }
 
 // MockLoader is a mock of Loader interface.
