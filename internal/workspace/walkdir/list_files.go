@@ -147,7 +147,20 @@ func resolveRootDir(ctx context.Context, w Reader, root string) (string, error) 
 				resCh <- result{err: err}
 				return
 			}
-			root = filepath.Dir(root)
+			// Dir is a fixpoint at the filesystem root, so walking past
+			// it would spin this goroutine forever when nothing exists
+			// (e.g. the scheme was closed under a teardown race). Stop
+			// there, and honor cancellation so an abandoned resolution
+			// does not keep polling a wedged scheme.
+			parent := filepath.Dir(root)
+			if parent == root || ctx.Err() != nil {
+				if err == nil {
+					err = os.ErrNotExist
+				}
+				resCh <- result{err: err}
+				return
+			}
+			root = parent
 		}
 	})
 	select {
