@@ -71,7 +71,7 @@ jobs:
             case "$f" in
               ./cmd/rune/docs/*|*_gomock.go|*.pb.go) continue ;;
             esac
-            if ! head -3 "$f" | grep -q 'Copyright (C) .* Unstable Build, LLC'; then
+            if ! head -3 "$f" | grep -q 'Copyright (C) .* The Rune Authors'; then
               echo "missing license header: $f"
               missing=1
             fi
