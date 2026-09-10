@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/user"
 	"sync"
@@ -180,13 +181,13 @@ func serveNetworkWorkspaces(
 	return server, nil
 }
 
-// completerOption feeds mesh peers to `workspaceopen` completion. The
-// completer deliberately never prompts — a completion runs on a
-// keystroke, and a keystroke must not open a modal — so unlike the
-// scheme it needs no IDE and is wired at IDE construction.
+// completerOption feeds mesh peers and their directories to
+// `workspaceopen` completion. The completer deliberately never
+// prompts — a completion runs on a keystroke, and a keystroke must not
+// open a modal — so unlike the scheme it needs no IDE and is wired at
+// IDE construction.
 func (n *network) completerOption() ide.Option {
-	return ide.WithWorkspaceOpenCompleter(
-		workspacerune.PeerCompleter(gatedPeerLister{n}))
+	return ide.WithWorkspaceOpenCompleter(workspacerune.Completer(gatedMesh{n}))
 }
 
 // register wires the network into a live IDE: the rune:// workspace
@@ -242,18 +243,25 @@ func (n *network) joinAsync() {
 	})
 }
 
-// gatedPeerLister hides the peers from an account whose plan does not
-// cover the network: a completion runs on a keystroke, and a keystroke
-// must not open a modal.
-type gatedPeerLister struct {
+// gatedMesh hides the mesh from an account whose plan does not cover
+// the network: a completion runs on a keystroke, and a keystroke must
+// not open a modal.
+type gatedMesh struct {
 	n *network
 }
 
-func (g gatedPeerLister) Peers(ctx context.Context) ([]runenet.Peer, error) {
+func (g gatedMesh) Peers(ctx context.Context) ([]runenet.Peer, error) {
 	if err := g.n.check(ctx); err != nil {
 		return nil, nil
 	}
 	return g.n.node.Peers(ctx)
+}
+
+func (g gatedMesh) Dial(ctx context.Context, peer string) (net.Conn, error) {
+	if err := g.n.check(ctx); err != nil {
+		return nil, err
+	}
+	return g.n.node.Dial(ctx, peer)
 }
 
 // gatedNetwork is what the `network` command operates on: the two

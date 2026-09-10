@@ -18,27 +18,54 @@ package workspacerune
 
 import (
 	"context"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/rune/internal/runenet"
 )
 
-type peerListerFunc func(ctx context.Context) ([]runenet.Peer, error)
-
-func (f peerListerFunc) Peers(ctx context.Context) ([]runenet.Peer, error) {
-	return f(ctx)
+// stubMesh answers peer listings from a fixed set and dials every peer
+// to the same address, which the tests point at a peer workspace
+// server serving a temporary directory.
+type stubMesh struct {
+	peers []runenet.Peer
+	addr  string
 }
 
-func TestPeerCompleter(t *testing.T) {
-	peers := peerListerFunc(func(context.Context) ([]runenet.Peer, error) {
-		return []runenet.Peer{
-			{Hostname: "laptop", Online: true},
-			{Hostname: "lab-box", Online: false},
-			{Hostname: "workstation", Online: true},
-		}, nil
-	})
+func (m stubMesh) Peers(context.Context) ([]runenet.Peer, error) {
+	return m.peers, nil
+}
+
+func (m stubMesh) Dial(ctx context.Context, _ string) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "tcp", m.addr)
+}
+
+func drain(t *testing.T, it iterator.Iterator[string]) []string {
+	t.Helper()
+	var ret []string
+	for {
+		v, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+		ret = append(ret, v)
+	}
+	require.NoError(t, it.Err())
+	return ret
+}
+
+func TestCompleterOffersPeers(t *testing.T) {
+	mesh := stubMesh{peers: []runenet.Peer{
+		{Hostname: "laptop", Online: true},
+		{Hostname: "lab-box", Online: false},
+		{Hostname: "workstation", Online: true},
+	}}
 
 	tsuite := []struct {
 		name string
@@ -61,11 +88,6 @@ func TestPeerCompleter(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "stops once the peer is chosen",
-			args: []string{"workspaceopen", "rune://laptop/co"},
-			want: nil,
-		},
-		{
 			name: "no argument yet",
 			args: []string{"workspaceopen"},
 			want: nil,
@@ -74,21 +96,71 @@ func TestPeerCompleter(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			it, newLastArg, err := PeerCompleter(peers).
+			it, newLastArg, err := Completer(mesh).
 				Complete(context.Background(), tcase.args)
 			require.NoError(t, err)
 			assert.Empty(t, newLastArg)
+			assert.ElementsMatch(t, tcase.want, drain(t, it))
+		})
+	}
+}
 
-			var got []string
-			for {
-				v, ok := it.Next(context.Background())
-				if !ok {
-					break
-				}
-				got = append(got, v)
-			}
-			require.NoError(t, it.Err())
-			assert.ElementsMatch(t, tcase.want, got)
+// TestCompleterOffersPeerDirectories covers completion past the
+// hostname: only the peer knows its filesystem, so the completions
+// come from a round-trip to it.
+func TestCompleterOffersPeerDirectories(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"code", "code/rune", "config", ".cache"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+	}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "notes.txt"), []byte("hi"), 0o600))
+
+	mesh := stubMesh{
+		peers: []runenet.Peer{{Hostname: "laptop", Online: true}},
+		addr:  servePeerWorkspace(t, "/"),
+	}
+
+	tsuite := []struct {
+		name string
+		last string
+		want []string
+	}{
+		{
+			name: "lists the directories of the typed directory",
+			last: "rune://laptop" + root + "/",
+			want: []string{
+				"rune://laptop" + root + "/code/",
+				"rune://laptop" + root + "/config/",
+			},
+		},
+		{
+			name: "filters by the typed prefix",
+			last: "rune://laptop" + root + "/co",
+			want: []string{
+				"rune://laptop" + root + "/code/",
+				"rune://laptop" + root + "/config/",
+			},
+		},
+		{
+			name: "descends into the picked directory",
+			last: "rune://laptop" + root + "/code/",
+			want: []string{"rune://laptop" + root + "/code/rune/"},
+		},
+		{
+			name: "offers hidden directories once a dot is typed",
+			last: "rune://laptop" + root + "/.",
+			want: []string{"rune://laptop" + root + "/.cache/"},
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			it, newLastArg, err := Completer(mesh).Complete(
+				context.Background(), []string{"workspaceopen", tcase.last})
+			require.NoError(t, err)
+			assert.Empty(t, newLastArg)
+			assert.ElementsMatch(t, tcase.want, drain(t, it))
 		})
 	}
 }
