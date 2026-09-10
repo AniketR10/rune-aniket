@@ -7866,15 +7866,25 @@ func TestRegisterREPLCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "already registered")
 }
 
-// uriWorkspace stubs workspace.Workspace to control URI resolution;
-// installRoot only calls URI, so the embedded interface stays nil.
+// uriWorkspace stubs workspace.Workspace to control URI resolution and
+// the host-reported install root; a nil install stands in for a host
+// that cannot say (ErrUnsupported), as schemeWorkspace does for
+// schemes without the capability.
 type uriWorkspace struct {
 	workspace.Workspace
-	fn func(path string) (workspaceapi.URI, error)
+	fn      func(path string) (workspaceapi.URI, error)
+	install func(ctx context.Context) (string, error)
 }
 
 func (w uriWorkspace) URI(path string) (workspaceapi.URI, error) {
 	return w.fn(path)
+}
+
+func (w uriWorkspace) InstallDataDir(ctx context.Context) (string, error) {
+	if w.install == nil {
+		return "", errors.ErrUnsupported
+	}
+	return w.install(ctx)
 }
 
 func TestInstallRoot(t *testing.T) {
@@ -7888,6 +7898,7 @@ func TestInstallRoot(t *testing.T) {
 		localDataDir string
 		uri          string
 		fn           func(path string) (workspaceapi.URI, error)
+		install      func(ctx context.Context) (string, error)
 		want         string
 	}{
 		{
@@ -7899,6 +7910,20 @@ func TestInstallRoot(t *testing.T) {
 			fn: func(string) (workspaceapi.URI, error) {
 				t.Fatal("URI must not be called for a file workspace")
 				return workspaceapi.URI{}, nil
+			},
+			want: "/Users/x/.runedev",
+		},
+		{
+			name:         "file workspace never consults the provider",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "file:///Users/x/src/proj",
+			fn: func(string) (workspaceapi.URI, error) {
+				t.Fatal("URI must not be called for a file workspace")
+				return workspaceapi.URI{}, nil
+			},
+			install: func(context.Context) (string, error) {
+				t.Fatal("InstallRoot must not be called for a file workspace")
+				return "", nil
 			},
 			want: "/Users/x/.runedev",
 		},
@@ -7935,12 +7960,70 @@ func TestInstallRoot(t *testing.T) {
 			},
 			want: "/Users/x/.rune",
 		},
+		{
+			// A rune:// peer is a long-running Rune with its own
+			// datadir; when the peer advertises it, the guess derived
+			// from the client's datadir must not run at all.
+			name:         "peer-advertised install root wins over the basename guess",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "rune://peer/home/remote/src/proj",
+			fn: func(string) (workspaceapi.URI, error) {
+				t.Fatal("URI must not be called when the peer advertises its install root")
+				return workspaceapi.URI{}, nil
+			},
+			install: func(context.Context) (string, error) {
+				return "/home/remote/.rune", nil
+			},
+			want: "/home/remote/.rune",
+		},
+		{
+			name:         "provider error falls back to the basename guess",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "rune://peer/home/remote/src/proj",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.runedev", path)
+				return workspaceapi.ParseURI("rune://peer/home/remote/.runedev")
+			},
+			install: func(context.Context) (string, error) {
+				return "", errors.New("peer info from peer: boom")
+			},
+			want: "/home/remote/.runedev",
+		},
+		{
+			// An older peer without the PeerInfo service degrades
+			// quietly to today's guess.
+			name:         "provider ErrUnsupported falls back to the basename guess",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "rune://peer/home/remote/src/proj",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.runedev", path)
+				return workspaceapi.ParseURI("rune://peer/home/remote/.runedev")
+			},
+			install: func(context.Context) (string, error) {
+				return "", fmt.Errorf("peer does not advertise: %w",
+					errors.ErrUnsupported)
+			},
+			want: "/home/remote/.runedev",
+		},
+		{
+			name:         "provider empty root falls back to the basename guess",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "rune://peer/home/remote/src/proj",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.runedev", path)
+				return workspaceapi.ParseURI("rune://peer/home/remote/.runedev")
+			},
+			install: func(context.Context) (string, error) {
+				return "", nil
+			},
+			want: "/home/remote/.runedev",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ws := uriWorkspace{fn: tt.fn}
+			ws := uriWorkspace{fn: tt.fn, install: tt.install}
 			assert.Equal(t, tt.want,
-				installRoot(ws, mustURI(t, tt.uri), tt.localDataDir))
+				installDataDir(ws, mustURI(t, tt.uri), tt.localDataDir))
 		})
 	}
 }

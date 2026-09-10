@@ -2374,7 +2374,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	// installDir is where the IDE provisions per-extension toolchains on the
 	// workspace host. Extensions resolve provisioned binaries under it via
 	// FindInstalledExecutable.
-	installDir := installRoot(cwd, uri, dataDir)
+	installDir := installDataDir(cwd, uri, dataDir)
 	browser := ex.Browser()
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage,
 		cfg.scheduleNextTick, h.trust)
@@ -2387,21 +2387,17 @@ func (h *workspaceManagerHandler) buildExtensions(
 	return runner, lsp, dap, promptStorage, nil
 }
 
-// installRoot returns the host path where per-extension toolchains are
-// provisioned for the given workspace.
-//
-// For a local (file://) workspace the IDE provisions into its own data
-// directory, so localDataDir is used as-is. For a remote workspace the
-// remote `rune -x` server is launched with an explicit
-// `--datadir ~/<basename>` (see workspacessh.WithRemoteDataDir), where
-// <basename> is the local data directory's basename; so the install root
-// is ~/<basename> resolved against the remote host. Client and remote
-// therefore agree by construction even when the client runs with a custom
-// --datadir (e.g. ~/.runedev provisions to the remote's ~/.runedev). On any
-// expansion error it falls back to localDataDir and logs.
-func installRoot(ws workspace.Workspace, uri workspaceapi.URI, localDataDir string) string {
+func installDataDir(ws workspace.Workspace, uri workspaceapi.URI, localDataDir string) string {
 	if uri.Scheme() == workspace.FileScheme {
 		return localDataDir
+	}
+	root, err := ws.InstallDataDir(context.Background())
+	switch {
+	case err == nil && root != "":
+		return root
+	case err != nil && !errors.Is(err, errors.ErrUnsupported):
+		log.Warnf("resolve install root advertised by workspace host %s: %v; "+
+			"falling back to ~/%s", uri.Host(), err, filepath.Base(localDataDir))
 	}
 	base := filepath.Base(localDataDir)
 	remote, err := ws.URI("~/" + base)
