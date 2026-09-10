@@ -424,6 +424,7 @@ make-release-linux:
 	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zprofile $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
 	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zshenv $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
 	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zshrc $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
+	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/LICENSES $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/LICENSES
 	@cd $(RUNE_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_LINUX_RELEASE_TAR) rune.app
 
 # release-linux-{amd64,arm64} build the portable release tarball through the
