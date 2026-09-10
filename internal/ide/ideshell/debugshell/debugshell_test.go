@@ -1343,14 +1343,14 @@ func TestHandler_StoppedBreakpointHighlightsLine(t *testing.T) {
 	})
 
 	// handleStoppedBreakpoint runs asynchronously off the
-	// adapter read goroutine — wait for the side effect.
+	// adapter read goroutine — wait for its last side effect.
+	// The browser open happens first, so waiting on it alone lets
+	// the editor assertions below run before the cursor move and
+	// the stopped location list have landed.
 	require.Eventually(t, func() bool {
-		br.mu.Lock()
-		defer br.mu.Unlock()
-		// The stopped event opens the source file in the
-		// browser. (Output sink is created on disk only —
-		// the debugshell no longer auto-opens it.)
-		return len(br.openCalls) >= 1
+		ed.mu.Lock()
+		defer ed.mu.Unlock()
+		return len(ed.setLocationLists[stoppedLocationID]) >= 1
 	}, 2*time.Second, 10*time.Millisecond)
 	br.mu.Lock()
 	// Find the stopped-frame source-file open in the
