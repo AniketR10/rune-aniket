@@ -23,7 +23,7 @@ you enjoy using it.
 
 See [docs.rune.build](https://docs.rune.build) for the full documentation.
 
-![Rune in the Romero theme](https://assets.rune.build/images/screenshots/screenshot_1_romero.webp)
+![Rune's batteries-included development environment](.github/assets/rune-batteries-included.gif)
 
 ## Repository layout
 
