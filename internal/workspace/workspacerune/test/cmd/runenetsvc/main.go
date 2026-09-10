@@ -89,7 +89,7 @@ func main() {
 	}
 	defer scheme.Close()
 
-	server, err := runenet.ServeWorkspace(node, scheme)
+	server, err := runenet.ServeWorkspace(node, scheme, *dataDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "runenetsvc: serve workspaces:", err)
 		os.Exit(6)

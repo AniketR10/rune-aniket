@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/runenet/runenetpb"
 	"unstable.build/rune/internal/workspace/remotescheme"
 	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
 )
@@ -51,8 +52,13 @@ type WorkspaceServer struct {
 // ServeWorkspace starts serving scheme to mesh peers on the node's
 // workspace port. Only machines owned by the same account as this node
 // are allowed to issue requests; see [Node.WhoIs].
+//
+// dataDir is this instance's Rune data directory, advertised to peers
+// through the PeerInfo service so a client can provision and resolve
+// toolchains under the peer's actual install root rather than guessing
+// it from its own datadir. It must be an absolute path on this host.
 func ServeWorkspace(
-	node *Node, scheme schemeapi.Scheme,
+	node *Node, scheme schemeapi.Scheme, dataDir string,
 ) (*WorkspaceServer, error) {
 	lis, err := node.Listen()
 	if err != nil {
@@ -71,6 +77,7 @@ func ServeWorkspace(
 	workspacerpc.RegisterFilesServer(grpcServer, rpcServer)
 	workspacerpc.RegisterExecutorServer(grpcServer, rpcServer)
 	workspacerpc.RegisterTerminalServer(grpcServer, rpcServer)
+	runenetpb.RegisterPeerInfoServer(grpcServer, peerInfoServer{dataDir: dataDir})
 
 	go debug.CapturePanicReport(func() {
 		if err := grpcServer.Serve(lis); err != nil {
@@ -79,6 +86,20 @@ func ServeWorkspace(
 		}
 	})
 	return &WorkspaceServer{grpcServer: grpcServer, rpcServer: rpcServer}, nil
+}
+
+// peerInfoServer answers PeerInfo requests with this instance's data
+// directory. It runs behind the same PeerAuthorizer interceptors as
+// the workspace services, so only same-account peers can query it.
+type peerInfoServer struct {
+	runenetpb.UnimplementedPeerInfoServer
+	dataDir string
+}
+
+func (s peerInfoServer) Get(
+	context.Context, *runenetpb.PeerInfoRequest,
+) (*runenetpb.PeerInfoResponse, error) {
+	return &runenetpb.PeerInfoResponse{DataDir: s.dataDir}, nil
 }
 
 // Close stops serving and drops every in-flight peer request.

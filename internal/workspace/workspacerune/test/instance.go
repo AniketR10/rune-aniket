@@ -33,17 +33,19 @@ import (
 
 // StartInstance launches a second Rune instance as its own process,
 // joined to control under hostname and serving its workspaces. It
-// returns once the instance reports itself reachable.
-func StartInstance(t *testing.T, control ControlPlane, hostname string) {
+// returns the instance's data directory once the instance reports
+// itself reachable.
+func StartInstance(t *testing.T, control ControlPlane, hostname string) string {
 	t.Helper()
 
+	// Not t.TempDir(): the instance holds its network identity
+	// here and must be able to write it for the whole test.
+	dataDir := t.TempDir()
 	cmd := exec.Command(instanceBinary(t),
 		"-hostname", hostname,
 		"-control-url", control.URL,
 		"-auth-key", control.AuthKey,
-		// Not t.TempDir(): the instance holds its network identity
-		// here and must be able to write it for the whole test.
-		"-datadir", t.TempDir(),
+		"-datadir", dataDir,
 	)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -65,6 +67,7 @@ func StartInstance(t *testing.T, control ControlPlane, hostname string) {
 		forwardOutput(t, hostname, stderr)
 	})
 	waitInstanceReady(t, hostname, stdout)
+	return dataDir
 }
 
 // waitInstanceReady blocks until the instance prints its ready line, so

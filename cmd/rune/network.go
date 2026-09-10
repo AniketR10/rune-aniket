@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/user"
 	"sync"
 	"time"
 
@@ -49,6 +51,7 @@ type network struct {
 	// never consulted.
 	gated    bool
 	autoJoin bool
+	dataDir  string
 
 	mu     sync.Mutex
 	server *runenet.WorkspaceServer
@@ -74,6 +77,7 @@ func newNetwork(
 	ret := &network{
 		gate:     gate,
 		autoJoin: cfg.AutoJoin,
+		dataDir:  dataDir,
 		// A key configured out of band belongs to a debug build
 		// driving a coordination server of its own, which the paid
 		// mesh must not be mixed up with.
@@ -118,7 +122,7 @@ func (n *network) join(ctx context.Context) error {
 	if n.closed || n.server != nil {
 		return nil
 	}
-	server, err := serveNetworkWorkspaces(n.node)
+	server, err := serveNetworkWorkspaces(n.node, n.dataDir)
 	if err != nil {
 		return fmt.Errorf("could not serve workspaces on the network: %w", err)
 	}
@@ -148,17 +152,27 @@ func networkConfig(rootCfg config.Config, dataDir string) (runenet.Config, error
 // at "/", so a rune:// URI can name any path the user could open
 // locally. Only machines owned by the same account get that far; see
 // runenet.PeerAuthorizer.
-func serveNetworkWorkspaces(node *runenet.Node) (*runenet.WorkspaceServer, error) {
+//
+// dataDir is advertised to peers as this instance's install root, so
+// it is resolved to an absolute path here: the peer consumes it as a
+// path on this host, not relative to its own process.
+func serveNetworkWorkspaces(
+	node *runenet.Node, dataDir string,
+) (*runenet.WorkspaceServer, error) {
 	uri, err := workspaceapi.CurrentUserHostURI("/")
 	if err != nil {
 		return nil, fmt.Errorf("root workspace URI: %w", err)
+	}
+	dataDir, err = workspaceapi.ExpandPath(dataDir, user.Current, os.Getwd)
+	if err != nil {
+		return nil, fmt.Errorf("resolve data dir %s: %w", dataDir, err)
 	}
 	scheme, err := workspace.NewFileScheme(
 		context.Background(), config.NopConfig(), uri)
 	if err != nil {
 		return nil, fmt.Errorf("root workspace scheme: %w", err)
 	}
-	server, err := runenet.ServeWorkspace(node, scheme)
+	server, err := runenet.ServeWorkspace(node, scheme, dataDir)
 	if err != nil {
 		_ = scheme.Close()
 		return nil, err
