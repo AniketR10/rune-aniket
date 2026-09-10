@@ -471,12 +471,6 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 	)
 }
 
-// newPromptEditor builds the editor that backs both the command
-// prompt's modal edit mode and the companion shell's input line. Both
-// edit a single logical line and wrap it through their own responsive
-// renderer, so the editor itself stays wrap=false: cursor motions
-// (0, $, l, …) traverse the whole command rather than a wrapped
-// visual row.
 func (h *workspaceManagerHandler) newPromptEditor(
 	cfg ideConfig,
 ) command.Editor {
@@ -1328,11 +1322,6 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 	wg.Wait()
 }
 
-// extensionRunArgs resolves the executable path and config for a user
-// extension. It must run on the calling goroutine because extensionConfig.config
-// records parse errors into the shared ideConfig.errors map (see
-// extensionConfig.config), which is not safe to touch from the per-extension
-// goroutines that startUserExtension feeds.
 func extensionRunArgs(p extensionConfig) (string, config.Config) {
 	path, _ := p.path()
 	pconfig, ok := p.config()
@@ -1342,9 +1331,6 @@ func extensionRunArgs(p extensionConfig) (string, config.Config) {
 	return path, pconfig
 }
 
-// startUserExtension runs one user-configured extension on the given runner
-// with pre-resolved args (see extensionRunArgs). It returns nil when the
-// extension is already running so callers can treat a re-run as a no-op.
 func startUserExtension(
 	manager extension.Runner, id, path string, pconfig config.Config,
 ) error {
@@ -1355,21 +1341,6 @@ func startUserExtension(
 	return nil
 }
 
-// startInstalledExtensions starts the given newly-added extensions on every
-// live workspace runner (home plus open workspaces). It is invoked after a
-// package install merges entries under the `extensions:` config key so the
-// tools become active without a restart. It returns whether at least one of
-// the ids matched a configured extension (and was thus started or already
-// running).
-//
-// This always runs off the host event loop: the package manager drives config
-// merges from background install goroutines (installGate.install spawns one;
-// the auto-install path is reached through LibDir consumers in idelsp/idedebug/
-// syntax workers). It therefore acquires h.mu — the shared IDE locker the event
-// loop holds — to read event-loop-owned runner state, then releases it before
-// spawning processes so the lock is never held across a fork. reloadConfig and
-// extensionRunArgs touch only freshly loaded, non-shared config state, so they
-// stay outside the lock.
 func (h *workspaceManagerHandler) startInstalledExtensions(ids []string) bool {
 	if len(ids) == 0 {
 		return false
@@ -2409,17 +2380,6 @@ func installDataDir(ws workspace.Workspace, uri workspaceapi.URI, localDataDir s
 	return remote.Path()
 }
 
-// workspaceRootURI resolves the workspace root against the workspace host,
-// expanding a leading ~ (as in ssh://host/~/src/proj) to the host's
-// absolute home path. The language extensions derive their LSP RootURI the
-// same way (via w.FileSystem(ctx).URI(".")), so resolving here keeps the
-// idelsp/idedebug managers' root in lockstep with what the extensions
-// send; otherwise gopls initialization fails the containment check with
-// "root uri is not contained in the workspace root". cwd is a required
-// dependency: a nil workspace is a wiring bug, not a runtime condition.
-// A resolve error is fatal: without a correct host-anchored root every
-// downstream containment check is unreliable, so the caller must abort the
-// build rather than proceed with an unresolved root.
 func workspaceRootURI(cwd workspace.Workspace, raw workspaceapi.URI) (workspaceapi.URI, error) {
 	if cwd == nil {
 		panic("workspaceRootURI: cwd workspace is required")

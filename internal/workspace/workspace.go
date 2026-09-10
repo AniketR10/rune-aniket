@@ -38,40 +38,9 @@ type Workspace interface {
 }
 
 // RemoteScheme is implemented by schemes whose underlying transport
-// can drop and reconnect (e.g. SSH). The signal published by
-// OnDisconnect must be interpreted as "every file descriptor handed out
-// by this scheme up to now is invalid": clients are expected to
-// drop cached handles, reset pools and reload whatever they need
-// against a freshly-resolved transport on demand.
-//
-// Each call to OnDisconnect returns a channel that is closed once on
-// the next transport drop. Subsequent calls return a fresh channel
-// for the next transition, so a single caller can re-arm after
-// reacting to a drop:
-//
-//	for {
-//	    select {
-//	    case <-rs.OnDisconnect():
-//	        invalidate()
-//	    case <-ctx.Done():
-//	        return
-//	    }
-//	}
-//
-// Local schemes do not implement RemoteScheme; callers should type-
-// assert and degrade silently when the assertion fails.
+// can drop and reconnect (e.g. SSH).
 type RemoteScheme interface {
 	OnDisconnect() <-chan struct{}
-
-	// WaitConnected blocks until the transport state is resolved:
-	// the first connection attempt has settled (successfully or
-	// not), the scheme is closed, or ctx is done. It does NOT
-	// guarantee the transport is healthy — only that scheme calls
-	// issued afterwards will not block on connection establishment
-	// (which is unbounded: first-connect provisioning may install
-	// packages on the remote host). Callers that apply their own
-	// deadline to scheme RPCs should wait here first so the
-	// deadline measures the RPC, not the connect.
 	WaitConnected(ctx context.Context) error
 }
 
@@ -132,30 +101,6 @@ var ErrFlushInProgress = errors.New(
 var ErrNoFlushInProgress = errors.New("no save in progress for this buffer")
 
 // FlusherCloser wraps methods to manipulate a cell.Buffer's persistence.
-//
-// Flush, ForceFlush and Reload are asynchronous. Each returns a buffered
-// channel (capacity 1) that will receive exactly one value and then
-// close:
-//   - nil on success,
-//   - workspaceapi.ErrStaleData / ErrFileIsNotWritable / scheme errors,
-//   - ctx.Err() if ctx is cancelled before the operation completes.
-//
-// If a flush (or reload) for this buffer is already in flight, the
-// method returns a nil channel and ErrFlushInProgress; the caller must
-// wait for the previous operation to complete (or cancel its ctx)
-// before retrying.
-//
-// Cancelling ctx signals disinterest in the result. The underlying
-// scheme calls (for example, gRPC Rename) cannot themselves be aborted
-// today: the work goroutine continues until the transport responds,
-// at which point its result is discarded and a new flush may be
-// started.
-//
-// Reload's result channel only fires after the post-read cell.Buffer
-// mutations have been dispatched onto the host event loop and
-// completed. This guarantees that buffer subscribers (which may touch
-// UI-owned state from OnWillEdit/OnDidEdit) run on the event-loop
-// goroutine rather than on the async worker that performed disk I/O.
 type FlusherCloser interface {
 	Flush(ctx context.Context) (<-chan error, error)
 	ForceFlush(ctx context.Context) (<-chan error, error)
