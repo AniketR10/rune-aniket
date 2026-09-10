@@ -149,6 +149,16 @@ func (m *mouse) wheelEvents(pos term.Coordinates, wheelY float64) []term.Event {
 		return nil
 	}
 
+	// Clamp before the int conversion: converting a float64 beyond the
+	// int64 range is implementation-defined (amd64 yields MinInt64,
+	// whose negation overflows back to MinInt64 and reaches makeslice
+	// negative; arm64 saturates). Bounding the accumulator to the
+	// per-frame line budget keeps the conversion in range everywhere.
+	if m.accumY > maxWheelLinesPerFrame {
+		m.accumY = maxWheelLinesPerFrame
+	} else if m.accumY < -maxWheelLinesPerFrame {
+		m.accumY = -maxWheelLinesPerFrame
+	}
 	lines := int(m.accumY)
 	m.accumY -= float64(lines)
 	if lines == 0 {
@@ -159,10 +169,6 @@ func (m *mouse) wheelEvents(pos term.Coordinates, wheelY float64) []term.Event {
 	if lines < 0 {
 		key = term.MouseWheelDown
 		lines = -lines
-	}
-
-	if lines > maxWheelLinesPerFrame {
-		lines = maxWheelLinesPerFrame
 	}
 
 	events := make([]term.Event, lines)
