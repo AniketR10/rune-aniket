@@ -92,7 +92,7 @@ command:
         # git grep with column info for precise cursor placement.
         "gitgrep":   "locationpicker git grep -n --column -- $1",
         # Jump straight to merge-conflict markers.
-        "gitconflicts": "locationpicker git grep -n --column '^<<<<<<<\\|^=======$\\|^>>>>>>>'",
+        "gitconflicts": "locationpicker git grep -n --column -E '^(<<<<<<<|=======$|>>>>>>>)'",
     },
 },
 ```

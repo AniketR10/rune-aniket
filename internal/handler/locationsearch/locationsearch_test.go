@@ -206,12 +206,9 @@ func TestHandlerTodoGrepAlias(t *testing.T) {
 
 // TestHandlerConflictsAlias drives the handler with the shell
 // expansion of the `:conflicts` alias against a file containing real
-// merge-conflict markers. Note: the alias uses BRE alternation
-// (`\|`) and a `$` anchor, which behaves quirkily across grep
-// implementations — `git grep` only returns the `<<<<<<<` and
-// `>>>>>>>` markers for this exact pattern, dropping `=======`. The
-// test pins the observed behavior so any future change to the alias
-// (e.g. switching to `-E` ERE) shows up here as a deliberate update.
+// merge-conflict markers. The alias uses ERE alternation so every
+// git implementation lists the same three markers; with BRE `\|`
+// Apple's git dropped the `^=======$` branch while GNU's kept it.
 // Each entry includes a column, so the target line is highlighted.
 func TestHandlerConflictsAlias(t *testing.T) {
 	requireGit(t)
@@ -225,7 +222,7 @@ func TestHandlerConflictsAlias(t *testing.T) {
 	dir := newGitRepo(t, fileContent{"a.go": content})
 	h := newSchemeHandler(t, dir, 7,
 		"cd "+dir+
-			` && git grep -n --column '^<<<<<<<\|^=======$\|^>>>>>>>'`)
+			` && git grep -n --column -E '^(<<<<<<<|=======$|>>>>>>>)'`)
 	waitForScan(t, h)
 
 	expected := strings.TrimPrefix(`
@@ -237,9 +234,9 @@ func TestHandlerConflictsAlias(t *testing.T) {
  >>>>>>> branch         
  after                  
  ────────────────────── 
- ▐                  2/2 
+ ▐                  3/3 
  a.go:2:1:<<<<<<< HEAD  
- a.go:6:1:>>>>>>> branc `, "\n")
+ a.go:4:1:=======       `, "\n")
 	handlertest.RunHandlerSequence(t, h, 24, 11, []handlertest.SequenceTestCase{
 		{InputSequence: "", Expected: expected},
 	})

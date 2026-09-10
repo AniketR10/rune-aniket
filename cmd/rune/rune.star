@@ -615,7 +615,10 @@ config = {
             # whitespace).
             "grep":           "locationpicker grep -n -R $1",
             "todogrep":       "locationpicker grep -n -R -E (TODO|FIXME)",
-            "conflicts":      "locationpicker git grep -n --column '^<<<<<<<\\|^=======$\\|^>>>>>>>'",
+            # ERE, not BRE: with `\|` alternation, Apple's git drops
+            # the `^=======$` branch while GNU's keeps it, so the same
+            # alias listed different markers per platform.
+            "conflicts":      "locationpicker git grep -n --column -E '^(<<<<<<<|=======$|>>>>>>>)'",
             "gitgrep":        "locationpicker git grep -n --column -- $1",
             # gitchanges: present every changed hunk (working tree
             # vs HEAD) as a `path:line:1:hunk` location. The awk

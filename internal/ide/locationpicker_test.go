@@ -63,8 +63,8 @@ func TestLocationPickerAliasesFromRuneStar(t *testing.T) {
 		{
 			alias:    "conflicts",
 			userArgs: nil,
-			wantShell: `git grep -n --column ` +
-				`"^<<<<<<<\\|^=======$\\|^>>>>>>>"`,
+			wantShell: `git grep -n --column -E ` +
+				`"^(<<<<<<<|=======$|>>>>>>>)"`,
 		},
 		{
 			alias:     "gitgrep",
