@@ -1,13 +1,16 @@
 ---
 sidebar_position: 5
+sidebar_label: Rust (beta)
+title: Rust
 ---
 
-# Rust
+# Rust <span className="badge badge--secondary" style={{fontSize: '0.5em', verticalAlign: 'middle'}}>Beta</span>
 
 Rune ships first-class Rust support: code intelligence through
 [rust-analyzer](https://rust-analyzer.github.io/), a toolchain that
-installs and updates itself through [rustup](https://rustup.rs/), and
-dedicated editor commands for Rust analysis and toolchain management.
+installs itself through [rustup](https://rustup.rs/) and is updated
+from the editor, and dedicated editor commands for Rust analysis and
+toolchain management.
 
 ## Setup
 
@@ -17,6 +20,10 @@ Rune installs the stable toolchain together with the `rust-src`,
 `clippy`, and `rustfmt` components, reporting progress through
 notifications. Once installed, `cargo`, `rustc`, `rustfmt`, and
 `cargo-clippy` are on the PATH of every terminal inside Rune.
+
+Toolchain setup is best-effort: if it fails, rust-analyzer still starts
+with whatever toolchain the host already has. Later toolchain updates
+are explicit, through [the console `rust` command](#managing-the-toolchain-the-console-rust-command).
 
 If you want to use your own language server binary, point Rune at it in
 `config.yaml`:
@@ -83,6 +90,9 @@ check-on-save command: each time you save a file, rust-analyzer runs
 `cargo clippy` and reports the findings as diagnostics, so lint
 warnings show up alongside compiler errors as you work.
 
+That check-on-save pass is on top of rust-analyzer's own semantic
+diagnostics, which are pulled as you type and do not wait for a save.
+
 ### Language server logs
 
 rust-analyzer writes logs to stderr, where Rune captures them. Run
@@ -136,7 +146,7 @@ described below.
 | `rust file-text` | Show rust-analyzer's current view of the file's text. | Default |
 | `rust item-tree` | Show the item tree for the current file. | Default |
 | `rust expand-macro` | Expand the macro invocation at the cursor. | Default |
-| `rust memory-usage` | Show rust-analyzer's memory usage report. | Default |
+| `rust memory-usage` | Show rust-analyzer's memory usage report. | Opt-in |
 | `rust crate-graph` | Show the crate dependency graph in DOT format. | Default |
 | `rust dependencies` | List the crates and versions in the workspace dependency graph. | Default |
 | `rust related-tests` | List tests related to the symbol at the cursor. | Default |
@@ -158,7 +168,7 @@ described below.
 | `rust move-item-up` | Move the item at the cursor up. | Experimental |
 | `rust move-item-down` | Move the item at the cursor down. | Experimental |
 | `rust ssr "<pattern> ==>> <replacement>"` | Apply a structural search-and-replace query across the workspace. | Experimental |
-| `rust runnables` | List runnable targets available at the cursor. | Experimental |
+| `rust runnables` | List the runnable targets available at the cursor and jump to the one you choose. Use `rust run` to run one. | Experimental |
 | `rust run` | Run a target at the cursor and show its output, opening a picker when several apply. | Experimental |
 | `rust type` | Show type information for the selection, or hover information at the cursor when nothing is selected. | Experimental |
 | `rust symbols <query> [deps]` | Search workspace types; add `deps` or `dependencies` to include dependencies. | Experimental |
@@ -173,6 +183,19 @@ extensions:
   rust:
     config:
       experimental: true
+```
+
+`rust memory-usage` is opt-in for a different reason: the released
+rust-analyzer build rejects the request, so the command is only
+registered when you ask for it and point `lsp_path` at a build compiled
+with its `dhat` feature.
+
+```yaml tab
+extensions:
+  rust:
+    config:
+      debug:
+        memory_usage: true
 ```
 
 ## Managing the toolchain: the console `rust` command
@@ -198,13 +221,23 @@ through to rustup:
 | `rust run <toolchain> <command>` | Run a command with a given toolchain. |
 | `rust doc [<args>]` | Open the Rust documentation. |
 | `rust self <args>` | Manage the rustup installation. |
-| `rust reload` | Refresh the toolchain binaries and restart the language server. |
+| `rust reload` | Re-probe the toolchain and restart the language server. |
+| `rust help [<subcommand>]` | Show the command's usage, or one subcommand's details. |
 
 Commands that can change the active toolchain (`default`, `toolchain`,
 `target`, `component`, and `update`) reload the language server
 automatically afterwards, so code intelligence tracks the new
 toolchain without a manual step. `rust reload` does the same thing on
-demand, for changes made outside the editor.
+demand, for changes made outside the editor: it re-probes the toolchain
+sysroot and reinitializes every language server the workspace has
+brought up. It does not install or update toolchain binaries; use
+`rust update` for that.
+
+The console command needs the managed toolchain, so it reports
+`no managed Rust toolchain: CARGO_HOME is not set` when `CARGO_HOME` is
+missing from the environment Rune runs in. Rune also skips the
+toolchain install in that case and leaves rust-analyzer to the host's
+own Rust installation.
 
 ## Debugging
 

@@ -16,9 +16,13 @@ language stands today.
 | --- | --- |
 | [Go](./go.md) | Supported |
 | [Python](./python.md) | Supported |
-| Rust | Coming Soon |
-| Zig | Coming Soon |
+| [Rust](./rust.md) | Beta |
+| [Zig](./zig.md) | Beta |
 | TypeScript | Roadmap |
+
+Beta means the language is complete enough for daily work and shipped
+by default, while its commands and defaults may still change between
+releases.
 
 Code intelligence works the same way across all of them. See the [Code
 Intelligence](./intelligence.md) guide for the cross-language `lsp`

@@ -15,6 +15,10 @@ do locally, because Rune routes them through the workspace's scheme without the
 rest of the IDE needing to know whether the files sit on your disk or across an
 SSH connection.
 
+For your own machines, the [network](./network.md) opens the same kind of
+workspace without SSH: they join one private network and address each
+other by name.
+
 ## Getting started
 
 ### Install Rune on the remote

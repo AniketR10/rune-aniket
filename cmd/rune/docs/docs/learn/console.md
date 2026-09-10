@@ -97,6 +97,7 @@ installed in the workspace, but the core commands are:
 | `authorizer (list\|revoke) [<permission>]` | Manage persisted plugin authorizer decisions. |
 | `lsp <subcommand> [<args>...]` | Language Server Protocol commands. |
 | `process` | Process management: inspect and control processes Rune tracks. |
+| `network <subcommand>` | Manage this machine's membership in your [private network](./network.md) of Rune instances. |
 
 ## Installing packages with `pkg`
 
