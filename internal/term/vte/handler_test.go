@@ -260,9 +260,6 @@ func TestIsNormalPtyExit(t *testing.T) {
 // black until the user presses another key.
 func TestHandlerPublishesEventOnPtyExit(t *testing.T) {
 	t.Parallel()
-	if ci := os.Getenv("CI"); ci == "true" {
-		t.SkipNow()
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

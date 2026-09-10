@@ -74,6 +74,10 @@ type Component struct {
 	// minutes or hours away.
 	spawnErrored atomic.Bool
 	pid          atomic.Int64
+	// slaveClosed makes the parent-side slave close idempotent:
+	// startCommand closes it after a successful spawn and Close
+	// closes it on teardown paths where no spawn succeeded.
+	slaveClosed atomic.Bool
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -782,13 +786,28 @@ func (t *Component) Close() (ret error) {
 	t.closed.Store(true)
 	t.cancelCtx()
 
-	if err := t.pty.Slave.Close(); err != nil {
+	if err := t.closeSlave(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	if err := t.pty.Master.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return ret
+}
+
+// closeSlave closes the parent's copy of the pty slave exactly once.
+// After a successful spawn the child owns its own dup of the slave,
+// and the parent must not hold another one: Linux only fails the
+// master read with EIO once the last slave descriptor closes, so a
+// retained parent copy would keep the run loop — and therefore the
+// tab auto-close chain — alive forever after the child exits. macOS
+// revokes the tty when the session leader exits, which is why the
+// leak was invisible there.
+func (t *Component) closeSlave() error {
+	if !t.slaveClosed.CompareAndSwap(false, true) {
+		return nil
+	}
+	return t.pty.Slave.Close()
 }
 
 // Pid returns the pid of the process started for this Component, or 0
@@ -953,6 +972,9 @@ func (t *Component) startCommand(ctx context.Context, cmdAndArgsStr string) erro
 	pid, err := t.executor.StartCommand(ctx, cmd)
 	if err == nil {
 		t.pid.Store(int64(pid))
+		if closeErr := t.closeSlave(); closeErr != nil {
+			t.log(log.WarnLevel, "close parent pty slave: %v", closeErr)
+		}
 	}
 	t.mu.Unlock()
 	if err != nil {
