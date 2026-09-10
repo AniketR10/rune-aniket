@@ -1,0 +1,246 @@
+// Copyright (C) 2017-2026 Unstable Build, LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+//go:build e2e
+
+package ide
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/rune/internal/handler/handlertest"
+	"unstable.build/rune/internal/ide/pkgtrust"
+	"unstable.build/rune/internal/text"
+)
+
+// TestE2EExoUserQuitAutoClosesTab boots a real IDE through ide.New
+// with a working exo section, opens a file, types `:q<enter>` into
+// the embedded editor and asserts that the tab is removed
+// automatically once the editor process exits.
+//
+// The auto-close chain in production is: vim exits -> vte's
+// comp.Run returns -> Handler publishes a term.EventNone via the
+// host EventPublisher -> the host event loop calls root.Handle with
+// that event -> WindowManager routes it to the focused Tab ->
+// vte.Handler.Handle returns exit=true (because e.exit is set) ->
+// Tab.Handle calls Component.RemoveTab(self), which drops the tab
+// from c.buffers and tears the window down. This test stands in for
+// the host event loop by intercepting the publish via
+// WithPublishEvent and re-dispatching the event through root.Handle
+// under the IDE locker.
+func TestE2EExoUserQuitAutoClosesTab(t *testing.T) {
+	bin, err := exec.LookPath("nvim")
+	if err != nil {
+		bin, err = exec.LookPath("vim")
+		if err != nil {
+			t.Skip("neither nvim nor vim available")
+		}
+	}
+
+	dir := t.TempDir()
+	canonical, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	dir = canonical
+	dataDir := t.TempDir()
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, fmt.Appendf(nil, `
+editor:
+  mode: exo
+  exo:
+    command: %s "+call cursor({line}, {col})" {file}
+    goto: "<esc>:{line}<enter>{col}|"
+    quit: "<esc>:q!<enter>"
+command:
+  key: "<c-\\\\>"
+`, bin), 0o666))
+
+	relFile := "exo.txt"
+	filePath := filepath.Join(dir, relFile)
+	require.NoError(t, os.WriteFile(filePath, []byte("hello\n"), 0o644))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		}()
+		return true
+	}
+
+	var rootRef atomic.Pointer[tui.Handler]
+	publish := func(ev term.Event) bool {
+		if ev.Type != term.EventNone {
+			return true
+		}
+		rp := rootRef.Load()
+		if rp == nil {
+			return true
+		}
+		r := *rp
+		scheduleNextTick(func() {
+			r.Handle(ev)
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithBell(func() {}),
+		WithStreamingOpen(true),
+		WithPublishEvent(publish),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	rootRef.Store(&root)
+	mu.Lock()
+	root.Resize(20, 8)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			ev := term.Event{
+				Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key,
+			}
+			switch {
+			case k.Key == term.KeyEsc:
+				ev.Raw = []byte{0x1b}
+			case k.Key == term.KeyEnter:
+				ev.Raw = []byte{0x0d}
+			case k.Key == term.KeySpace:
+				ev.Raw = []byte{' '}
+			case k.Mod == term.ModCtrl && k.Ch == '\\':
+				ev.Raw = []byte{0x1c}
+			case k.Ch != 0:
+				ev.Raw = []byte(string(k.Ch))
+			}
+			mu.Lock()
+			root.Handle(ev)
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	tabCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(i.workspaceHandler.focusEx().comp.Tabs())
+	}
+
+	sendKeys(`<c-\\>edit<space>` + relFile + `<enter>`)
+
+	require.Eventually(t, func() bool {
+		return tabCount() > 0
+	}, 10*time.Second, 100*time.Millisecond,
+		"exo file tab must be open before quitting the editor")
+
+	// Wait for the streaming-open swap to land so the tab's
+	// handler is the exo editor rather than the deferHandler /
+	// streamload pair. Without this gate the publish dispatch
+	// below can race text.(*Component).openFileTabStreaming's
+	// deferred sh.Close() with streamload.Handle (RUNE-205).
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		tabs := i.workspaceHandler.focusEx().comp.Tabs()
+		if len(tabs) == 0 {
+			return false
+		}
+		_, streaming := tabs[0].Handler().(interface {
+			Swap(text.Handler)
+		})
+		return !streaming
+	}, 10*time.Second, 50*time.Millisecond,
+		"streaming-open swap must complete before quitting the editor")
+
+	// Give the editor time to finish startup so `:q` is interpreted
+	// in normal mode rather than swallowed by an init-time prompt.
+	time.Sleep(1500 * time.Millisecond)
+
+	sendKeys(`<esc>:q<enter>`)
+
+	require.Eventually(t, func() bool {
+		return tabCount() == 0
+	}, 10*time.Second, 100*time.Millisecond,
+		"exo tab must auto-close after :q<enter> exits %s; if "+
+			"this assertion fails the vte exit publish -> "+
+			"root.Handle -> Tab.Handle -> RemoveTab chain is "+
+			"broken", bin)
+
+	handlertest.RunHandlerSequence(t, &lockedHandler{Handler: root, mu: mu},
+		20, 8, []handlertest.SequenceTestCase{{
+			InputSequence: "",
+			Expected: `┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		}})
+}
+
+// lockedHandler serializes Handle/Draw/Resize/Cursor on the shared
+// IDE locker so handlertest.RunHandlerSequence does not race
+// scheduled callbacks that the test scheduler runs under the same
+// mutex.
+type lockedHandler struct {
+	tui.Handler
+	mu sync.Locker
+}
+
+func (h *lockedHandler) Handle(ev term.Event) (bool, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Handle(ev)
+}
+
+func (h *lockedHandler) Draw(w term.Writer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Draw(w)
+}
+
+func (h *lockedHandler) Resize(width, height int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Resize(width, height)
+}
+
+func (h *lockedHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Cursor()
+}
