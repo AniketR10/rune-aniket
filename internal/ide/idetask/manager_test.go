@@ -1668,8 +1668,12 @@ func TestManagerReplaceTaskEdgeCases(t *testing.T) {
 			"watch-failure error should surface the underlying watch error")
 
 		// A failed watch never armed, so there is no live watch to retrigger
-		// the task: it stays dead until the user recreates it.
-		assert.True(t, watchStopped(m, exec, "task"),
+		// the task: it stays dead until the user recreates it. The teardown
+		// runs asynchronously after the halted state becomes visible, so
+		// poll like assertWatchArmed does.
+		assert.Eventually(t, func() bool {
+			return watchStopped(m, exec, "task")
+		}, time.Second, 5*time.Millisecond,
 			"failed watch must leave no live watch to retrigger the task")
 	})
 
@@ -2137,6 +2141,10 @@ func TestManagerLifecycleEdgeCases(t *testing.T) {
 		require.NoError(t, m.RunTask(Task{Name: "a", Cmd: "run"}))
 		runAndSettle(t, m, Task{Name: "b", Cmd: "run"})
 
+		// Running flips on the async spawn, so wait for it before
+		// snapshotting the list.
+		assertTaskWithin(t, m, time.Second, "a",
+			func(info TaskInfo) bool { return info.Running })
 		infos := m.ListTasks()
 		require.Len(t, infos, 2)
 		byName := map[string]TaskInfo{}
