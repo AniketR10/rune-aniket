@@ -43,6 +43,7 @@ import (
 	"unstable.build/rune/internal/ide/idelsp/languages"
 	"unstable.build/rune/internal/ide/pkgtrust"
 	"unstable.build/rune/internal/ide/syntax"
+	"unstable.build/rune/internal/ide/syntax/grammarfixture"
 	"unstable.build/rune/internal/term/gui"
 	"unstable.build/rune/internal/text"
 )
@@ -137,7 +138,9 @@ upgrade:
 
 // stageSyntaxFixture copies the committed tree-sitter grammar fixture
 // for langID from internal/ide/syntax/syntaxtest into the data dir's installed
-// package layout (<dataDir>/lib/<langID>).
+// package layout (<dataDir>/lib/<langID>). The parser at the root of the
+// fixture is the darwin universal binary, so the host parser is resolved
+// through grammarfixture rather than copied along with the query files.
 func stageSyntaxFixture(tb testing.TB, dataDir, langID string) {
 	tb.Helper()
 	src := filepath.Join("..", "..", "internal", "ide", "syntax", "syntaxtest", langID)
@@ -150,7 +153,7 @@ func stageSyntaxFixture(tb testing.TB, dataDir, langID string) {
 		tb.Fatalf("mkdir %s: %v", dst, err)
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || e.Name() == syntax.ParserFilename {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(src, e.Name()))
@@ -160,6 +163,16 @@ func stageSyntaxFixture(tb testing.TB, dataDir, langID string) {
 		if err := os.WriteFile(filepath.Join(dst, e.Name()), data, 0o755); err != nil {
 			tb.Fatalf("write %s: %v", e.Name(), err)
 		}
+	}
+	parser := grammarfixture.ParserPath(tb, src)
+	data, err := os.ReadFile(parser)
+	if err != nil {
+		tb.Fatalf("read %s: %v", parser, err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dst, syntax.ParserFilename), data, 0o755,
+	); err != nil {
+		tb.Fatalf("write %s: %v", syntax.ParserFilename, err)
 	}
 }
 
