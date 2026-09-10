@@ -242,6 +242,11 @@ func (i *IDE) InputMode() term.InputMode {
 }
 
 // SetDefaultAttributes sets the default attributes to be used to fill the screen.
+//
+// It mutates state the event loop and the async workspace builds read,
+// so callers must hold the IDE locker (see WithLocker). Command
+// handlers already run under it; setup code running outside the loop
+// has to take it explicitly.
 func (i *IDE) SetDefaultAttributes(defAttr term.Attributes) {
 	i.root.defAttr = defAttr
 	// Propagate to every registered tutorial so per-step shaders

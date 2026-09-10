@@ -310,8 +310,14 @@ func (b *bootstrapHandler) wallpaperTheme() string {
 // SetDefaultAttributes would not propagate into the running shader
 // (RUNE-203). Seeding both the pre-bootstrap and configured IDEs
 // with the same attrs also avoids a color jump across performSwap.
+//
+// The IDE is already running async workspace builds by the time it is
+// returned, and those read the state the setter writes, so the seed
+// takes the event loop lock like a loop iteration would.
 func (b *bootstrapHandler) applyInitialThemeAttr(i *ide.IDE) {
 	b.initialThemeAttr = resolveInitialThemeAttr(i.Browser(), i.Config())
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	i.SetDefaultAttributes(b.initialThemeAttr)
 }
 
@@ -399,7 +405,9 @@ func (b *bootstrapHandler) guiEnvLiveApplyHook(
 func (b *bootstrapHandler) setupConfiguredIDE(
 	i *ide.IDE, client *apiclient.Client,
 ) error {
+	b.mu.Lock()
 	i.SetDefaultAttributes(b.initialThemeAttr)
+	b.mu.Unlock()
 
 	b.client = client
 	scheduleCrashReportCheck(i, client, b.dataDir, b.scheduleNextTick)

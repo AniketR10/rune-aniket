@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -242,4 +243,36 @@ func TestLoadQuickMenuKeepsValidButtons(t *testing.T) {
 
 	require.Equal(t, []ide.QuickMenuButton{{Symbol: "terminal",
 		Title: "New Terminal", Command: []string{"terminalnew"}}}, b.quickMenu)
+}
+
+// TestApplyInitialThemeAttrHoldsEventLoopLock pins that the theme seed
+// runs as an event-loop iteration. ide.New starts the cwd workspace
+// build on a background goroutine that reads the same shader-runner
+// state SetDefaultAttributes writes (via abortPendingBuild ->
+// stopLoading), so seeding the attributes off the loop lock is a data
+// race.
+func TestApplyInitialThemeAttrHoldsEventLoopLock(t *testing.T) {
+	b := newConfiguredBootstrapForEnvTest(t, configFilename,
+		"editor:\n  mode: modal\n", t.TempDir())
+
+	done := make(chan struct{})
+	b.mu.Lock()
+	go func() {
+		defer close(done)
+		b.applyInitialThemeAttr(b.realIDE)
+	}()
+
+	select {
+	case <-done:
+		b.mu.Unlock()
+		t.Fatal("applyInitialThemeAttr must run under the event loop lock")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	b.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("applyInitialThemeAttr did not complete after the lock was released")
+	}
 }
