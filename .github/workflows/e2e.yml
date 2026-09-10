@@ -34,7 +34,8 @@ jobs:
             gcc g++ pkg-config \
             libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
             libxinerama-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libwayland-dev libxkbcommon-dev
+            libasound2-dev libwayland-dev libxkbcommon-dev \
+            xvfb mesa-utils vim
 
       # The e2e suites drive real toolchains; each one skips when its
       # binary is absent, so a missing tool degrades coverage rather
@@ -46,5 +47,12 @@ jobs:
           rustup component add rust-analyzer || true
           curl -LsSf https://astral.sh/uv/install.sh | sh
 
+      # The GUI e2e suites open real windows through ebiten/glfw,
+      # which needs an X display; the hosted runners are headless.
+      - name: Run e2e suite (Linux, under Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" make test-e2e
+
       - name: Run e2e suite
+        if: runner.os != 'Linux'
         run: make test-e2e
