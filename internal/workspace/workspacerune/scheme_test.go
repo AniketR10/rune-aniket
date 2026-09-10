@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/runenet"
+	"unstable.build/rune/internal/runenet/runenetpb"
 	"unstable.build/rune/internal/workspace"
 	tworkspacerpc "unstable.build/rune/internal/workspace/workspacerpc"
 )
@@ -241,7 +242,12 @@ func peerFileScheme(t *testing.T, root string) schemeapi.Scheme {
 	return fileScheme
 }
 
-func servePeerScheme(t *testing.T, scheme schemeapi.Scheme) string {
+// servePeerScheme serves scheme over the workspace RPC services; any
+// register hooks add further services (e.g. PeerInfo) to the same
+// server, as runenet.ServeWorkspace does.
+func servePeerScheme(
+	t *testing.T, scheme schemeapi.Scheme, register ...func(*grpc.Server),
+) string {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -254,6 +260,9 @@ func servePeerScheme(t *testing.T, scheme schemeapi.Scheme) string {
 	sdkworkspacerpc.RegisterFilesServer(grpcServer, rpcServer)
 	sdkworkspacerpc.RegisterExecutorServer(grpcServer, rpcServer)
 	sdkworkspacerpc.RegisterTerminalServer(grpcServer, rpcServer)
+	for _, r := range register {
+		r(grpcServer)
+	}
 	go debug.CapturePanicReport(func() {
 		_ = grpcServer.Serve(lis)
 	})
@@ -262,6 +271,63 @@ func servePeerScheme(t *testing.T, scheme schemeapi.Scheme) string {
 		_ = rpcServer.Stop()
 	})
 	return lis.Addr().String()
+}
+
+// staticPeerInfo advertises a fixed data directory, standing in for a
+// peer that serves the PeerInfo service.
+type staticPeerInfo struct {
+	runenetpb.UnimplementedPeerInfoServer
+	dataDir string
+}
+
+func (s staticPeerInfo) Get(
+	context.Context, *runenetpb.PeerInfoRequest,
+) (*runenetpb.PeerInfoResponse, error) {
+	return &runenetpb.PeerInfoResponse{DataDir: s.dataDir}, nil
+}
+
+func TestInstallRootReturnsPeerAdvertisedDataDir(t *testing.T) {
+	dir := t.TempDir()
+	addr := servePeerScheme(t, peerFileScheme(t, dir), func(s *grpc.Server) {
+		runenetpb.RegisterPeerInfoServer(s,
+			staticPeerInfo{dataDir: "/home/peer/.rune"})
+	})
+	dialer := dialerFunc(func(ctx context.Context, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", addr)
+	})
+
+	uri, err := workspaceapi.ParseURI("rune://laptop" + dir)
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	root, err := s.(workspace.InstallDataDirProvider).
+		InstallDataDir(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "/home/peer/.rune", root)
+}
+
+func TestInstallRootOnOldPeerReportsUnsupported(t *testing.T) {
+	dir := t.TempDir()
+	// No PeerInfo service registered: this peer runs an older Rune,
+	// and the real gRPC Unimplemented round-trip must degrade to
+	// ErrUnsupported so the caller falls back to its own guess.
+	addr := servePeerScheme(t, peerFileScheme(t, dir))
+	dialer := dialerFunc(func(ctx context.Context, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", addr)
+	})
+
+	uri, err := workspaceapi.ParseURI("rune://laptop" + dir)
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	_, err = s.(workspace.InstallDataDirProvider).InstallDataDir(context.Background())
+	require.ErrorIs(t, err, errors.ErrUnsupported)
 }
 
 // recordingExecutor answers StartCommand with the request it received

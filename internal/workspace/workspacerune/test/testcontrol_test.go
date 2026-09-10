@@ -42,7 +42,7 @@ func TestMeshRoundTrip(t *testing.T) {
 	control := StartTestControl(t, true /* sameUser */)
 	peer := StartNode(t, control, "peer")
 	client := StartNode(t, control, "client")
-	ServeWorkspaces(t, peer)
+	peerDataDir := ServeWorkspaces(t, peer)
 	WaitPeer(t, client, "peer")
 
 	dir := t.TempDir()
@@ -53,6 +53,14 @@ func TestMeshRoundTrip(t *testing.T) {
 	defer scheme.Close()
 
 	assert.Equal(t, dir, scheme.Root())
+
+	// The peer advertises its own data directory as the install root,
+	// so a client with a different --datadir provisions and resolves
+	// toolchains where the peer actually keeps them.
+	root, err := scheme.(workspace.InstallDataDirProvider).
+		InstallDataDir(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, peerDataDir, root)
 
 	entries, err := scheme.ReadDir(".")
 	require.NoError(t, err)

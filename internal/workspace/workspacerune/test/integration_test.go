@@ -19,7 +19,10 @@ package runetest
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"unstable.build/rune/internal/workspace"
 	"unstable.build/rune/internal/workspace/workspacetest"
 )
 
@@ -36,10 +39,21 @@ func TestIntegrationScheme(t *testing.T) {
 	SkipIfNoDocker(t)
 
 	control := StartHeadscale(t)
-	StartInstance(t, control, "peer")
+	peerDataDir := StartInstance(t, control, "peer")
 
 	client := StartNode(t, control, "client")
 	WaitPeer(t, client, "peer")
+
+	// The serving instance advertises its own data directory as the
+	// install root; the client must see it verbatim over the mesh.
+	t.Run("install root", func(t *testing.T) {
+		scheme := OpenWorkspace(t, client, "peer", t.TempDir())
+		defer scheme.Close()
+		root, err := scheme.(workspace.InstallDataDirProvider).
+			InstallDataDir(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, peerDataDir, root)
+	})
 
 	newScheme := func(t *testing.T) schemeapi.Scheme {
 		return OpenWorkspace(t, client, "peer", t.TempDir())

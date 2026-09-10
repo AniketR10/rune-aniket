@@ -28,6 +28,7 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -40,6 +41,7 @@ import (
 	"google.golang.org/grpc/status"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/runenet"
+	"unstable.build/rune/internal/runenet/runenetpb"
 	"unstable.build/rune/internal/workspace"
 	"unstable.build/rune/internal/workspace/remotescheme"
 )
@@ -52,6 +54,7 @@ const Scheme = "rune"
 var ErrConnectionClosed = errors.New("network connection closed unexpectedly")
 
 var _ workspace.RemoteScheme = (*scheme)(nil)
+var _ workspace.InstallDataDirProvider = (*scheme)(nil)
 
 // Dialer opens a connection to a peer's workspace server. It is
 // satisfied by [runenet.Node].
@@ -258,6 +261,50 @@ func (s *scheme) OnDisconnect() <-chan struct{} {
 
 func (s *scheme) WaitConnected(ctx context.Context) error {
 	return s.Scheme.(workspace.RemoteScheme).WaitConnected(ctx)
+}
+
+// installRootTimeout bounds the PeerInfo round-trip so resolving the
+// install root against a peer that is asleep or gone fails over to the
+// caller's fallback instead of stalling extension startup.
+const installRootTimeout = 5 * time.Second
+
+// InstallDataDir asks the peer for its Rune data directory over a
+// connection of its own: the reconnect loop owns the workspace
+// connection, and a one-shot query must not race its lifecycle. A peer
+// running an older Rune without the PeerInfo service reports
+// errors.ErrUnsupported so the caller degrades to its own guess.
+func (s *scheme) InstallDataDir(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, installRootTimeout)
+	defer cancel()
+
+	conn, err := dialPeer(s.dialer, s.peer)
+	if err != nil {
+		return "", fmt.Errorf("connect to %s: %w", s.peer, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	info, err := runenetpb.NewPeerInfoClient(conn).
+		Get(ctx, &runenetpb.PeerInfoRequest{})
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return "", fmt.Errorf(
+				"peer %s does not advertise its install root: %w",
+				s.peer, errors.ErrUnsupported)
+		}
+		return "", fmt.Errorf("peer info from %s: %w", s.peer, err)
+	}
+	return info.GetDataDir(), nil
+}
+
+// dialPeer opens a gRPC connection to peer's workspace server over the
+// mesh. The connection is established lazily on the first RPC; the
+// caller owns it and must close it.
+func dialPeer(dialer Dialer, peer string) (*grpc.ClientConn, error) {
+	return grpc.NewClient("passthrough:///"+peer,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return dialer.Dial(ctx, peer)
+		}))
 }
 
 // connScheme ties the lifetime of the gRPC connection to the scheme
