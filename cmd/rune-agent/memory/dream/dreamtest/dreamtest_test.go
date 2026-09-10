@@ -504,7 +504,9 @@ func (a *asyncFlusher) Handle(ev term.Event) (exit, handled bool) {
 		// LLM call. The in-progress conversation row travels through
 		// the REPL pump goroutine on its own time, so poll until it is
 		// rendered before the golden compare.
-		a.waitFrameContains("conversation")
+		// (The REPL progress bar also says "conversations", so match
+		// the full row prefix.)
+		a.waitFrameContains("⚙ conversation ")
 	} else {
 		a.f.h.Wait()
 	}
