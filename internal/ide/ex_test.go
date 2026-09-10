@@ -3150,6 +3150,14 @@ func (s *queuedScheduler) Flush(lock sync.Locker) {
 // Handle/Draw assertions, mirroring the production event loop where
 // scheduled callbacks run under the host's UI lock.
 //
+// The queue is deliberately passive (drained at explicit flush
+// points on the test goroutine) rather than an active consumer like
+// newTestScheduler: the ex harness dispatches re-entrantly on the
+// test goroutine (echo → publishEvent → testEx.Handle), which a
+// consumer goroutine holding a non-reentrant mutex would deadlock.
+// The IDE-level handler and macro harnesses are not re-entrant and
+// use newTestScheduler/quiesceHandler instead.
+//
 // We can't compare function values directly; instead we detect the
 // inline default by exercising it: it runs the callback synchronously
 // and returns true. A custom scheduler that queues for later won't run

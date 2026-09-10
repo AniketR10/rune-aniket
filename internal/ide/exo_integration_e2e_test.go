@@ -14,9 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build e2e
+
 package ide
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,7 +127,7 @@ func TestExoVimEndToEnd(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	require.NoError(t, m.addOrCreateWorkspace(uri))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	assert.False(t, autoSaverConstructed.Load(),
 		"exo must skip the autoSaver wiring; otherwise external "+
@@ -194,36 +197,6 @@ func TestExoVimEndToEnd(t *testing.T) {
 			"exo session, even after the external editor saves")
 }
 
-// keyEvent renders a KeyComb into a term.Event with the Raw bytes
-// vte expects. Unlike handlertest.RunHandlerSequence, vte's input
-// path falls back to ev.Raw for non-special keys (e.g. plain ASCII
-// runes), so Ch alone is insufficient — the pty would receive an
-// empty write and the embedded editor would not see the keystroke.
-func keyEvent(k term.KeyComb) term.Event {
-	ev := term.Event{
-		Type: term.EventKey, Mod: k.Mod, Key: k.Key, Ch: k.Ch,
-	}
-	switch {
-	case k.Key == term.KeyEsc:
-		ev.Raw = []byte{0x1b}
-	case k.Key == term.KeyEnter:
-		ev.Raw = []byte{0x0d}
-	case k.Key == term.KeySpace:
-		ev.Raw = []byte{' '}
-	case k.Key == term.KeyTab:
-		ev.Raw = []byte{0x09}
-	case k.Key == term.KeyBackspace:
-		ev.Raw = []byte{0x7f}
-	case k.Mod == term.ModCtrl && k.Ch >= 'a' && k.Ch <= 'z':
-		ev.Raw = []byte{byte(k.Ch - 'a' + 1)}
-	case k.Mod == term.ModCtrl && k.Ch == '\\':
-		ev.Raw = []byte{0x1c}
-	case k.Ch != 0:
-		ev.Raw = []byte(string(k.Ch))
-	}
-	return ev
-}
-
 // TestExoVimSwapfileGracefulClose asserts that closing a exo tab
 // hosting vim leaves no .swp file behind.
 func TestExoVimSwapfileGracefulClose(t *testing.T) {
@@ -269,7 +242,7 @@ func TestExoVimSwapfileGracefulClose(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	require.NoError(t, m.addOrCreateWorkspace(uri))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	h := newSafeHandler(m)
 	h.Resize(80, 24)
@@ -378,7 +351,7 @@ func TestExoVimSetCursorAtScroll(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	require.NoError(t, m.addOrCreateWorkspace(uri))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	h := newSafeHandler(m)
 	h.Resize(80, 24)
@@ -461,3 +434,94 @@ func TestExoVimSetCursorAtScroll(t *testing.T) {
 var _ interface {
 	SetCursorAtScroll(term.Coordinates) bool
 } = (text.Handler)(nil)
+
+func TestFileExplorerExoEnter(t *testing.T) {
+	if _, err := exec.LookPath("vim"); err != nil {
+		t.Skip("vim binary not available")
+	}
+
+	// EvalSymlinks: macOS t.TempDir() returns /var/... but the FS
+	// scheme canonicalises to /private/var/... so URI lookup must
+	// match.
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(
+		filepath.Join(dir, "subdir"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "subdir", "child.txt"),
+		[]byte("hi"), 0o644))
+
+	cfg := defaultConfigWithWrap(false)
+	editorCfg := cfg.cfg["editor"].(map[string]any)
+	editorCfg["mode"] = "exo"
+	editorCfg["exo"] = map[string]any{
+		"command": `vim -Nu NONE -n "+call cursor({line}, {col})" {file}`,
+		"goto":    "<esc>:{line}<enter>{col}|",
+		"quit":    "<esc>:qa<enter>",
+	}
+	cfg.ringBell = func() {}
+	require.Equal(t, "exo", cfg.editorMode())
+	// The exofallback default is standard; verify it propagated so
+	// downstream behaviour (Enter toggles, no vi search) matches.
+	require.Equal(t, "standard", cfg.exoFallback())
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.quiesce()
+
+	h := newSafeHandler(m)
+	h.Resize(40, 12)
+
+	ex := m.focusEx()
+	require.NotNil(t, ex)
+	assert.True(t, ex.ed.IsExternal(),
+		"exo workspace must remain externally managed even when "+
+			"some URIs route to the fallback")
+
+	m.mu.Lock()
+	err = ex.fexplorer(context.Background())
+	m.mu.Unlock()
+	require.NoError(t, err, "fexplorer must open under exo via the "+
+		"exofallback router for memory:///fexplorer")
+	require.NotNil(t, ex.fileExplorerWin,
+		"file explorer window must be present")
+	require.NotNil(t, ex.fileExplorerHandler,
+		"file explorer handler must be cached")
+
+	explorer := ex.fileExplorerHandler
+	// The workspace fs watcher refreshes the tree from its own
+	// goroutine under m.mu, so every read of explorer state has to
+	// take the same lock.
+	explorerRows := func() int {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return explorer.ed.CellView().Rows()
+	}
+	searchMode := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return explorer.ed.IsSearchMode()
+	}
+	beforeRows := explorerRows()
+	require.Greater(t, beforeRows, 0,
+		"explorer tree must render at least one row")
+
+	// With cursor on the first (directory) row, <Enter> must expand
+	// the tree. The modeless fallback delivers <Enter> to the inner
+	// editor handler, which the file explorer interprets as
+	// expand-or-open since it is not in search mode.
+	_, handled := h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter,
+	})
+	require.True(t, handled, "<Enter> must be handled")
+	require.False(t, searchMode(),
+		"modeless fallback must not enter search mode on <Enter>")
+	assert.NotEqual(t, beforeRows, explorerRows(),
+		"<Enter> on a directory row must toggle the tree")
+}

@@ -683,7 +683,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	// otherwise the default sentinel path drops config + .backup files
 	// in the package working directory.
 	cfg.configPath = filepath.Join(dir, "rune.yaml")
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	manager := workspace.NewManager(cfg.workspace(), cfg.scheduleNextTick)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
 	notiCfg := notificationsConfig()
@@ -724,7 +724,9 @@ func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(dir)
 	})
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	// Share the caller's (deliberately synchronous) scheduler so the
+	// manager and the handler dispatch through the same path.
+	manager := workspace.NewManager(cfg.workspace(), cfg.scheduleNextTick)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,
 		cfg, FuncExtensionsRunner(testRunnerFn), nil, nil, dir, nil,

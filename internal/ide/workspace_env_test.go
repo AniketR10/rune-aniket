@@ -68,7 +68,7 @@ func TestWorkspaceManagerHandlerEnvSource(t *testing.T) {
 		m := newTestWorkspaceManagerHandlerWithDir(t,
 			defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
 		t.Cleanup(func() { _ = m.Close() })
-		m.drainPendingWorkspaces()
+		m.quiesce()
 
 		base, ok := m.envSource("WORKSPACE")
 		assert.True(t, ok)

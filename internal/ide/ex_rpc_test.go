@@ -66,7 +66,13 @@ type safeHandler struct {
 	mu        sync.Locker
 	Handler   browserapi.Handler
 	Component tui.Component
-	close     func()
+	// quiesce, when set, runs after mu is released so async work
+	// started by the handled event can re-acquire mu and finish
+	// before the next test step. Wired to
+	// testWorkspaceManagerHandler.quiesce for IDE-level tests and to
+	// ex.waitInflight for the RPC browser tests.
+	quiesce func()
+	close   func()
 }
 
 func (h *safeHandler) Resize(width, height int) {
@@ -87,24 +93,8 @@ func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 		w.Wait()
 	}
 	h.mu.Unlock()
-	// addWorkspace runs Phase B/C asynchronously: a goroutine
-	// builds the workspace and then schedules install via
-	// scheduleNextTick. After the test has released h.mu the
-	// install goroutine can acquire it and finish, so wait here for
-	// any pending workspaces to install before the next test step.
-	if drainer, ok := h.Handler.(interface{ drainPendingWorkspaces() }); ok {
-		drainer.drainPendingWorkspaces()
-	}
-	// Drain any in-flight async save/reload completions started by
-	// the just-processed event. The IDE locker is released above so
-	// awaiter goroutines can complete their scheduled callbacks
-	// (cfg.scheduleNextTick spawns a goroutine that re-acquires
-	// h.mu before running cb).
-	if drainer, ok := h.Handler.(interface{ waitInflight() }); ok {
-		drainer.waitInflight()
-	}
-	if drainer, ok := h.Handler.(interface{ drainSched() }); ok {
-		drainer.drainSched()
+	if h.quiesce != nil {
+		h.quiesce()
 	}
 	return
 }
@@ -187,7 +177,8 @@ func newTestRPCBrowser(t *testing.T,
 				ex.Close()
 			})
 		}
-		h := &safeHandler{Component: ex, Handler: ex, mu: &serverMutex, close: close}
+		h := &safeHandler{Component: ex, Handler: ex, mu: &serverMutex,
+			quiesce: ex.waitInflight, close: close}
 		*destructor = close
 		return h, browsertest.BrowserFromAPIBrowser(bc), nil
 	}

@@ -92,7 +92,7 @@ func TestSetWorkspaceRequiresAttentionRace(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.scheduleNextTick = sched
 
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	manager := workspace.NewManager(cfg.workspace(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 
@@ -154,7 +154,7 @@ func TestNotificationsInheritRightInset(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.scheduleNextTick = sched
 
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	manager := workspace.NewManager(cfg.workspace(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 

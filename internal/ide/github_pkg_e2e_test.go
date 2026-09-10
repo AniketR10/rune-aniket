@@ -257,7 +257,7 @@ func runGitHubPkgE2E(t *testing.T, f ghE2EFixture) {
 	wsURI, err := workspaceapi.CurrentUserHostURI(wsDir)
 	require.NoError(t, err)
 	require.NoError(t, m.addWorkspace(wsURI, true, false, -1))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	h := pkgshell.New(pkgshell.Config{
 		Manager:       m.pkgmanager.pkg,

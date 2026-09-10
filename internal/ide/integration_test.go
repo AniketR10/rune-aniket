@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,7 +45,9 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	workspaceURI, err := workspaceapi.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
-	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	mu := new(sync.Mutex)
+	sched, _ := newTestScheduler(t, mu)
+	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	w, err := manager.AddWorkspace(context.Background(), workspaceURI)
 	require.NoError(t, err)

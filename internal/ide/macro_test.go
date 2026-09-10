@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -140,20 +139,6 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				secondURI, err := workspaceapi.CurrentUserHostURI(secondFile)
 				require.NoError(t, err)
 				handleKeys(t, tc, ":workspaceopen<space>"+secondWorkspace+"<enter>")
-				// :workspaceopen kicks off async addWorkspace; wait for
-				// the new workspace to install before opening a file
-				// in it (otherwise Open lands on the home workspace).
-				deadline := time.Now().Add(5 * time.Second)
-				for time.Now().Before(deadline) {
-					flushMacroHarness(tc)
-					tc.ide.workspaceHandler.mu.Lock()
-					hasPending := len(tc.ide.workspaceHandler.pending) > 0
-					tc.ide.workspaceHandler.mu.Unlock()
-					if !hasPending {
-						break
-					}
-					time.Sleep(time.Millisecond)
-				}
 				withLockedIDE(t, tc.mu, func() {
 					require.NoError(t, tc.ide.Open(secondURI))
 				})
@@ -430,11 +415,11 @@ func TestNativeMacroPlaybackIntegration(t *testing.T) {
 }
 
 type macroIntegrationHarness struct {
-	mu        *sync.Mutex
-	events    chan term.Event
-	ide       *IDE
-	h         *macroTestHandler
-	scheduler *queuedScheduler
+	mu     *sync.Mutex
+	events chan term.Event
+	ide    *IDE
+	h      *macroTestHandler
+	drain  func() uint64
 }
 
 type macroTestHandler struct {
@@ -485,10 +470,10 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 
 	mu := new(sync.Mutex)
 	events := make(chan term.Event, 4096)
-	scheduler := newQueuedScheduler()
+	sched, drain := newTestScheduler(t, mu)
 	i, err := New(dir, cfgName, dir, pkgtrust.NewStore(dir, nil), newTestStorage(t, dir),
 		WithLocker(mu),
-		WithScheduleNextTick(scheduler.ScheduleNextTick),
+		WithScheduleNextTick(sched),
 		WithPublishEvent(func(ev term.Event) bool {
 			if ev.Type == term.EventInterrupt && ev.UserFunc == nil {
 				return true
@@ -504,27 +489,13 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, i.Close()) })
 	_ = i.Ready()
-	tc := &macroIntegrationHarness{mu: mu, events: events, ide: i, scheduler: scheduler}
+	tc := &macroIntegrationHarness{mu: mu, events: events, ide: i, drain: drain}
 	tc.h = &macroTestHandler{tc: tc}
 
 	// addWorkspace is async: New kicks off Phase B in a goroutine and
-	// Phase C lands the install via scheduleNextTick. With our test
-	// scheduler that means the install is queued into scheduler. Wait
-	// for any pending workspace to be enqueued and installed by
-	// repeatedly flushing the scheduler — flushMacroHarness only
-	// drains what's already queued, so we loop until no entries
-	// remain in h.pending.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		flushMacroHarness(tc)
-		i.workspaceHandler.mu.Lock()
-		hasPending := len(i.workspaceHandler.pending) > 0
-		i.workspaceHandler.mu.Unlock()
-		if !hasPending {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	// Phase C lands the install via scheduleNextTick. Wait for the
+	// boot workspace to install before the test starts driving keys.
+	flushMacroHarness(tc)
 
 	withLockedIDE(t, mu, func() {
 		require.NoError(t, i.Open(uri))
@@ -595,6 +566,10 @@ func drainPublishedEvents(t *testing.T, tc *macroIntegrationHarness, events <-ch
 
 func editorString(t *testing.T, i *IDE) string {
 	t.Helper()
+	// The fs-watcher and scheduled callbacks mutate editor state
+	// under the IDE locker; take it for the read as well.
+	i.workspaceHandler.mu.Lock()
+	defer i.workspaceHandler.mu.Unlock()
 	win, err := i.Browser().Focus()
 	require.NoError(t, err)
 	h, err := win.Content()
@@ -617,9 +592,7 @@ func flushMacroHarness(tc *macroIntegrationHarness) {
 	if tc == nil {
 		return
 	}
-	if tc.scheduler != nil {
-		tc.scheduler.Flush(tc.mu)
-	}
+	quiesceHandler(tc.ide.workspaceHandler, tc.drain)
 	tc.mu.Lock()
 	handler := tc.ide.workspaceHandler.focusHandler()
 	ex, ok := handler.(*ex)

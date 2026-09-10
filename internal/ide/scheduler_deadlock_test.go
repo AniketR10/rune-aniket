@@ -69,7 +69,7 @@ func TestScheduleNextTickDoesNotReacquireHostLock(t *testing.T) {
 	homeURI, err := workspaceapi.ParseURI("memory:///home")
 	require.NoError(t, err)
 
-	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	manager := workspace.NewManager(cfg.workspace(), cfg.scheduleNextTick)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 

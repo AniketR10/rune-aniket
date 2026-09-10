@@ -373,7 +373,7 @@ func TestPkgInstallStartsExtensionWithPackageEnv(t *testing.T) {
 	wsURI, err := workspaceapi.CurrentUserHostURI(dir)
 	require.NoError(t, err)
 	require.NoError(t, m.addWorkspace(wsURI, true, false, -1))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	h := pkgshell.New(pkgshell.Config{
 		Manager:       m.pkgmanager.pkg,

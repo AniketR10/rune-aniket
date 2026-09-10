@@ -227,7 +227,7 @@ func newRealGitHubPkgHandler(
 	wsURI, err := workspaceapi.CurrentUserHostURI(wsDir)
 	require.NoError(t, err)
 	require.NoError(t, m.addWorkspace(wsURI, true, false, -1))
-	m.drainPendingWorkspaces()
+	m.quiesce()
 
 	dispatch := func(ctx context.Context, cmd string, args ...string) error {
 		w := m.workspaces[m.focus]
