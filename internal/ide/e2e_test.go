@@ -35,7 +35,6 @@ import (
 	"unstable.build/rune/internal/extension/extensionv2"
 	"unstable.build/rune/internal/handler/handlertest"
 	"unstable.build/rune/internal/ide"
-	"unstable.build/rune/internal/ide/pkgtrust"
 )
 
 func TestE2E(t *testing.T) {
@@ -77,13 +76,7 @@ command:
 		require.NoError(t, err)
 
 		var mu sync.Mutex
-		tracker := newSchedTracker(hostScheduleNextTick(&mu))
-		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
-			ide.WithLocker(&mu),
-			ide.WithScheduleNextTick(tracker.Schedule),
-			ide.WithPublishEvent(func(term.Event) bool { return true }),
-		)
-		require.NoError(t, err)
+		i, drain := newHostIDE(t, &mu, dir, config.Name())
 
 		handler := i.Ready()
 		// addWorkspace is async; wait for the cwd workspace install
@@ -124,7 +117,7 @@ command:
 		// would deadlock with the host scheduler (which spawns
 		// goroutines that acquire mu themselves).
 		handlertest.RunHandlerSequence(t, e2eLockedHandler{
-			Handler: handler, mu: &mu, ide: i, sched: tracker,
+			Handler: handler, mu: &mu, ide: i, drain: drain,
 		}, 20, 10, cases)
 	})
 
@@ -154,13 +147,8 @@ command:
 			extensionv2.WithAuthTokenEnv("IDETEST_TOKEN"),
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
-			ide.WithExtensionsRunner(runner),
-			ide.WithLocker(&mu),
-			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
-			ide.WithPublishEvent(func(term.Event) bool { return true }),
-		)
-		require.NoError(t, err)
+		i, _ := newHostIDE(t, &mu, dir, config.Name(),
+			ide.WithExtensionsRunner(runner))
 
 		handler := i.Ready()
 
@@ -218,13 +206,8 @@ command:
 			&mu, dir,
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir, pkgtrust.NewStore(dir, nil), newE2EStorage(t, dir),
-			ide.WithExtensionsRunner(runner),
-			ide.WithLocker(&mu),
-			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
-			ide.WithPublishEvent(func(term.Event) bool { return true }),
-		)
-		require.NoError(t, err)
+		i, _ := newHostIDE(t, &mu, dir, config.Name(),
+			ide.WithExtensionsRunner(runner))
 
 		handler := i.Ready()
 		i.WaitWorkspaces()

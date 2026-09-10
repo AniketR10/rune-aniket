@@ -21,11 +21,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/ide"
+	"unstable.build/rune/internal/ide/pkgtrust"
 	"unstable.build/rune/internal/localstorage"
 )
 
@@ -34,64 +37,102 @@ func newE2EStorage(t *testing.T, dataDir string) storageapi.Service {
 	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
 }
 
-// hostScheduleNextTick mirrors a host event loop's UserFunc dispatch:
-// fn runs on a fresh goroutine while holding mu, exactly like
-// gui.Update does before invoking ev.UserFunc(). Tests use this to
-// preserve the production contract that scheduled callbacks observe
-// IDE state under the host lock.
-func hostScheduleNextTick(mu sync.Locker) func(func()) bool {
-	return func(fn func()) bool {
-		go func() {
+// newHostScheduler returns a scheduleNextTick stub bound to mu, a
+// start that begins dispatching, and a drain that blocks until every
+// queued callback has run.
+//
+// A single consumer goroutine drains a FIFO queue, running each
+// callback under mu in enqueue order, mirroring the host event loop's
+// UserFunc serialization. Enqueuing never touches mu, so a caller
+// holding mu does not deadlock against the consumer.
+//
+// Dispatch stays parked until start is called because the host loop
+// only pumps UserFunc events once it is running: callbacks scheduled
+// while the IDE is still being constructed are queued, not run
+// alongside the constructor.
+func newHostScheduler(t *testing.T, mu sync.Locker) (
+	sched func(func()) bool, start func(), drain func(),
+) {
+	var schedMu sync.Mutex
+	schedCond := sync.NewCond(&schedMu)
+	var queue []func()
+	running := false
+	stopped := false
+	started := false
+	go debug.CapturePanicReport(func() {
+		for {
+			schedMu.Lock()
+			for (len(queue) == 0 || !started) && !stopped {
+				schedCond.Wait()
+			}
+			if stopped {
+				schedMu.Unlock()
+				return
+			}
+			fn := queue[0]
+			queue = queue[1:]
+			running = true
+			schedMu.Unlock()
+
 			mu.Lock()
-			defer mu.Unlock()
 			fn()
-		}()
+			mu.Unlock()
+
+			schedMu.Lock()
+			running = false
+			schedCond.Broadcast()
+			schedMu.Unlock()
+		}
+	})
+	// Registered before any caller cleanup so it runs last (LIFO):
+	// teardown that still schedules callbacks keeps a live consumer.
+	t.Cleanup(func() {
+		schedMu.Lock()
+		stopped = true
+		schedCond.Broadcast()
+		schedMu.Unlock()
+	})
+	sched = func(fn func()) bool {
+		schedMu.Lock()
+		queue = append(queue, fn)
+		schedCond.Broadcast()
+		schedMu.Unlock()
 		return true
 	}
-}
-
-// schedTracker wraps a scheduler with a pending-callback counter so
-// the test can wait for every queued scheduled callback to actually
-// run, not just the IDE flusher's onDone. The IDE flusher's
-// WaitInflight only blocks for awaiter goroutines; text/component's
-// dispatchFlush is scheduled independently and otherwise has no
-// observable completion handle in tests.
-type schedTracker struct {
-	inner   func(func()) bool
-	muCount sync.Mutex
-	cond    *sync.Cond
-	pending int
-}
-
-func newSchedTracker(inner func(func()) bool) *schedTracker {
-	s := &schedTracker{inner: inner}
-	s.cond = sync.NewCond(&s.muCount)
-	return s
-}
-
-func (s *schedTracker) Schedule(fn func()) bool {
-	s.muCount.Lock()
-	s.pending++
-	s.muCount.Unlock()
-	return s.inner(func() {
-		defer func() {
-			s.muCount.Lock()
-			s.pending--
-			if s.pending == 0 {
-				s.cond.Broadcast()
-			}
-			s.muCount.Unlock()
-		}()
-		fn()
-	})
-}
-
-func (s *schedTracker) Wait() {
-	s.muCount.Lock()
-	for s.pending > 0 {
-		s.cond.Wait()
+	start = func() {
+		schedMu.Lock()
+		started = true
+		schedCond.Broadcast()
+		schedMu.Unlock()
 	}
-	s.muCount.Unlock()
+	drain = func() {
+		schedMu.Lock()
+		defer schedMu.Unlock()
+		for len(queue) > 0 || running {
+			schedCond.Wait()
+		}
+	}
+	return sched, start, drain
+}
+
+// newHostIDE builds an IDE the way the host does: nothing dispatches
+// the callbacks the constructor schedules until construction has
+// finished, so they cannot interleave with it.
+func newHostIDE(t *testing.T, mu *sync.Mutex, dir, cfgPath string,
+	opts ...ide.Option,
+) (*ide.IDE, func()) {
+	t.Helper()
+	sched, start, drain := newHostScheduler(t, mu)
+	opts = append([]ide.Option{
+		ide.WithLocker(mu),
+		ide.WithScheduleNextTick(sched),
+		ide.WithPublishEvent(func(term.Event) bool { return true }),
+	}, opts...)
+	i, err := ide.New(dir, cfgPath, dir, pkgtrust.NewStore(dir, nil),
+		newE2EStorage(t, dir), opts...)
+	require.NoError(t, err)
+	start()
+	return i, drain
 }
 
 // e2eLockedHandler mirrors the way the production event loop drives
@@ -104,7 +145,7 @@ type e2eLockedHandler struct {
 	tui.Handler
 	mu    *sync.Mutex
 	ide   *ide.IDE
-	sched *schedTracker
+	drain func()
 }
 
 func (h e2eLockedHandler) Handle(ev term.Event) (bool, bool) {
@@ -116,8 +157,8 @@ func (h e2eLockedHandler) Handle(ev term.Event) (bool, bool) {
 	// goroutines. text/component.dispatchFlush is scheduled
 	// independently through the same scheduler and would otherwise
 	// race the next Draw — wait for the scheduler to drain too.
-	if h.sched != nil {
-		h.sched.Wait()
+	if h.drain != nil {
+		h.drain()
 	}
 	return quit, handled
 }

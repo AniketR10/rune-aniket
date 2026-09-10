@@ -30,7 +30,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/rune/internal/ide"
-	"unstable.build/rune/internal/ide/pkgtrust"
 )
 
 // quitTutorialSrc parks on a floating_window step. Floating windows
@@ -80,18 +79,11 @@ tutorials:
 `, tutPath, waitPath), 0o600))
 
 	var mu sync.Mutex
-	tracker := newSchedTracker(hostScheduleNextTick(&mu))
-	i, err := ide.New(dir, cfgPath, dir, pkgtrust.NewStore(dir, nil),
-		newE2EStorage(t, dir),
-		ide.WithLocker(&mu),
-		ide.WithScheduleNextTick(tracker.Schedule),
-		ide.WithPublishEvent(func(term.Event) bool { return true }),
-	)
-	require.NoError(t, err)
-
-	h := e2eLockedHandler{Handler: i.Ready(), mu: &mu, ide: i, sched: tracker}
+	i, drain := newHostIDE(t, &mu, dir, cfgPath)
+	h := e2eLockedHandler{Handler: i.Ready(), mu: &mu, ide: i, drain: drain}
 	h.Resize(40, 14)
 	i.WaitWorkspaces()
+	drain()
 	return h, i
 }
 
