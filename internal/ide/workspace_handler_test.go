@@ -3813,7 +3813,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspaceopen %s>:ramo w__", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen %s>:ramo w__", escapeInputPath(dir2)), // new workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -3913,11 +3913,34 @@ func TestExternalCommands(t *testing.T) {
 	})
 }
 
+// escapeInputPath escapes a filesystem path for interpolation into a
+// legacy TestHandlerSequence input. The legacy syntax gives bare
+// runes special meaning ('_' sleeps, ':' opens the command prompt,
+// '>' is enter, ...) and types a '\\'-prefixed rune literally.
+// macOS per-user temp roots (/var/folders/xx/<random>) can draw an
+// '_' in their random segment, which would otherwise be swallowed
+// as a sleep token and corrupt the typed path.
+func escapeInputPath(p string) string {
+	var b strings.Builder
+	for _, r := range p {
+		switch r {
+		case ':', '`', '_', ' ', '^', '#', '$', '>', '<', '\\':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func TestExternalEvents(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
-		dir2, err := os.MkdirTemp("", "")
+		// The '_' in the pattern pins the legacy input-DSL escape
+		// below: macOS per-user temp roots can draw an '_' in their
+		// random segment, and an unescaped one is interpreted as a
+		// sleep token instead of a typed rune.
+		dir2, err := os.MkdirTemp("", "x_")
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			os.RemoveAll(dir)
@@ -4000,7 +4023,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", escapeInputPath(dir2)), // new workspace
 				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
@@ -4176,7 +4199,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", escapeInputPath(dir2)), // new workspace
 				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
