@@ -66,3 +66,13 @@ func DefaultConfig() Config {
 		MaxMessageSize:                 DefaultMaxMessageSize,
 	}
 }
+
+// methodRetryBudget is how long a method call keeps retrying before it
+// gives the transport error back to the caller. A follower only starts
+// the coup after TimeToCoup of failed dials and then still has to take
+// the lock and bind its listener, so the budget covers two coups:
+// a call that races the death of the leader rides the election out
+// instead of failing.
+func methodRetryBudget(cfg Config) time.Duration {
+	return 2 * cfg.TimeToCoup
+}

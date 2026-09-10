@@ -47,6 +47,23 @@ func TestDefaultConfiguration(t *testing.T) {
 	assert.Greater(t, maxFollowFailures, 1)
 }
 
+// TestMethodRetryBudgetOutlastsCoup pins that a call which races the
+// death of the leader can wait out the whole election. The follower
+// only starts the coup after TimeToCoup of failed dials and then has
+// to bind its own listener, so a retry budget of exactly TimeToCoup
+// leaves nothing for that startup and surfaces the transport error to
+// the caller.
+func TestMethodRetryBudgetOutlastsCoup(t *testing.T) {
+	for name, cfg := range map[string]Config{
+		"default": DefaultConfig(),
+		"test":    testConfig(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Greater(t, methodRetryBudget(cfg), cfg.TimeToCoup)
+		})
+	}
+}
+
 func TestNormalizedLockFile(t *testing.T) {
 	t.Run("keeps short path unchanged", func(t *testing.T) {
 		lockFile := filepath.Join(t.TempDir(), ".lock")

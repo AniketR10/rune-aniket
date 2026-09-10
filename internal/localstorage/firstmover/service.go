@@ -156,7 +156,7 @@ func (s *Service) Init(open StorageFactory, lockFile string, cfg Config) {
 	s.maxFollowFailures = int(cfg.TimeToCoup / (cfg.DialTimeout + cfg.ConnectRetryCadence))
 	s.retryStrategy = retry.CombinedStrategy(
 		retry.SequentialStrategy(cfg.MethodRetryCadence),
-		retry.LimitStrategy(uint(cfg.TimeToCoup/cfg.MethodRetryCadence)),
+		retry.LimitStrategy(uint(methodRetryBudget(cfg)/cfg.MethodRetryCadence)),
 	)
 	s.receiveRetryStrategy = retry.SequentialStrategy(cfg.ReceiveRetryCadence)
 	s.connectRetryStrategy = retry.SequentialStrategy(cfg.ConnectRetryCadence)
