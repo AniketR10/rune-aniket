@@ -67,8 +67,8 @@ type file struct {
 	content string
 	scheme  schemeapi.Scheme
 
-	buf             *cell.Buffer
-	view            UnixFileView
+	buf  *cell.Buffer
+	view UnixFileView
 	// reloading is flipped by the reload worker and read by
 	// OnDidEdit on the host event loop, so it is atomic.
 	reloading       atomic.Bool

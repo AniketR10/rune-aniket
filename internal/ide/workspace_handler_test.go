@@ -1390,8 +1390,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 	type integrationCase struct {
 		name           string
 		startWorkspace int
-		setup          func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string)
-		sequences      []handlertest.SequenceTestCase
+		// seed writes fixture files before the workspaces exist.
+		// Creating them afterwards would land inside a live
+		// fs-watcher and race the frame assertions below with a
+		// "changed on disk" reload notification.
+		seed      func(t *testing.T, tmp1, tmp2 string)
+		setup     func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string)
+		sequences []handlertest.SequenceTestCase
 	}
 
 	newManager := func(t *testing.T, tmp1, tmp2 string) *testWorkspaceManagerHandler {
@@ -1437,8 +1442,10 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 		{
 			name:           "local file stays in current workspace",
 			startWorkspace: 0,
-			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+			seed: func(t *testing.T, tmp1, tmp2 string) {
 				require.NoError(t, os.WriteFile(filepath.Join(tmp1, "local.go"), []byte("package main\n"), 0o666))
+			},
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
 				setAliases(m, map[string]text.CommandAlias{
 					"openCase": {Commands: []string{"edit local.go"}},
 					"to1":      {Commands: []string{"workspacefocus 1"}},
@@ -1487,9 +1494,12 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 		{
 			name:           "unopened foreign file switches to owning workspace",
 			startWorkspace: 0,
-			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+			seed: func(t *testing.T, tmp1, tmp2 string) {
 				ownedPath := filepath.Join(tmp2, "owned.go")
 				require.NoError(t, os.WriteFile(ownedPath, []byte("package main\n"), 0o666))
+			},
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				ownedPath := filepath.Join(tmp2, "owned.go")
 				setAliases(m, map[string]text.CommandAlias{
 					"openCase": {Commands: []string{fmt.Sprintf("edit file://%s", ownedPath)}},
 					"to1":      {Commands: []string{"workspacefocus 1"}},
@@ -1597,9 +1607,12 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 		{
 			name:           "focused owner opens locally without reroute",
 			startWorkspace: 1,
-			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+			seed: func(t *testing.T, tmp1, tmp2 string) {
 				ownedPath := filepath.Join(tmp2, "self.go")
 				require.NoError(t, os.WriteFile(ownedPath, []byte("package main\n"), 0o666))
+			},
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				ownedPath := filepath.Join(tmp2, "self.go")
 				setAliases(m, map[string]text.CommandAlias{
 					"openCase": {Commands: []string{fmt.Sprintf("edit file://%s", ownedPath)}},
 					"to1":      {Commands: []string{"workspacefocus 1"}},
@@ -1651,6 +1664,9 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmp1 := t.TempDir()
 			tmp2 := t.TempDir()
+			if tc.seed != nil {
+				tc.seed(t, tmp1, tmp2)
+			}
 			m := newManager(t, tmp1, tmp2)
 			t.Cleanup(func() {
 				require.NoError(t, m.Close())

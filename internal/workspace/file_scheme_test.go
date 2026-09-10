@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -745,6 +746,68 @@ func TestResolveLoginShell(t *testing.T) {
 		t.Setenv("SHELL", bin)
 		assert.Equal(t, bin, resolveLoginShell())
 	})
+}
+
+// TestFileSchemeRecursiveWatchIgnoresPreexistingFiles pins the Watch
+// contract: a watch reports changes made after it was established,
+// never an inventory of what was already there.
+//
+// Linux's inotify backend has no recursive watch, so the notify
+// library walks the tree to install one watch per directory and
+// reports every entry it discovers as a Create. Those synthetic
+// events are indistinguishable from real ones downstream: the IDE
+// reloaded every open tab (with a "changed on disk" notification)
+// after a workspace reload, and the symbol indexer re-walked files
+// that had not changed. macOS's FSEvents watches recursively and
+// emits nothing, which is why this only ever bit on Linux.
+func TestFileSchemeRecursiveWatchIgnoresPreexistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	for _, name := range []string{"a.txt", "b.txt", "sub/c.txt"} {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, name), []byte("x"), 0o666))
+	}
+
+	// FSEvents hands a new stream the changes its daemon recorded in
+	// the instant before the stream started, so a watch opened in the
+	// same millisecond as the fixture writes sees them. Real
+	// workspaces are not created microseconds before being watched;
+	// let the daemon flush so the assertion below is about watch
+	// establishment and not about clock proximity.
+	time.Sleep(500 * time.Millisecond)
+
+	uri, err := makeLocalURI(dir)
+	require.NoError(t, err)
+	scheme, err := newTestFileScheme(uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	ch := make(chan schemeapi.EventInfo, 64)
+	id, err := scheme.Watch(filepath.Join(dir, "..."), ch,
+		schemeapi.Create, schemeapi.Write, schemeapi.Remove,
+		schemeapi.Rename)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.StopWatch(id) })
+
+	select {
+	case ei := <-ch:
+		t.Fatalf("watch reported %v for pre-existing %s; establishing "+
+			"a watch must not synthesise events for files that were "+
+			"already on disk", ei.Event(), ei.URI().Path())
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// A real create after establishment must still be delivered,
+	// so the suppression cannot simply be "drop every Create".
+	created := filepath.Join(dir, "sub", "new.txt")
+	require.NoError(t, os.WriteFile(created, []byte("y"), 0o666))
+	select {
+	case ei := <-ch:
+		assert.Equal(t, filepath.Base(created),
+			filepath.Base(ei.URI().Path()))
+	case <-time.After(5 * time.Second):
+		t.Fatal("create after watch establishment was not delivered")
+	}
 }
 
 func TestFileSchemeCloseClosesTrackedFiles(t *testing.T) {

@@ -605,6 +605,7 @@ func (p *fileScheme) Watch(
 	if err != nil {
 		return 0, fmt.Errorf("notify: %v", err)
 	}
+	discardWatchBootstrap(ch)
 	go debug.CapturePanicReport(func() {
 		for {
 			select {
@@ -631,6 +632,29 @@ func (p *fileScheme) Watch(
 	id := p.nextWatchPoint.Add(1)
 	p.watchpoints.Store(int(id), w)
 	return int(id), nil
+}
+
+// discardWatchBootstrap drops the events notify.Watch queues while
+// establishing the watch. Backends without a native recursive watch
+// (inotify) walk the tree to install one watch per directory and
+// report every entry they pass as a Create, so a fresh watch would
+// otherwise announce the whole workspace as newly created. Those
+// events are all enqueued before notify.Watch returns, so a
+// non-blocking drain here separates them from real activity without
+// resorting to a settling delay.
+//
+// A file genuinely created while the walk is still running can be
+// swallowed too, but that is inherent to watch establishment: until
+// the walk reaches a directory, changes in it are not observable
+// either.
+func discardWatchBootstrap(ch <-chan notify.EventInfo) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
 }
 
 func (p *fileScheme) StopWatch(ID int) error {
