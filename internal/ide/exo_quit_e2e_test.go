@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,7 +72,7 @@ func TestE2EExoUserQuitAutoClosesTab(t *testing.T) {
 editor:
   mode: exo
   exo:
-    command: %s "+call cursor({line}, {col})" {file}
+    command: %s --cmd "set shortmess+=F" "+call cursor({line}, {col})" {file}
     goto: "<esc>:{line}<enter>{col}|"
     quit: "<esc>:q!<enter>"
 command:
@@ -120,8 +121,11 @@ command:
 
 	root := i.Ready()
 	rootRef.Store(&root)
+	// A realistic terminal size: on anything tiny the editor pages
+	// its long file-info message through `-- More --` and waits for
+	// a keypress before ever showing the file.
 	mu.Lock()
-	root.Resize(20, 8)
+	root.Resize(80, 24)
 	mu.Unlock()
 	i.WaitWorkspaces()
 
@@ -142,6 +146,8 @@ command:
 				ev.Raw = []byte{' '}
 			case k.Mod == term.ModCtrl && k.Ch == '\\':
 				ev.Raw = []byte{0x1c}
+			case k.Mod == term.ModCtrl && k.Ch >= 'a' && k.Ch <= 'z':
+				ev.Raw = []byte{byte(k.Ch - 'a' + 1)}
 			case k.Ch != 0:
 				ev.Raw = []byte(string(k.Ch))
 			}
@@ -184,9 +190,36 @@ command:
 	}, 10*time.Second, 50*time.Millisecond,
 		"streaming-open swap must complete before quitting the editor")
 
-	// Give the editor time to finish startup so `:q` is interpreted
-	// in normal mode rather than swallowed by an init-time prompt.
-	time.Sleep(1500 * time.Millisecond)
+	// Wait for the editor to draw the opened file before quitting
+	// it. Vim's startup blocks for seconds waiting for terminal
+	// query responses, and any input arriving during that window is
+	// consumed as response data — a fixed sleep either wastes time
+	// or lands inside the window and loses the quit sequence.
+	drawFrame := func() string {
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		mu.Lock()
+		root.Draw(w)
+		mu.Unlock()
+		require.NoError(t, w.Flush())
+		return w.String()
+	}
+	require.Eventually(t, func() bool {
+		return strings.Contains(drawFrame(), "hello")
+	}, 30*time.Second, 200*time.Millisecond,
+		"editor must draw the opened file before we quit it")
+
+	// Drawing the file is still not proof the editor accepts input:
+	// vim keeps waiting several seconds for terminal query responses
+	// after its first draw and consumes anything typed in that
+	// window as response data. Probe with <c-g>, which is harmless
+	// and echoes the quoted file name only once vim processes input
+	// normally.
+	require.Eventually(t, func() bool {
+		sendKeys(`<c-g>`)
+		return strings.Contains(drawFrame(), `"`+relFile+`"`)
+	}, 30*time.Second, 300*time.Millisecond,
+		"editor must respond to input before we quit it")
 
 	sendKeys(`<esc>:q<enter>`)
 
