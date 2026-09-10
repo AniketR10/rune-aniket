@@ -482,7 +482,7 @@ func TestSignedPackageTrustIntegration(t *testing.T) {
 		"editor:\n  mode: modal\n"), 0o644))
 
 	mu := new(sync.Mutex)
-	schedule, startSchedule := newDeferredScheduler(mu)
+	schedule, drainSchedule := newTestScheduler(t, mu)
 	extensions, err := extensionv2.NewRunner(context.Background(), mu, dataDir)
 	require.NoError(t, err)
 	keyring := armoredPublicKeyring(t, entity)
@@ -497,7 +497,7 @@ func TestSignedPackageTrustIntegration(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, i.Close()) })
 	_ = i.Ready()
-	startSchedule()
+	drainSchedule()
 	i.WaitWorkspaces()
 
 	packages := pkgshell.New(pkgshell.Config{
@@ -1029,6 +1029,9 @@ func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
 			mu.Lock()
 			root.Resize(80, 24)
 			mu.Unlock()
+			// Start scheduler dispatch before waiting: the install lands
+			// through a scheduled callback.
+			drain()
 			i.WaitWorkspaces()
 			drain()
 
@@ -1153,7 +1156,7 @@ command:
 	// EventInterrupt at a time from a single channel). A goroutine
 	// per call would let two dispatches race for mu and reorder, which
 	// production never does.
-	scheduleNextTick, _ := newTestScheduler(t, mu)
+	scheduleNextTick, drainSched := newTestScheduler(t, mu)
 	runner := newPerIDReadyRunner("dummy")
 	runnerFn := func(
 		_ workspaceapi.URI,
@@ -1174,6 +1177,9 @@ command:
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = i.Close() })
 	root := i.Ready()
+	// The first drain starts scheduler dispatch; before it, callbacks
+	// queue so they cannot race New's unsynchronized wiring.
+	drainSched()
 	mu.Lock()
 	root.Resize(80, 24)
 	mu.Unlock()
@@ -1269,7 +1275,7 @@ command:
 `), 0o666))
 
 	mu := new(sync.Mutex)
-	scheduleNextTick, _ := newTestScheduler(t, mu)
+	scheduleNextTick, drainSched := newTestScheduler(t, mu)
 	runner := newPerIDReadyRunner("dummy")
 	runnerFn := func(
 		_ workspaceapi.URI,
@@ -1290,6 +1296,9 @@ command:
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = i.Close() })
 	root := i.Ready()
+	// The first drain starts scheduler dispatch; before it, callbacks
+	// queue so they cannot race New's unsynchronized wiring.
+	drainSched()
 	mu.Lock()
 	root.Resize(80, 24)
 	mu.Unlock()
@@ -3215,6 +3224,9 @@ func TestIDECloseCommandPrompt(t *testing.T) {
 	mu.Lock()
 	root.Resize(80, 24)
 	mu.Unlock()
+	// Start scheduler dispatch before waiting: the install lands
+	// through a scheduled callback.
+	drain()
 	i.WaitWorkspaces()
 	drain()
 

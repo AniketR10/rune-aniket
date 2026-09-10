@@ -136,6 +136,9 @@ func TestPromptChoiceBrowserLifecycle(t *testing.T) {
 	mu.Lock()
 	root.Resize(80, 24)
 	mu.Unlock()
+	// Start scheduler dispatch before waiting: the install lands
+	// through a scheduled callback.
+	drain()
 	i.WaitWorkspaces()
 	drain()
 

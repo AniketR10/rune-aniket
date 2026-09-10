@@ -46,7 +46,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	require.NoError(t, err)
 
 	mu := new(sync.Mutex)
-	sched, _ := newTestScheduler(t, mu)
+	sched, drainSched := newTestScheduler(t, mu)
 	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	w, err := manager.AddWorkspace(context.Background(), workspaceURI)
@@ -67,6 +67,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	buffer := cell.NewBuffer()
 	fc, err := w.Load(uri, buffer, swapURI, false)
 	require.NoError(t, err)
+	drainSched()
 
 	return buffer, fc, uri, func() {
 		manager.Close()

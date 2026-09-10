@@ -150,7 +150,7 @@ func TestNotificationsInheritRightInset(t *testing.T) {
 	require.NoError(t, err)
 
 	mu := new(sync.Mutex)
-	sched, _ := newTestScheduler(t, mu)
+	sched, drainSched := newTestScheduler(t, mu)
 	cfg := defaultCfg()
 	cfg.scheduleNextTick = sched
 
@@ -176,6 +176,7 @@ func TestNotificationsInheritRightInset(t *testing.T) {
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, rightInset, 0, '1', 0, 0, true, nil, releaseManager,
 		shRunner, 0, nil, false, false, newCommandObserverRegistry()))
+	drainSched()
 	// Close runs under the IDE locker, as the event loop holds it.
 	defer func() {
 		mu.Lock()

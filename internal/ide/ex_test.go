@@ -3395,7 +3395,15 @@ func TestExResizeDoesNotBlockOnPtyResize(t *testing.T) {
 
 		ws.armed.Store(true)
 		assertResizeReturns(t, b)
-		assert.Equal(t, [2]int{80, 24}, ws.waitEntered(t))
+		// The warm terminal's own warm-up resize can still be in
+		// flight when the transport arms and then enters first; the
+		// assertion is that the user resize reaches the transport,
+		// so skip over warm-up sizes.
+		for {
+			if got := ws.waitEntered(t); got == [2]int{80, 24} {
+				break
+			}
+		}
 	})
 }
 

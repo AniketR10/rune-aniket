@@ -5131,6 +5131,14 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 // callback is running, then reports the total number of callbacks
 // executed so far. quiesceHandler compares that count across passes
 // to detect whether a drain did any work.
+//
+// Dispatch stays parked until the first drain call. The host loop
+// only pumps UserFunc events once it is running, so callbacks
+// scheduled while the IDE or handler is still being constructed must
+// queue rather than run alongside the constructor — running them
+// early races the constructor's unsynchronized wiring. Every harness
+// quiesces (and therefore drains) right after construction, which is
+// the moment the "loop" starts.
 func newTestScheduler(t *testing.T, mu sync.Locker) (
 	sched func(func()) bool, drain func() uint64,
 ) {
@@ -5147,10 +5155,11 @@ func newTestScheduler(t *testing.T, mu sync.Locker) (
 	var executed uint64
 	running := false
 	stopped := false
+	started := false
 	go debug.CapturePanicReport(func() {
 		for {
 			schedMu.Lock()
-			for len(queue) == 0 && !stopped {
+			for (len(queue) == 0 || !started) && !stopped {
 				schedCond.Wait()
 			}
 			if stopped {
@@ -5193,6 +5202,10 @@ func newTestScheduler(t *testing.T, mu sync.Locker) (
 	drain = func() uint64 {
 		schedMu.Lock()
 		defer schedMu.Unlock()
+		if !started {
+			started = true
+			schedCond.Broadcast()
+		}
 		for len(queue) > 0 || running {
 			schedCond.Wait()
 		}
