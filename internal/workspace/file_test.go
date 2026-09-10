@@ -1808,6 +1808,80 @@ func (s *renameHookScheme) Rename(oldpath, newpath string) error {
 	return s.Scheme.Rename(oldpath, newpath)
 }
 
+// statHookScheme wraps a schemeapi.Scheme so a test can observe Stat
+// calls issued by the flush worker. All other methods delegate
+// transparently.
+type statHookScheme struct {
+	schemeapi.Scheme
+	onStat func(path string)
+}
+
+func (s *statHookScheme) Stat(path string) (os.FileInfo, error) {
+	if s.onStat != nil {
+		s.onStat(path)
+	}
+	return s.Scheme.Stat(path)
+}
+
+// TestFileFlushNewFilePublishesLastFlushAfterTouch verifies that when
+// flush creates a brand-new file on disk (the O_CREATE|O_EXCL touch),
+// lastFlush is published with the touched file's mtime before the
+// flush proceeds to stage and rename the swap. Otherwise the FS
+// watcher can dispatch the touch's Create event during the rest of
+// the flush, observe a zero lastFlush with a dirty buffer, and show
+// the "file was just created on disk / discard your changes" prompt
+// for our own write.
+func TestFileFlushNewFilePublishesLastFlushAfterTouch(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "newfile.txt")
+	workspaceURI, err := makeLocalURI(dir)
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.WriteString("data\n")
+
+	hook := &statHookScheme{Scheme: inner}
+	f, err := newFile(hook, target, buf, "", false, inlineSchedule)
+	require.NoError(t, err)
+	defer f.Close()
+
+	var (
+		captured   bool
+		observed   time.Time
+		touchMtime time.Time
+	)
+	// The touch is the first moment target exists on disk; the first
+	// scheme call afterwards is a Stat (of the swap file). Capture
+	// LastFlush there — the window in which a watcher could already
+	// be dispatching the Create event.
+	hook.onStat = func(string) {
+		if captured {
+			return
+		}
+		info, statErr := inner.Stat(target)
+		if statErr != nil {
+			return
+		}
+		captured = true
+		touchMtime = info.ModTime()
+		observed = f.LastFlush()
+	}
+
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
+
+	require.True(t, captured,
+		"no scheme.Stat observed after the touch created %s", target)
+	require.False(t, observed.IsZero(),
+		"lastFlush must be published as soon as the touch makes the "+
+			"file observable on disk")
+	assert.True(t, observed.Equal(touchMtime),
+		"lastFlush at first post-touch Stat (%s) must match the touched "+
+			"file's mtime (%s) so the watcher's self-write suppression "+
+			"covers the Create event", observed, touchMtime)
+}
+
 // TestFileReloadBufferMutationOnEventLoop guards the invariant
 // that file.reload's cell.Buffer mutations and the lastFlush
 // update run on the host event loop, not on the async worker

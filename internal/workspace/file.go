@@ -853,6 +853,20 @@ func (f *file) flush(force bool) error {
 		if isExist {
 			return workspaceapi.ErrStaleData
 		}
+		// The touch is the first observable FS event for a brand-new
+		// file and it fires long before the swap rename publishes
+		// lastFlush below. Publish the touched file's mtime right away
+		// so an FS-watcher goroutine dispatching the Create event
+		// mid-flush sees lastFlush == mtime (our own write) instead of
+		// a zero lastFlush with a dirty buffer, which it would surface
+		// as a "file was just created on disk" conflict prompt.
+		if f.orig != nil {
+			if info, statErr := f.orig.Stat(); statErr == nil {
+				f.mu.Lock()
+				f.lastFlush = info.ModTime()
+				f.mu.Unlock()
+			}
+		}
 	} else if f.readOnly && force {
 		// if it exists, but created readonly and want to force flush
 		// overwrite f.orig with correct flags
