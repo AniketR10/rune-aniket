@@ -23,7 +23,7 @@ you enjoy using it.
 
 See [docs.rune.build](https://docs.rune.build) for the full documentation.
 
-![Rune's batteries-included development environment](.github/assets/rune-batteries-included.gif)
+![Rune's editor, file explorer, and AI agent panel](.github/assets/rune-screenshot.png)
 
 ## Repository layout
 
