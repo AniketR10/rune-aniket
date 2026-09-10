@@ -45,15 +45,13 @@ See [AGENTS.md](AGENTS.md) for a deeper tour of the architecture.
 ## Build prerequisites
 
 Rune links a GPU renderer through cgo, so a C toolchain is required. macOS
-needs only the Xcode command line tools. On Debian/Ubuntu:
+needs only the Xcode command line tools. Linux additionally needs the X11,
+OpenGL, ALSA, Wayland, and xkbcommon development headers, whose package names
+differ per distribution.
 
-```bash
-sudo apt-get install -y --no-install-recommends \
-  gcc g++ pkg-config \
-  libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
-  libxinerama-dev libxi-dev libxxf86vm-dev \
-  libasound2-dev libwayland-dev libxkbcommon-dev
-```
+[Building from source](https://docs.rune.build/develop/building) has the
+verified package lists for Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE, Alpine,
+and Void, along with a walkthrough of your first change to the editor.
 
 ## Makefile
 
