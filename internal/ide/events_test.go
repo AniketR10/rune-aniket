@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"time"
 	"unstable.build/rune/internal/ide/plugin"
 	"unstable.build/rune/internal/ide/vctrl"
 	"unstable.build/rune/internal/term/vte"
@@ -611,6 +612,17 @@ func TestHandleFSChange_NoPromptForSecondWriteDuringReload(t *testing.T) {
 	// is still pending. handleFSChange must observe IsDirty=false
 	// and route to startReloadAndNotify, not openFileChangedPrompt.
 	require.NoError(t, os.WriteFile(testURI.Path(), []byte("xyz"), 0o666))
+	// The reload above recorded the "abc" mtime as the last flush
+	// time, and handleFSChange drops events whose mtime equals it
+	// (an own-write echo). Linux stamps mtimes from a per-jiffy
+	// clock (up to ~4ms apart), so this write can land on the same
+	// tick and be mistaken for that echo — the same limitation git
+	// calls a racily-clean entry. The scenario under test is a
+	// later external write, so give it a strictly newer mtime.
+	info, err := os.Stat(testURI.Path())
+	require.NoError(t, err)
+	bumped := info.ModTime().Add(10 * time.Millisecond)
+	require.NoError(t, os.Chtimes(testURI.Path(), bumped, bumped))
 	fsev2 := testEventInfo{e: schemeapi.Write, u: testURI}
 	dispatchFilesystemEvent(x, &mu, ignores, fsev2)
 
