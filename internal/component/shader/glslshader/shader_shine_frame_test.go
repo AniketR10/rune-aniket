@@ -157,11 +157,11 @@ func TestShineFrameOnlyAffectsFrameChars(t *testing.T) {
 			name:  "frame 5 of 8",
 			frame: 5,
 			expect: `
-###########
+##########🭾
 ▏         #
 ▏    a    #
 ▏         #
-🭼▁▁▁▁▁▁▁▁##`,
+🭼▁▁▁▁▁▁▁###`,
 		},
 		{
 			name:  "frame 6 of 8",

@@ -48,7 +48,11 @@ func TestGrepFiles_boundsWalkdirWorkers(t *testing.T) {
 	result := tool.Execute(context.Background(), `{"pattern":"match"}`)
 	require.False(t, result.IsError, result.Content)
 
-	wantMax := max(min(runtime.NumCPU(), maxAgentWalkdirWorkers), 1)
+	// grep sniffs each candidate for binary content on the single
+	// goroutine that feeds the readers, so one open can overlap the
+	// bounded pool. Runners with few CPUs shrink the pool enough for
+	// that extra open to matter.
+	wantMax := max(min(runtime.NumCPU(), maxAgentWalkdirWorkers), 1) + 1
 	assert.LessOrEqual(t, int(fs.maxConcurrent.Load()), wantMax)
 }
 

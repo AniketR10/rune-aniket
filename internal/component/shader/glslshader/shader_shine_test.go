@@ -120,11 +120,11 @@ xxxxx######`,
 			name:  "frame 5 of 8",
 			frame: 5,
 			expect: `
-###########
+##########x
 x##########
-xxxx#######
+xxx########
 xxxxxx#####
-xxxxxxxxx##`,
+xxxxxxxx###`,
 		},
 		{
 			name:  "frame 6 of 8",

@@ -281,7 +281,10 @@ func TestSummary(t *testing.T) {
 		{"agent without description long prompt", NewAgentTool(spawner, nil, nil, nil), `{"prompt":"` + strings.Repeat("a", 80) + `"}`, strings.Repeat("a", 60) + "..."},
 		{"agent invalid json", NewAgentTool(spawner, nil, nil, nil), `bad`, ""},
 		// list_dir
-		{"list_dir", NewListDir(fs, dirURI(dir)), `{"dir_path":"/tmp/project"}`, ".../tmp/project"},
+		// The workspace root is synthetic: summaryPath collapses the
+		// "../" chain, so a t.TempDir() root would make the expected
+		// output depend on how deep the host's temp dir sits.
+		{"list_dir", NewListDir(fs, dirURI("/ws/root/dir")), `{"dir_path":"/tmp/project"}`, ".../tmp/project"},
 		{"list_dir invalid json", NewListDir(fs, dirURI(dir)), `bad`, ""},
 		// exec_command
 		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir), configedit.NopConfig()), `{"cmd":"echo hello"}`, "echo hello"},

@@ -17,6 +17,7 @@
 package shaderutils
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -290,6 +291,20 @@ func TestSampleGradient(t *testing.T) {
 			factor:   0.5,
 			gradient: nil,
 			expect:   term.ColorDefault,
+		},
+		{
+			// Shader knobs can divide by a zero the caller cannot
+			// rule out, so a NaN factor reaches here. Converting it
+			// to an index is implementation-defined: amd64 yields
+			// MinInt64 and indexes out of range.
+			name:   "NaN factor",
+			factor: math.NaN(),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
+			},
+			expect: term.NewRGBColor(255, 0, 0),
 		},
 	}
 

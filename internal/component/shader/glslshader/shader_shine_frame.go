@@ -104,8 +104,12 @@ func (s *shineFrame) Shade(frame, total int, in [][]term.Cell) {
 
 	// Sweep "pulse" from -bandWidth to 1+bandWidth so the band fully enters
 	// from the bottom-left corner and fully exits past the top-right corner.
+	//
+	// The product is rounded explicitly: arm64 fuses it with the
+	// subtraction into an FMA and keeps the extra precision, which lands
+	// the band edge on a different cell than amd64 does.
 	pulse := fract(float(frame) / float(total) * float(cycles))
-	pos := pulse*(1.0+2.0*bandWidth) - bandWidth
+	pos := float(pulse*(1.0+2.0*bandWidth)) - bandWidth
 
 	maxX := float(cols - 1)
 	if maxX <= 0 {
