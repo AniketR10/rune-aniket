@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	sdkworkspacerpc "github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
@@ -225,17 +226,28 @@ func TestSchemeReportsDisconnect(t *testing.T) {
 // over the same workspace RPC services runenet.ServeWorkspace registers.
 func servePeerWorkspace(t *testing.T, root string) string {
 	t.Helper()
+	return servePeerScheme(t, peerFileScheme(t, root))
+}
+
+func peerFileScheme(t *testing.T, root string) schemeapi.Scheme {
+	t.Helper()
 
 	uri, err := workspaceapi.ParseURI("file://" + root)
 	require.NoError(t, err)
 	fileScheme, err := workspace.NewFileScheme(
 		context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = fileScheme.Close() })
+	return fileScheme
+}
+
+func servePeerScheme(t *testing.T, scheme schemeapi.Scheme) string {
+	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	grpcServer := grpc.NewServer()
-	rpcServer := tworkspacerpc.NewServer(fileScheme,
+	rpcServer := tworkspacerpc.NewServer(scheme,
 		tworkspacerpc.CommandAuthorizerFunc(
 			func(context.Context, workspaceapi.Cmd) error { return nil }))
 	sdkworkspacerpc.RegisterSchemeServer(grpcServer, rpcServer)
@@ -248,7 +260,48 @@ func servePeerWorkspace(t *testing.T, root string) string {
 	t.Cleanup(func() {
 		grpcServer.Stop()
 		_ = rpcServer.Stop()
-		_ = fileScheme.Close()
 	})
 	return lis.Addr().String()
+}
+
+// recordingExecutor answers StartCommand with the request it received
+// instead of running anything, so a test can assert what the peer was
+// asked to do without spawning a process.
+type recordingExecutor struct {
+	schemeapi.Scheme
+	dirs chan string
+}
+
+func (r *recordingExecutor) StartCommand(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	r.dirs <- cmd.Dir
+	return 0, errors.New("recorded, not started")
+}
+
+func TestSchemeStartsCommandsInTheWorkspaceDirectory(t *testing.T) {
+	dir := t.TempDir()
+	peer := &recordingExecutor{
+		Scheme: peerFileScheme(t, "/"),
+		dirs:   make(chan string, 1),
+	}
+	addr := servePeerScheme(t, peer)
+	dialer := dialerFunc(func(ctx context.Context, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", addr)
+	})
+
+	uri, err := workspaceapi.ParseURI("rune://laptop" + dir)
+	require.NoError(t, err)
+	s, err := New(dialer)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.(workspace.RemoteScheme).WaitConnected(context.Background()))
+
+	_, err = s.StartCommand(context.Background(), workspaceapi.Cmd{Path: "true"})
+	require.Error(t, err)
+	// A peer serves its whole filesystem, so a command that names no
+	// directory of its own — every terminal Rune opens — would start in
+	// the peer's root instead of the workspace.
+	assert.Equal(t, dir, <-peer.dirs)
 }

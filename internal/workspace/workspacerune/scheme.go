@@ -188,7 +188,33 @@ func (s *scheme) connectScheme(
 		_ = conn.Close()
 		return nil, fmt.Errorf("open %s on %s: %w", s.path, s.peer, err)
 	}
-	return &connScheme{Scheme: remote, conn: conn}, nil
+	return &connScheme{Scheme: workspaceCwd{Scheme: remote}, conn: conn}, nil
+}
+
+// workspaceCwd runs commands in the workspace directory. A peer serves
+// its whole filesystem rooted at "/" and the workspace is a chroot of
+// it, but the protocol carries no root for StartCommand: without a
+// directory of its own every terminal would start in the peer's root
+// instead of the workspace the user opened.
+type workspaceCwd struct {
+	schemeapi.Scheme
+}
+
+func (w workspaceCwd) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	if cmd.Dir == "" {
+		cmd.Dir = w.Root()
+	}
+	return w.Scheme.StartCommand(ctx, cmd)
+}
+
+func (w workspaceCwd) Chroot(path string) (schemeapi.Scheme, error) {
+	sub, err := w.Scheme.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+	return workspaceCwd{Scheme: sub}, nil
 }
 
 // takeConn hands an already-established connection to gRPC exactly
