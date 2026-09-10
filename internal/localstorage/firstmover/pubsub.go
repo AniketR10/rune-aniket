@@ -53,6 +53,14 @@ type pubsub struct {
 	readyCtx context.Context
 	ready    func()
 	closed   bool
+	// pubReadyCtx gates the server Publish handler until this
+	// incarnation has restored the subscriptions recovered from its
+	// predecessor. Without it a publish retried across a leader
+	// handoff can land on the new leader before resubscribe runs,
+	// find zero subscribers and vacuously succeed, silently dropping
+	// an at-least-once message.
+	pubReadyCtx context.Context
+	pubReady    func()
 
 	// leader only
 	subscribers    map[string][]*subscriber
@@ -76,6 +84,7 @@ type subscriber struct {
 func (p *pubsub) init(lockFile, pid string) {
 	p.cancelFn = func() {}
 	p.readyCtx, p.ready = context.WithCancel(context.Background())
+	p.pubReadyCtx, p.pubReady = context.WithCancel(context.Background())
 	p.lockFile = lockFile
 	p.pid = pid
 }
@@ -317,6 +326,15 @@ func (p *pubsub) Publish(
 	ctx context.Context, req *pubsubpb.PublishRequest,
 ) (*pubsubpb.PublishResponse, error) {
 	<-p.readyCtx.Done()
+
+	p.mu.Lock()
+	pubReadyCtx := p.pubReadyCtx
+	p.mu.Unlock()
+	select {
+	case <-pubReadyCtx.Done():
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
 	topic := req.GetTopic()
 	msg := req.GetData()

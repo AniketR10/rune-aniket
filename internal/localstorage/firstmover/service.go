@@ -59,6 +59,11 @@ const DefaultMaxMessageSize = 1024 * 1024 * 4
 // when message is larger than MaxMessageSize.
 var ErrMessageTooLarge = errors.New("message exceeds maximum size")
 
+// testHookLeadBeforeResubscribe lets tests hold a freshly elected
+// leader inside the window between unlocking the API and restoring
+// the subscriptions recovered from its predecessor.
+var testHookLeadBeforeResubscribe atomic.Pointer[func()]
+
 // StorageFactory opens the backing storageapi.Service for a peer that
 // has just won leader election. The leader owns the returned service
 // for the duration of its leadership and closes it when leadership
@@ -425,6 +430,7 @@ func (s *Service) Close() (ret error) {
 		_ = s.active.Close()
 	} else if s.active != nil && s.active == s.svc { // leader
 		s.pubsub.ready() // make sure that if we're not ready yet, we fail immediately
+		s.pubsub.pubReady()
 		s.mu.Unlock()
 		// best effort, use server method directly so we guarantee delivery
 		req := pubsubpb.PublishRequest{Topic: internalTopic, Data: internalMessageBye}
@@ -721,7 +727,11 @@ func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bo
 	t := time.NewTimer(s.cfg.ConnectRetryCadence * 2)
 	defer t.Stop()
 
+	if hook := testHookLeadBeforeResubscribe.Load(); hook != nil {
+		(*hook)()
+	}
 	s.resubscribe(ctx, subscriptions)
+	s.pubsub.pubReady()
 	for {
 		select {
 		case <-t.C:

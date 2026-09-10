@@ -141,9 +141,61 @@ func TestPubSub(t *testing.T) {
 		require.NoError(t, follower.Subscribe(ctx, topic))
 		require.NoError(t, leader.Close())
 		require.NoError(t, follower.Publish(ctx, topic, []byte("block")))
-		data, err := follower.Receive(ctx, topic)
+		receiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		data, err := follower.Receive(receiveCtx, topic)
 		require.NoError(t, err)
 		assert.Equal(t, "block", string(data))
+		cleanupNodes(t, follower)
+	})
+
+	t.Run("publish while the new leader is still resubscribing is delivered", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 1)
+		follower := followers[0]
+		topic := "1234"
+		ctx := context.Background()
+		require.NoError(t, follower.Subscribe(ctx, topic))
+
+		windowEntered := make(chan struct{})
+		windowRelease := make(chan struct{})
+		var once sync.Once
+		hook := func() {
+			once.Do(func() { close(windowEntered) })
+			<-windowRelease
+		}
+		testHookLeadBeforeResubscribe.Store(&hook)
+		defer testHookLeadBeforeResubscribe.Store(nil)
+
+		require.NoError(t, leader.Close())
+		<-windowEntered
+
+		// The follower has won the election and unlocked the API but
+		// has not restored its recovered subscriptions yet. A publish
+		// issued now must not be dropped.
+		pubDone := make(chan error, 1)
+		go func() {
+			pubDone <- follower.Publish(ctx, topic, []byte("block"))
+		}()
+		select {
+		case err := <-pubDone:
+			// Broken path: the publish "succeeded" inside the window,
+			// which means it was broadcast to zero subscribers.
+			require.NoError(t, err)
+			pubDone = nil
+		case <-time.After(500 * time.Millisecond):
+			// Fixed path: the publish is parked until the recovered
+			// subscriptions are re-established.
+		}
+		close(windowRelease)
+
+		receiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		data, err := follower.Receive(receiveCtx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+		if pubDone != nil {
+			require.NoError(t, <-pubDone)
+		}
 		cleanupNodes(t, follower)
 	})
 
