@@ -849,6 +849,53 @@ func TestFileSchemeCloseClosesTrackedFiles(t *testing.T) {
 	assert.NoError(t, f2.Close())
 }
 
+// TestFileSchemeFdReuseDoesNotAliasFiles models the OS recycling a
+// descriptor number: a stale wrapper whose number has since been
+// re-registered by a successor must neither unwrap to the successor's
+// file nor delete the successor's registration when closed.
+func TestFileSchemeFdReuseDoesNotAliasFiles(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+	require.NoError(t, err)
+	s, err := newTestFileScheme(uri)
+	require.NoError(t, err)
+	defer func() { _ = s.Close() }()
+
+	pathA := tmpDir + "/a.txt"
+	pathB := tmpDir + "/b.txt"
+	require.NoError(t, os.WriteFile(pathA, []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(pathB, []byte("b"), 0o644))
+
+	fa, err := s.OpenFile(pathA, os.O_RDONLY, 0)
+	require.NoError(t, err)
+	stale := fa.(*fileSchemeFile)
+	fb, err := s.OpenFile(pathB, os.O_RDONLY, 0)
+	require.NoError(t, err)
+	successor := fb.(*fileSchemeFile)
+
+	// Simulate the OS handing stale's number to the successor after
+	// stale's descriptor was closed elsewhere.
+	s.files.Store(stale.fd, successor)
+
+	// Unwrapping the stale wrapper must resolve by identity, not by
+	// the recycled number.
+	assert.True(t, s.tryUnwrapFileWriter(stale) == io.Writer(stale.File),
+		"stale wrapper must unwrap to its own file, not the recycled number's owner")
+	assert.True(t, s.tryUnwrapFileReader(stale) == io.Reader(stale.File),
+		"stale wrapper must unwrap to its own file, not the recycled number's owner")
+
+	// Closing the stale wrapper must not delete the successor's
+	// registration under the recycled number.
+	require.NoError(t, stale.Close())
+	v, ok := s.files.Load(stale.fd)
+	require.True(t, ok,
+		"closing a stale wrapper must not drop the recycled number's registration")
+	assert.Same(t, successor, v)
+}
+
 func TestOpenFileClosesSchemeOnCallerClose(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)

@@ -705,7 +705,10 @@ func (f *fileSchemeFile) Fd() uintptr {
 
 func (f *fileSchemeFile) Close() error {
 	f.closeOnce.Do(func() {
-		f.p.files.Delete(f.Fd())
+		// Delete only our own registration: the OS recycles
+		// descriptor numbers, so a plain Delete could remove the
+		// entry of whichever file now owns the number.
+		f.p.files.CompareAndDelete(f.fd, f)
 		f.closeErr = f.File.Close()
 	})
 	return f.closeErr
@@ -736,6 +739,11 @@ func makeLocalURI(path string) (workspaceapi.URI, error) {
 }
 
 func (p *fileScheme) tryUnwrapFileWriter(f io.Writer) io.Writer {
+	// A local caller hands us the wrapper itself; unwrap by identity
+	// so descriptor-number recycling cannot alias it to another file.
+	if f, ok := f.(*fileSchemeFile); ok {
+		return f.File
+	}
 	if f, ok := f.(workspaceapi.File); ok {
 		v, ok := p.files.Load(f.Fd())
 		if ok {
@@ -746,6 +754,9 @@ func (p *fileScheme) tryUnwrapFileWriter(f io.Writer) io.Writer {
 }
 
 func (p *fileScheme) tryUnwrapFileReader(f io.Reader) io.Reader {
+	if f, ok := f.(*fileSchemeFile); ok {
+		return f.File
+	}
 	if f, ok := f.(workspaceapi.File); ok {
 		v, ok := p.files.Load(f.Fd())
 		if ok {
