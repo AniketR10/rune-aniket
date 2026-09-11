@@ -199,6 +199,13 @@ func (t *Component) Resize(width, height int) error {
 	if t.pty.Master == nil {
 		return fmt.Errorf("terminal is not running")
 	}
+	// Close released the master, but the window manager keeps
+	// resizing a closed handler until its tab is removed. The
+	// descriptor number is reusable by then, so the ioctl either
+	// fails with EBADF or lands on an unrelated file.
+	if t.closed.Load() {
+		return nil
+	}
 
 	t.mu.Lock()
 	sameSize := t.width == width && t.height == height

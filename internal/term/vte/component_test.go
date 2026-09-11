@@ -1113,6 +1113,38 @@ func (e *recordingExecutor) SetPtySize(p workspaceapi.Pty, width, height int) er
 	return nil
 }
 
+// TestComponentResizeAfterCloseSkipsSetPtySize reproduces the bug where a
+// closed Component still ioctl'd its master descriptor. Close releases the
+// master, but the window manager keeps resizing the handler until the tab
+// is removed (a paused idetask keeps its closed handler installed for the
+// whole pause), so every resize reached SetPtySize on a dead fd and the
+// workspace reported EBADF — or, once the number was recycled, ENOTTY on
+// an unrelated file. Since resizes moved off the event loop the failure
+// surfaced as an error toast per resize step.
+func TestComponentResizeAfterCloseSkipsSetPtySize(t *testing.T) {
+	t.Parallel()
+
+	tm := mockTabManager{}
+	exe := &recordingExecutor{}
+	comp, err := NewComponent(exe, exe, &tm, DefaultConfig())
+	require.NoError(t, err)
+
+	require.NoError(t, comp.Resize(80, 24))
+	require.NoError(t, comp.Close())
+
+	exe.mu.Lock()
+	exe.setPtySize = nil
+	exe.mu.Unlock()
+
+	require.NoError(t, comp.Resize(80, 23),
+		"resizing a closed terminal is a no-op, not a failure")
+
+	exe.mu.Lock()
+	defer exe.mu.Unlock()
+	assert.Empty(t, exe.setPtySize,
+		"a closed Component must not ioctl its released master descriptor")
+}
+
 // TestComponentRestoreFromSnapshotDrivesSetPtySize reproduces a bug where
 // a freshly-restored Component would keep its pre-restore width/height (e.g.
 // the warm-reservoir WidthHint or a stale workspace size propagated via
