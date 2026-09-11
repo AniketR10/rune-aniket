@@ -104,7 +104,7 @@ func TestDream_E2E_SingleDialogueWithToolCall(t *testing.T) {
 				"⚙ Phase: Extract memories from conversations",
 				"⚙ conversation \"d1\" (1/1 conversations)",
 				"⚙ extracting memories (1/1 conversations)",
-				"└─ ✗ read_file (in <1ms)",
+				"└─ ✗ read_file (in 250ms)",
 				"⚙ verifying memories (1/1 conversations)",
 				"✓ Phase: Extract memories from conversations",
 				"⚙ Phase: Refine recall machinery",
@@ -577,6 +577,14 @@ func (d *dreamCommand) HandleCommand(
 				}
 				if p.Type == dream.ProgressToolCall {
 					continue
+				}
+				// The tool duration is wall-clock time, so a slow CI
+				// runner can tip a sub-millisecond stub call over 1ms
+				// and change the rendered suffix. Pin it so the golden
+				// frames stay deterministic; fmtDuration's rendering
+				// is covered by dreamcomponent's row tests.
+				if p.Type == dream.ProgressToolResult {
+					p.Duration = 250 * time.Millisecond
 				}
 				return dreamcomponent.New(p), true, nil
 			}
