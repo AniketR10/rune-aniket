@@ -391,6 +391,56 @@ func TestFetchManifestRejectsDowngrade(t *testing.T) {
 	require.False(t, has, "downgrade must not be offered")
 }
 
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want int
+	}{
+		{"older", "v1.1.0", "v1.2.0", -1},
+		{"newer", "v1.2.0", "v1.1.0", 1},
+		{"equal", "v1.2.0", "v1.2.0", 0},
+		// `git describe --tags` output ranks as a semver
+		// pre-release of its base tag, but it is really N commits
+		// *past* that tag.
+		{"dev build past tag", "v1.2.0-4-gbb09675b", "v1.2.0", 1},
+		{"tag before dev build", "v1.2.0", "v1.2.0-4-gbb09675b", -1},
+		{"dirty dev build past tag", "v1.2.0-4-gbb09675b-dirty", "v1.2.0", 1},
+		{"more commits past same tag", "v1.2.0-9-gbb09675b", "v1.2.0-4-gaaaaaaaa", 1},
+		{"same commits past same tag", "v1.2.0-4-gbb09675b", "v1.2.0-4-gbb09675b", 0},
+		{"dev build below next release", "v1.2.0-4-gbb09675b", "v1.2.1", -1},
+		{"dev build above previous release", "v1.2.0-4-gbb09675b", "v1.1.9", 1},
+		// A real pre-release tag still sorts below its release.
+		{"prerelease tag", "v1.2.0-rc1", "v1.2.0", -1},
+		{"dev build past prerelease tag", "v1.2.0-rc1-2-gbb09675b", "v1.2.0-rc1", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, compareVersions(tc.a, tc.b))
+		})
+	}
+}
+
+func TestFetchManifestRejectsUpgradeToOwnBaseTag(t *testing.T) {
+	// Dev builds report `git describe --tags`, which is the base tag
+	// plus the commits since it. Publishing that base tag must not
+	// look like an upgrade to a client already past it.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(Manifest{
+			Version:  "v1.2.0",
+			Filename: "Rune.dmg",
+			URL:      "https://example.invalid/Rune.dmg",
+			SHA256:   "abc",
+		})
+	}))
+	t.Cleanup(srv.Close)
+	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr := newTestManager(t, srv, "v1.2.0-4-gbb09675b", now)
+	_, has, err := mgr.fetchManifest(context.Background())
+	require.NoError(t, err)
+	require.False(t, has, "dev build past the manifest tag must not be offered")
+}
+
 func TestFetchManifestRejectsBelowMinSupported(t *testing.T) {
 	// Client is older than min_supported_version, so the user must
 	// upgrade out of band. Surface an error so the manager's

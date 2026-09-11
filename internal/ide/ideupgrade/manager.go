@@ -17,6 +17,7 @@
 package ideupgrade
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,8 +28,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -456,12 +459,41 @@ func requireSecureURL(rawURL string) error {
 	return nil
 }
 
-// compareVersions returns semver.Compare(a, b) but falls back to
-// string equality when either side is not a valid semver. Falling
-// back to "equal" on unparseable inputs is intentional: it keeps the
-// downgrade check from firing on dev-build tags like
-// "v0.42.1-2-gabcdef-dirty" that git describe produces.
+// describeSuffix matches the `-<commits>-g<hash>[-dirty]` suffix that
+// `git describe --tags` appends to the nearest tag.
+var describeSuffix = regexp.MustCompile(`^(.+)-(\d+)-g[0-9a-f]{6,}(?:-dirty)?$`)
+
+// splitDescribe separates a git-describe version into its base tag and
+// the number of commits built on top of that tag.
+func splitDescribe(v string) (string, int) {
+	m := describeSuffix.FindStringSubmatch(v)
+	if m == nil {
+		return v, 0
+	}
+	ahead, err := strconv.Atoi(m[2])
+	if err != nil {
+		return v, 0
+	}
+	return m[1], ahead
+}
+
+// compareVersions orders release and dev-build versions. Semver alone
+// is not enough: git describe output like "v1.2.0-4-gabcdef" parses as
+// a *pre-release* of v1.2.0, so a client built four commits past the
+// tag would be offered an "upgrade" to the release it already
+// contains. Commits past a shared base tag therefore break the tie.
 func compareVersions(a, b string) int {
+	aBase, aAhead := splitDescribe(a)
+	bBase, bAhead := splitDescribe(b)
+	if c := compareTags(aBase, bBase); c != 0 {
+		return c
+	}
+	return cmp.Compare(aAhead, bAhead)
+}
+
+// compareTags returns semver.Compare(a, b) but falls back to string
+// equality when either side is not a valid semver.
+func compareTags(a, b string) int {
 	if !semver.IsValid(a) || !semver.IsValid(b) {
 		if a == b {
 			return 0
