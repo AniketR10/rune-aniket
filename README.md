@@ -23,7 +23,7 @@ you enjoy using it.
 
 See [docs.rune.build](https://docs.rune.build) for the full documentation.
 
-![Rune's editor, file explorer, and AI agent panel](.github/assets/rune-screenshot.png)
+![Rune IDE showing its character-grid interface, with an editor, a file tree, and an agent session side by side.](.github/assets/rune-screenshot.webp)
 
 ## Repository layout
 
