@@ -25,11 +25,13 @@ the code.
 
 ## What you need
 
-- **A Rune plan that includes the network.** It is a paid feature. Run
-  `login` in the [Rune console](./console.md) to sign in with the
-  account that holds your plan. When your account does not cover the
-  network, Rune offers to sign you in, sign you up, or upgrade. After
-  upgrading, run `login` again so this machine picks up the new plan.
+- **A Rune account.** Run `login` in the [Rune console](./console.md) to
+  sign in; Rune offers to sign you in or sign you up when you are not.
+  The free plan covers 2 machines on the network, and a paid plan covers
+  as many as you like. When a third machine tries to join a free
+  account, Rune offers to upgrade and points you at `network remove`;
+  after upgrading, run `login` again so the machine picks up the new
+  plan.
 - **Rune running on both machines, signed into the same account.** A
   machine serves its workspaces from the Rune instance running on it. If
   Rune is not open there, the machine is not reachable, and only your own
@@ -63,10 +65,43 @@ run it as `network <subcommand>`, or submit a one-off from the
 | Command | What it does |
 | --- | --- |
 | `network status` | Show this machine's name, addresses, and sign-in state, including the last error and any pending authorization URL. |
-| `network peers` | List the other machines on the network, with the `rune://` address each one is reachable at. |
+| `network peers` | List the other machines connected to the network, with the `rune://` address each one is reachable at. |
+| `network machines` | List every machine registered to your account, whether or not it is on the network right now, and which one you are on. |
+| `network remove <machine>` | Unregister a machine from your account, freeing the slot it held. |
 | `network up` | Join the network and wait until this machine is a member. |
 | `network down` | Leave the network. Open `rune://` workspaces stop working until you run `network up` again. |
 | `network help` | Show the command's usage. |
+
+## How many machines you can have
+
+The free plan covers 2 machines. A third one is turned away when it asks
+to join, with the offer to upgrade or to make room. `network machines`
+shows what is registered to your account:
+
+```
+network machines
+```
+
+| machine | state | last seen |
+| --- | --- | --- |
+| carbon (this machine) | online | 2026-03-01 12:04 |
+| studio | offline | 2026-02-19 09:31 |
+
+Unlike `network peers`, which reads the network itself, this list comes
+from your account, so it also works from a machine that is being kept
+off the network. Free the slot a machine holds with:
+
+```
+network remove studio
+```
+
+The machine keeps working locally; it is only unregistered from the
+network. Running `network up` on it registers it again, which takes a
+slot back. A paid plan has no limit, so nothing has to be removed.
+
+A removed machine that is running and online is told right away: Rune
+there shows **"This machine has been removed from the network."** One
+that is asleep or shut down finds out the next time it is used.
 
 ## Opening a workspace on another machine
 
@@ -178,10 +213,20 @@ Use `rune://` for your own machines.
 
 ## Troubleshooting
 
-**"The network is part of a paid Rune plan."** The account signed in on
-this machine does not cover the network. Choose **Sign in** or **Sign
-up** if you have not signed in, or **Upgrade** to add it to your plan.
-After upgrading, run `login` again so this machine picks up the change.
+**"The network links the machines you sign in on..."** No account is
+signed in on this machine. Choose **Sign in**, or **Sign up** to create
+an account.
+
+**"The free Rune plan includes 2 machines on the network."** Your
+account already has as many machines registered as the free plan covers.
+Run `network machines` to see them and `network remove <machine>` to
+free a slot, or choose **Upgrade**. After upgrading, run `login` again
+so this machine picks up the change.
+
+**"This machine has been removed from the network."** Someone ran
+`network remove` for this machine from another one on your account. It
+keeps working locally but is off the network. If that was a mistake, run
+`network up` to register it again, which takes a slot back.
 
 **A machine is missing from `network peers`.** Check that Rune is
 running on it, that `network status` there reports state `Running`, and

@@ -45,6 +45,26 @@ const (
 // upgrade.
 const SubscriptionRequiredMessage = "subscription required"
 
+// MachineLimitMessage is the response body the API server writes with
+// its 403 when an account already has as many machines on the network
+// as its plan allows. Like SubscriptionRequiredMessage it is what
+// tells this 403 apart from every other one the auth middleware
+// answers with, so clients must match it before telling a user to
+// remove a machine or upgrade.
+const MachineLimitMessage = "machine limit reached"
+
+// Network endpoints a Rune instance talks to for its mesh membership.
+// They are spelled here because both ends must agree on them and the
+// API server cannot import the client's internals.
+const (
+	// NetworkNodesPath lists the machines registered to the calling
+	// account.
+	NetworkNodesPath = "/api/network/nodes"
+	// NetworkNodeRemovePath removes one of them, freeing a slot for
+	// the next machine that asks for credentials.
+	NetworkNodeRemovePath = "/api/network/nodes/remove"
+)
+
 // RPCUser represents a rune user, from an auth point of view.
 type RPCUser struct {
 	ID      string

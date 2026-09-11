@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -53,12 +54,34 @@ var ErrPeerNotFound = errors.New("peer not found in network")
 // ErrNotAuthenticated is returned when joining the mesh needs a Rune
 // account and none is signed in.
 var ErrNotAuthenticated = errors.New(
-	"the network is part of a Rune plan; run the `login` command to sign in")
+	"the network links the machines of one Rune account; run the " +
+		"`login` command to sign in")
 
 // ErrSubscriptionRequired is returned when the signed-in account holds
 // no plan that includes the network.
 var ErrSubscriptionRequired = errors.New(
-	"the network is part of a Rune plan; upgrade to join it")
+	"this account's plan does not include the network; upgrade to join it")
+
+// ErrMachineLimit is returned when the account already has as many
+// machines on the network as its plan allows.
+var ErrMachineLimit = errors.New(
+	"the free Rune plan includes 2 machines on the network; remove one " +
+		"with `network remove <machine>` or upgrade for more")
+
+// ErrMachineRemoved is returned when this machine is no longer one of
+// the account's: it was removed from the network from somewhere else.
+var ErrMachineRemoved = errors.New(
+	"this machine has been removed from the network")
+
+// watchRetryDelay is how long the backend-state watcher waits before
+// re-subscribing after the notification stream ends.
+const watchRetryDelay = 2 * time.Second
+
+// Backend states [Status.State] reports.
+const (
+	StateNotRunning = "NotRunning"
+	StateRunning    = "Running"
+)
 
 // Peer is one other machine in the mesh.
 type Peer struct {
@@ -91,6 +114,10 @@ type Status struct {
 	// LastError is the most recent failure to bring the node up or
 	// join the mesh. It is empty once the node has joined.
 	LastError string
+	// MachineID is the durable id the coordination server knows this
+	// machine by, and the id the account's machine list reports. It
+	// is empty until the node has registered.
+	MachineID string
 }
 
 // Node is the local machine's membership in the mesh.
@@ -185,7 +212,62 @@ func (n *Node) Start(ctx context.Context) error {
 				Warnf("could not join network: %v", err)
 		}
 	})
+	if n.cfg.OnNeedsLogin != nil {
+		go debug.CapturePanicReport(func() { n.watchBackendState(upCtx) })
+	}
 	return nil
+}
+
+// watchBackendState follows the backend's state over the IPN bus so
+// this machine learns it was logged out as it happens rather than the
+// next time someone asks. The coordination server expires a removed
+// machine's key while its stream is still open, and that expiry
+// arrives here as a move into NeedsLogin.
+func (n *Node) watchBackendState(ctx context.Context) {
+	state := ipn.NoState
+	for ctx.Err() == nil {
+		state = n.readBackendState(ctx, state)
+		select {
+		case <-ctx.Done():
+		case <-time.After(watchRetryDelay):
+		}
+	}
+}
+
+// readBackendState consumes one subscription to the notification bus,
+// returning the last state it saw so a re-subscription does not report
+// a state the previous one already did.
+func (n *Node) readBackendState(ctx context.Context, prev ipn.State) ipn.State {
+	lc, err := n.client()
+	if err != nil {
+		return prev
+	}
+	watcher, err := lc.WatchIPNBus(ctx, ipn.NotifyInitialState)
+	if err != nil {
+		return prev
+	}
+	defer watcher.Close()
+	for {
+		notify, err := watcher.Next()
+		if err != nil {
+			return prev
+		}
+		if notify.State == nil {
+			continue
+		}
+		if enteredNeedsLogin(prev, *notify.State) {
+			n.cfg.OnNeedsLogin()
+		}
+		prev = *notify.State
+	}
+}
+
+// enteredNeedsLogin reports whether the backend just moved into
+// NeedsLogin. Only the transition counts: the bus repeats the current
+// state whenever the watch is re-established, and a machine that stays
+// logged out would otherwise be told about it over and over.
+func enteredNeedsLogin(prev, next ipn.State) bool {
+	return next == ipn.NeedsLogin && prev != ipn.NeedsLogin
 }
 
 // recordJoin stores the outcome of a join attempt for Status to
@@ -211,12 +293,86 @@ func (n *Node) Up(ctx context.Context) error {
 	if err := n.setWantRunning(ctx, true); err != nil {
 		return err
 	}
+	if err := n.reauthenticate(ctx); err != nil {
+		n.recordJoin(err)
+		return err
+	}
 	_, err := n.srv.Up(ctx)
 	n.recordJoin(err)
 	if err != nil {
 		return fmt.Errorf("join network: %w", err)
 	}
 	return nil
+}
+
+// reauthenticate re-registers this machine when the coordination
+// server has stopped accepting its node key. Node keys expire on
+// purpose: re-registering goes back through the account server, which
+// is what re-checks the account and how many machines its plan
+// covers. Without this the machine would sit waiting for a browser
+// login that the mesh never asks a Rune user for.
+func (n *Node) reauthenticate(ctx context.Context) error {
+	if n.cfg.Credentials == nil {
+		return nil
+	}
+	lc, err := n.client()
+	if err != nil {
+		return err
+	}
+	st, err := lc.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("network status: %w", err)
+	}
+	if !needsReauth(st) {
+		return nil
+	}
+	return n.reregister(ctx, lc)
+}
+
+// reregister mints fresh credentials and hands them to the backend.
+func (n *Node) reregister(ctx context.Context, lc *local.Client) error {
+	controlURL, authKey, err := n.cfg.Credentials(ctx)
+	if err != nil {
+		return err
+	}
+	n.mu.Lock()
+	n.controlURL = controlURL
+	n.mu.Unlock()
+	if err := lc.Start(ctx, ipn.Options{AuthKey: authKey}); err != nil {
+		return fmt.Errorf("re-register machine: %w", err)
+	}
+	return nil
+}
+
+// Rejoin re-registers this machine even when the backend still
+// believes it is a member, and blocks until it has joined. A machine
+// removed while it was asleep wakes up holding a netmap the
+// coordination server has already forgotten, so waiting to be told it
+// is logged out would leave it stranded.
+func (n *Node) Rejoin(ctx context.Context) error {
+	if n.cfg.Credentials == nil {
+		return nil
+	}
+	lc, err := n.client()
+	if err != nil {
+		return err
+	}
+	if err := n.reregister(ctx, lc); err != nil {
+		n.recordJoin(err)
+		return err
+	}
+	_, err = n.srv.Up(ctx)
+	n.recordJoin(err)
+	if err != nil {
+		return fmt.Errorf("join network: %w", err)
+	}
+	return nil
+}
+
+// needsReauth reports whether the backend is waiting to be logged in,
+// which is the shape an expired node key takes locally.
+func needsReauth(st *ipnstate.Status) bool {
+	return st != nil && st.BackendState == ipn.NeedsLogin.String()
 }
 
 // Down leaves the mesh but keeps this machine's identity, so a later
@@ -362,7 +518,7 @@ func (n *Node) Status(ctx context.Context) (Status, error) {
 		ret.LastError = lastErr.Error()
 	}
 	if lc == nil {
-		ret.State = "NotRunning"
+		ret.State = StateNotRunning
 		return ret, nil
 	}
 	st, err := lc.Status(ctx)
@@ -373,6 +529,7 @@ func (n *Node) Status(ctx context.Context) (Status, error) {
 	ret.State = st.BackendState
 	ret.AuthURL = st.AuthURL
 	ret.LoginName = selfLoginName(st)
+	ret.MachineID = selfMachineID(st)
 	return ret, nil
 }
 
@@ -395,6 +552,17 @@ func selfLoginName(st *ipnstate.Status) string {
 		return ""
 	}
 	return st.User[st.Self.UserID].LoginName
+}
+
+// selfMachineID is the id the coordination server knows the local node
+// by. It is stable across renames and reconnects, which is what makes
+// it the only safe way to ask whether this machine is still one of the
+// account's.
+func selfMachineID(st *ipnstate.Status) string {
+	if st == nil || st.Self == nil {
+		return ""
+	}
+	return string(st.Self.ID)
 }
 
 // peerName prefers the mesh DNS label over HostInfo's hostname: the

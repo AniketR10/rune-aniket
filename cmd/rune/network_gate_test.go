@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +38,10 @@ type stubNetworkAPI struct {
 	authKey    string
 	credErr    error
 	credCalls  int
+	machines   []apiclient.Machine
+	machineErr error
+	removed    []string
+	removeErr  error
 }
 
 func (s *stubNetworkAPI) AccountStatus(context.Context) (auth.RPCUser, bool, error) {
@@ -50,8 +53,21 @@ func (s *stubNetworkAPI) NetworkCredentials(context.Context) (string, string, er
 	return s.controlURL, s.authKey, s.credErr
 }
 
+func (s *stubNetworkAPI) NetworkMachines(
+	context.Context,
+) ([]apiclient.Machine, error) {
+	return s.machines, s.machineErr
+}
+
+func (s *stubNetworkAPI) NetworkMachineRemove(_ context.Context, id string) error {
+	if s.removeErr != nil {
+		return s.removeErr
+	}
+	s.removed = append(s.removed, id)
+	return nil
+}
+
 func TestNetworkGateCheck(t *testing.T) {
-	planEnds := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	tsuite := []struct {
 		name string
 		api  stubNetworkAPI
@@ -64,17 +80,11 @@ func TestNetworkGateCheck(t *testing.T) {
 			runenet.ErrNotAuthenticated,
 		},
 		{
+			// The free plan carries the network too; how many
+			// machines it covers is the server's call at mint time.
 			"never subscribed",
 			stubNetworkAPI{user: auth.RPCUser{Role: auth.RoleUser}, signedIn: true},
-			runenet.ErrSubscriptionRequired,
-		},
-		{
-			"lapsed plan",
-			stubNetworkAPI{
-				user:     auth.RPCUser{Role: auth.RoleUser, PlanEnds: planEnds},
-				signedIn: true,
-			},
-			runenet.ErrSubscriptionRequired,
+			nil,
 		},
 		{
 			"paid",
@@ -122,13 +132,13 @@ func TestNetworkGateCredentials(t *testing.T) {
 		assert.Equal(t, "tskey-1", authKey)
 	})
 
-	t.Run("does not ask for credentials without a plan", func(t *testing.T) {
+	t.Run("does not ask for credentials while signed out", func(t *testing.T) {
 		api := &stubNetworkAPI{
 			user:     auth.RPCUser{Role: auth.RoleUser},
-			signedIn: true,
+			signedIn: false,
 		}
 		_, _, err := newNetworkGate(api).credentials(context.Background())
-		assert.True(t, errors.Is(err, runenet.ErrSubscriptionRequired), "got %v", err)
+		assert.True(t, errors.Is(err, runenet.ErrNotAuthenticated), "got %v", err)
 		assert.Zero(t, api.credCalls)
 	})
 
@@ -144,11 +154,16 @@ func TestNetworkGateCredentials(t *testing.T) {
 				apiclient.ErrSubscriptionRequired,
 				runenet.ErrSubscriptionRequired,
 			},
+			{
+				"machine allowance spent",
+				apiclient.ErrMachineLimit,
+				runenet.ErrMachineLimit,
+			},
 		}
 		for _, tcase := range tsuite {
 			t.Run(tcase.name, func(t *testing.T) {
 				api := &stubNetworkAPI{
-					user:     auth.RPCUser{Role: auth.RolePaid},
+					user:     auth.RPCUser{Role: auth.RoleUser},
 					signedIn: true,
 					credErr:  tcase.err,
 				}
@@ -156,6 +171,42 @@ func TestNetworkGateCredentials(t *testing.T) {
 				assert.True(t, errors.Is(err, tcase.want), "got %v", err)
 			})
 		}
+	})
+}
+
+// The user names machines, the account server works in ids, so the
+// gate is what turns one into the other.
+func TestNetworkGateRemove(t *testing.T) {
+	t.Run("removes the machine with that name", func(t *testing.T) {
+		api := &stubNetworkAPI{
+			user:     auth.RPCUser{Role: auth.RoleUser},
+			signedIn: true,
+			machines: []apiclient.Machine{
+				{ID: "1", Hostname: "laptop"},
+				{ID: "2", Hostname: "desktop"},
+			},
+		}
+		require.NoError(t, newNetworkGate(api).
+			remove(context.Background(), "desktop"))
+		assert.Equal(t, []string{"2"}, api.removed)
+	})
+
+	t.Run("reports a name no machine answers to", func(t *testing.T) {
+		api := &stubNetworkAPI{
+			user:     auth.RPCUser{Role: auth.RoleUser},
+			signedIn: true,
+			machines: []apiclient.Machine{{ID: "1", Hostname: "laptop"}},
+		}
+		err := newNetworkGate(api).remove(context.Background(), "workstation")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "workstation")
+		assert.Empty(t, api.removed)
+	})
+
+	t.Run("needs a signed-in account", func(t *testing.T) {
+		api := &stubNetworkAPI{}
+		err := newNetworkGate(api).remove(context.Background(), "laptop")
+		assert.True(t, errors.Is(err, runenet.ErrNotAuthenticated), "got %v", err)
 	})
 }
 
@@ -172,8 +223,107 @@ func TestNetworkPromptFor(t *testing.T) {
 	assert.Equal(t, networkUpgradeMessage, message)
 	assert.Equal(t, []string{networkOptUpgrade, networkOptCancel}, options)
 
+	message, options, _, ok = networkPromptFor(runenet.ErrMachineLimit)
+	require.True(t, ok)
+	assert.Equal(t, networkMachineLimitMessage, message)
+	assert.Equal(t, []string{networkOptUpgrade, networkOptCancel}, options)
+
+	// There is nothing to buy and nothing to sign into: the machine is
+	// off the network because the account asked for it to be.
+	message, options, bindings, ok = networkPromptFor(runenet.ErrMachineRemoved)
+	require.True(t, ok)
+	assert.Equal(t, networkMachineRemovedMessage, message)
+	assert.Equal(t, []string{networkOptOK}, options)
+	assert.Len(t, bindings, len(options))
+
 	_, _, _, ok = networkPromptFor(errors.New("network unreachable"))
 	assert.False(t, ok)
+}
+
+// The account's machine list is keyed by the coordination server's
+// durable id, so that is what says whether this machine is still one
+// of the account's.
+func TestMachineRemoved(t *testing.T) {
+	machines := []apiclient.Machine{
+		{ID: "1", Hostname: "laptop"},
+		{ID: "2", Hostname: "desktop"},
+	}
+	tsuite := []struct {
+		name      string
+		machineID string
+		machines  []apiclient.Machine
+		want      bool
+	}{
+		{"still listed", "1", machines, false},
+		{"no longer listed", "3", machines, true},
+		{"account has no machines left", "1", nil, true},
+		{"never registered", "", machines, false},
+		// Two machines of one account may answer to the same name;
+		// only the id says which one this is.
+		{"same name, different machine", "3",
+			[]apiclient.Machine{{ID: "1", Hostname: "laptop"}}, true},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			assert.Equal(t, tcase.want,
+				machineRemoved(tcase.machineID, tcase.machines))
+		})
+	}
+}
+
+// A logout is either a node key that reached its lifetime, which is
+// re-minted silently, or a machine the account removed, which the user
+// has to be told about. Only the account's machine list tells them
+// apart, so an unreachable account server claims neither.
+func TestNetworkHandleNeedsLogin(t *testing.T) {
+	setup := func(t *testing.T, api *stubNetworkAPI) (
+		*network, *networkPrompter, *int,
+	) {
+		t.Helper()
+		net := newNetwork(config.NopConfig(), t.TempDir(), newNetworkGate(api))
+		t.Cleanup(func() { _ = net.Close() })
+		prompts := 0
+		return net, &networkPrompter{
+			scheduleNextTick: func(func()) bool { prompts++; return true },
+		}, &prompts
+	}
+
+	t.Run("prompts when the account no longer lists it", func(t *testing.T) {
+		api := &stubNetworkAPI{
+			user:     auth.RPCUser{Role: auth.RoleUser},
+			signedIn: true,
+			machines: []apiclient.Machine{{ID: "1", Hostname: "laptop"}},
+		}
+		net, prompter, prompts := setup(t, api)
+		net.handleNeedsLogin(context.Background(), prompter, "9")
+		assert.Equal(t, 1, *prompts)
+		assert.Zero(t, api.credCalls)
+	})
+
+	t.Run("re-registers silently when it is still listed", func(t *testing.T) {
+		api := &stubNetworkAPI{
+			user:     auth.RPCUser{Role: auth.RoleUser},
+			signedIn: true,
+			machines: []apiclient.Machine{{ID: "1", Hostname: "laptop"}},
+			credErr:  errors.New("credentials endpoint unreachable"),
+		}
+		net, prompter, prompts := setup(t, api)
+		net.handleNeedsLogin(context.Background(), prompter, "1")
+		assert.Zero(t, *prompts)
+		assert.Equal(t, 1, api.credCalls)
+	})
+
+	t.Run("says nothing when the account cannot be reached", func(t *testing.T) {
+		api := &stubNetworkAPI{
+			user:       auth.RPCUser{Role: auth.RoleUser},
+			signedIn:   true,
+			machineErr: errors.New("account server unreachable"),
+		}
+		net, prompter, prompts := setup(t, api)
+		net.handleNeedsLogin(context.Background(), prompter, "1")
+		assert.Zero(t, *prompts)
+		assert.Zero(t, api.credCalls)
+	})
 }
 
 // The gate, prompter, and network take only mandatory dependencies. A

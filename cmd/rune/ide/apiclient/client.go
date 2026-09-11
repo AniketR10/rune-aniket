@@ -17,6 +17,7 @@
 package apiclient
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	_ "embed"
@@ -284,6 +285,18 @@ const networkCredentialsTimeout = 30 * time.Second
 // no plan that covers the requested feature.
 var ErrSubscriptionRequired = errors.New("an active Rune plan is required")
 
+// ErrMachineLimit is returned when the account already has as many
+// machines on the network as its plan covers.
+var ErrMachineLimit = errors.New("machine limit reached")
+
+// Machine is one of the account's machines on the network.
+type Machine struct {
+	ID       string    `json:"id"`
+	Hostname string    `json:"hostname"`
+	LastSeen time.Time `json:"last_seen"`
+	Online   bool      `json:"online"`
+}
+
 // NetworkCredentials asks the API for the coordination server this
 // machine may join and a single-use key that pre-authorizes it. Both
 // are short-lived and decided server-side, which is where the network
@@ -291,54 +304,14 @@ var ErrSubscriptionRequired = errors.New("an active Rune plan is required")
 func (a *Client) NetworkCredentials(
 	ctx context.Context,
 ) (controlURL, authKey string, err error) {
-	u := *a.httpEndpointURL
-	u.Path = "/api/network/credentials"
-
-	ctx, cancel := context.WithTimeout(ctx, networkCredentialsTimeout)
-	defer cancel()
-
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	resp, err := a.networkRequest(
+		ctx, http.MethodPost, "/api/network/credentials", nil)
 	if err != nil {
-		return "", "", fmt.Errorf("new request: %w", err)
-	}
-	token, err := a.tokenSource.Token()
-	if err != nil {
-		if errors.Is(err, auth.ErrNotAuthenticated) {
-			return "", "", auth.ErrNotAuthenticated
-		}
-		return "", "", fmt.Errorf("get auth token: %w", err)
-	}
-	if !token.Valid() {
-		return "", "", auth.ErrNotAuthenticated
-	}
-	r.Header.Set("Authorization",
-		fmt.Sprintf("%s %s", token.TokenType, token.AccessToken))
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return "", "", fmt.Errorf("network credentials: %w", err)
+		return "", "", err
 	}
 	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusUnauthorized:
-		return "", "", auth.ErrNotAuthenticated
-	case http.StatusPaymentRequired:
-		return "", "", ErrSubscriptionRequired
-	case http.StatusForbidden:
-		// The auth middleware answers 403 for every failure and a
-		// deployment without the endpoint 403s the whole /api/
-		// subtree, so only the paid gate's own message may be read
-		// as a missing plan.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		if strings.Contains(string(body), auth.SubscriptionRequiredMessage) {
-			return "", "", ErrSubscriptionRequired
-		}
-		return "", "", fmt.Errorf("network credentials: status 403: %s",
-			strings.TrimSpace(string(body)))
-	default:
-		return "", "", fmt.Errorf("network credentials: status %d", resp.StatusCode)
+	if err := networkStatusError("network credentials", resp); err != nil {
+		return "", "", err
 	}
 
 	var body struct {
@@ -352,6 +325,123 @@ func (a *Client) NetworkCredentials(
 		return "", "", errors.New("network credentials: incomplete response")
 	}
 	return body.ControlURL, body.AuthKey, nil
+}
+
+// NetworkMachines lists the machines the account has on the network.
+// It goes over HTTPS rather than the mesh because a machine held back
+// by the limit is not on the mesh to ask.
+func (a *Client) NetworkMachines(ctx context.Context) ([]Machine, error) {
+	resp, err := a.networkRequest(
+		ctx, http.MethodGet, auth.NetworkNodesPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := networkStatusError("network machines", resp); err != nil {
+		return nil, err
+	}
+	var body struct {
+		Machines []Machine `json:"machines"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("network machines: decode response: %w", err)
+	}
+	return body.Machines, nil
+}
+
+// ErrMachineNotFound is returned when removing a machine the account
+// does not have.
+var ErrMachineNotFound = errors.New("machine not found")
+
+// NetworkMachineRemove unregisters one of the account's machines,
+// freeing the slot it held.
+func (a *Client) NetworkMachineRemove(ctx context.Context, id string) error {
+	resp, err := a.networkRequest(ctx, http.MethodPost,
+		auth.NetworkNodeRemovePath, map[string]string{"node_id": id})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrMachineNotFound
+	}
+	return networkStatusError("network machine remove", resp)
+}
+
+// networkRequest issues an authenticated request to the account
+// server's network API.
+func (a *Client) networkRequest(
+	ctx context.Context, method, path string, body any,
+) (*http.Response, error) {
+	u := *a.httpEndpointURL
+	u.Path = path
+
+	ctx, cancel := context.WithTimeout(ctx, networkCredentialsTimeout)
+	defer cancel()
+
+	var payload io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("encode request: %w", err)
+		}
+		payload = bytes.NewReader(encoded)
+	}
+	r, err := http.NewRequestWithContext(ctx, method, u.String(), payload)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	token, err := a.tokenSource.Token()
+	if err != nil {
+		if errors.Is(err, auth.ErrNotAuthenticated) {
+			return nil, auth.ErrNotAuthenticated
+		}
+		return nil, fmt.Errorf("get auth token: %w", err)
+	}
+	if !token.Valid() {
+		return nil, auth.ErrNotAuthenticated
+	}
+	r.Header.Set("Authorization",
+		fmt.Sprintf("%s %s", token.TokenType, token.AccessToken))
+	if body != nil {
+		r.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return resp, nil
+}
+
+// networkStatusError maps the network API's response status to the
+// sentinel the caller acts on. op names the request in the errors that
+// carry no sentinel of their own.
+func networkStatusError(op string, resp *http.Response) error {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	case http.StatusUnauthorized:
+		return auth.ErrNotAuthenticated
+	case http.StatusPaymentRequired:
+		return ErrSubscriptionRequired
+	case http.StatusForbidden:
+		// The auth middleware answers 403 for every failure and a
+		// deployment without the endpoint 403s the whole /api/
+		// subtree, so only the gate's own messages may be read as an
+		// entitlement the user can act on.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		switch {
+		case strings.Contains(string(body), auth.MachineLimitMessage):
+			return ErrMachineLimit
+		case strings.Contains(string(body), auth.SubscriptionRequiredMessage):
+			return ErrSubscriptionRequired
+		}
+		return fmt.Errorf("%s: status 403: %s",
+			op, strings.TrimSpace(string(body)))
+	default:
+		return fmt.Errorf("%s: status %d", op, resp.StatusCode)
+	}
 }
 
 // Dial creates a new grpc.ClientConn that uses the underlying

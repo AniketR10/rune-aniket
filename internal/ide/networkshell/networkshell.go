@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -51,8 +52,20 @@ var commandManual = textapi.CommandManual{
 		},
 		{
 			Name: "peers",
-			Summary: "List the other machines on the network, with the " +
+			Summary: "List the other machines connected to the network, with the " +
 				"rune:// address each one is reachable at.",
+		},
+		{
+			Name: "machines",
+			Summary: "List every machine registered to your account, " +
+				"whether or not it is on the network right now. The free " +
+				"plan covers 2 of them.",
+		},
+		{
+			Name: "remove",
+			Summary: "Unregister a machine from your account, freeing the " +
+				"slot it held. The machine rejoins by running `network up` " +
+				"on it again.",
 		},
 		{
 			Name: "up",
@@ -78,6 +91,24 @@ type Network interface {
 	Peers(ctx context.Context) ([]runenet.Peer, error)
 	Up(ctx context.Context) error
 	Down(ctx context.Context) error
+	// Machines are the machines registered to the account, which is
+	// what the plan's machine allowance is counted in. Unlike Peers
+	// it is answered by the account server rather than the mesh, so
+	// it works on a machine the allowance is keeping off the mesh.
+	Machines(ctx context.Context) ([]Machine, error)
+	// Remove unregisters the machine named hostname.
+	Remove(ctx context.Context, hostname string) error
+}
+
+// Machine is one of the account's machines on the network.
+type Machine struct {
+	// Hostname is the name used in rune://<hostname> URIs.
+	Hostname string
+	// LastSeen is when the machine last reached the network. Zero
+	// for a machine that never did.
+	LastSeen time.Time
+	// Online is whether the machine is on the network right now.
+	Online bool
 }
 
 // Config configures a Handler.
@@ -116,6 +147,10 @@ func (h *Handler) HandleCommand(
 		return h.status(ctx)
 	case "peers":
 		return h.peers(ctx)
+	case "machines":
+		return h.machines(ctx)
+	case "remove":
+		return h.remove(ctx, cmd.Args[1:])
 	case "up":
 		return h.up(ctx)
 	case "down":
@@ -176,8 +211,8 @@ func (h *Handler) peers(ctx context.Context) (
 	}
 	if len(peers) == 0 {
 		return markdownOutput(
-			"No other machines on the network yet. Run `network status` " +
-				"on another machine to add it."), nil
+			"No other machines connected to the network yet. Run " +
+				"`network status` on another machine to add it."), nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Machines\n\n")
@@ -192,6 +227,64 @@ func (h *Handler) peers(ctx context.Context) (
 			p.Hostname, p.Hostname, p.OS, state)
 	}
 	return markdownOutput(b.String()), nil
+}
+
+func (h *Handler) machines(ctx context.Context) (
+	iterator.Iterator[component.Responsive], error,
+) {
+	machines, err := h.network.Machines(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(machines) == 0 {
+		return markdownOutput("No machines registered to your account yet. " +
+			"Run `network up` to add this one."), nil
+	}
+	// Which machine this is matters before removing one, but a node
+	// that never joined has no name to report, so it is best effort.
+	var self string
+	if st, err := h.network.Status(ctx); err == nil {
+		self = st.Hostname
+	}
+	return markdownOutput(machinesMarkdown(machines, self)), nil
+}
+
+func machinesMarkdown(machines []Machine, self string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Your machines\n\n")
+	fmt.Fprintf(&b, "| machine | state | last seen |\n")
+	fmt.Fprintf(&b, "| --- | --- | --- |\n")
+	for _, m := range machines {
+		name := m.Hostname
+		if name == self {
+			name += " (this machine)"
+		}
+		state, lastSeen := "offline", "never"
+		if m.Online {
+			state = "online"
+		}
+		if !m.LastSeen.IsZero() {
+			lastSeen = m.LastSeen.Local().Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", name, state, lastSeen)
+	}
+	fmt.Fprintf(&b,
+		"\nRemove one with `network remove <machine>`.\n")
+	return b.String()
+}
+
+func (h *Handler) remove(ctx context.Context, args []string) (
+	iterator.Iterator[component.Responsive], error,
+) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("usage: %s remove <machine>", CommandName)
+	}
+	if err := h.network.Remove(ctx, args[0]); err != nil {
+		return nil, err
+	}
+	return markdownOutput(fmt.Sprintf(
+		"Removed `%s`. Run `network up` on it to register it again.",
+		args[0])), nil
 }
 
 func (h *Handler) up(ctx context.Context) (

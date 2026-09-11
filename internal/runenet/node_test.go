@@ -23,6 +23,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"tailscale.com/ipn"
+	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/tailcfg"
 )
 
 func TestStartCredentials(t *testing.T) {
@@ -84,6 +87,103 @@ func TestStartCredentials(t *testing.T) {
 		assert.Equal(t, "https://control.example.com", node.srv.ControlURL)
 		assert.Equal(t, "tskey-auth-secret", node.srv.AuthKey)
 	})
+}
+
+// Node keys expire on purpose: re-registering is what re-checks the
+// account and the machines its plan covers, so a backend waiting for
+// a login must mint fresh credentials rather than wait for a browser
+// login the mesh never asks a Rune user for.
+func TestNeedsReauth(t *testing.T) {
+	assert.True(t, needsReauth(&ipnstate.Status{
+		BackendState: ipn.NeedsLogin.String()}))
+	assert.False(t, needsReauth(&ipnstate.Status{
+		BackendState: ipn.Running.String()}))
+	assert.False(t, needsReauth(nil))
+}
+
+func TestReauthenticate(t *testing.T) {
+	t.Run("is a no-op without a credentials source", func(t *testing.T) {
+		node := New(Config{
+			Hostname: "workstation", Port: DefaultPort, Dir: t.TempDir(),
+			AuthKey: "tskey-static",
+		})
+		t.Cleanup(func() { _ = node.Close() })
+		assert.NoError(t, node.reauthenticate(context.Background()))
+	})
+
+	t.Run("needs a running node", func(t *testing.T) {
+		node := New(Config{
+			Hostname: "workstation", Port: DefaultPort, Dir: t.TempDir(),
+			Credentials: func(context.Context) (string, string, error) {
+				return "https://control.example.com", "tskey-auth-secret", nil
+			},
+		})
+		t.Cleanup(func() { _ = node.Close() })
+		assert.True(t, errors.Is(
+			node.reauthenticate(context.Background()), ErrNotStarted))
+	})
+}
+
+// A machine removed while it slept wakes up on a netmap the
+// coordination server has already forgotten, so Rejoin must re-mint
+// without waiting for the backend to admit it is logged out.
+func TestRejoin(t *testing.T) {
+	t.Run("is a no-op without a credentials source", func(t *testing.T) {
+		node := New(Config{
+			Hostname: "workstation", Port: DefaultPort, Dir: t.TempDir(),
+			AuthKey: "tskey-static",
+		})
+		t.Cleanup(func() { _ = node.Close() })
+		assert.NoError(t, node.Rejoin(context.Background()))
+	})
+
+	t.Run("needs a running node", func(t *testing.T) {
+		node := New(Config{
+			Hostname: "workstation", Port: DefaultPort, Dir: t.TempDir(),
+			Credentials: func(context.Context) (string, string, error) {
+				return "https://control.example.com", "tskey-auth-secret", nil
+			},
+		})
+		t.Cleanup(func() { _ = node.Close() })
+		assert.True(t, errors.Is(
+			node.Rejoin(context.Background()), ErrNotStarted))
+	})
+}
+
+// Only the move into NeedsLogin is news. The bus repeats the current
+// state every time the watch is re-established, and a machine that is
+// logged out stays logged out.
+func TestEnteredNeedsLogin(t *testing.T) {
+	cases := []struct {
+		name string
+		prev ipn.State
+		next ipn.State
+		want bool
+	}{
+		{"from running", ipn.Running, ipn.NeedsLogin, true},
+		{"from no state", ipn.NoState, ipn.NeedsLogin, true},
+		{"from starting", ipn.Starting, ipn.NeedsLogin, true},
+		{"repeated on re-watch", ipn.NeedsLogin, ipn.NeedsLogin, false},
+		{"joining", ipn.NeedsLogin, ipn.Starting, false},
+		{"joined", ipn.Starting, ipn.Running, false},
+		{"stopped", ipn.Running, ipn.Stopped, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, enteredNeedsLogin(tc.prev, tc.next))
+		})
+	}
+}
+
+// The machine list the account server returns is keyed by this id, so
+// it is what tells this machine whether it is still one of the
+// account's. A node that has not registered has none.
+func TestSelfMachineID(t *testing.T) {
+	assert.Equal(t, "", selfMachineID(nil))
+	assert.Equal(t, "", selfMachineID(&ipnstate.Status{}))
+	assert.Equal(t, "42", selfMachineID(&ipnstate.Status{
+		Self: &ipnstate.PeerStatus{ID: tailcfg.StableNodeID("42")},
+	}))
 }
 
 func TestStatusBeforeStart(t *testing.T) {

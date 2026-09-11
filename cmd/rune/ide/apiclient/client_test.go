@@ -534,6 +534,14 @@ func TestNetworkCredentials(t *testing.T) {
 			wantErr: ErrSubscriptionRequired,
 		},
 		{
+			// The account may use the network; it just has as many
+			// machines on it as its plan covers.
+			name:    "machine allowance spent",
+			status:  http.StatusForbidden,
+			body:    auth.MachineLimitMessage + "\n",
+			wantErr: ErrMachineLimit,
+		},
+		{
 			name:    "payment required",
 			status:  http.StatusPaymentRequired,
 			wantErr: ErrSubscriptionRequired,
@@ -595,6 +603,73 @@ func TestNetworkCredentials(t *testing.T) {
 				assert.Equal(t, tcase.wantURL, controlURL)
 				assert.Equal(t, tcase.wantKey, authKey)
 			}
+		})
+	}
+}
+
+func TestNetworkMachines(t *testing.T) {
+	lastSeen := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	var gotPath, gotMethod string
+	srv := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			gotPath, gotMethod = r.URL.Path, r.Method
+			_, _ = w.Write([]byte(`{"machines":[` +
+				`{"id":"1","hostname":"laptop","last_seen":"2026-03-01T12:00:00Z",` +
+				`"online":true}]}`))
+		}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	client := &Client{httpEndpointURL: u, tokenSource: newValidTestTokenSource()}
+
+	machines, err := client.NetworkMachines(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, auth.NetworkNodesPath, gotPath)
+	assert.Equal(t, http.MethodGet, gotMethod)
+	assert.Equal(t, []Machine{
+		{ID: "1", Hostname: "laptop", LastSeen: lastSeen, Online: true},
+	}, machines)
+}
+
+func TestNetworkMachineRemove(t *testing.T) {
+	tsuite := []struct {
+		name    string
+		status  int
+		wantErr error
+	}{
+		{"removed", http.StatusNoContent, nil},
+		{"machine of another account", http.StatusNotFound, ErrMachineNotFound},
+		{"signed out", http.StatusUnauthorized, auth.ErrNotAuthenticated},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			var gotPath, gotMethod, gotBody string
+			srv := httptest.NewServer(http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					gotPath, gotMethod = r.URL.Path, r.Method
+					body, _ := io.ReadAll(r.Body)
+					gotBody = string(body)
+					w.WriteHeader(tcase.status)
+				}))
+			defer srv.Close()
+
+			u, err := url.Parse(srv.URL)
+			require.NoError(t, err)
+			client := &Client{
+				httpEndpointURL: u,
+				tokenSource:     newValidTestTokenSource(),
+			}
+
+			err = client.NetworkMachineRemove(context.Background(), "7")
+			assert.Equal(t, auth.NetworkNodeRemovePath, gotPath)
+			assert.Equal(t, http.MethodPost, gotMethod)
+			assert.JSONEq(t, `{"node_id":"7"}`, gotBody)
+			if tcase.wantErr == nil {
+				assert.NoError(t, err)
+				return
+			}
+			assert.True(t, errors.Is(err, tcase.wantErr), "got %v", err)
 		})
 	}
 }

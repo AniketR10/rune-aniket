@@ -21,6 +21,7 @@ import (
 	"errors"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,11 @@ type fakeNetwork struct {
 	up     int
 	upErr  error
 	down   int
+
+	machines    []Machine
+	machinesErr error
+	removed     []string
+	removeErr   error
 }
 
 func (f *fakeNetwork) Status(context.Context) (runenet.Status, error) {
@@ -48,6 +54,18 @@ func (f *fakeNetwork) Peers(context.Context) ([]runenet.Peer, error) {
 
 func (f *fakeNetwork) Up(context.Context) error   { f.up++; return f.upErr }
 func (f *fakeNetwork) Down(context.Context) error { f.down++; return nil }
+
+func (f *fakeNetwork) Machines(context.Context) ([]Machine, error) {
+	return f.machines, f.machinesErr
+}
+
+func (f *fakeNetwork) Remove(_ context.Context, hostname string) error {
+	if f.removeErr != nil {
+		return f.removeErr
+	}
+	f.removed = append(f.removed, hostname)
+	return nil
+}
 
 type nopProgressWriter struct{}
 
@@ -103,6 +121,33 @@ func TestHandleCommandRouting(t *testing.T) {
 		assert.Equal(t, 1, net.down)
 	})
 
+	t.Run("machines lists the account's machines", func(t *testing.T) {
+		require.NotNil(t, handle(t, h, "machines"))
+	})
+
+	t.Run("remove unregisters the named machine", func(t *testing.T) {
+		require.NotNil(t, handle(t, h, "remove", "workstation"))
+		assert.Equal(t, []string{"workstation"}, net.removed)
+	})
+
+	t.Run("remove needs exactly one machine", func(t *testing.T) {
+		_, err := h.HandleCommand(context.Background(),
+			repl.Command{Name: CommandName, Args: []string{"remove"}},
+			nopProgressWriter{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "usage")
+	})
+
+	t.Run("remove surfaces the failure", func(t *testing.T) {
+		failing := &fakeNetwork{removeErr: errors.New("no machine named \"gone\"")}
+		_, err := New(Config{Network: failing}).HandleCommand(
+			context.Background(),
+			repl.Command{Name: CommandName, Args: []string{"remove", "gone"}},
+			nopProgressWriter{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "gone")
+	})
+
 	t.Run("no argument prints usage", func(t *testing.T) {
 		require.NotNil(t, handle(t, h))
 	})
@@ -151,6 +196,22 @@ func TestStatusMarkdown(t *testing.T) {
 	})
 }
 
+// The list is what a user reads before deciding which machine to
+// remove, so it has to say which one they are on and which ones are
+// still reachable.
+func TestMachinesMarkdown(t *testing.T) {
+	lastSeen := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	got := machinesMarkdown([]Machine{
+		{Hostname: "laptop", Online: true, LastSeen: lastSeen},
+		{Hostname: "desktop"},
+	}, "laptop")
+
+	assert.Contains(t, got, "| laptop (this machine) | online |")
+	assert.Contains(t, got, "| desktop | offline | never |")
+	assert.Contains(t, got, lastSeen.Local().Format("2006-01-02 15:04"))
+	assert.Contains(t, got, "network remove <machine>")
+}
+
 func TestComplete(t *testing.T) {
 	h := New(Config{Network: &fakeNetwork{}})
 
@@ -162,7 +223,9 @@ func TestComplete(t *testing.T) {
 		{
 			name: "every subcommand",
 			args: nil,
-			want: []string{"status", "peers", "up", "down"},
+			want: []string{
+				"status", "peers", "machines", "remove", "up", "down",
+			},
 		},
 		{
 			name: "filtered by prefix",

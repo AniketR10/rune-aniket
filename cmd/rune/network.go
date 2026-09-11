@@ -57,6 +57,10 @@ type network struct {
 	mu     sync.Mutex
 	server *runenet.WorkspaceServer
 	closed bool
+	// prompter is only there once the IDE exists, which is after the
+	// node may already have started; a push that lands before then
+	// has nowhere to be shown.
+	prompter *networkPrompter
 }
 
 // newNetwork assembles the mesh node and its entitlement gate. A
@@ -86,9 +90,70 @@ func newNetwork(
 	}
 	if ret.gated {
 		cfg.Credentials = gate.credentials
+		cfg.OnNeedsLogin = ret.onNeedsLogin
 	}
 	ret.node = runenet.New(cfg)
 	return ret
+}
+
+// needsLoginTimeout bounds the account round-trip a logout triggers.
+const needsLoginTimeout = 30 * time.Second
+
+// onNeedsLogin runs when the coordination server stops accepting this
+// machine's node key. Two very different things look like that from
+// here and only the account's machine list tells them apart: a node
+// key that reached the end of its lifetime, which is re-minted without
+// bothering anyone, and a machine the account removed on purpose,
+// which the user has to be told about.
+func (n *network) onNeedsLogin() {
+	prompter := n.currentPrompter()
+	if prompter == nil {
+		return
+	}
+	go debug.CapturePanicReport(func() {
+		ctx, cancel := context.WithTimeout(
+			context.Background(), needsLoginTimeout)
+		defer cancel()
+		st, err := n.node.Status(ctx)
+		if err != nil || st.MachineID == "" {
+			// A machine that never registered has no removal to
+			// report and no key worth re-minting.
+			return
+		}
+		n.handleNeedsLogin(ctx, prompter, st.MachineID)
+	})
+}
+
+func (n *network) handleNeedsLogin(
+	ctx context.Context, prompter *networkPrompter, machineID string,
+) {
+	machines, err := n.gate.machines(ctx)
+	if err != nil {
+		// Without the list the two cases are indistinguishable, and
+		// claiming the machine was removed when the account server is
+		// merely unreachable would be worse than saying nothing.
+		log.Warnf("network: could not check this machine's registration: %v", err)
+		return
+	}
+	if machineRemoved(machineID, machines) {
+		prompter.prompt(runenet.ErrMachineRemoved)
+		return
+	}
+	if err := n.node.Up(ctx); err != nil {
+		log.Warnf("could not re-register machine on the network: %v", err)
+	}
+}
+
+func (n *network) setPrompter(prompter *networkPrompter) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.prompter = prompter
+}
+
+func (n *network) currentPrompter() *networkPrompter {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.prompter
 }
 
 // startAutoJoin joins the mesh off the boot path when the user asked
@@ -199,6 +264,7 @@ func (n *network) register(
 	i *ide.IDE, scheduleNextTick func(func()) bool,
 ) error {
 	prompter := newNetworkPrompter(i, scheduleNextTick)
+	n.setPrompter(prompter)
 	if err := i.RegisterScheme(
 		workspacerune.Scheme, n.schemeFunc(prompter)); err != nil {
 		return fmt.Errorf("register %s scheme: %w", workspacerune.Scheme, err)
@@ -278,7 +344,30 @@ func (g gatedNetwork) Status(ctx context.Context) (runenet.Status, error) {
 		g.prompter.prompt(err)
 		return runenet.Status{}, err
 	}
-	return g.n.node.Status(ctx)
+	st, err := g.n.node.Status(ctx)
+	if err != nil {
+		return runenet.Status{}, err
+	}
+	if g.removed(ctx, st) {
+		g.prompter.prompt(runenet.ErrMachineRemoved)
+	}
+	return st, nil
+}
+
+// removed reports whether the account no longer lists this machine
+// even though the backend still believes it is a member. That is what
+// a machine removed while it was asleep looks like: it wakes holding a
+// netmap the coordination server has already forgotten, so the logout
+// that would have told it never arrives.
+func (g gatedNetwork) removed(ctx context.Context, st runenet.Status) bool {
+	if !g.n.gated || st.State != runenet.StateRunning {
+		return false
+	}
+	machines, err := g.n.gate.machines(ctx)
+	if err != nil {
+		return false
+	}
+	return machineRemoved(st.MachineID, machines)
 }
 
 // joinWaitTimeout bounds how long `network up` waits for membership.
@@ -293,6 +382,17 @@ func (g gatedNetwork) Up(ctx context.Context) error {
 	}
 	upCtx, cancel := context.WithTimeout(ctx, joinWaitTimeout)
 	defer cancel()
+	// `network up` is what the removal prompt tells the user to run,
+	// so it has to work for the machine that slept through its own
+	// removal: that node is Running on a netmap nobody else has, and
+	// only an unconditional re-registration gets it back.
+	if st, err := g.n.node.Status(upCtx); err == nil && g.removed(upCtx, st) {
+		if err := g.n.node.Rejoin(upCtx); err != nil {
+			g.prompter.prompt(err)
+			return err
+		}
+		return nil
+	}
 	if err := g.n.node.Up(upCtx); err != nil {
 		if upCtx.Err() != nil && ctx.Err() == nil {
 			return fmt.Errorf("not a member after %s; joining continues "+
@@ -309,6 +409,36 @@ func (g gatedNetwork) Peers(ctx context.Context) ([]runenet.Peer, error) {
 
 func (g gatedNetwork) Down(ctx context.Context) error {
 	return g.n.node.Down(ctx)
+}
+
+// Machines and Remove go to the account server rather than the mesh:
+// a machine kept off the network by the account's machine allowance is
+// not there to be asked, and removing it is how the user makes room.
+func (g gatedNetwork) Machines(
+	ctx context.Context,
+) ([]networkshell.Machine, error) {
+	machines, err := g.n.gate.machines(ctx)
+	if err != nil {
+		g.prompter.prompt(err)
+		return nil, err
+	}
+	ret := make([]networkshell.Machine, 0, len(machines))
+	for _, m := range machines {
+		ret = append(ret, networkshell.Machine{
+			Hostname: m.Hostname,
+			LastSeen: m.LastSeen,
+			Online:   m.Online,
+		})
+	}
+	return ret, nil
+}
+
+func (g gatedNetwork) Remove(ctx context.Context, hostname string) error {
+	if err := g.n.gate.remove(ctx, hostname); err != nil {
+		g.prompter.prompt(err)
+		return err
+	}
+	return nil
 }
 
 // Close leaves the mesh and stops serving workspaces to peers.

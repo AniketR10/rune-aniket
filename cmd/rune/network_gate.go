@@ -19,7 +19,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
+	"slices"
+	"strings"
 
 	extbrowser "github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
@@ -29,27 +32,39 @@ import (
 	"unstable.build/rune/cmd/rune/ide/apiclient"
 	"unstable.build/rune/internal/browser"
 	"unstable.build/rune/internal/ide"
-	"unstable.build/rune/internal/ide/idenag"
 	"unstable.build/rune/internal/runenet"
 )
 
-const networkFeatureBlurb = "**The network is part of a paid Rune plan.**\n\n" +
-	"It links the machines you sign in on into a private, encrypted network,\n" +
-	"so any of them can be opened as a workspace with\n" +
+const networkFeatureBlurb = "**The network links the machines you sign in on " +
+	"into a private,\nencrypted network,** so any of them can be opened as a " +
+	"workspace with\n" +
 	"`workspaceopen rune://<machine>/`.\n\n"
 
 const networkSignedOutMessage = networkFeatureBlurb +
-	"Sign in with the account that holds your plan, or create one to get started."
+	"Sign in to use it, or create an account to get started. The free plan\n" +
+	"includes 2 machines."
 
 const networkUpgradeMessage = networkFeatureBlurb +
 	"Upgrade to use it. Once you have, run the `login` command again so this\n" +
 	"machine picks up your new plan."
+
+const networkMachineLimitMessage = "**The free Rune plan includes 2 machines " +
+	"on the network.**\n\n" +
+	"Remove one with `network machines` and `network remove <machine>`, or\n" +
+	"upgrade for as many as you like. After upgrading, run the `login` command\n" +
+	"again so this machine picks up your new plan.\n"
+
+const networkMachineRemovedMessage = "**This machine has been removed from " +
+	"the network.**\n\n" +
+	"If this was a mistake, run `network up` in the console —\n" +
+	"`console network up` from the command prompt — to reconnect.\n"
 
 const (
 	networkOptSignIn  = "  Sign in  "
 	networkOptSignUp  = "  Sign up  "
 	networkOptUpgrade = "  Upgrade  "
 	networkOptCancel  = "  Cancel  "
+	networkOptOK      = "  Ok  "
 )
 
 // networkAPI is the account-facing half of [apiclient.Client] the gate
@@ -57,6 +72,8 @@ const (
 type networkAPI interface {
 	AccountStatus(ctx context.Context) (auth.RPCUser, bool, error)
 	NetworkCredentials(ctx context.Context) (controlURL, authKey string, err error)
+	NetworkMachines(ctx context.Context) ([]apiclient.Machine, error)
+	NetworkMachineRemove(ctx context.Context, id string) error
 }
 
 // networkGate decides whether this machine may join the network. The
@@ -76,23 +93,22 @@ func newNetworkGate(client networkAPI) *networkGate {
 	return &networkGate{client: client}
 }
 
-// check reports whether the cached account claims cover the network.
-// It performs no request, so it is safe to call from the event loop.
+// check reports whether this machine may try to join the network. Any
+// signed-in account may: how many machines its plan covers is the
+// account server's call when it mints the credentials, which is the
+// only point a machine cannot join without passing. It performs no
+// request, so it is safe to call from the event loop.
 func (g *networkGate) check(ctx context.Context) error {
-	user, signedIn, err := g.client.AccountStatus(ctx)
+	_, signedIn, err := g.client.AccountStatus(ctx)
 	if err != nil {
 		// An undecodable token reads as signed out, so the user is
 		// nudged towards a fresh sign-in rather than left stuck.
 		return runenet.ErrNotAuthenticated
 	}
-	switch nagStateFromAccount(user, signedIn) {
-	case idenag.StateActive:
-		return nil
-	case idenag.StateSignedOut:
+	if !signedIn {
 		return runenet.ErrNotAuthenticated
-	default:
-		return runenet.ErrSubscriptionRequired
 	}
+	return nil
 }
 
 // credentials satisfies [runenet.CredentialsFunc].
@@ -103,15 +119,73 @@ func (g *networkGate) credentials(
 		return "", "", err
 	}
 	controlURL, authKey, err = g.client.NetworkCredentials(ctx)
-	switch {
-	case errors.Is(err, auth.ErrNotAuthenticated):
-		return "", "", runenet.ErrNotAuthenticated
-	case errors.Is(err, apiclient.ErrSubscriptionRequired):
-		return "", "", runenet.ErrSubscriptionRequired
-	case err != nil:
-		return "", "", err
+	if err != nil {
+		return "", "", networkEntitlementError(err)
 	}
 	return controlURL, authKey, nil
+}
+
+// machines lists the machines registered to the account. The account
+// server answers, not the mesh, so it works from a machine the
+// account's allowance is keeping off the mesh.
+func (g *networkGate) machines(ctx context.Context) ([]apiclient.Machine, error) {
+	if err := g.check(ctx); err != nil {
+		return nil, err
+	}
+	machines, err := g.client.NetworkMachines(ctx)
+	if err != nil {
+		return nil, networkEntitlementError(err)
+	}
+	return machines, nil
+}
+
+// remove unregisters the machine named hostname. The account server
+// works in machine ids, which a user has no way to know, so the name
+// they do know is resolved against their machine list first.
+func (g *networkGate) remove(ctx context.Context, hostname string) error {
+	machines, err := g.machines(ctx)
+	if err != nil {
+		return err
+	}
+	for _, m := range machines {
+		if !strings.EqualFold(m.Hostname, hostname) {
+			continue
+		}
+		if err := g.client.NetworkMachineRemove(ctx, m.ID); err != nil {
+			return networkEntitlementError(err)
+		}
+		return nil
+	}
+	return fmt.Errorf("no machine named %q on the network", hostname)
+}
+
+// machineRemoved reports whether machines, the account's own list, no
+// longer has this machine in it. The comparison is by the durable id
+// the coordination server assigned: hostnames are not unique across an
+// account, and a machine that has been removed has no entry left to
+// match a name against anyway. A machine that has not registered yet
+// has no id and is never called removed.
+func machineRemoved(machineID string, machines []apiclient.Machine) bool {
+	if machineID == "" {
+		return false
+	}
+	return !slices.ContainsFunc(machines, func(m apiclient.Machine) bool {
+		return m.ID == machineID
+	})
+}
+
+// networkEntitlementError maps what the API client answers onto the
+// mesh sentinels, which is what [networkPromptFor] offers a way out of.
+func networkEntitlementError(err error) error {
+	switch {
+	case errors.Is(err, auth.ErrNotAuthenticated):
+		return runenet.ErrNotAuthenticated
+	case errors.Is(err, apiclient.ErrSubscriptionRequired):
+		return runenet.ErrSubscriptionRequired
+	case errors.Is(err, apiclient.ErrMachineLimit):
+		return runenet.ErrMachineLimit
+	}
+	return err
 }
 
 // networkPrompter turns an entitlement error into the sign-in or
@@ -186,6 +260,16 @@ func networkPromptFor(err error) (
 		return networkUpgradeMessage,
 			[]string{networkOptUpgrade, networkOptCancel},
 			[]term.KeyComb{{Ch: 'u'}, {Ch: 'c'}}, true
+	case errors.Is(err, runenet.ErrMachineLimit):
+		return networkMachineLimitMessage,
+			[]string{networkOptUpgrade, networkOptCancel},
+			[]term.KeyComb{{Ch: 'u'}, {Ch: 'c'}}, true
+	case errors.Is(err, runenet.ErrMachineRemoved):
+		// Nothing to offer: the machine is off the network because
+		// the account asked for it to be. Acknowledging is the only
+		// thing left, and the copy says how to undo it.
+		return networkMachineRemovedMessage,
+			[]string{networkOptOK}, []term.KeyComb{{Ch: 'o'}}, true
 	default:
 		return "", nil, nil, false
 	}

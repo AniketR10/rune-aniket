@@ -61,11 +61,16 @@ type Config struct {
 	// URL reported by `network status`.
 	AuthKey string
 	// Credentials mints ControlURL and AuthKey when the node joins.
-	// Rune Network is a paid feature and the account server decides
-	// which mesh a machine may join, so neither value is
-	// user-configurable. A nil Credentials joins with the static
+	// The account server decides which mesh a machine may join, and
+	// how many machines the account's plan covers, so neither value
+	// is user-configurable. A nil Credentials joins with the static
 	// ControlURL and AuthKey above.
 	Credentials CredentialsFunc
+	// OnNeedsLogin is called when the coordination server stops
+	// accepting this machine's node key, which is what being removed
+	// from the account looks like from here. It runs on a background
+	// goroutine and must not block.
+	OnNeedsLogin func()
 	// Port is the tailnet-side listening port. See DefaultPort.
 	Port int
 	// Dir is the data directory the node persists its identity under.
