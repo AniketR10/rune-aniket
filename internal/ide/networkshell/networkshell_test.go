@@ -42,6 +42,9 @@ type fakeNetwork struct {
 	machinesErr error
 	removed     []string
 	removeErr   error
+
+	machineNames    []string
+	machineNamesErr error
 }
 
 func (f *fakeNetwork) Status(context.Context) (runenet.Status, error) {
@@ -57,6 +60,10 @@ func (f *fakeNetwork) Down(context.Context) error { f.down++; return nil }
 
 func (f *fakeNetwork) Machines(context.Context) ([]Machine, error) {
 	return f.machines, f.machinesErr
+}
+
+func (f *fakeNetwork) MachineNames(context.Context) ([]string, error) {
+	return f.machineNames, f.machineNamesErr
 }
 
 func (f *fakeNetwork) Remove(_ context.Context, hostname string) error {
@@ -213,10 +220,9 @@ func TestMachinesMarkdown(t *testing.T) {
 }
 
 func TestComplete(t *testing.T) {
-	h := New(Config{Network: &fakeNetwork{}})
-
 	tsuite := []struct {
 		name string
+		net  fakeNetwork
 		args []string
 		want []string
 	}{
@@ -237,10 +243,42 @@ func TestComplete(t *testing.T) {
 			args: []string{"peers", ""},
 			want: nil,
 		},
+		{
+			// `remove` names a machine, and the account's own list is
+			// the only place those names can come from.
+			name: "remove offers the account's machines",
+			net:  fakeNetwork{machineNames: []string{"laptop", "desktop"}},
+			args: []string{"remove", ""},
+			want: []string{"laptop", "desktop"},
+		},
+		{
+			name: "machines filtered by prefix",
+			net:  fakeNetwork{machineNames: []string{"laptop", "desktop", "lab"}},
+			args: []string{"remove", "la"},
+			want: []string{"laptop", "lab"},
+		},
+		{
+			// A completion runs on a keystroke, so an unreachable
+			// account server offers nothing rather than failing.
+			name: "unreachable account offers nothing",
+			net: fakeNetwork{
+				machineNamesErr: errors.New("account server unreachable"),
+			},
+			args: []string{"remove", ""},
+			want: nil,
+		},
+		{
+			name: "remove takes only one machine",
+			net:  fakeNetwork{machineNames: []string{"laptop"}},
+			args: []string{"remove", "laptop", ""},
+			want: nil,
+		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
+			net := tcase.net
+			h := New(Config{Network: &net})
 			it, err := h.Complete(context.Background(), CommandName, tcase.args)
 			require.NoError(t, err)
 			var got []string

@@ -95,6 +95,9 @@ off the network. Free the slot a machine holds with:
 network remove studio
 ```
 
+Press `Tab` after `network remove` to complete the machine name from your
+account's list, so there is nothing to type from memory.
+
 The machine keeps working locally; it is only unregistered from the
 network. Running `network up` on it registers it again, which takes a
 slot back. A paid plan has no limit, so nothing has to be removed.

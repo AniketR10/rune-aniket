@@ -326,6 +326,52 @@ func TestNetworkHandleNeedsLogin(t *testing.T) {
 	})
 }
 
+// `network remove` completes machine names, which runs on a keystroke.
+// Machines prompts a signed-out user to sign in; MachineNames must not,
+// or pressing Tab would open a modal mid-keystroke.
+func TestGatedNetworkMachineNames(t *testing.T) {
+	newGated := func(t *testing.T, api *stubNetworkAPI) (gatedNetwork, *int) {
+		t.Helper()
+		net := newNetwork(config.NopConfig(), t.TempDir(), newNetworkGate(api))
+		t.Cleanup(func() { _ = net.Close() })
+		prompts := 0
+		return gatedNetwork{n: net, prompter: &networkPrompter{
+			scheduleNextTick: func(func()) bool { prompts++; return true },
+		}}, &prompts
+	}
+
+	t.Run("offers the account's machines", func(t *testing.T) {
+		gated, prompts := newGated(t, &stubNetworkAPI{
+			user:     auth.RPCUser{Role: auth.RoleUser},
+			signedIn: true,
+			machines: []apiclient.Machine{
+				{ID: "1", Hostname: "laptop"},
+				{ID: "2", Hostname: "desktop"},
+			},
+		})
+		names, err := gated.MachineNames(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"laptop", "desktop"}, names)
+		assert.Zero(t, *prompts)
+	})
+
+	t.Run("stays silent while signed out", func(t *testing.T) {
+		gated, prompts := newGated(t, &stubNetworkAPI{})
+		_, err := gated.MachineNames(context.Background())
+		assert.True(t, errors.Is(err, runenet.ErrNotAuthenticated), "got %v", err)
+		assert.Zero(t, *prompts)
+	})
+
+	// The same account, asked the same question by the `machines`
+	// subcommand, is prompted: that one the user asked for.
+	t.Run("Machines still prompts", func(t *testing.T) {
+		gated, prompts := newGated(t, &stubNetworkAPI{})
+		_, err := gated.Machines(context.Background())
+		require.Error(t, err)
+		assert.Equal(t, 1, *prompts)
+	})
+}
+
 // The gate, prompter, and network take only mandatory dependencies. A
 // nil is a wiring bug that must crash at construction, never a state
 // the code quietly tolerates.

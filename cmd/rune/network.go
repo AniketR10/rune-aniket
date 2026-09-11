@@ -441,6 +441,21 @@ func (g gatedNetwork) Remove(ctx context.Context, hostname string) error {
 	return nil
 }
 
+// MachineNames feeds `network remove` completion. It never prompts,
+// unlike Machines: a completion runs on a keystroke, and a keystroke
+// must not open a modal. A signed-out account simply offers nothing.
+func (g gatedNetwork) MachineNames(ctx context.Context) ([]string, error) {
+	machines, err := g.n.gate.machines(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]string, 0, len(machines))
+	for _, m := range machines {
+		ret = append(ret, m.Hostname)
+	}
+	return ret, nil
+}
+
 // Close leaves the mesh and stops serving workspaces to peers.
 func (n *network) Close() error {
 	n.mu.Lock()

@@ -96,6 +96,10 @@ type Network interface {
 	// it is answered by the account server rather than the mesh, so
 	// it works on a machine the allowance is keeping off the mesh.
 	Machines(ctx context.Context) ([]Machine, error)
+	// MachineNames are the names Remove accepts. It is the completion
+	// path, so unlike Machines it must stay silent: a completion runs
+	// on a keystroke, and a keystroke must not open a modal.
+	MachineNames(ctx context.Context) ([]string, error)
 	// Remove unregisters the machine named hostname.
 	Remove(ctx context.Context, hostname string) error
 }
@@ -307,8 +311,11 @@ func (h *Handler) down(ctx context.Context) (
 
 // Complete satisfies repl.CommandHandler.
 func (h *Handler) Complete(
-	_ context.Context, _ string, args []string,
+	ctx context.Context, _ string, args []string,
 ) (iterator.Iterator[string], error) {
+	if len(args) == 2 && args[0] == "remove" {
+		return h.completeMachine(ctx, args[1])
+	}
 	if len(args) > 1 {
 		return iterator.FromSlice[string](nil), nil
 	}
@@ -320,6 +327,26 @@ func (h *Handler) Complete(
 	for _, c := range commandManual.Commands {
 		if strings.HasPrefix(c.Name, filter) {
 			ret = append(ret, c.Name)
+		}
+	}
+	return iterator.FromSlice(ret), nil
+}
+
+// completeMachine offers the names `remove` takes. They come from the
+// account rather than the mesh, so the machine the plan's allowance is
+// keeping off the network — the one most likely to be removed — is
+// offered too.
+func (h *Handler) completeMachine(
+	ctx context.Context, filter string,
+) (iterator.Iterator[string], error) {
+	names, err := h.network.MachineNames(ctx)
+	if err != nil {
+		return iterator.FromSlice[string](nil), nil
+	}
+	var ret []string
+	for _, name := range names {
+		if strings.HasPrefix(name, filter) {
+			ret = append(ret, name)
 		}
 	}
 	return iterator.FromSlice(ret), nil
