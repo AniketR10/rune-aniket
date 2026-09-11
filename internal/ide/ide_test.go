@@ -3158,17 +3158,11 @@ func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
 	configFile, _ := makeTestFiles(t)
 	dataDir := t.TempDir()
 
-	var mu sync.Mutex
+	mu := new(sync.Mutex)
+	scheduleNextTick, drain := newTestScheduler(t, mu)
 	i, err := New(homeURI, configFile.Name(), dataDir, pkgtrust.NewStore(dataDir, nil), newTestStorage(t, dataDir),
-		WithLocker(&mu),
-		WithScheduleNextTick(func(fn func()) bool {
-			go func() {
-				mu.Lock()
-				defer mu.Unlock()
-				fn()
-			}()
-			return true
-		}),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithScheme(scheme, tracker.newScheme),
@@ -3176,7 +3170,12 @@ func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
 	require.NoError(t, err)
 
 	_ = i.Ready()
+	// Start scheduler dispatch before waiting: the install lands
+	// through a scheduled callback, and dispatch stays parked until
+	// the first drain so callbacks cannot race New's wiring.
+	drain()
 	i.WaitWorkspaces()
+	drain()
 
 	i.workspaceHandler.mu.Lock()
 	var cwd workspace.Workspace

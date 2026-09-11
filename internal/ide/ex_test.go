@@ -3313,7 +3313,12 @@ func newExForTestingVTECapacity(
 // a transport that is wedged but has not surfaced a disconnect.
 type blockingResizeWorkspace struct {
 	*testLoader
-	armed   atomic.Bool
+	armed atomic.Bool
+	// blockOn narrows the park to one size. The resize worker is a
+	// single goroutine, so a warm-up resize that enters first parks
+	// it forever and the resize under test never reaches the
+	// transport.
+	blockOn atomic.Pointer[[2]int]
 	entered chan [2]int
 	release chan struct{}
 }
@@ -3332,12 +3337,21 @@ func (w *blockingResizeWorkspace) SetPtySize(
 	if !w.armed.Load() {
 		return nil
 	}
+	if only := w.blockOn.Load(); only != nil && *only != [2]int{width, height} {
+		return nil
+	}
 	select {
 	case w.entered <- [2]int{width, height}:
 	default:
 	}
 	<-w.release
 	return nil
+}
+
+// armFor parks the transport only on a resize to width x height.
+func (w *blockingResizeWorkspace) armFor(width, height int) {
+	w.blockOn.Store(&[2]int{width, height})
+	w.armed.Store(true)
 }
 
 func (w *blockingResizeWorkspace) waitEntered(t *testing.T) [2]int {
@@ -3397,17 +3411,9 @@ func TestExResizeDoesNotBlockOnPtyResize(t *testing.T) {
 		require.NotNil(t, b.reservoir)
 		b.reservoir.WaitForInitialFill()
 
-		ws.armed.Store(true)
+		ws.armFor(80, 24)
 		assertResizeReturns(t, b)
-		// The warm terminal's own warm-up resize can still be in
-		// flight when the transport arms and then enters first; the
-		// assertion is that the user resize reaches the transport,
-		// so skip over warm-up sizes.
-		for {
-			if got := ws.waitEntered(t); got == [2]int{80, 24} {
-				break
-			}
-		}
+		assert.Equal(t, [2]int{80, 24}, ws.waitEntered(t))
 	})
 }
 
