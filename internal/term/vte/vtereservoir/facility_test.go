@@ -92,6 +92,43 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 3, int(called.Load()))
 	})
 
+	t.Run("Get discards dead pooled vtes", func(t *testing.T) {
+		t.Parallel()
+		// Regression: a remote transport drop kills the pty run
+		// loop of every pooled VTE (Component.IsComplete becomes
+		// true) but, past the first one-shot OnDisconnect signal,
+		// nothing drains the pool. Get used to hand these dead
+		// VTEs to new panes, which then rendered an empty terminal
+		// that never opened.
+		var mu sync.Mutex
+		var created []*recordingVTE
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
+			v := newRecordingVTE()
+			mu.Lock()
+			defer mu.Unlock()
+			created = append(created, v)
+			return v, nil
+		})
+
+		mu.Lock()
+		warm := append([]*recordingVTE(nil), created...)
+		mu.Unlock()
+		require.Len(t, warm, 2)
+		for _, v := range warm {
+			v.complete.Store(true)
+		}
+
+		got, err := f.Get()
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.False(t, got.IsComplete(),
+			"Get must not hand out a VTE whose pty run loop exited")
+		for _, v := range warm {
+			assert.True(t, v.closed.Load(),
+				"dead pooled VTEs must be disposed, not leaked")
+		}
+	})
+
 	t.Run("facility.Close closes all free vtes", func(t *testing.T) {
 		t.Parallel()
 		var mu sync.Mutex
@@ -773,7 +810,8 @@ func (r *fakeRemoteScheme) broadcastDisconnect() {
 // goroutine mutates the pool.
 type recordingVTE struct {
 	component.String
-	closed atomic.Bool
+	closed   atomic.Bool
+	complete atomic.Bool
 }
 
 func newRecordingVTE() *recordingVTE {
@@ -796,7 +834,7 @@ func (r *recordingVTE) OnFocusChange(bool)                     {}
 func (r *recordingVTE) SetDefaultAttributes(term.Attributes)   {}
 func (r *recordingVTE) Snapshot() (vte.Snapshot, error)        { return vte.Snapshot{}, nil }
 func (r *recordingVTE) RestoreFromSnapshot(vte.Snapshot) error { return nil }
-func (r *recordingVTE) IsComplete() bool                       { return false }
+func (r *recordingVTE) IsComplete() bool                       { return r.complete.Load() }
 func (r *recordingVTE) URI() workspaceapi.URI                  { return workspaceapi.URI{} }
 func (r *recordingVTE) Title() string                          { return "" }
 func (r *recordingVTE) UsedAlternateBuffer() bool              { return false }

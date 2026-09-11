@@ -217,6 +217,24 @@ func (f *Facility) WaitForInitialFill() {
 // Get selects an arbitrary vte from the [Facility], removes it from the
 // Facility, and returns it to the caller.
 func (f *Facility) Get() (VTE, error) {
+	v, dead, err := f.get()
+	// Dispose dead VTEs off-lock: closing a VTE bound to a dropped
+	// remote transport can block on RPC teardown.
+	for _, d := range dead {
+		if cerr := d.Close(); cerr != nil {
+			f.log(log.WarnLevel, "close dead pooled vte: %v", cerr)
+		}
+	}
+	return v, err
+}
+
+// get pops the first live pooled VTE. Pooled VTEs whose pty run loop
+// already exited (IsComplete) are returned in dead for the caller to
+// dispose outside the lock: a remote transport drop kills every
+// pooled VTE in place, and OnDisconnect is a one-shot signal, so a
+// drop after the first reconnect leaves the pool full of dead VTEs
+// that would render as blank, unresponsive terminals.
+func (f *Facility) get() (v VTE, dead []VTE, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -227,9 +245,13 @@ func (f *Facility) Get() (VTE, error) {
 		f.cond.Wait()
 	}
 
-	if len(f.pool) != 0 {
+	for len(f.pool) != 0 {
 		head := f.pool[0]
 		f.pool = f.pool[1:]
+		if head.IsComplete() {
+			dead = append(dead, head)
+			continue
+		}
 		// ensure there's always at least one available. The refill
 		// is opportunistic: a failure must not cost the caller the
 		// warm VTE it already holds.
@@ -241,10 +263,11 @@ func (f *Facility) Get() (VTE, error) {
 				f.pool = append(f.pool, newvte)
 			}
 		}
-		return head, nil
+		return head, dead, nil
 	}
 
-	return f.new(false)
+	v, err = f.new(false)
+	return v, dead, err
 }
 
 // Resize can be used to update the width/height of all the vtes in the reservoir.
@@ -414,7 +437,11 @@ func (v *vteAdapter) Handle(ev term.Event) (exit, handled bool) {
 
 func (v *vteAdapter) Close() error {
 	v.f.log(log.TraceLevel, "Close called on vte %p", v)
-	if v.exit || v.f.pool == nil || v.UsedAlternateBuffer() {
+	// IsComplete means the pty run loop exited (shell gone or remote
+	// transport dropped): the bell probe below could never dispatch,
+	// and caching such a VTE would hand a dead terminal to a later
+	// Get.
+	if v.exit || v.f.pool == nil || v.IsComplete() || v.UsedAlternateBuffer() {
 		return v.Handler.Close()
 	}
 	v.Handler.SystemCanDispatchBell(func(err error) {
