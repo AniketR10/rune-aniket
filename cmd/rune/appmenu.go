@@ -265,6 +265,21 @@ func appMenus(
 			prefill("Open Worktree…", "worktreeopen"),
 			prefill("Remove Worktree…", "worktreeremove"),
 		}},
+		{Title: "Network", Items: []appmenu.Item{
+			// Spelled as a raw echo macro rather than prefill: prefill
+			// appends a trailing <space>, which would separate the caret
+			// from the scheme the workspaceopen completer extends.
+			cmd("Open Remote Workspace…", "echo", "{prompt}workspaceopen<space>rune://"),
+			sep,
+			cmd("Status", "console", "network", "status"),
+			cmd("Show Peers", "console", "network", "peers"),
+			cmd("Show Machines", "console", "network", "machines"),
+			sep,
+			cmd("Connect", "console", "network", "up"),
+			cmd("Disconnect", "console", "network", "down"),
+			sep,
+			prefill("Remove Machine…", "console", "network", "remove"),
+		}},
 		{Title: "Tools", Items: []appmenu.Item{
 			cmd("New Terminal", "terminalnew"),
 			cmd("New Terminal Tab", "terminalnewtab"),

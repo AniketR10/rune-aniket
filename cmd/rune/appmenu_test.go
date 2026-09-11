@@ -155,7 +155,9 @@ func TestAppMenusShippedPresetsBindCommands(t *testing.T) {
 // TestAppMenusItemInvariants pins the structural rules of the menu
 // spec: titles and commands are non-empty, and prompt-prefill items use
 // the presets' `echo {prompt}...<space>` macro shape with an ellipsis
-// in the title signalling that further input is required.
+// in the title signalling that further input is required. A macro may
+// instead end with a URI scheme prefix, which leaves the caret against
+// a partial argument for the command's completer to extend.
 func TestAppMenusItemInvariants(t *testing.T) {
 	titles := map[string]bool{}
 	for _, menu := range testAppMenus(
@@ -176,8 +178,11 @@ func TestAppMenusItemInvariants(t *testing.T) {
 				"%s: echo prefill must carry a single macro argument", cmd.Title)
 			assert.True(t, strings.HasPrefix(cmd.Args[0], "{prompt}"),
 				"%s: prefill %q must open the prompt", cmd.Title, cmd.Args[0])
-			assert.True(t, strings.HasSuffix(cmd.Args[0], "<space>"),
-				"%s: prefill %q must end with a trailing space", cmd.Title, cmd.Args[0])
+			assert.True(t,
+				strings.HasSuffix(cmd.Args[0], "<space>") ||
+					strings.HasSuffix(cmd.Args[0], "://"),
+				"%s: prefill %q must end with a trailing space or a scheme prefix",
+				cmd.Title, cmd.Args[0])
 			assert.True(t, strings.HasSuffix(cmd.Title, "…"),
 				"%s: prefill items require further input and need an ellipsis", cmd.Title)
 		}
@@ -457,8 +462,43 @@ func TestAppMenusDeriveAccelerators(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		"Rune", "File", "Edit", "View", "Find", "Go",
-		"Workspace", "Tools", "Help",
+		"Workspace", "Network", "Tools", "Help",
 	}, titles)
+}
+
+// TestAppMenusNetwork pins the Network menu to the console `network`
+// subcommand surface so a subcommand rename cannot silently leave a
+// dead menu item behind.
+func TestAppMenusNetwork(t *testing.T) {
+	menus := testAppMenus(nil, nil, appMenuTestModels, appMenuTestTutorials)
+	menu := menuByTitle(t, menus, "Network")
+
+	assert.Equal(t, []appmenu.Item{
+		appmenu.Command{
+			Title:   "Open Remote Workspace…",
+			Command: "echo",
+			Args:    []string{"{prompt}workspaceopen<space>rune://"},
+		},
+		appmenu.Separator{},
+		appmenu.Command{Title: "Status", Command: "console", Args: []string{"network", "status"}},
+		appmenu.Command{
+			Title: "Show Peers", Command: "console", Args: []string{"network", "peers"},
+		},
+		appmenu.Command{
+			Title: "Show Machines", Command: "console", Args: []string{"network", "machines"},
+		},
+		appmenu.Separator{},
+		appmenu.Command{Title: "Connect", Command: "console", Args: []string{"network", "up"}},
+		appmenu.Command{
+			Title: "Disconnect", Command: "console", Args: []string{"network", "down"},
+		},
+		appmenu.Separator{},
+		appmenu.Command{
+			Title:   "Remove Machine…",
+			Command: "echo",
+			Args:    []string{"{prompt}console<space>network<space>remove<space>"},
+		},
+	}, menu.Items)
 }
 
 // TestActivateAppMenuCommandPublishesChord asserts menu activation
