@@ -2414,6 +2414,32 @@ func (c ideConfig) authorizerAutoAuthorize(key string, defaultValue bool) bool {
 	return enabled
 }
 
+func (c ideConfig) telemetry() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "telemetry")
+}
+
+// telemetryEnabled reports whether usage telemetry may be sent. A malformed
+// value disables telemetry: the user's intent is unreadable, so the quiet
+// option is the safe one.
+func (c ideConfig) telemetryEnabled() bool {
+	cfg, ok := c.telemetry()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("enabled")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["telemetry.enabled"] = err
+			return false
+		}
+		return true
+	}
+	return enabled
+}
+
 func (c ideConfig) modal() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
@@ -2612,6 +2638,17 @@ func EditorMode(cfg config.Config) string {
 	}
 	c := ideConfig{cfg: raw, errors: map[string]error{}}
 	return c.editorMode()
+}
+
+// TelemetryEnabled resolves telemetry.enabled from cfg. A missing section or
+// key enables telemetry; a malformed value disables it.
+func TelemetryEnabled(cfg config.Config) bool {
+	var raw map[string]any
+	if telemetry, err := cfg.GetMap("telemetry"); err == nil {
+		raw = map[string]any{"telemetry": telemetry}
+	}
+	c := ideConfig{cfg: raw, errors: map[string]error{}}
+	return c.telemetryEnabled()
 }
 
 // pkgEditorMode returns the editor mode exposed to package config.star

@@ -413,6 +413,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.False(t, cfg.editorAutoSave())
 	assert.Equal(t, "info", cfg.cfg["log_level"])
 	assert.Equal(t, 2000, cfg.consoleMaxHistory())
+	assert.True(t, cfg.telemetryEnabled())
 }
 
 func TestModalPresetUsesHomeRowResizeBindings(t *testing.T) {

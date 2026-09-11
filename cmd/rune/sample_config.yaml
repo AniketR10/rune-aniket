@@ -70,6 +70,10 @@
 #  #wallpaper: myAsciiArt
 #  #wallpaper_image: /path/to/image.png
 
+#telemetry:
+#  # Report anonymous usage and system information. Set to false to opt out.
+#  enabled: true
+
 #extensions:
 #  fuzzy_search:
 #    path: extension_fuzzy_search

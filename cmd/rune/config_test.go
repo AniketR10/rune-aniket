@@ -54,6 +54,27 @@ func TestIDEConfigOverlaySubscriptResolvesDefaultTree(t *testing.T) {
 	assert.Equal(t, 2, got)
 }
 
+// TestTelemetryEnabledFromUserConfig covers the opt-out path newAPIClient
+// depends on: telemetry ships enabled, and a user config that sets
+// telemetry.enabled to false turns it off.
+func TestTelemetryEnabledFromUserConfig(t *testing.T) {
+	dir := t.TempDir()
+	assert.True(t, ide.TelemetryEnabled(mustLoadConfig(t,
+		filepath.Join(dir, "missing.yaml"))))
+
+	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path,
+		[]byte("telemetry:\n  enabled: false\n"), 0o644))
+	assert.False(t, ide.TelemetryEnabled(mustLoadConfig(t, path)))
+}
+
+func mustLoadConfig(t *testing.T, path string) config.Config {
+	t.Helper()
+	cfg, err := ide.Config(path, runeDefaultConfig())
+	require.NoError(t, err)
+	return cfg
+}
+
 // TestDefaultQuickMenuButtons guards the quick menu shipped in rune.star
 // against an entry that validation rejects, which would silently drop a
 // button at runtime. It compares parsed buttons against raw entries

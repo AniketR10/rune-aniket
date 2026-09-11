@@ -580,6 +580,13 @@ config = {
         # onboarding installs without prompting regardless of this setting.
         "auto_install": False,
     },
+    # Anonymous usage telemetry. See the Telemetry page in the Rune docs for
+    # the full list of what is reported.
+    "telemetry": {
+        # Report anonymous usage and system information. When False, Rune
+        # sends nothing and never creates an install identifier.
+        "enabled": True,
+    },
     # Interactive tutorials. Each entry maps a `:tutorial start <name>` to
     # the path of a Starlark file that calls `tutorial(...)` with a
     # list of `step(...)` entries. Empty by default — extensions and

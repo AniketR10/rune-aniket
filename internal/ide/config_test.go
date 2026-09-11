@@ -722,6 +722,37 @@ func TestUpdatesAutoInstall(t *testing.T) {
 	}
 }
 
+func TestTelemetryEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		telemetry any
+		want      bool
+		wantErr   bool
+	}{
+		{"absent telemetry defaults true", nil, true, false},
+		{"absent key defaults true", map[string]any{}, true, false},
+		{"explicit true", map[string]any{"enabled": true}, true, false},
+		{"explicit false", map[string]any{"enabled": false}, false, false},
+		{"invalid type fails closed", map[string]any{"enabled": "yes"},
+			false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := map[string]any{}
+			if tc.telemetry != nil {
+				m["telemetry"] = tc.telemetry
+			}
+			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.telemetryEnabled())
+			assert.Equal(t, tc.want, TelemetryEnabled(config.MapConfig(m)))
+			if tc.wantErr {
+				assert.Error(t, cfg.errors["telemetry.enabled"])
+			} else {
+				assert.Empty(t, cfg.errors)
+			}
+		})
+	}
+}
+
 func TestAuthorizerAutoAuthorize(t *testing.T) {
 	for _, tc := range []struct {
 		name           string

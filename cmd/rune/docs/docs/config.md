@@ -227,3 +227,18 @@ For ready-to-copy `exo` configs (Vim, Neovim, Helix, Nano, and more), see the
   ```python tab
   config["gui"]["key_mapping"] = {"<capslock>": "<esc>"}
   ```
+
+## Telemetry
+
+- `telemetry.enabled`: whether Rune reports anonymous usage data. It is `true`
+  by default. See [Telemetry](./learn/telemetry.md) for the full list of what
+  is reported and how to opt out.
+
+  ```yaml tab
+  telemetry:
+    enabled: false
+  ```
+
+  ```python tab
+  config["telemetry"]["enabled"] = False
+  ```

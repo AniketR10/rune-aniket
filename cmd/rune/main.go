@@ -890,7 +890,7 @@ func newAPIClient(
 	apicfg.InsecureTransport = *flagGRPCInsecure
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	apicfg.WebsiteAddress = *flagWebsiteAddress
-	apicfg.EnableTelemetry = true
+	apicfg.EnableTelemetry = ide.TelemetryEnabled(cfg)
 	apicfg.TelemetryPeriod = telemetryPeriod
 	apicfg.InstallBackupDir = installBackupDir
 	apicfg.EditorMode = ide.EditorMode(cfg)
