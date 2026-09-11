@@ -494,6 +494,44 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 0, f.Capacity())
 	})
 
+	// Pins the data race where vteAdapter.Close read f.pool without
+	// the facility lock to decide between re-pooling and closing,
+	// while the initCap warm-up goroutines appended to the pool
+	// under the lock. Get disposes dead pooled VTEs by calling
+	// Close off-lock, so the unsynchronized read raced every warm
+	// pool append; the race detector flags it.
+	t.Run("adapter Close races the warm-up appends safely", func(t *testing.T) {
+		t.Parallel()
+		b := nopBrowser{}
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+		scheme, err := workspacetest.NewNopScheme("file:///tmp")(
+			context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		nop := scheme.(*workspacetest.NopScheme)
+		nop.NewPtyFunc = func(ctx context.Context) (workspaceapi.Pty, error) {
+			return workspaceapi.Pty{
+				Master: scheme.NewFile(0, ""),
+				Slave:  scheme.NewFile(1, ""),
+			}, nil
+		}
+		nop.StartCommandFunc = func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+			return 0, nil
+		}
+		f := New(b, b, scheme, scheme, b, vte.DefaultConfig(), 8)
+		t.Cleanup(func() { _ = f.Close() })
+
+		// Get and dispose adapters while the warm-up is still
+		// appending; each Close decides whether the facility can
+		// still re-pool it, which must be synchronized with those
+		// appends.
+		for range 16 {
+			v, err := f.Get()
+			require.NoError(t, err)
+			_ = v.Close()
+		}
+	})
+
 	// Pins the regression where a stalled remote workspace transport
 	// blocked the warm-up's NewPty forever: pendingInit never drained,
 	// so Get (called on the host event loop during session restore)

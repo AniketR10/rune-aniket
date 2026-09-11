@@ -390,6 +390,15 @@ func (f *Facility) put(v VTE) bool {
 	return true
 }
 
+// drained reports whether the facility can no longer re-pool an
+// adapter: it was closed, or its pool was torn down (reset after a
+// transport drop, or not yet populated by the warm-up).
+func (f *Facility) drained() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closed || f.pool == nil
+}
+
 func (e *Facility) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
@@ -441,7 +450,7 @@ func (v *vteAdapter) Close() error {
 	// transport dropped): the bell probe below could never dispatch,
 	// and caching such a VTE would hand a dead terminal to a later
 	// Get.
-	if v.exit || v.f.pool == nil || v.IsComplete() || v.UsedAlternateBuffer() {
+	if v.exit || v.f.drained() || v.IsComplete() || v.UsedAlternateBuffer() {
 		return v.Handler.Close()
 	}
 	v.Handler.SystemCanDispatchBell(func(err error) {
