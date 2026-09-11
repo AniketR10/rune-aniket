@@ -1,0 +1,74 @@
+name: Feature request
+description: Suggest a new capability or an improvement to an existing one
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Larger changes (a new component, a new extension surface, or a
+        behavior change to Rune Agent) are best agreed on here before you
+        write code. See
+        [CONTRIBUTING.md](https://github.com/unstablebuild/rune/blob/main/CONTRIBUTING.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: >
+        What are you trying to do today, and where does Rune get in the
+        way? Describe the workflow, not just the missing feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: >
+        What should Rune do instead? Include the command, key binding, or
+        config key you would expect, and how it should behave.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Editor and text handling
+        - Terminal / VTE
+        - GUI and rendering
+        - Language intelligence (LSP, symbols, search)
+        - Debugger (DAP)
+        - Rune Agent
+        - Workspaces (local, remote, packages)
+        - Configuration and key bindings
+        - Install, upgrade, or licensing
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >
+        Existing commands, config, extensions, or external tools you tried,
+        and why they fall short.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: >
+        Mockups, prior art from other editors, or links to related issues.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I would be willing to work on this.
+          required: false

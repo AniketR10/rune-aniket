@@ -1,0 +1,116 @@
+name: Bug report
+description: Something in Rune or Rune Agent does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        Please do not report security vulnerabilities here. See
+        [SECURITY.md](https://github.com/unstablebuild/rune/blob/main/SECURITY.md)
+        for private reporting.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: A clear description of the bug and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Numbered steps, starting from a fresh `rune` launch. Include the
+        exact keys pressed, commands run, and any relevant config.
+      placeholder: |
+        1. Launch `rune -w /path/to/repo`
+        2. Open a Go file and press ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Rune does this affect?
+      options:
+        - Editor and text handling
+        - Terminal / VTE
+        - GUI and rendering
+        - Language intelligence (LSP, symbols, search)
+        - Debugger (DAP)
+        - Rune Agent
+        - Workspaces (local, remote, packages)
+        - Configuration and key bindings
+        - Install, upgrade, or licensing
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Rune version
+      description: Output of `rune --version`.
+      placeholder: "Rune v0.0.0 (HEAD is abcdef0)"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: "macOS 15.3 arm64, or Ubuntu 24.04 amd64"
+    validations:
+      required: true
+
+  - type: input
+    id: shell
+    attributes:
+      label: Shell
+      description: >
+        The shell running in the Rune terminal. Only needed for terminal
+        or shell-related bugs.
+      placeholder: "zsh 5.9"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, crash report, or screenshots
+      description: >
+        Relevant lines from `~/.rune/debug.log`, any crash report path
+        printed as `saved crash report file://...`, and screenshots or a
+        recording for visual bugs. Redact anything sensitive.
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: >
+        Any non-default parts of `~/.rune/config.yaml` (or `config.star`),
+        installed extensions, or agent provider setup involved.
+      render: yaml
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can reproduce this on the latest released version.
+          required: false
