@@ -1145,6 +1145,70 @@ func TestComponentResizeAfterCloseSkipsSetPtySize(t *testing.T) {
 		"a closed Component must not ioctl its released master descriptor")
 }
 
+// parkedStartExecutor parks inside StartCommand, standing in for the
+// window where the executor is building the child process from the
+// pty descriptors it was handed.
+type parkedStartExecutor struct {
+	testExecutor
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (e *parkedStartExecutor) StartCommand(
+	context.Context, workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	close(e.entered)
+	<-e.release
+	return 1, nil
+}
+
+// TestComponentCloseWaitsForInflightStartCommand reproduces the data
+// race between Close and the async spawn goroutine: the executor reads
+// the slave descriptor while building the child (os/exec calls
+// File.Fd), and Close closed that same *os.File without serializing
+// against the hand-off. The race detector flagged it on CI as a
+// concurrent File.Fd / File.Close on the pty slave.
+func TestComponentCloseWaitsForInflightStartCommand(t *testing.T) {
+	t.Parallel()
+
+	exe := &parkedStartExecutor{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	cfg := DefaultConfig()
+	cfg.CommandAndArgs = []string{"sh"}
+	cfg.CommandExpander = expanderFunc(
+		func(_ context.Context, line string) (string, error) {
+			return line, nil
+		})
+	comp, err := NewComponent(exe, exe, &mockTabManager{}, cfg)
+	require.NoError(t, err)
+
+	select {
+	case <-exe.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the spawn goroutine never reached StartCommand")
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- comp.Close() }()
+
+	select {
+	case <-closed:
+		t.Fatal("Close released the pty while the executor was still " +
+			"building the child from its descriptors")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(exe.release)
+	select {
+	case err := <-closed:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close never completed after the spawn settled")
+	}
+}
+
 // TestComponentRestoreFromSnapshotDrivesSetPtySize reproduces a bug where
 // a freshly-restored Component would keep its pre-restore width/height (e.g.
 // the warm-reservoir WidthHint or a stale workspace size propagated via

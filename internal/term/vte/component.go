@@ -787,12 +787,17 @@ func (t *Component) ClearPrimaryBuffer() (ok bool) {
 
 // Close tears down the pty and cancels the Component's context.
 // Safe to call concurrently with the async expandAndStart goroutine:
-// startCommand re-checks t.closed (atomic) under mu before handing
-// the pty FDs to executor.StartCommand.
+// startCommand re-checks t.closed under mu before handing the pty
+// FDs to executor.StartCommand, and the teardown below takes the same
+// lock so it cannot release a descriptor the executor is still
+// reading to build the child. The context cancellation above unwinds
+// a spawn RPC parked on a dead transport, so the wait stays bounded.
 func (t *Component) Close() (ret error) {
 	t.closed.Store(true)
 	t.cancelCtx()
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if err := t.closeSlave(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
