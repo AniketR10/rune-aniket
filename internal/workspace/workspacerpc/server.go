@@ -34,6 +34,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/rune/internal/debug"
+	"unstable.build/rune/internal/workspace"
 	"unstable.build/rune/internal/workspace/processctx"
 )
 
@@ -400,7 +401,7 @@ func (s *Server) SetPtySize(ctx context.Context, req *workspacerpc.SetPtySizeReq
 ) {
 	master := s.s.NewFile(uintptr(req.GetMasterFd()), req.GetMaster())
 	if master == nil {
-		return nil, errors.New("invalid master pty fd")
+		return nil, workspace.ErrInvalidMasterPtyFd
 	}
 	pty := workspaceapi.Pty{
 		Master: master,

@@ -55,6 +55,13 @@ var (
 	errProcNotFound = errors.New("process not found")
 )
 
+// ErrInvalidMasterPtyFd reports a SetPtySize whose master descriptor
+// is no longer registered with the scheme, i.e. the pty was closed.
+// The message is a wire contract: the workspacerpc server returns it
+// verbatim, gRPC flattens it to an untyped status error, and the ide
+// resize worker matches on the text to drop the resize silently.
+var ErrInvalidMasterPtyFd = errors.New("invalid master pty fd")
+
 // NewFileScheme returns a Scheme that manages resources
 // on the local file system.
 func NewFileScheme(
@@ -552,14 +559,34 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 		return fmt.Errorf("extraneous pty: %+v", pp)
 	}
 
+	// Resizes are queued off the event loop, so one can race the
+	// terminal teardown and dequeue after Close released the master.
+	// Close deregisters the wrapper, so a missing registration means
+	// the cached descriptor number is dead or already recycled by an
+	// unrelated file, which must not be ioctl'd.
+	if !p.registered(ptyFile) {
+		return ErrInvalidMasterPtyFd
+	}
 	err := pty.Setsize(ptyFile.Fd(), &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
 	})
 	if err != nil {
+		// Close may have landed between the check above and the
+		// ioctl; report that as the pty being gone, not as EBADF.
+		if !p.registered(ptyFile) {
+			return ErrInvalidMasterPtyFd
+		}
 		return fmt.Errorf("set pty size: %v", err)
 	}
 	return nil
+}
+
+// registered reports whether f is still the file registered under its
+// descriptor number, i.e. it has not been closed.
+func (p *fileScheme) registered(f *fileSchemeFile) bool {
+	cur, ok := p.files.Load(f.fd)
+	return ok && cur == f
 }
 
 func (p *fileScheme) MkdirAll(path string, perm os.FileMode) error {

@@ -84,3 +84,37 @@ func TestFileSchemeNewFileNameGate(t *testing.T) {
 	require.Equal(t, f, s.NewFile(f.Fd(), f.Name()))
 	require.Nil(t, s.NewFile(f.Fd(), tmpDir+"/other.txt"))
 }
+
+// A resize can race terminal teardown: the async pty-resize worker may
+// dequeue a SetPtySize that was queued while the terminal was alive
+// only after Close has released the master. The scheme must report
+// that as ErrInvalidMasterPtyFd — the same condition the workspacerpc
+// server reports for a remote workspace — so the ide worker can drop
+// it silently instead of raising an EBADF error toast, or worse,
+// ioctl'ing whichever file has recycled the descriptor number.
+func TestFileSchemeSetPtySizeClosedMaster(t *testing.T) {
+	tmpDir := t.TempDir()
+	uri, err := makeLocalURI(tmpDir)
+	require.NoError(t, err)
+
+	s, err := newTestFileScheme(uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	pty, err := s.NewPty(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = pty.Master.Close()
+		_ = pty.Slave.Close()
+	})
+
+	require.NoError(t, s.SetPtySize(pty, 80, 24),
+		"a live master must resize fine")
+
+	require.NoError(t, pty.Master.Close())
+
+	err = s.SetPtySize(pty, 32, 5)
+	require.ErrorIs(t, err, ErrInvalidMasterPtyFd)
+	require.Contains(t, err.Error(), "invalid master pty fd",
+		"the message is the wire contract the ide resize worker matches on")
+}

@@ -34,10 +34,10 @@ import (
 // by the newest size, so SetPtySize drops it rather than wait.
 const asyncTerminalResizeQueue = 1
 
-// errInvalidMasterPtyFd is the message workspacerpc.Server.SetPtySize
-// reports once the master descriptor is gone. gRPC flattens it to an
-// untyped status error, so the message is all the client can match on.
-const errInvalidMasterPtyFd = "invalid master pty fd"
+// errInvalidMasterPtyFd is the message the workspace schemes report
+// once the master descriptor is gone. gRPC flattens it to an untyped
+// status error, so the message is all the client can match on.
+var errInvalidMasterPtyFd = workspace.ErrInvalidMasterPtyFd.Error()
 
 type ptyResize struct {
 	pty           workspaceapi.Pty
