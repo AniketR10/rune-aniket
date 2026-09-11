@@ -64,17 +64,19 @@ COMMON_LDFLAGS=-X unstable.build/rune/internal/debug.Tag=$$(git describe --tags)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=six"
 
 # RUNE_ENV selects the API endpoints baked into the binary.
-#   - dev (default): point at api.unstable.build / rpc.unstable.build
-#   - prod         : point at api.rune.build / rpc.rune.build
-# Distribution / release rules below set RUNE_ENV=prod so user-facing builds
-# always target production. Local `make rune` keeps the dev defaults.
-RUNE_ENV ?= dev
-PROD_LDFLAGS=-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST) -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultWebsiteAddress=$(PROD_WEBSITE_ADDRESS)
+#   - prod (default): point at api.rune.build / rpc.rune.build
+#   - staging       : point at api.unstable.build / rpc.unstable.build
+# Production is the source-level default in cmd/rune/ide/apiclient, so a
+# plain `go build` / `go run ./cmd/rune` matches a release build and needs
+# no ldflags here. Staging is opt-in: the staging-dist-* rules below set
+# RUNE_ENV=staging, which injects STAGING_LDFLAGS.
+RUNE_ENV ?= prod
+STAGING_LDFLAGS=-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.unstable.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.unstable.build:443 -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(STAGING_DOWNLOAD_HOST) -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultWebsiteAddress=$(STAGING_WEBSITE_ADDRESS)
 # Use `=` (recursive) so $(RUNE_ENV) is re-evaluated when RUNE_GOFLAGS is expanded
 # in a recipe — this lets target-specific overrides such as
-# `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
-# prerequisites without affecting the default `make rune` build.
-RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
+# `staging-dist-darwin-arm64: RUNE_ENV := staging` flip the ldflags for
+# transitive prerequisites without affecting the default `make rune` build.
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/rune/internal/debug.Package=rune $(if $(filter staging,$(RUNE_ENV)),$(STAGING_LDFLAGS))"
 
 # GitHub repositories dist.sh uploads release tarballs / DMGs to.
 # `prod-dist-*` targets publish to PROD_RELEASE_REPO (user-facing) while
@@ -89,8 +91,8 @@ PROD_DOWNLOAD_HOST    ?= https://github.com/$(PROD_RELEASE_REPO)/releases/latest
 STAGING_DOWNLOAD_HOST ?= https://github.com/$(STAGING_RELEASE_REPO)/releases/latest/download
 
 # Public www-rune origin baked into the binary for the OAuth callback
-# redirect. Prod builds use the user-facing website; the default var in
-# apiclient.DefaultWebsiteAddress already points at the staging site.
+# redirect. Staging builds use the internal website; the default var in
+# apiclient.DefaultWebsiteAddress already points at the user-facing site.
 PROD_WEBSITE_ADDRESS     ?= https://rune.build
 STAGING_WEBSITE_ADDRESS  ?= https://rune.unstable.build
 
@@ -532,8 +534,9 @@ dist-darwin-amd64: check-release-tag dmg-amd64-notarize
 check-release-tag:
 	@cd $(ROOT_DIR) && ./cmd/rune/check-release-tag.sh
 
-# prod-dist-*: build with prod ldflags (api.rune.build / rpc.rune.build:443)
-# and upload to $(PROD_RELEASE_REPO).
+# prod-dist-*: build with the default prod endpoints
+# (api.rune.build / rpc.rune.build:443) and upload to
+# $(PROD_RELEASE_REPO).
 prod-dist-linux-amd64:  RUNE_ENV := prod
 prod-dist-linux-amd64:  DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
@@ -575,46 +578,46 @@ prod-dist-darwin-arm64: DIST_REPO := $(PROD_RELEASE_REPO)
 prod-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-darwin-arm64: dist-darwin-arm64
 
-# staging-dist-*: build with the default dev ldflags
+# staging-dist-*: build with the staging ldflags
 # (api.unstable.build / rpc.unstable.build:443) and upload to
 # $(STAGING_RELEASE_REPO).
-staging-dist-linux-amd64:  RUNE_ENV := dev
+staging-dist-linux-amd64:  RUNE_ENV := staging
 staging-dist-linux-amd64:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64:  dist-linux-amd64
 
-staging-dist-linux-arm64:  RUNE_ENV := dev
+staging-dist-linux-arm64:  RUNE_ENV := staging
 staging-dist-linux-arm64:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64:  dist-linux-arm64
 
-staging-dist-linux-amd64-native:  RUNE_ENV := dev
+staging-dist-linux-amd64-native:  RUNE_ENV := staging
 staging-dist-linux-amd64-native:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64-native:  dist-linux-amd64-native
 
-staging-dist-linux-arm64-native:  RUNE_ENV := dev
+staging-dist-linux-arm64-native:  RUNE_ENV := staging
 staging-dist-linux-arm64-native:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64-native:  dist-linux-arm64-native
 
 # staging-dist-linux-*-cross are retained as aliases for the now-default cross build.
-staging-dist-linux-amd64-cross:  RUNE_ENV := dev
+staging-dist-linux-amd64-cross:  RUNE_ENV := staging
 staging-dist-linux-amd64-cross:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64-cross:  dist-linux-amd64
 
-staging-dist-linux-arm64-cross:  RUNE_ENV := dev
+staging-dist-linux-arm64-cross:  RUNE_ENV := staging
 staging-dist-linux-arm64-cross:  DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64-cross:  dist-linux-arm64
 
-staging-dist-darwin-amd64: RUNE_ENV := dev
+staging-dist-darwin-amd64: RUNE_ENV := staging
 staging-dist-darwin-amd64: DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-amd64: dist-darwin-amd64
 
-staging-dist-darwin-arm64: RUNE_ENV := dev
+staging-dist-darwin-arm64: RUNE_ENV := staging
 staging-dist-darwin-arm64: DIST_REPO := $(STAGING_RELEASE_REPO)
 staging-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-arm64: dist-darwin-arm64

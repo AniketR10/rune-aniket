@@ -112,7 +112,7 @@ To build, package, and publish as a GitHub release asset:
 make rune-prod-dist-linux-amd64
 make rune-prod-dist-linux-arm64
 
-# Staging (unstablebuild/rune-staging, dev API endpoints baked in)
+# Staging (unstablebuild/rune-staging, staging API endpoints baked in)
 # default cross-compile, glibc 2.28 floor
 make rune-staging-dist-linux-amd64
 make rune-staging-dist-linux-arm64

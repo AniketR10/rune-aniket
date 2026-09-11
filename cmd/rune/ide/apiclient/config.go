@@ -29,13 +29,14 @@ const (
 
 // DefaultHTTPEndpointAddress and DefaultGRPCEndpointAddress are the
 // API endpoints baked into the binary at build time. They default to
-// the development API; release builds override them via `-ldflags -X`
-// to point at the production API. They are package-level variables
-// (not constants) so the linker can replace them; do not assign to
-// them at runtime.
+// the production API so an uninstrumented build (`go run ./cmd/rune`)
+// behaves like a release; staging builds override them via
+// `-ldflags -X` to point at the development API. They are
+// package-level variables (not constants) so the linker can replace
+// them; do not assign to them at runtime.
 var (
-	DefaultHTTPEndpointAddress = "https://api.unstable.build"
-	DefaultGRPCEndpointAddress = "rpc.unstable.build:443"
+	DefaultHTTPEndpointAddress = "https://api.rune.build"
+	DefaultGRPCEndpointAddress = "rpc.rune.build:443"
 )
 
 // DefaultDownloadsHost is the public CDN origin that hosts the
@@ -45,18 +46,18 @@ var (
 // Points at the GitHub releases download endpoint, which always
 // resolves to the newest non-prerelease release, so beta releases
 // published as prereleases stay invisible to stable clients. Not a
-// constant so the linker can replace it via `-ldflags -X`; do not
-// assign to it at runtime.
+// constant so staging builds can replace it via `-ldflags -X` with
+// the rune-staging release host; do not assign to it at runtime.
 var DefaultDownloadsHost = "https://github.com/unstablebuild/rune/releases/latest/download"
 
 // DefaultWebsiteAddress is the public www-rune origin used by the
 // OAuth callback page to redirect users to /checkout after sign-in.
 //
-// Defaults to the staging website. Production release builds override
-// it via `-ldflags -X` to point at the prod website (see
-// cmd/rune/Makefile PROD_LDFLAGS). Not a constant so the linker can
-// replace it; do not assign to it at runtime.
-var DefaultWebsiteAddress = "https://rune.unstable.build"
+// Defaults to the production website. Staging builds override it via
+// `-ldflags -X` to point at the staging website (see cmd/rune/Makefile
+// STAGING_LDFLAGS). Not a constant so the linker can replace it; do
+// not assign to it at runtime.
+var DefaultWebsiteAddress = "https://rune.build"
 
 // defaultReleaseCollection returns the Firestore collection name for
 // the current platform, e.g. "rune-release-darwin-arm64". The prefix

@@ -78,7 +78,7 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
-	rune-prod-app-arm64 \
+	rune-staging-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize \
 	rune-agent-prod-dist rune-agent-staging-dist \
@@ -339,6 +339,9 @@ rune-release-linux-arm64-cross:
 #
 #   prod    -> unstablebuild/rune          (api.rune.build / rpc.rune.build:443)
 #   staging -> unstablebuild/rune-staging  (api.unstable.build / rpc.unstable.build:443)
+#
+# Prod is the source-level default, so only the staging targets inject
+# endpoint ldflags (RUNE_ENV=staging).
 rune-prod-dist-linux-amd64: clean
 	@$(MAKE) -C cmd/rune prod-dist-linux-amd64
 
@@ -448,9 +451,9 @@ rune-app-amd64:
 rune-app-arm64:
 	@$(MAKE) -C cmd/rune app-arm64
 
-# Like rune-app-arm64 but bakes the prod API endpoints into the binary.
-rune-prod-app-arm64:
-	@$(MAKE) -C cmd/rune app-arm64 RUNE_ENV=prod
+# Like rune-app-arm64 but bakes the staging API endpoints into the binary.
+rune-staging-app-arm64:
+	@$(MAKE) -C cmd/rune app-arm64 RUNE_ENV=staging
 
 rune-app-delve:
 	@$(MAKE) -C cmd/rune app-delve

@@ -11,10 +11,12 @@ ARG GIT_SSH_KEY
 ARG RUNE_BUILD_TAG
 ARG RUNE_BUILD_COMMIT
 ARG RUNE_RELEASE_TAR
-# RUNE_ENV selects the baked-in API endpoints. "dev" (default) keeps the
-# api.unstable.build / rpc.unstable.build defaults compiled into the source;
-# "prod" overrides them with api.rune.build / rpc.rune.build via -ldflags -X.
-ARG RUNE_ENV=dev
+# RUNE_ENV selects the baked-in API endpoints. "prod" (default) keeps the
+# api.rune.build / rpc.rune.build defaults compiled into the source;
+# "staging" overrides them with api.unstable.build / rpc.unstable.build via
+# -ldflags -X. Keep the staging values in sync with cmd/rune/Makefile's
+# STAGING_LDFLAGS.
+ARG RUNE_ENV=prod
 # GO_VERSION pins the Go toolchain installed from the official tarball. buster
 # ships no usable system Go, and the tarball links only a low glibc so it runs
 # fine on buster. Keep in sync with go.mod's go directive.
@@ -147,16 +149,16 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	esac; \
 	export CC PKG_CONFIG_PATH; \
 	mkdir -p /out/rune.app/bin /out/rune.app/lib; \
-	PROD_LDFLAGS=""; \
-	if [ "$RUNE_ENV" = "prod" ]; then \
-		PROD_LDFLAGS="-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultDownloadsHost=https://downloads.rune.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultWebsiteAddress=https://rune.build"; \
+	STAGING_LDFLAGS=""; \
+	if [ "$RUNE_ENV" = "staging" ]; then \
+		STAGING_LDFLAGS="-X unstable.build/rune/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.unstable.build -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.unstable.build:443 -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultDownloadsHost=https://github.com/unstablebuild/rune-staging/releases/latest/download -X unstable.build/rune/cmd/rune/ide/apiclient.DefaultWebsiteAddress=https://rune.unstable.build"; \
 	fi; \
 	CGO_LDFLAGS='-Wl,-rpath,$ORIGIN/../lib' \
 	GOOS=$TARGETOS \
 	GOARCH=$TARGETARCH \
 	/usr/local/go/bin/go build \
 		-tags=ebitensinglethread \
-		-ldflags="-X unstable.build/rune/debug.Tag=$RUNE_BUILD_TAG -X unstable.build/rune/debug.Commit=$RUNE_BUILD_COMMIT -X unstable.build/rune/debug.Package=rune $PROD_LDFLAGS" \
+		-ldflags="-X unstable.build/rune/debug.Tag=$RUNE_BUILD_TAG -X unstable.build/rune/debug.Commit=$RUNE_BUILD_COMMIT -X unstable.build/rune/debug.Package=rune $STAGING_LDFLAGS" \
 		-o /out/rune.app/bin/rune \
 		./cmd/rune; \
 	\
