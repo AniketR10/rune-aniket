@@ -19,6 +19,23 @@ The repository also contains substantial TUI/editor infrastructure built on `git
 New non-`main` packages go under `internal/`. The supported extension API is the
 separate `rune-go-sdk` module.
 
+### Language integrations
+
+Before researching, planning, implementing, or reviewing support for a new
+programming language, read
+[`cmd/rune/docs/docs/develop/languages.md`](cmd/rune/docs/docs/develop/languages.md)
+in full. Treat that guide as the required integration checklist, not optional
+background reading. It defines how language extensions, project and tool
+management, LSP initialization, Tree-sitter assets, core symbol resolution,
+debugging, packaging, and the language-specific Rune-core test suites fit
+together.
+
+Do not consider a new language or language feature complete unless it follows
+the guide's testing pattern. In particular, add or extend the corresponding
+language suite in Rune core for each affected layer, using the real language
+server, debugger adapter, native syntax queries, and committed `testdata`
+project where the guide requires them.
+
 `auth` is the one exception: the account claims, roles and endpoint paths in it
 are a wire contract with the API server, which lives in a different module and
 therefore cannot import `internal/`. Both ends must deserialize the same token,

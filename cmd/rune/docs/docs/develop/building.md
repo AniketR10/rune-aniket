@@ -3,7 +3,7 @@ sidebar_position: 9
 description: Build Rune from source on macOS and Linux, run it with `go run ./cmd/rune`, and make your first change to the editor.
 ---
 
-# Building from source
+# Rune
 
 Rune is a single Go module. A plain checkout builds with the standard Go
 tooling: no submodules, no vendored trees, no code generation step. The one
