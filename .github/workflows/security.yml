@@ -8,6 +8,10 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   actions: read
   contents: read
@@ -17,26 +21,17 @@ jobs:
     name: CodeQL
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # The analysis cannot be uploaded on this plan (see below), so on a
+    # pull request it burns 45 minutes and throws the results away. Run it
+    # where the signal is still useful: post-merge and on the weekly cron.
+    if: github.event_name != 'pull_request'
     permissions:
       actions: read
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc g++ pkg-config \
-            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
-            libxinerama-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libwayland-dev libxkbcommon-dev
-
+      - uses: ./.github/actions/setup-build
       - uses: github/codeql-action/init@v3
         with:
           languages: go
@@ -56,20 +51,13 @@ jobs:
     name: govulncheck
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Advisories land independently of our commits, so the weekly cron is
+    # what actually catches them; per-PR runs mostly re-report the same
+    # dependency set.
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc g++ pkg-config \
-            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
-            libxinerama-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libwayland-dev libxkbcommon-dev
+      - uses: ./.github/actions/setup-build
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

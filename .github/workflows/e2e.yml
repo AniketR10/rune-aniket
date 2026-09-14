@@ -21,21 +21,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-build
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc g++ pkg-config \
-            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
-            libxinerama-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libwayland-dev libxkbcommon-dev \
-            xvfb mesa-utils vim
+          extra-packages: mesa-utils vim
 
       # The e2e suites drive real toolchains; each one skips when its
       # binary is absent, so a missing tool degrades coverage rather

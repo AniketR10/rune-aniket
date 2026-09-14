@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: linux-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -15,15 +15,9 @@ permissions:
 
 jobs:
   test:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-24.04
-          - ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,23 +25,33 @@ jobs:
           # needs the tag history a shallow clone omits.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-build
 
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc g++ pkg-config \
-            libgl1-mesa-dev libx11-dev libxrandr-dev libxcursor-dev \
-            libxinerama-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libwayland-dev libxkbcommon-dev xauth xvfb
+      # `make` is the build check: it compiles every binary the same way a
+      # release does, so a separate `go build ./...` would only recompile
+      # the same packages.
+      - name: Build binaries
+        run: make
 
-      - name: Build
-        run: go build ./...
+      - name: Smoke test the built binary
+        run: ./bin/rune --version
 
+      # One instrumented run feeds both the race check and codecov; a
+      # separate uninstrumented coverage job re-ran the whole suite.
       - name: Test
-        run: xvfb-run -a make test GOTESTFLAGS='-race -timeout 300s -p 1'
+        run: |
+          xvfb-run -a make test \
+            GOTESTFLAGS='-race -timeout 300s -p 1 -coverprofile=coverage.out'
+
+      - uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: rune-ubuntu-24.04
+          path: bin/
+          retention-days: 7
