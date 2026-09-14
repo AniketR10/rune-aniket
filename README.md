@@ -20,6 +20,8 @@
 
 ---
 
+https://github.com/user-attachments/assets/4ab84f7f-47c8-47af-9d32-7c69afd02669
+
 **Rune is a fast, GPU-accelerated, full-featured IDE and terminal multiplexer, suitable both for automatic and manual programming.**
 
 - **continue working from anywhere**: All your Rune instances form an e2e-encrypted network of peers, powered by our [headscale](https://github.com/juanfont/headscale) network. Connect to your workstation from your laptop, and to your laptop from your workstation.
