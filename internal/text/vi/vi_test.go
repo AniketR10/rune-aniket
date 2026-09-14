@@ -715,6 +715,77 @@ func testViHandleSize(t *testing.T, width, height int) {
 	}
 }
 
+// TestNormalCtrlScrollDispatch covers
+// https://github.com/unstablebuild/rune/issues/60: Vi.Handle used to
+// intercept 'u' in normal mode regardless of the modifier, so <c-u> was
+// swallowed as undo and never reached the half-page-up handler.
+func TestNormalCtrlScrollDispatch(t *testing.T) {
+	const fileContent = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"
+
+	suite := []struct {
+		name      string
+		setCursor term.Coordinates
+		key       term.Event
+		expect    string
+	}{
+		{
+			name:      "ctrl-u moves screen up half page",
+			setCursor: term.Coordinates{Y: 7},
+			key:       term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'u'},
+			expect:    "c\nd\ne\nX",
+		},
+		{
+			name:      "ctrl-d moves screen down half page",
+			setCursor: term.Coordinates{Y: 1},
+			key:       term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'd'},
+			expect:    "X\ne\nf\ng",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(fileContent))
+			vi := New(buf, uri)
+			vi.Resize(1, 4)
+			require.True(t, vi.SetCursorAtScroll(tcase.setCursor))
+
+			quit, handled := vi.Handle(tcase.key)
+			require.False(t, quit)
+			require.True(t, handled)
+
+			w := term.NewStringWriter(1, 4)
+			vi.Draw(w)
+			c, _, ok := vi.Cursor()
+			require.True(t, ok)
+			w.SetCell(c, term.Cell{Width: 1, Ch: 'X'})
+			w.Flush()
+			assert.Equal(t, tcase.expect, w.String())
+		})
+	}
+
+	t.Run("ctrl-u does not undo the last change", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(fileContent))
+		vi := New(buf, uri)
+		vi.Resize(20, 4)
+
+		handleRunes(t, vi, "xG")
+		edited := buf.String()
+		require.Equal(t, "\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk", edited)
+
+		quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'u'})
+		require.False(t, quit)
+		require.True(t, handled)
+		assert.Equal(t, edited, buf.String())
+
+		quit, handled = vi.Handle(testKey('u'))
+		require.False(t, quit)
+		require.True(t, handled)
+		assert.Equal(t, fileContent, buf.String())
+	})
+}
+
 func TestUndo100(t *testing.T) {
 	testUndoSize(t, 100, 99)
 }
