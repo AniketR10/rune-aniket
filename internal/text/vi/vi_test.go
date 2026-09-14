@@ -786,6 +786,28 @@ func TestNormalCtrlScrollDispatch(t *testing.T) {
 	})
 }
 
+// TestNormalCtrlDotDoesNotRepeat guards the same modifier-blind dispatch
+// for '.': only an unmodified '.' repeats the last change, so <c-.> stays
+// available to outer keybindings.
+func TestNormalCtrlDotDoesNotRepeat(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("alpha\nbravo\ncharlie"))
+	vi := New(buf, uri)
+	vi.Resize(20, 10)
+
+	handleRunes(t, vi, "x")
+	edited := buf.String()
+	require.Equal(t, "lpha\nbravo\ncharlie", edited)
+
+	quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: '.'})
+	require.False(t, quit)
+	assert.False(t, handled)
+	assert.Equal(t, edited, buf.String())
+
+	handleRunes(t, vi, ".")
+	assert.Equal(t, "pha\nbravo\ncharlie", buf.String())
+}
+
 func TestUndo100(t *testing.T) {
 	testUndoSize(t, 100, 99)
 }

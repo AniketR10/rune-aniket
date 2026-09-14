@@ -317,8 +317,10 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 			case term.EventKey:
 				switch ev.Ch {
 				case '.':
-					handled = vi.repeat()
-					return
+					if ev.Mod == 0 {
+						handled = vi.repeat()
+						return
+					}
 				case 'u':
 					if ev.Mod == 0 {
 						handled = vi.undo()
