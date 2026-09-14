@@ -12,7 +12,7 @@ go run ./cmd/rune
 
 ## Come hack with us
 
-Join the Discord: https://discord.gg/2pdrdj6xJ for questions, design arguments,
+Join the Discord: https://discord.gg/xzte9J8f8N for questions, design arguments,
 "where does this live?", and the people who'll review your patch.
 
 And contributors won't just get a thank-you: Unstable Build will distribute a

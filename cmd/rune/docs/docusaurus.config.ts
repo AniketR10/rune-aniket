@@ -202,7 +202,7 @@ const config: Config = {
           title: 'Community',
           items: [
             {label: 'GitHub', href: 'https://github.com/unstablebuild'},
-            {label: 'Discord', href: 'https://discord.gg/4JsTCHR5Th'},
+            {label: 'Discord', href: 'https://discord.gg/xzte9J8f8N'},
             {label: 'Hugging Face', href: 'https://huggingface.co/unstablebuild'},
             {label: 'X', href: 'https://x.com/unstablebuild'},
           ],

@@ -4,7 +4,7 @@ contact_links:
     url: https://docs.rune.build
     about: Configuration, key bindings, extensions, and the Rune Agent guide.
   - name: Questions and general discussion
-    url: https://discord.gg/2pdrdj6xJ
+    url: https://discord.gg/xzte9J8f8N
     about: Ask usage questions and share setups with other Rune users.
   - name: Security vulnerability
     url: https://github.com/unstablebuild/rune/security/advisories/new

@@ -7,7 +7,7 @@ import LastUpdated from '@theme/LastUpdated';
 
 // The docs source lives in a private repository, so there is no public
 // "Edit this page" target. Point readers at the community channel instead.
-const DISCORD_URL = 'https://discord.gg/4JsTCHR5Th';
+const DISCORD_URL = 'https://discord.gg/xzte9J8f8N';
 
 function SuggestImprovement({title}: {title: string}) {
   return (
