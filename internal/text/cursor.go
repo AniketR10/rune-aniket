@@ -3154,7 +3154,7 @@ func (c *Cursor) RedoSelection() bool {
 
 // Selection returns the current text under either text, line or block selection.
 func (c *Cursor) Selection() string {
-	s := term.CellsToString(c.selection.cells)
+	s := cell.RowsToString(c.selection.cells)
 	if c.selection.mode == LineSelection && len(s) > 0 {
 		s += "\n"
 	}

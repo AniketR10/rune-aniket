@@ -6612,6 +6612,40 @@ func setupCursor(t *testing.T, width, height int, wrap bool) *Cursor {
 	return setupCursorContent(t, width, height, sampleSnippet, wrap)
 }
 
+// TestCursorSelectionUnwrapsSoftWrappedRows covers the terminal's vi
+// mode, where the cursor reads the emulator's grid: rows the emulator
+// broke apart to fit the width carry cell.WrapMarker and must be
+// yanked back as the single logical line they were printed as.
+func TestCursorSelectionUnwrapsSoftWrappedRows(t *testing.T) {
+	cases := []struct {
+		desc string
+		mode SelectMode
+		want string
+	}{
+		{"standard selection", StandardSelection, "abcdefghij\nxy"},
+		{"line selection", LineSelection, "abcdefghij\nxy\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			c := setupCursorContent(t, 5, 5, "abcde\nfghij\nxy", false)
+			rows := c.buffer().RawCells()
+			rows[0][len(rows[0])-1].Bytes = cell.WrapMarker
+
+			switch tc.mode {
+			case StandardSelection:
+				require.True(t, c.Select())
+			case LineSelection:
+				require.True(t, c.SelectLine())
+			}
+			require.True(t, c.MoveLastLine())
+			require.True(t, c.MoveEndLine())
+
+			assert.Equal(t, tc.want, c.Selection())
+		})
+	}
+}
+
 type testSelectionService struct {
 	view    cell.View
 	expand  map[term.Range]term.Range

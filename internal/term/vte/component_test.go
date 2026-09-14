@@ -889,6 +889,62 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 	assert.Equal(t, expected, writer.String())
 }
 
+// TestComponentSelectionUnwrapsSoftWrappedLines pins that copying a
+// logical line the emulator broke across rows to fit the width yields
+// the original single line rather than one line per screen row, while
+// rows separated by a real newline keep theirs.
+func TestComponentSelectionUnwrapsSoftWrappedLines(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		desc     string
+		from, to term.Coordinates
+		want     string
+	}{
+		{
+			desc: "soft wrapped line is joined back",
+			from: term.Coordinates{},
+			to:   term.Coordinates{Y: 1, X: 4},
+			want: "abcdefghij",
+		},
+		{
+			desc: "soft wrap joined, hard newline kept",
+			from: term.Coordinates{},
+			to:   term.Coordinates{Y: 2, X: 1},
+			want: "abcdefghij\nxy",
+		},
+		{
+			desc: "wrap continuation row starts a plain selection",
+			from: term.Coordinates{Y: 1},
+			to:   term.Coordinates{Y: 2, X: 1},
+			want: "fghij\nxy",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := DefaultConfig()
+			comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+				&mockTabManager{}, cfg)
+			require.NoError(t, err)
+			comp.parserHandler.sync.primBuf.SetDefaultChar(' ')
+			comp.parserHandler.sync.altBuf.SetDefaultChar(' ')
+			require.NoError(t, comp.Resize(5, 5))
+
+			comp.parser.AdvanceBytes([]byte("abcdefghij\r\nxy"))
+			assertDraw(t, comp, "abcde\nfghij\nxy   \n     \n     ")
+
+			comp.Select(tc.from)
+			comp.SelectEnd(tc.to)
+			got, ok := comp.Selection()
+			require.True(t, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // TestComponentWidenWhileScrolledUpKeepsContentVisible reproduces the
 // black, frozen screen from catting a large file, narrowing the terminal
 // (vertical splits), scrolling to the top, then widening it again.

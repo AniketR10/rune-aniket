@@ -35,6 +35,7 @@ import (
 	"go.uber.org/multierr"
 	"mvdan.cc/sh/v3/shell"
 	"unstable.build/rune/internal/browser"
+	"unstable.build/rune/internal/cell"
 	"unstable.build/rune/internal/component"
 	"unstable.build/rune/internal/debug"
 	"unstable.build/rune/internal/term/vte/vteparser"
@@ -582,7 +583,7 @@ func (t *Component) Selection() (data string, ok bool) {
 	if !ok {
 		return
 	}
-	data = term.CellsToString(cells)
+	data = cell.RowsToString(cells)
 	data = strings.ReplaceAll(data, "\x00", "")
 	return data, ok
 }

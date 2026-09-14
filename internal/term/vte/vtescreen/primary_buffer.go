@@ -59,8 +59,6 @@ func (b *PrimaryBuffer) Restore(cells [][]term.Cell, cursor term.Coordinates, wi
 	b.AltBuffer.restore(cells, cursor, max(b.minWidth, width), height)
 }
 
-const wrapMarker uint8 = 1 << 7
-
 // ScrollUpHistory scrolls the visible screen up by count lines by
 // appending blank rows after the last row, growing history. The oldest
 // row allocation is recycled once maxHistory rows are present. When
@@ -82,7 +80,7 @@ func (b *PrimaryBuffer) MarkWrapAtCursor() {
 		return
 	}
 	// use unused field to mark that line is wrapped oob
-	c.Bytes = wrapMarker
+	c.Bytes = cell.WrapMarker
 }
 
 // Resize resizes this Buffer and resets the vertical margins.
@@ -200,7 +198,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	}
 	// Unwrap previous wraps in a single O(rows) pass.
 	merged, ok := b.Cells.MergeMarkedRows(at+1,
-		func(c term.Cell) bool { return c.Bytes == wrapMarker },
+		func(c term.Cell) bool { return c.Bytes == cell.WrapMarker },
 		func(c *term.Cell) { c.Bytes = 0 })
 	if ok {
 		at -= merged
@@ -304,7 +302,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 			// line actually ends.
 			for i := range s.Times {
 				row := cells[headY+i]
-				row[len(row)-1].Bytes = wrapMarker
+				row[len(row)-1].Bytes = cell.WrapMarker
 			}
 			shift += s.Times
 		}
