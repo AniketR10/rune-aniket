@@ -1,69 +1,60 @@
-# Rune
 
-[![Linux](https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml)
-[![macOS](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml)
-[![Lint](https://github.com/unstablebuild/rune/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/unstablebuild/rune/actions/workflows/lint.yml)
-[![codecov](https://codecov.io/gh/unstablebuild/rune/branch/main/graph/badge.svg)](https://codecov.io/gh/unstablebuild/rune)
-[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/2pdrdj6xJ)
-[![Reddit](https://img.shields.io/badge/reddit-r%2FUnstableBuild-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/UnstableBuild/)
-[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+<p align="center">
+  <img src="/extra/icon.iconset/icon_512x512.png" alt="rune" width="100" />
+</p>
 
-Rune is a fast, GPU-rendered, keyboard-driven IDE for power users. The Unix way, finished
-as a product: code, terminals, CLI tools, language intelligence, debugging, and AI agents,
-all in one composable, multi-workspace environment.
+<p align="center">
+  <a href="https://rune.build">rune.build</a> · <a href="https://docs.rune.build/#prerequisites">quick start</a> · <a href="https://docs.rune.build/develop/building">hack on rune</a>
+</p>
 
-Rune Agent, in `cmd/rune-agent`, is an AI coding agent shipped as an extension rather than
-part of the core editor. This keeps Rune suitable for automatic programming while
-still allowing uncorrupted manual programming, and it pushes the extension
-system to support complex applications.
+<p align="center">
+  <a href="https://github.com/unstablebuild/rune/releases/latest"><img src="https://img.shields.io/github/v/release/unstablebuild/rune?label=release&amp;labelColor=333333&amp;color=666666" alt="latest stable release" /></a>
+  <a href="https://github.com/unstablebuild/rune/releases"><img src="https://img.shields.io/github/downloads/unstablebuild/rune/total?labelColor=333333&amp;color=666666" alt="total GitHub release downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="GPLv3 license" /></a>
+  <a href="https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml"><img src="https://github.com/unstablebuild/rune/actions/workflows/test-linux.yml/badge.svg?branch=main" alt="Linux tests" /></a>
+  <a href="https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml"><img src="https://github.com/unstablebuild/rune/actions/workflows/test-macos.yml/badge.svg?branch=main" alt="macOS tests" /></a>
+  <a href="https://discord.gg/xzte9J8f8N"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Join us on Discord" /></a>
+  <a href="https://www.reddit.com/r/UnstableBuild/"><img src="https://img.shields.io/badge/reddit-r%2FUnstableBuild-FF4500?logo=reddit&amp;logoColor=white" alt="Rune subreddit" /></a>
+    <a href="https://x.com/unstablebuild"><img src="https://img.shields.io/badge/follow-%40unstablebuild-000000?logo=x&logoColor=white" alt="follow @unstablebuild on X" /></a>
+</p>
 
-Rune has been slowly developed over the course of the last few years and we've taken great
-care in making it easy to develop and maintain. We hope you enjoy hacking it as much as
-you enjoy using it.
+---
 
-See [docs.rune.build](https://docs.rune.build) for the full documentation.
+**Rune is a fast, GPU-accelerated, full-featured IDE and terminal multiplexer, suitable both for automatic and manual programming.**
 
-![Rune IDE showing its character-grid interface, with an editor, a file tree, and an agent session side by side.](.github/assets/rune-screenshot.webp)
+- **continue working from anywhere**: All your Rune instances form an e2e-encrypted network of peers, powered by our [headscale](https://github.com/juanfont/headscale) network. Connect to your workstation from your laptop, and to your laptop from your workstation.
+- **batteries included**: Production-grade language intelligence, out-of-the-box. Check the list of [supported languages](https://docs.rune.build/languages/supported).
+- **a new organizing model**: Stay in the flow for longer. Rune's UI is a screen multiplexer that allows you to organize it freely. Nine workspace slots. Infinite terminals, tabs and windows. A built-in agent or IDE-grade skills for yours.
+- **plugins and extensions**: Extend Rune's functionality with [official packages →](https://rune.build/packages) or install community ones straight from a Git repository `pkg install github.com/unstablebuild/rune-extension-themebuilder`.
+- **native application**: A native graphics pipeline: OpenGL on Linux, Metal on macOS. No Electron.
 
-## Repository layout
+## install
 
-- `cmd/rune` — the main Rune application
-- `cmd/rune-agent` — the Rune Agent extension and packages
-- `cmd/rune/docs` — the documentation site published at docs.rune.build; its
-  markdown is embedded into the binary and served by the `docs:///` workspace
-- `internal/` — the editor, terminal, text, workspace, and LLM packages the
-  binaries are built from
+```bash
+curl -fsSL https://rune.build/install.sh | sh
+```
 
-Everything outside `cmd/` lives under `internal/`. Rune is an application, not
-a library: the supported, semver-stable API for writing extensions is
-[rune-go-sdk](https://github.com/unstablebuild/rune-go-sdk), which is a
-separate Apache-2.0 module. Packages in this repository carry no compatibility
-guarantees and are refactored freely.
+## development
 
-See [AGENTS.md](AGENTS.md) for a deeper tour of the architecture.
+```bash
+git clone git@github.com:unstablebuild/rune.git
+```
 
-## Build prerequisites
-
-Rune links a GPU renderer through cgo, so a C toolchain is required. macOS
-needs only the Xcode command line tools. Linux additionally needs the X11,
-OpenGL, ALSA, Wayland, and xkbcommon development headers, whose package names
-differ per distribution.
-
-[Building from source](https://docs.rune.build/develop/building) has the
-verified package lists for Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE, Alpine,
-and Void, along with a walkthrough of your first change to the editor.
-
-## Makefile
-
-A plain checkout builds with the standard Go tooling — no submodules or code
-generation steps required:
-
+Then run:
 ```bash
 go run ./cmd/rune
 ```
 
-The Makefile adds the version, commit, and build-date ldflags plus the
-release build tags:
+To create a macOS application bundle:
+```bash
+make rune-dmg
+```
+
+See [prerequisites](https://docs.rune.build/#prerequisites) for more details.
+
+## Makefile
+
+The Makefile has a few rules for common operations needed during development.
 
 ```bash
 make                 # build all binaries into bin/
@@ -101,9 +92,8 @@ To report a security issue, see [SECURITY.md](SECURITY.md).
 
 ## Sponsorship
 
-Rune is developed by Unstable Build, LLC, a self-funded company. If you'd like to
-financially support us, you can do so via GitHub Sponsors. There are no perks or
-entitlements associated with sponsorship.
+Rune is developed by Unstable Build, LLC, a self-funded organization. If you'd like to
+financially support us, you can do so via GitHub Sponsors; we might even send you some swag.
 
 ## License
 
