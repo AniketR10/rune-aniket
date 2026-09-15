@@ -331,11 +331,19 @@ func TestPubSub(t *testing.T) {
 		}
 		instance1 := instances[len(instances)-1]
 		instance2 := instances[len(instances)-2]
-		defer cleanupNodes(t, instances...)
 
+		stop := make(chan struct{})
+		done := make(chan struct{})
 		go func() {
-			for i := 0; i < n-2; i++ {
-				time.Sleep(cfg.DialTimeout + cfg.ConnectRetryCadence)
+			defer close(done)
+			ticker := time.NewTicker(cfg.DialTimeout + cfg.ConnectRetryCadence)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+				}
 				for _, instance := range instances {
 					if instance.IsLeader() && instance != instance1 && instance != instance2 {
 						_ = instance.Close()
@@ -343,6 +351,11 @@ func TestPubSub(t *testing.T) {
 					}
 				}
 			}
+		}()
+		defer func() {
+			close(stop)
+			<-done
+			cleanupNodes(t, instances...)
 		}()
 		publishAndReceive(t, instance1, instance2, m)
 	})
