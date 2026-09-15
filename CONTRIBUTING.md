@@ -126,13 +126,30 @@ bluectl license -f LICENSE_HEADER <new files>
 
 ## Commit messages
 
+Pull requests are squashed, so the PR title and description become the
+commit message on `main`.
+
 Match the existing style in `git log`:
 
-- Short, imperative, sentence-style subject (e.g. `Fix`, `Add`,
-  `Update`, `Remove`).
-- A short body explaining *why* the change is needed, not a list of
-  validation commands you ran.
+- Short, imperative, sentence-style subject, starting with a
+  capitalized verb: `Add`, `Update`, `Fix`, `Remove`, `Upgrade`, or
+  `Revert`.
+- Keep the subject on the user-visible or code-level change (the
+  "what"), with no trailing period.
+- Add a short body explaining *why* the change is being introduced,
+  separated from the subject by a blank line.
 - Wrap subject and body lines to 90 columns.
+- Don't list the validation commands you ran unless asked.
+- For performance work, include measured before/after numbers when you
+  have them.
+
+Good examples:
+
+```
+Add AGENTS.md project instructions support
+Fix userMsgIdx after compaction to prevent index out of range panic
+Update /clear confirmation to render inline instead of in a floating window
+```
 
 ## AI-assisted contributions
 
