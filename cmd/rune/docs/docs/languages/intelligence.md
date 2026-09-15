@@ -21,7 +21,7 @@ keywords:
 Rune's code intelligence is cross-language. The same `lsp` command drives
 **go to definition**, **find references**, **diagnostics**, hover docs,
 rename, formatting, and completion for every
-[first-class language](./supported.md#first-class-languages). The keys
+[Tier 1 language](./supported.md#tier-1-languages). The keys
 and workflow below are identical no matter which language server is
 running underneath.
 
@@ -72,14 +72,15 @@ but not where it lives, use the by-name variant below instead.
 ### Query any symbol by name
 
 This is one of the most powerful ways to move around a codebase. You can
-query a symbol (a function, type, variable, struct, interface, or method)
-**by name**, without first having to find where it lives. If you remember
-what something is called but not where it is defined, press
-<KeyBinding command="echo {prompt}lsp<space>definition<space>" />, type the name,
-and jump straight to its definition:
+query a symbol (a function, type, struct, interface, or method) **by name**,
+without first having to find where it lives. Rune's [symbol index](./symbol-index.md)
+resolves qualified names across the workspace before asking the language server
+for the semantic result. If you remember what something is called but not where
+it is defined, press <KeyBinding command="echo {prompt}lsp<space>definition<space>" />,
+type its qualified name, and jump straight to its definition:
 
 ```
-lsp definition NewServer
+lsp definition server.NewServer
 ```
 
 Each preset provides variants that pre-fill the prompt with the command and
@@ -125,13 +126,13 @@ written.
 | Key | Command | Target |
 | --- | --- | --- |
 | <KeyBinding command="lsp hover" /> | `lsp hover` | Symbol under the cursor |
-| <KeyBinding command="echo {prompt}lsp<space>hover<space>" /> | `lsp hover` | Symbol you fuzzy-search by name |
+| <KeyBinding command="echo {prompt}lsp<space>hover<space>" /> | `lsp hover` | Symbol you query by name |
 | <KeyBinding command="lsp definition" /> | `lsp definition` | Symbol under the cursor |
-| <KeyBinding command="echo {prompt}lsp<space>definition<space>" /> | `lsp definition` | Symbol you fuzzy-search by name |
+| <KeyBinding command="echo {prompt}lsp<space>definition<space>" /> | `lsp definition` | Symbol you query by name |
 | <KeyBinding command="lsp references" /> | `lsp references` | Symbol under the cursor |
-| <KeyBinding command="echo {prompt}lsp<space>references<space>" /> | `lsp references` | Symbol you fuzzy-search by name |
+| <KeyBinding command="echo {prompt}lsp<space>references<space>" /> | `lsp references` | Symbol you query by name |
 | <KeyBinding command="lsp implementation" /> | `lsp implementation` | Symbol under the cursor |
-| <KeyBinding command="echo {prompt}lsp<space>implementation<space>" /> | `lsp implementation` | Symbol you fuzzy-search by name |
+| <KeyBinding command="echo {prompt}lsp<space>implementation<space>" /> | `lsp implementation` | Symbol you query by name |
 | <KeyBinding command="lsp rename" /> | `lsp rename` | Symbol under the cursor |
 | <KeyBinding command="lsp format" /> | `lsp format` | The file, or the selection |
 | <KeyBinding command="lsp diagnostics" /> | `lsp diagnostics` | The whole file |

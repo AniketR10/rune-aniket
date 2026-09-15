@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 8
 ---
 
 # Monorepos
@@ -79,8 +79,8 @@ guide. Its main entry points in a monorepo are:
   workspace.
 - `searchast` (run `searchfunc`, `searchvar`, or `searchtype` from the command
   prompt): find a function, type, or
-  variable definition anywhere in the workspace using the structural
-  (tree-sitter) index.
+  variable definition anywhere in the workspace using structural Tree-sitter
+  queries.
 
 ### Very large workspaces
 

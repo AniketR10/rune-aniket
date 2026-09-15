@@ -1,12 +1,12 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 sidebar_label: Rust (beta)
 title: Rust
 ---
 
 # Rust <span className="badge badge--secondary" style={{fontSize: '0.5em', verticalAlign: 'middle'}}>Beta</span>
 
-Rune ships first-class Rust support: code intelligence through
+Rune ships [Tier 1](./supported.md#support-tiers) Rust support: code intelligence through
 [rust-analyzer](https://rust-analyzer.github.io/), a toolchain that
 installs itself through [rustup](https://rustup.rs/) and is updated
 from the editor, and dedicated editor commands for Rust analysis and

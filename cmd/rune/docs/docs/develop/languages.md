@@ -1,6 +1,6 @@
 ---
 sidebar_position: 10
-description: Add first-class support for a new programming language to Rune.
+description: Add Tier 1 support for a new programming language to Rune.
 ---
 
 # Languages
@@ -662,7 +662,7 @@ pkg install <language>
 
 ## 9. Test the integration as a whole
 
-The Rune-core language suites are a requirement for first-class support. When
+The Rune-core language suites are a requirement for [Tier 1 support](../languages/supported.md#support-tiers). When
 you add functionality at one of these layers, add or extend the corresponding
 `<file-id>_test.go` suite in the same change. Do not rely only on unit tests in
 `cmd/extension_<language>`.
@@ -696,7 +696,7 @@ the package pins a tool version, verify that version in the suite as
 [Python's LSP test](https://github.com/unstablebuild/rune/blob/main/internal/ide/idelsp/py_test.go#L51-L75)
 does.
 
-Before proposing first-class support, work through this checklist:
+Before proposing [Tier 1 support](../languages/supported.md#support-tiers), work through this checklist:
 
 - Open root, nested, and multi-project workspaces.
 - Test local and SSH workspaces.

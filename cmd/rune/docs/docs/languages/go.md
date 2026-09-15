@@ -1,10 +1,10 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 ---
 
 # Go
 
-Rune ships first-class Go support: code intelligence through a built-in
+Rune ships [Tier 1](./supported.md#support-tiers) Go support: code intelligence through a built-in
 language client, and a dedicated `go` command that drives refactors,
 tests, and module management. This guide works through every Go feature
 from the commands you type down to what each one does.

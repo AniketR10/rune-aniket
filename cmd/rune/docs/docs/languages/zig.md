@@ -1,12 +1,12 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 sidebar_label: Zig (beta)
 title: Zig
 ---
 
 # Zig <span className="badge badge--secondary" style={{fontSize: '0.5em', verticalAlign: 'middle'}}>Beta</span>
 
-Rune ships first-class Zig support: code intelligence through
+Rune ships [Tier 1](./supported.md#support-tiers) Zig support: code intelligence through
 [zls](https://zigtools.org/), build-on-save diagnostics powered by the
 Zig build system, zls code actions on the
 [command prompt](../learn/command-prompt.md), and a dedicated

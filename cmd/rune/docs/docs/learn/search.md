@@ -8,7 +8,7 @@ Rune gives you several ways to find code, each suited to a different
 question. This guide covers the structural search built on tree-sitter
 (jump to a definition in the current file, or across the workspace) and
 the fuzzy finders for files and symbols. It also points you at the two
-neighboring tools: semantic symbol search for first-class languages, and
+neighboring tools: semantic symbol search for Tier 1 languages, and
 the location picker for turning any command's output into a jump list.
 
 At a glance:
@@ -108,12 +108,13 @@ presents the matches in a fuzzy picker, jumping you to the line you pick.
 
 ## Semantic symbol search
 
-For [first-class languages](../languages/supported.md#first-class-languages)
+For [Tier 1 languages](../languages/supported.md#tier-1-languages)
 such as [Go](../languages/go.md), Rune adds language-server symbol
-search on top of the structural tools. Instead of matching the parse
-tree, it queries the language server, so you can jump to a definition,
-list references, or find implementations of a symbol **by name** with
-full code intelligence. See
+search on top of the structural tools. Rune's
+[symbol index](../languages/symbol-index.md) first locates a qualified name,
+then Rune queries the language server from that source position. This lets you
+jump to a definition, list references, or find implementations of a symbol
+**by name** with full code intelligence. See
 [Query any symbol by name](../languages/intelligence.md#query-any-symbol-by-name)
 for the commands and bindings.
 

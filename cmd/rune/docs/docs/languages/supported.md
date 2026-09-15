@@ -5,12 +5,18 @@ sidebar_label: Supported
 
 # Supported Languages
 
-Rune offers first-class support for a growing set of programming
-languages: deep code intelligence, a built-in debugger, and
-language-specific commands on top of editing. This page lists where each
-language stands today.
+Rune groups language support into [tiers](#support-tiers). Each tier builds on the one below it,
+so every supported capability remains available as a language moves up.
 
-## First-class languages
+## Support tiers
+
+| Tier | Capabilities |
+| --- | --- |
+| **Tier 1** | All Tier 2 features, plus [LSP](./intelligence.md) and full ecosystem workflows. |
+| **Tier 2** | All Tier 3 features, plus the [symbol indexer](./symbol-index.md). |
+| **Tier 3** | Syntax highlighting and structural queries. |
+
+## Tier 1 languages
 
 | Language | Status |
 | --- | --- |
@@ -24,7 +30,7 @@ Beta means the language is complete enough for daily work and shipped
 by default, while its commands and defaults may still change between
 releases.
 
-Code intelligence works the same way across all of them. See the [Code
+Code intelligence works the same way across [Tier 1](#support-tiers) languages. See the [Code
 Intelligence](./intelligence.md) guide for the cross-language `lsp`
 command: go to definition, find references, diagnostics, hover, rename,
 and formatting.
@@ -33,14 +39,13 @@ Working in a repository with several projects side by side? See the
 [Monorepos](./monorepo.md) guide for how Rune discovers each project and
 keeps search fast at scale.
 
-## Everything else: language packages
+## Tier 3 language packages
 
-Beyond the first-class languages, Rune understands the **structure** of
-over 300 more through downloadable language packages. Each package bundles
-a tree-sitter grammar and a set of query files, giving Rune a real parse
-tree for the file instead of plain text. That parse tree powers syntax
-highlighting, code folding, indentation, and (most usefully)
-[structural search and navigation](../learn/search.md).
+Rune offers Tier 3 support for over 300 additional languages through
+downloadable language packages. Each package bundles a Tree-sitter grammar and
+a set of query files, giving Rune a real parse tree for the file instead of
+plain text. That parse tree powers syntax highlighting, code folding,
+indentation, and (most usefully) [structural search and navigation](../learn/search.md).
 
 | | | | |
 | --- | --- | --- | --- |

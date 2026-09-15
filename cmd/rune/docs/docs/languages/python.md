@@ -1,10 +1,10 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 ---
 
 # Python
 
-Rune ships first-class Python support: code intelligence through the
+Rune ships [Tier 1](./supported.md#support-tiers) Python support: code intelligence through the
 [ty](https://github.com/astral-sh/ty) language server, formatting
 through [ruff](https://github.com/astral-sh/ruff), and project
 environments managed end to end with
