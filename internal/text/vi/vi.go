@@ -289,7 +289,7 @@ func (vi *Vi) Paste(registerID string) (clipboard.Data, error) {
 // Copy satisfies text.Clipboard to make sure undo/redo deletes
 // are not being copied to the clipboard or backspace deletes within insert.
 func (vi *Vi) Copy(registerID string, data clipboard.Data) error {
-	if vi.resetting || vi.handler.mode() == insertMode {
+	if vi.resetting || vi.handler.mode() == insertMode || vi.handler.copySuppressed() {
 		return nil
 	}
 	return vi.clipboard.Copy(registerID, data)

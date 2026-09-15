@@ -545,6 +545,10 @@ func (h *mockHandler) unselect() bool {
 	return false
 }
 
+func (h *mockHandler) copySuppressed() bool {
+	return false
+}
+
 func (h *mockHandler) search(string) {
 }
 
@@ -1121,6 +1125,139 @@ func TestCopyDelete(t *testing.T) {
 }
 
 var _ = (foldsService)(testFoldsService{})
+
+func TestVisualBlockDeleteThenPaste(t *testing.T) {
+	ctrlV := term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'v'}
+
+	type blockCase struct {
+		name         string
+		content      string
+		setupKeys    string
+		selectKeys   string
+		deleteKeys   string
+		moveKeys     string
+		pasteKey     rune
+		wantRegister string
+		wantDeleted  string
+		wantBuffer   string
+	}
+
+	drive := func(t *testing.T, vi *Vi, keys string) {
+		t.Helper()
+		for _, ch := range keys {
+			quit, handled := vi.Handle(testKey(ch))
+			require.False(t, quit)
+			require.True(t, handled, "key %q should be handled", ch)
+		}
+	}
+
+	for _, tc := range []blockCase{
+		{
+			name:         "d then P reinserts the whole block",
+			content:      "abcd\nefgh\nijkl\nmnop",
+			selectKeys:   "lj",
+			deleteKeys:   "d",
+			moveKeys:     "jj",
+			pasteKey:     'P',
+			wantRegister: "ab\nef",
+			wantDeleted:  "cd\ngh\nijkl\nmnop",
+			wantBuffer:   "cd\ngh\nabijkl\nefmnop",
+		},
+		{
+			name:         "x then p reinserts the whole block",
+			content:      "abcd\nefgh\nijkl\nmnop",
+			selectKeys:   "lj",
+			deleteKeys:   "x",
+			moveKeys:     "jj",
+			pasteKey:     'p',
+			wantRegister: "ab\nef",
+			wantDeleted:  "cd\ngh\nijkl\nmnop",
+			wantBuffer:   "cd\ngh\niabjkl\nmefnop",
+		},
+		{
+			name:         "d on a ragged block keeps every row",
+			content:      "abcdefgh\nxy\n12345678",
+			selectKeys:   "llljj",
+			deleteKeys:   "d",
+			moveKeys:     "jj",
+			pasteKey:     'P',
+			wantRegister: "abcd\nxy\n1234",
+			wantDeleted:  "efgh\n\n5678",
+			wantBuffer:   "efgh\n\nabcd5678\nxy\n1234",
+		},
+		{
+			name:         "black-hole block delete preserves unnamed",
+			content:      "abcd\nefgh\nijkl",
+			setupKeys:    "ljy^jj",
+			selectKeys:   "l",
+			deleteKeys:   "\"_d",
+			moveKeys:     "",
+			pasteKey:     'P',
+			wantRegister: "ab\nef",
+			wantDeleted:  "abcd\nefgh\nkl",
+			wantBuffer:   "abcd\nefgh\nabkl\nef",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			_, err := buf.ReadFrom(strings.NewReader(tc.content))
+			require.NoError(t, err)
+
+			mock := new(mockClip)
+			vi := New(buf, uri, WithClipboard(registerset.New(mock)))
+			vi.Resize(80, 24)
+
+			if tc.setupKeys != "" {
+				quit, handled := vi.Handle(ctrlV)
+				require.False(t, quit)
+				require.True(t, handled)
+				drive(t, vi, tc.setupKeys)
+			}
+
+			quit, handled := vi.Handle(ctrlV)
+			require.False(t, quit)
+			require.True(t, handled)
+			drive(t, vi, tc.selectKeys+tc.deleteKeys)
+
+			data, err := vi.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantRegister, data.Text)
+			mode, ok := data.Metadata.(text.SelectMode)
+			require.True(t, ok, "register should carry a selection mode")
+			assert.Equal(t, text.BlockSelection, mode)
+			assert.Equal(t, tc.wantDeleted, buf.String())
+
+			if tc.moveKeys != "" {
+				drive(t, vi, tc.moveKeys)
+			}
+			if tc.pasteKey != 0 {
+				quit, handled := vi.Handle(testKey(tc.pasteKey))
+				require.False(t, quit)
+				require.True(t, handled)
+				assert.Equal(t, tc.wantBuffer, buf.String())
+			}
+		})
+	}
+}
+
+func TestVisualBlockChangePreservesRegister(t *testing.T) {
+	buf := cell.NewBuffer()
+	_, err := buf.ReadFrom(strings.NewReader("abcd\nefgh\nijkl"))
+	require.NoError(t, err)
+	vi := New(buf, uri, WithClipboard(registerset.New(new(mockClip))))
+	vi.Resize(80, 24)
+
+	quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'v'})
+	require.False(t, quit)
+	require.True(t, handled)
+	handleRunes(t, vi, "ljc")
+
+	assert.Equal(t, insertMode, vi.handler.mode())
+	assert.Equal(t, "cd\ngh\nijkl", buf.String())
+	data, err := vi.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "", data.Text)
+}
 
 type testFoldsService struct {
 	view cell.View
