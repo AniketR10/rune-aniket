@@ -1,3 +1,16 @@
+---
+sidebar_position: 3
+title: Symbol Index
+description: How Rune indexes workspace symbols for fast code navigation and agent tools.
+keywords:
+  - symbol index
+  - symbol database
+  - symboldb
+  - code navigation
+  - tree-sitter
+  - workspace symbols
+---
+
 {/*
 Copyright (C) 2017-2026 The Rune Authors
 SPDX-License-Identifier: GPL-3.0-or-later
@@ -15,18 +28,6 @@ General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */}
-
----
-sidebar_position: 3
-description: How Rune indexes workspace symbols for fast code navigation and agent tools.
-keywords:
-  - symbol index
-  - symbol database
-  - symboldb
-  - code navigation
-  - tree-sitter
-  - workspace symbols
----
 
 # Symbol Index
 
