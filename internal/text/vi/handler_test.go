@@ -11881,10 +11881,10 @@ func TestCentering(t *testing.T) {
 			expect:        "d   \ne   \n Xf \ng   ",
 		},
 		{
-			name:          "zz does nothing with last line",
+			name:          "zz centers the last line, scrolling past the end of the file",
 			setCursor:     term.Coordinates{Y: 10},
 			inputSequence: "zz",
-			expect:        "h   \ni   \nj   \nX   ",
+			expect:        "i   \nj   \nX   \n    ",
 		},
 		{
 			name:          "zz does nothing with first line",
@@ -11905,10 +11905,28 @@ func TestCentering(t *testing.T) {
 			expect:        " Xf \ng   \nh   \ni   ",
 		},
 		{
+			name:          "zt on the last line scrolls past the end of the file",
+			setCursor:     term.Coordinates{Y: 10},
+			inputSequence: "zt",
+			expect:        "X   \n    \n    \n    ",
+		},
+		{
 			name:          "zb repositions cursor at the bottom of the view",
 			setCursor:     term.Coordinates{Y: 5},
 			inputSequence: "zb",
 			expect:        "c   \nd   \ne   \n Xf ",
+		},
+		{
+			name:          "z<enter> repositions cursor at the top and moves to first non blank",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "z<enter>",
+			expect:        "  X \ng   \nh   \ni   ",
+		},
+		{
+			name:          "z- repositions cursor at the bottom and moves to first non blank",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "z-",
+			expect:        "c   \nd   \ne   \n  X ",
 		},
 	}
 
@@ -11918,8 +11936,12 @@ func TestCentering(t *testing.T) {
 			vi.Resize(4, 4)
 
 			vi.setCursorAtScroll(tcase.setCursor)
-			for _, ch := range tcase.inputSequence {
-				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			keys, err := term.ParseKeys(tcase.inputSequence)
+			require.NoError(t, err)
+			for _, key := range keys {
+				vi.Handle(term.Event{
+					Type: term.EventKey, Ch: key.Ch, Mod: key.Mod, Key: key.Key,
+				})
 			}
 
 			w := term.NewStringWriter(4, 4)

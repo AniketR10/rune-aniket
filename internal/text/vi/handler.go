@@ -3538,12 +3538,18 @@ func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
 	var visual, stayZMode bool
 	switch ev.Mod {
 	case 0:
+		switch ev.Key {
+		case term.KeyEnter:
+			repositioned := vi.cursor.RepositionTop()
+			handled = vi.cursor.MoveStartLineNonBlank() || repositioned
+		}
 		switch ev.Ch {
 		case '.':
-			handled = vi.cursor.Center()
-			if handled {
-				vi.cursor.MoveStartLineNonBlank()
-			}
+			repositioned := vi.cursor.Center()
+			handled = vi.cursor.MoveStartLineNonBlank() || repositioned
+		case '-':
+			repositioned := vi.cursor.RepositionBottom()
+			handled = vi.cursor.MoveStartLineNonBlank() || repositioned
 		case 'z':
 			handled = vi.cursor.Center()
 		case 'v', 'V':

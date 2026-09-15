@@ -181,7 +181,7 @@ func (b *Tab) SeekOffset() int {
 	if !ok {
 		return 0
 	}
-	return scrollable.SeekOffset()
+	return min(scrollable.SeekOffset(), scrollable.MaxSeekOffset())
 }
 
 // MaxSeekOffset satisfies component.Scrollable.

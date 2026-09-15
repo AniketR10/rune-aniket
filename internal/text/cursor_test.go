@@ -1308,49 +1308,332 @@ func TestCursorTryIndentWithConfiguredIndentRune(t *testing.T) {
 	}
 }
 
+// centerLines builds a buffer of n two digit lines so that a view of a known
+// size can be asserted cell by cell.
+func centerLines(n int) string {
+	var b strings.Builder
+	for i := range n {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "%02d", i)
+	}
+	return b.String()
+}
+
+func drawScroll(t *testing.T, c *Cursor, width, height int) string {
+	t.Helper()
+	w := term.NewStringWriter(width, height)
+	c.scroll.Draw(w)
+	require.NoError(t, w.Flush())
+	return w.String()
+}
+
+// TestCursorCenter covers Cursor.Center, which is what vim's zz maps to: the
+// cursor's line moves to the middle row of the view. Around the end of the
+// buffer the view keeps scrolling and leaves the rows below the last line
+// empty, so that every line can reach the middle row.
 func TestCursorCenter(t *testing.T) {
+	// sampleSnippet is 32 lines, so with a 10 row view the middle row is 5
+	// and the last line the view can show at its bottom is 22.
 	suite := []struct {
-		width, height             int
-		setCursorAtScroll         term.Coordinates
-		expectedHandled           bool
-		expectedWindowCoordinates term.Coordinates
+		name              string
+		width, height     int
+		content           string
+		setCursorAtScroll term.Coordinates
+		wantHandled       bool
+		wantWindowY       int
+		wantOffsetY       int
 	}{
-		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
-		{10, 10, term.Coordinates{Y: 2}, false, term.Coordinates{Y: 2}},
-		{10, 10, term.Coordinates{Y: 5}, false, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 5}},
-		{10, 10, term.Coordinates{Y: 7}, true, term.Coordinates{Y: 5}},
-		{10, 10, term.Coordinates{Y: 8}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 5}},
-		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{X: 3, Y: 6}},
-		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{X: 3, Y: 8}},
-		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
-		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
-		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 31}},
+		{
+			name:  "first line cannot reach the middle row",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 0},
+		},
+		{
+			name:  "line above the middle row cannot reach it either",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 2},
+			wantWindowY:       2,
+		},
+		{
+			name:  "line already on the middle row is a no-op",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 5},
+			wantWindowY:       5,
+		},
+		{
+			name:  "line below the middle row scrolls down to it",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 6},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       1,
+		},
+		{
+			name:  "line in the middle of the buffer",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 20},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       15,
+		},
+		{
+			name:  "last line that centers without passing the end",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 27},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       22,
+		},
+		{
+			name:  "first line that only centers past the end",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 28},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       23,
+		},
+		{
+			name:  "last line centers with empty rows below it",
+			width: 10, height: 10,
+			setCursorAtScroll: term.Coordinates{Y: 31},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       26,
+		},
+		{
+			name:  "view taller than the buffer leaves the first line alone",
+			width: 100, height: 100,
+			setCursorAtScroll: term.Coordinates{Y: 0},
+		},
+		{
+			name:  "view taller than the buffer cannot center the last line",
+			width: 100, height: 100,
+			setCursorAtScroll: term.Coordinates{Y: 31},
+			wantWindowY:       31,
+		},
+		{
+			name:  "single row view keeps the line on the only row",
+			width: 10, height: 1,
+			setCursorAtScroll: term.Coordinates{Y: 31},
+			wantOffsetY:       31,
+		},
+		{
+			name:  "three row view centers the last line past the end",
+			width: 10, height: 3,
+			setCursorAtScroll: term.Coordinates{Y: 31},
+			wantHandled:       true,
+			wantWindowY:       1,
+			wantOffsetY:       30,
+		},
+		{
+			name:  "buffer as tall as the view still centers its last line",
+			width: 4, height: 10,
+			content:           centerLines(10),
+			setCursorAtScroll: term.Coordinates{Y: 9},
+			wantHandled:       true,
+			wantWindowY:       5,
+			wantOffsetY:       4,
+		},
+		{
+			name:  "single line buffer never scrolls",
+			width: 4, height: 10,
+			content:           "only",
+			setCursorAtScroll: term.Coordinates{Y: 0},
+		},
+		{
+			name:  "buffer shorter than half the view never scrolls",
+			width: 4, height: 10,
+			content:           centerLines(4),
+			setCursorAtScroll: term.Coordinates{Y: 3},
+			wantWindowY:       3,
+		},
 	}
 
-	for i, test := range suite {
-		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
-			c := setupCursor(t, test.width, test.height, false)
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			content := test.content
+			if content == "" {
+				content = sampleSnippet
+			}
+			c := setupCursorContent(t, test.width, test.height, content, false)
+
+			c.MoveToScroll(test.setCursorAtScroll)
+			// subscribe once the cursor is in place so that only the
+			// seeks performed by Center are counted.
 			sub := &testScrollSubscriber{}
 			c.scroll.Subscribe(sub)
 
-			c.MoveToScroll(test.setCursorAtScroll)
 			handled := c.Center()
-			require.Equal(t, test.expectedHandled, handled)
+			require.Equal(t, test.wantHandled, handled)
 
-			cursor := c.CursorAtScroll()
-			assert.Equal(t, test.setCursorAtScroll, cursor)
-			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
-			if test.expectedHandled {
+			assert.Equal(t, test.setCursorAtScroll, c.CursorAtScroll(),
+				"the cursor must stay on its line")
+			assert.Equal(t, test.wantWindowY, c.Coordinates().Y)
+			assert.Equal(t, test.wantOffsetY, c.scroll.Offset().Y)
+			assert.Zero(t, c.scroll.Offset().X,
+				"centering must not scroll horizontally")
+
+			win, _ := c.WindowCoordinates(c.CursorAtScroll())
+			assert.Equal(t, c.Coordinates().Y, win.Y,
+				"the cursor window row must agree with the scroll offset")
+
+			if test.wantHandled {
 				assert.NotZero(t, sub.seek)
+			} else {
+				assert.Zero(t, sub.seek,
+					"a center that changes nothing must not notify subscribers")
 			}
 		})
 	}
+}
+
+// TestCursorCenterContract pins the outcome of Cursor.Center for every
+// combination of view height and cursor line: the view always ends up half a
+// view above the cursor's line, clamped at the first line, and the cursor
+// never leaves the view.
+func TestCursorCenterContract(t *testing.T) {
+	const rows = 32
+	for _, height := range []int{1, 2, 3, 4, 5, 9, 10, 17, 31, 32, 33, 64} {
+		for line := range rows {
+			c := setupCursor(t, 10, height, false)
+			require.Equal(t, rows, c.scroll.Buffer().Rows())
+
+			c.MoveToScroll(term.Coordinates{Y: line})
+			c.Center()
+
+			offset := c.scroll.Offset()
+			window := c.Coordinates()
+			msg := fmt.Sprintf("height %d, line %d", height, line)
+			assert.Equal(t, max(0, line-height/2), offset.Y, msg)
+			assert.Equal(t, line-offset.Y, window.Y, msg)
+			assert.GreaterOrEqual(t, window.Y, 0, msg)
+			assert.Less(t, window.Y, height, msg)
+			assert.Equal(t, term.Coordinates{Y: line}, c.CursorAtScroll(), msg)
+		}
+	}
+}
+
+// TestCursorCenterPastEndOfContent covers the cases where centering has to
+// scroll the view beyond the last line of the buffer.
+func TestCursorCenterPastEndOfContent(t *testing.T) {
+	const (
+		width  = 4
+		height = 7
+		lines  = 20
+	)
+
+	t.Run("leaves the rows below the last line empty", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+
+		require.True(t, c.Center())
+		assert.Equal(t, 3, c.Coordinates().Y)
+		assert.Equal(t, "16  \n17  \n18  \n19  \n    \n    \n    ",
+			drawScroll(t, c, width, height))
+	})
+
+	t.Run("is idempotent", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+
+		require.True(t, c.Center())
+		before := c.scroll.Offset()
+		view := drawScroll(t, c, width, height)
+
+		assert.False(t, c.Center())
+		assert.Equal(t, before, c.scroll.Offset())
+		assert.Equal(t, view, drawScroll(t, c, width, height))
+	})
+
+	t.Run("centers back from a view repositioned at the top", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+
+		require.True(t, c.Center())
+		centered := c.scroll.Offset()
+
+		require.True(t, c.RepositionTop())
+		require.Equal(t, lines-1, c.scroll.Offset().Y,
+			"the last line must be able to reach the top row")
+		assert.Equal(t, 0, c.Coordinates().Y)
+
+		require.True(t, c.Center())
+		assert.Equal(t, centered, c.scroll.Offset())
+		assert.Equal(t, 3, c.Coordinates().Y)
+	})
+
+	t.Run("keeps the horizontal offset", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+		require.True(t, c.scroll.SetOffset(
+			term.Coordinates{X: 1, Y: c.scroll.Offset().Y}))
+
+		require.True(t, c.Center())
+		assert.Equal(t, 1, c.scroll.Offset().X)
+	})
+
+	t.Run("counts folded lines", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		require.True(t, c.scroll.MarkHidden(2, 8))
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+
+		require.True(t, c.Center())
+		assert.Equal(t, 3, c.Coordinates().Y)
+		assert.Equal(t, term.Coordinates{Y: lines - 1}, c.CursorAtScroll())
+		// six lines are hidden, so the same view sits six rows lower
+		// in the buffer than it does without the fold.
+		assert.Equal(t, 10, c.scroll.Offset().Y)
+		assert.Equal(t, "16  \n17  \n18  \n19  \n    \n    \n    ",
+			drawScroll(t, c, width, height))
+	})
+
+	t.Run("counts the rows a wrapped last line takes", func(t *testing.T) {
+		c := setupCursorContent(t, 4, 6, "a\nb\nc\nd\ne\nf\ng\nh\niiiiiiii", true)
+		c.MoveToScroll(term.Coordinates{Y: 8})
+
+		require.True(t, c.Center())
+		assert.Equal(t, 3, c.Coordinates().Y)
+		assert.Equal(t, term.Coordinates{Y: 8}, c.CursorAtScroll())
+		assert.Equal(t, "f   \ng   \nh   \niiii\niiii\n    ",
+			drawScroll(t, c, 4, 6))
+	})
+
+	t.Run("inverted scrolls stay anchored at the end", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, centerLines(lines), false)
+		c.scroll.InvertOffset = true
+		// the cursor starts at the top, and with an inverted offset the
+		// view already sits at the end of the content.
+		c.MoveFirstLine()
+		c.MoveToScroll(term.Coordinates{Y: lines - 1})
+		before := c.scroll.Offset()
+
+		assert.False(t, c.Center())
+		assert.Equal(t, before, c.scroll.Offset())
+		assert.Equal(t, height-1, c.Coordinates().Y)
+		assert.LessOrEqual(t, c.scroll.SeekOffset(), c.scroll.MaxSeekOffset())
+	})
+
+	t.Run("does nothing without a view to center in", func(t *testing.T) {
+		for _, size := range []term.Coordinates{{X: 0, Y: height}, {X: width, Y: 0}} {
+			c := setupCursorContent(t, size.X, size.Y, centerLines(lines), false)
+			c.MoveToScroll(term.Coordinates{Y: lines - 1})
+			before := c.scroll.Offset()
+
+			assert.False(t, c.Center())
+			assert.Equal(t, before, c.scroll.Offset())
+			assert.Equal(t, term.Coordinates{Y: lines - 1}, c.CursorAtScroll())
+		}
+	})
+
+	t.Run("does nothing on an empty buffer", func(t *testing.T) {
+		c := setupCursorContent(t, width, height, "", false)
+
+		assert.False(t, c.Center())
+		assert.Equal(t, term.Coordinates{}, c.scroll.Offset())
+		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
+	})
 }
 
 func TestCursorRepositionTop(t *testing.T) {
@@ -1370,13 +1653,15 @@ func TestCursorRepositionTop(t *testing.T) {
 		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 0}},
 		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{X: 3, Y: 0}},
 		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{X: 3, Y: 0}},
-		{10, 10, term.Coordinates{Y: 24}, true, term.Coordinates{X: 3, Y: 2}},
-		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{X: 3, Y: 5}},
-		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{X: 3, Y: 6}},
-		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{X: 3, Y: 8}},
-		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		// the last lines of the buffer reach the top of the view too,
+		// scrolling past the end of the content, as vim does.
+		{10, 10, term.Coordinates{Y: 24}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 31}, true, term.Coordinates{Y: 0}},
 		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
-		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 31}},
+		{100, 100, term.Coordinates{Y: 31}, true, term.Coordinates{Y: 0}},
 	}
 
 	for i, test := range suite {

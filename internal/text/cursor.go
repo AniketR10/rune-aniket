@@ -142,25 +142,38 @@ func NewCursor(scroll *component.Scroll, scheduleNextTick func(func()) bool) *Cu
 // Center centers the cursor at the scroll such that the cursor
 // occupies the line at the center of the view.
 func (c *Cursor) Center() (handled bool) {
-	seeked := c.scroll.RepositionLineCenter(c.cursorAtScroll().Y)
-	c.cursor.Y -= seeked
-	return seeked != 0
+	return c.repositionLine(
+		c.scroll.SizeHeight()/2, c.scroll.RepositionLineCenter)
 }
 
 // RepositionTop repositions the cursor at the scroll such that the cursor
 // occupies the line at the top of the view.
 func (c *Cursor) RepositionTop() (handled bool) {
-	seeked := c.scroll.RepositionLineTop(c.cursorAtScroll().Y)
-	c.cursor.Y -= seeked
-	return seeked != 0
+	return c.repositionLine(0, c.scroll.RepositionLineTop)
 }
 
 // RepositionBottom repositions the cursor at the scroll such that the cursor
 // occupies the line at the bottom of the view.
 func (c *Cursor) RepositionBottom() (handled bool) {
-	seeked := c.scroll.RepositionLineBottom(c.cursorAtScroll().Y)
+	return c.repositionLine(
+		c.scroll.SizeHeight()-1, c.scroll.RepositionLineBottom)
+}
+
+func (c *Cursor) repositionLine(target int, reposition func(int) int) bool {
+	if c.scroll.SizeHeight() == 0 || c.scroll.Width() == 0 {
+		return false
+	}
+	seeked := reposition(c.cursorAtScroll().Y)
 	c.cursor.Y -= seeked
-	return seeked != 0
+	pastEnd := c.cursor.Y - target
+	if pastEnd <= 0 || c.scroll.InvertOffset {
+		return seeked != 0
+	}
+	offset := c.scroll.Offset()
+	offset.Y += pastEnd
+	c.scroll.SetOffset(offset)
+	c.cursor.Y = target
+	return true
 }
 
 // MoveToWindow moves the cursor to the given visible window coordinates in the

@@ -2739,11 +2739,11 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
-│b                 │
-│c                 │
 │d                 │
 │e                 │
 │▐                 │
+│                  │
+│                  │
 │            NORMAL│
 └──────────────────┘`},
 				}
@@ -2814,11 +2814,11 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 						`┌─────━━━──────────┐
 │o A  o B          │
 ├──────────────────┤
-│b                 │
-│c                 │
 │d                 │
 │e                 │
 │▐                 │
+│                  │
+│                  │
 │            NORMAL│
 └──────────────────┘`},
 				}
