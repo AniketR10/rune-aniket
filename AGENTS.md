@@ -233,11 +233,14 @@ Do not mark a task complete without validating the fix.
 
 When creating commit messages for this repository, match the existing subject style in recent history.
 
-- Prefer short, imperative, sentence-style subjects
-- Usually start with a capitalized verb such as `Add`, `Update`, `Fix`, `Remove`, `Display`, `Sort`, `Generate`, `Upgrade`, or `Revert`
+- Use short, imperative, sentence-style subjects.
+- The subject **must** start with one of these allowed verbs: `Add`, `Update`,
+  `Fix`, `Remove`, `Upgrade`, `Revert`, or `Refactor`. This is an exhaustive
+  allowlist, not a set of examples.
 - Keep the subject focused on the user-visible or code-level change (the "what").
 - Add a short description on the reason why the change is being introduced (the "why").
-- Wrap commit subjects and body lines to a maximum of 90 columns
+- The commit subject **must** be shorter than 90 characters.
+- Every commit body line **must** be wrapped at 90 characters or fewer.
 - Do not include routine validation command lists in commit messages unless explicitly requested
 - For performance-oriented commits, include measured before/after timings or percentages when available
 
@@ -246,7 +249,7 @@ Good examples:
 - `Add AGENTS.md project instructions support`
 - `Update plan skill with critical loop exit section`
 - `Fix userMsgIdx after compaction to prevent index out of range panic`
-- `Display /clear confirmation inline instead of floating window`
+- `Update /clear confirmation to display inline`
 
 ## Review checklist
 
