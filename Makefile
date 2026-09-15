@@ -144,7 +144,7 @@ BLUECTL_CONFIG = $(BLUECTL_CONFIG_ROOT)/$(1)/$(2)
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: .git/hooks/pre-commit $(EXECS)
+default: .git/hooks/pre-commit .git/hooks/commit-msg $(EXECS)
 
 debug: RUNE_DEBUG_BUILD := true
 debug: CGO_ENABLED=CGO_ENABLED=1
@@ -160,6 +160,10 @@ rune-agent: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 rune-agent: $(BIN)/rune-agent
 
 .git/hooks/pre-commit: .pre-commit-config.yaml
+	@ command -v pre-commit >/dev/null 2>&1 && pre-commit install \
+		|| echo "pre-commit not installed; skipping git hook setup"
+
+.git/hooks/commit-msg: .pre-commit-config.yaml
 	@ command -v pre-commit >/dev/null 2>&1 && pre-commit install \
 		|| echo "pre-commit not installed; skipping git hook setup"
 
