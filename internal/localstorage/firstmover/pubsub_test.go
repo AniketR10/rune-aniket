@@ -172,6 +172,34 @@ func TestPubSub(t *testing.T) {
 		cleanupNodes(t, follower)
 	})
 
+	t.Run("silent leader death is detected without client traffic", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 1)
+		follower := followers[0]
+		topic := "1234"
+		ctx := context.Background()
+		require.NoError(t, follower.Subscribe(ctx, topic))
+
+		testHookSuppressBye.Store(true)
+		defer testHookSuppressBye.Store(false)
+
+		require.NoError(t, leader.Close())
+		// The sibling test above publishes immediately, and that RPC is
+		// itself what forces the dead connection to fail. Election must
+		// not depend on a client happening to send something, or a node
+		// that only waits for messages stays leaderless forever.
+		require.Eventually(t, func() bool { return follower.IsLeader() },
+			5*time.Second, 10*time.Millisecond,
+			"follower must take leadership without client traffic")
+
+		require.NoError(t, follower.Publish(ctx, topic, []byte("block")))
+		receiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		data, err := follower.Receive(receiveCtx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+		cleanupNodes(t, follower)
+	})
+
 	t.Run("publish while the new leader is still resubscribing is delivered", func(t *testing.T) {
 		leader, followers := makeLeaderFollowerPair(t, 1)
 		follower := followers[0]
