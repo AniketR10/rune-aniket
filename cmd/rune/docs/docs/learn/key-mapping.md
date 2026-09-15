@@ -1,9 +1,10 @@
 # Key remapping
 
 `gui.key_mapping` rewrites one key combination into another **before** it
-reaches the editor. It is useful when the operating system swallows a key, or
-when a physical key never produces a usable keystroke on its own. The classic
-example is **CapsLock**.
+reaches the editor. It is useful when the operating system swallows a key, when
+the window in focus claims a key you would rather bind to a command, or when a
+physical key never produces a usable keystroke on its own. The classic example
+is **CapsLock**.
 
 This feature applies to the Rune GUI only. Both sides of a mapping use the same
 grammar as command bindings; see [Key combination syntax](./key-syntax.md) for
@@ -29,6 +30,65 @@ config["gui"]["key_mapping"] = {"<capslock>": "<esc>"}
 The example above makes CapsLock behave as Escape inside Rune. Targets can be
 printable characters or named keys, so `"<numlock>": "0"` and
 `"<ctrl-left>": "<home>"` are both valid.
+
+## When a command binding doesn't fire
+
+The window in focus receives every key first. If it acts on that key, the event
+stops there and `command.key_bindings` never runs. This is deliberate: it keeps
+a shell, a full-screen program, and an editor in insert mode completely
+transparent to typing. Any combination Rune claimed for itself globally could
+never be typed into them again.
+
+A binding therefore only fires on a combination the focused window declines. A
+terminal is the strictest case, because it forwards almost everything to the
+shell: plain characters, and every `ctrl` and `shift` combination. It leaves
+alone only combinations that include `alt` or `meta`, which is why Rune's
+shipped bindings live there.
+
+So this binding opens the file explorer from an editor, but does nothing in a
+terminal, where `<ctrl-e>` belongs to the shell:
+
+```yaml tab
+command:
+  key_bindings:
+    "<ctrl-e>": "fexplorer"
+```
+
+```python tab
+config["command"]["key_bindings"]["<ctrl-e>"] = "fexplorer"
+```
+
+`gui.key_mapping` solves this without giving up the key you want to press.
+The remap runs before the focused window ever sees the event, so you can press
+one combination and have Rune route on another. Map your combination to one the
+terminal declines, then bind the command to that target:
+
+```yaml tab
+gui:
+  key_mapping:
+    "<ctrl-e>": "<alt-meta-e>"
+command:
+  key_bindings:
+    "<alt-meta-e>": "fexplorer"
+```
+
+```python tab
+config["gui"]["key_mapping"]["<ctrl-e>"] = "<alt-meta-e>"
+config["command"]["key_bindings"]["<alt-meta-e>"] = "fexplorer"
+```
+
+`<ctrl-e>` now opens the file explorer everywhere, terminals included. What
+reaches the terminal is `<alt-meta-e>`, which it does not claim, so the binding
+runs.
+
+Two things to keep in mind:
+
+- The source combination is spent. Nothing in Rune receives `<ctrl-e>` after
+  this, so the shell can no longer use it either. That is usually the point, but
+  pick a combination you do not need to send through.
+- Remap individual combinations, not a bare modifier. `"<ctrl>": "<meta>"`
+  rewrites the `ctrl` bit on every key, so `<ctrl-c>` would become `<meta-c>`
+  and you would lose the ability to interrupt a running command.
 
 ## Physical keys you can remap
 

@@ -188,6 +188,12 @@ The binding dispatches the `fmt` alias directly. See
 [Key combination syntax](./key-syntax.md) for the full grammar of
 `<ctrl-f>`-style tokens.
 
+A binding only fires if the window in focus does not claim the key first, so
+`<ctrl-f>` above runs in an editor but not in a terminal, where it belongs to
+the shell. See [When a command binding doesn't
+fire](./key-mapping.md#when-a-command-binding-doesnt-fire) for how to keep the
+key you want to press and still have the binding run everywhere.
+
 ## Replay keys as macros with `echo`
 
 Some workflows can't be expressed as a single command and its
