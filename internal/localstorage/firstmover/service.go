@@ -676,10 +676,23 @@ func (s *Service) setActiveAndUnlock(svc storageapi.Service) {
 func (s *Service) recoverSubscriptions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for topic, stream := range s.pubsub.clientStreams {
+	for topic, entry := range s.pubsub.clientStreams {
+		if topic == internalTopic {
+			// the goodbye channel belongs to the connection that
+			// just died; monitorLeader opens a fresh one per leader.
+			continue
+		}
 		var msgs [][]byte
-		for len(stream) > 0 {
-			msg := <-stream
+		// entry.ch is nil (len 0) while the subscription is still
+		// being established: nothing is buffered yet, but the topic
+		// must still be restored.
+		for len(entry.ch) > 0 {
+			msg := <-entry.ch
+			if msg.err != nil {
+				// the pump reports the dead connection into the
+				// stream; that is not a message to replay.
+				continue
+			}
 			msgs = append(msgs, msg.msg.GetData())
 		}
 		s.subscriptions[topic] = append(s.subscriptions[topic], msgs...)

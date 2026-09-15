@@ -250,6 +250,70 @@ func TestPubSub(t *testing.T) {
 		cleanupNodes(t, follower)
 	})
 
+	t.Run("concurrent subscribes to one topic share a single server stream", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 1)
+		follower := followers[0]
+		defer cleanupNodes(t, leader, follower)
+		topic := "1234"
+		ctx := context.Background()
+		require.NoError(t, follower.waitReady(ctx))
+
+		// A Receive racing the post-failover resubscribe used to open
+		// a second server stream for the same topic. Whichever one
+		// registered after a publish never saw the message, and the
+		// caller blocked on it forever.
+		const n = 16
+		streams := make([]chan msgError, n)
+		errs := make([]error, n)
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i := range n {
+			go func() {
+				defer wg.Done()
+				_, streams[i], errs[i] = follower.pubsub.subscribe(ctx, topic, false)
+			}()
+		}
+		wg.Wait()
+		for i := range n {
+			require.NoError(t, errs[i], i)
+			assert.Equal(t, streams[0], streams[i], "subscriber %d got a different stream", i)
+		}
+		leader.mu.Lock()
+		subscribers := len(leader.pubsub.subscribers[topic])
+		leader.mu.Unlock()
+		assert.Equal(t, 1, subscribers, "server registered more than one stream for the topic")
+
+		require.NoError(t, leader.Publish(ctx, topic, []byte("block")))
+		data, err := follower.Receive(ctx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+	})
+
+	t.Run("a stream that failed while the leader was lost is not replayed as a message", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 1)
+		follower := followers[0]
+		topic := "1234"
+		ctx := context.Background()
+		require.NoError(t, follower.Subscribe(ctx, topic))
+
+		// The stream pump reports the broken connection into the
+		// buffered stream. recoverSubscriptions must not carry that
+		// error entry over as an empty message.
+		testHookSuppressBye.Store(true)
+		defer testHookSuppressBye.Store(false)
+		require.NoError(t, leader.Close())
+		require.Eventually(t, func() bool { return follower.IsLeader() },
+			5*time.Second, 10*time.Millisecond)
+
+		require.NoError(t, follower.Publish(ctx, topic, []byte("block")))
+		receiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		data, err := follower.Receive(receiveCtx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+		cleanupNodes(t, follower)
+	})
+
 	t.Run("extreme concurrency of leaders and followers", func(t *testing.T) {
 		const n, m = 40, 20
 		cfg := testConfig()
