@@ -121,6 +121,7 @@ type ex struct {
 	extensionsExecutor       *workspaceshell.Executor
 	storage                  storageapi.Service
 	workspaceURI             workspaceapi.URI
+	outOfRootTabs            *outOfRootWatcher
 	closed                   bool
 	home                     bool
 	reservoir                *vtereservoir.Facility
@@ -2930,6 +2931,9 @@ func (e *ex) Close() (ret error) {
 	e.stopTerminal()
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
+	}
+	if e.outOfRootTabs != nil {
+		e.outOfRootTabs.Close()
 	}
 	if e.reservoir != nil {
 		if err := e.reservoir.Close(); err != nil {
