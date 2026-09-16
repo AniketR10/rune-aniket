@@ -749,6 +749,7 @@ func runGUI(
 
 	options := buildGUIOptions(browser, cfg, transparentWindow, mu, *flagFPS)
 	options = append(options, gui.WithDragObserver(root.dragObserver))
+	options = append(options, gui.WithLinkObserver(root.linkObserver))
 
 	storage := root.storage
 	width, height, ok := getLastSize(storage)

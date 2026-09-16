@@ -45,6 +45,10 @@ type input struct {
 	input       keysManager
 	keyMapping  map[ebiten.KeyEvent]ebiten.KeyEvent
 	modMapping  map[ebiten.KeyModifier]ebiten.KeyModifier
+	// metaDown tracks whether Meta/Super is held. It is derived from key
+	// transitions rather than ebiten.IsKeyPressed, which always reports
+	// false on GLFW desktop platforms.
+	metaDown bool
 }
 
 func newInput(fontManager *font.Manager) *input {
@@ -158,6 +162,8 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 			continue
 		}
 
+		i.trackMeta(ev)
+
 		if ev.Action == ebiten.KeyActionRelease {
 			continue
 		}
@@ -232,6 +238,24 @@ func (i *input) isLayoutText(ev ebiten.InputEvent, mod term.Modifier) bool {
 		}
 	}
 	return false
+}
+
+// trackMeta keeps metaDown in sync with the platform's view of the
+// Meta/Super modifier. A transition of a meta key sets it directly; any
+// other key action carries the modifier mask the platform observed and
+// so resynchronizes a release that never reached the window.
+func (i *input) trackMeta(ev ebiten.InputEvent) {
+	switch ev.Key {
+	case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight:
+		i.metaDown = ev.Action != ebiten.KeyActionRelease
+	default:
+		i.metaDown = ev.Mods&ebiten.KeyModSuper != 0
+	}
+}
+
+// metaHeld reports whether the Meta/Super modifier is currently held.
+func (i *input) metaHeld() bool {
+	return i.metaDown
 }
 
 // claim records that a key action has already been turned into a terminal

@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
@@ -349,6 +350,26 @@ func (b *bootstrapHandler) dragObserver(ev gui.DragEvent) {
 		target.DragCancel()
 	case gui.DragDrop:
 		target.DragDrop(ev.Pos, ev.Paths)
+	}
+}
+
+// linkObserver opens a URL the user meta-clicked in the rendered frame.
+// Workspace files open in the editor; anything else goes to the system
+// browser.
+func (b *bootstrapHandler) linkObserver(u *url.URL) {
+	if u.Scheme == "file" {
+		uri, err := workspaceapi.ParseURI(u.String())
+		if err != nil {
+			b.notifyError("open link", err)
+			return
+		}
+		if err := b.currentIDE().Open(uri); err != nil {
+			b.notifyError("open link", err)
+		}
+		return
+	}
+	if err := b.openBrowser(u); err != nil {
+		b.notifyError("open link", err)
 	}
 }
 
