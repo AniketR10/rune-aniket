@@ -703,18 +703,15 @@ func TestOutOfRootTabWatch(t *testing.T) {
 			write func(t *testing.T, path, content string)
 		}{
 			{"write in place", writeFileWithNewerMtime},
-			// Editors save by renaming a swap file over the original, which
-			// replaces the inode a file-level watch would be attached to.
 			{"rename over", renameFileWithNewerMtime},
 		}
 		for _, test := range suite {
 			t.Run(test.name, func(t *testing.T) {
-				x, mu, scheme := newOutOfRootWatchTest(t, nil)
+				x, mu := newOutOfRootWatchTest(t)
 
 				file := outOfRootFile(t, t.TempDir(), "outside.txt")
 				require.NoError(t, os.WriteFile(file.Path(), []byte("old"), 0o666))
 				require.NoError(t, x.editFiles(bgctx, file.String()))
-				waitForWatches(t, scheme, 1)
 
 				test.write(t, file.Path(), "new")
 
@@ -724,12 +721,11 @@ func TestOutOfRootTabWatch(t *testing.T) {
 	})
 
 	t.Run("prompts on a dirty buffer", func(t *testing.T) {
-		x, mu, scheme := newOutOfRootWatchTest(t, nil)
+		x, mu := newOutOfRootWatchTest(t)
 
 		file := outOfRootFile(t, t.TempDir(), "outside.txt")
 		require.NoError(t, os.WriteFile(file.Path(), []byte(""), 0o666))
 		require.NoError(t, x.editFiles(bgctx, file.String()))
-		waitForWatches(t, scheme, 1)
 
 		editBuffer(t, x, file, "ABC")
 		writeFileWithNewerMtime(t, file.Path(), "new")
@@ -743,130 +739,202 @@ func TestOutOfRootTabWatch(t *testing.T) {
 		assertFileContent(t, x, file, "ABC")
 	})
 
-	t.Run("shares one watch per directory until the last tab closes", func(t *testing.T) {
-		x, mu, scheme := newOutOfRootWatchTest(t, nil)
+	t.Run("does not dispatch filesystem events to subscribers", func(t *testing.T) {
+		x, mu := newOutOfRootWatchTest(t)
 
-		dir := t.TempDir()
-		a := outOfRootFile(t, dir, "a.txt")
-		b := outOfRootFile(t, dir, "b.txt")
+		var dispatched atomic.Int32
+		require.NoError(t, x.comp.SubscribeEvents([]textapi.EventType{
+			textapi.EventTypeCreate, textapi.EventTypeChange,
+			textapi.EventTypeRename, textapi.EventTypeRemove,
+		}, textapi.FuncEventHandler(func(context.Context, textapi.Event) bool {
+			dispatched.Add(1)
+			return false
+		})))
+
+		file := outOfRootFile(t, t.TempDir(), "outside.txt")
+		require.NoError(t, os.WriteFile(file.Path(), []byte("old"), 0o666))
+		require.NoError(t, x.editFiles(bgctx, file.String()))
+		writeFileWithNewerMtime(t, file.Path(), "new")
+		waitForBufferContent(t, x, mu, file, "new")
+
+		assert.Zero(t, dispatched.Load())
+	})
+
+	t.Run("recovers after a failed stat", func(t *testing.T) {
+		x, mu := newOutOfRootWatchTest(t)
+		scheme := &flakyStatScheme{inner: x.workspace}
+		x.outOfRootTabs.scheme = scheme
+
+		file := outOfRootFile(t, t.TempDir(), "outside.txt")
+		require.NoError(t, os.WriteFile(file.Path(), []byte("old"), 0o666))
+		require.NoError(t, x.editFiles(bgctx, file.String()))
+		scheme.failures.Store(3)
+
+		writeFileWithNewerMtime(t, file.Path(), "new")
+
+		waitForBufferContent(t, x, mu, file, "new")
+		assert.Zero(t, scheme.failures.Load())
+	})
+
+	t.Run("polls until the last tab closes", func(t *testing.T) {
+		x, mu := newOutOfRootWatchTest(t)
+
+		a := outOfRootFile(t, t.TempDir(), "a.txt")
+		b := outOfRootFile(t, t.TempDir(), "b.txt")
 		require.NoError(t, os.WriteFile(a.Path(), []byte("a"), 0o666))
 		require.NoError(t, os.WriteFile(b.Path(), []byte("b"), 0o666))
 		require.NoError(t, x.editFiles(bgctx, a.String()))
 		require.NoError(t, x.editFiles(bgctx, b.String()))
-		waitForWatches(t, scheme, 1)
-		assert.Equal(t, []string{dir}, x.outOfRootTabs.watchedDirs())
+		assert.ElementsMatch(t, []string{a.String(), b.String()}, trackedOutOfRootTabs(x))
 
 		removeTab(t, x, mu, a)
-		assert.Equal(t, []string{dir}, x.outOfRootTabs.watchedDirs())
+		assert.Equal(t, []string{b.String()}, trackedOutOfRootTabs(x))
 		writeFileWithNewerMtime(t, b.Path(), "b2")
 		waitForBufferContent(t, x, mu, b, "b2")
 
 		removeTab(t, x, mu, b)
-		assert.Empty(t, x.outOfRootTabs.watchedDirs())
-		waitForStopWatches(t, scheme, 1)
-		assert.Equal(t, int32(1), scheme.watches.Load())
+		assert.Empty(t, trackedOutOfRootTabs(x))
+		waitForPollingStopped(t, x)
 	})
 
-	t.Run("ignores tabs inside the workspace root", func(t *testing.T) {
-		x, _, _ := newOutOfRootWatchTest(t, nil)
-
-		file, err := x.workspace.URI("a")
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(file.Path(), []byte("a"), 0o666))
-		require.NoError(t, x.editFiles(bgctx, file.String()))
-
-		assert.Empty(t, x.outOfRootTabs.watchedDirs())
-	})
-
-	t.Run("ignores a sibling directory sharing the root prefix", func(t *testing.T) {
-		x, _, scheme := newOutOfRootWatchTest(t, nil)
-
-		sibling := x.workspaceURI.Path() + "-sibling"
-		require.NoError(t, os.Mkdir(sibling, 0o755))
-		t.Cleanup(func() { _ = os.RemoveAll(sibling) })
-		file := outOfRootFile(t, sibling, "a.txt")
-		require.NoError(t, os.WriteFile(file.Path(), []byte("a"), 0o666))
-		require.NoError(t, x.editFiles(bgctx, file.String()))
-
-		assert.Equal(t, []string{sibling}, x.outOfRootTabs.watchedDirs())
-		waitForWatches(t, scheme, 1)
-	})
-
-	t.Run("releases a watch whose tab closed before it armed", func(t *testing.T) {
-		gate := make(chan struct{})
-		x, mu, scheme := newOutOfRootWatchTest(t, gate)
+	t.Run("stops polling when the workspace closes", func(t *testing.T) {
+		x, mu := newOutOfRootWatchTest(t)
 
 		file := outOfRootFile(t, t.TempDir(), "outside.txt")
 		require.NoError(t, os.WriteFile(file.Path(), []byte("a"), 0o666))
 		require.NoError(t, x.editFiles(bgctx, file.String()))
-		removeTab(t, x, mu, file)
-		close(gate)
-
-		waitForStopWatches(t, scheme, 1)
-	})
-
-	t.Run("stops watches when the workspace closes", func(t *testing.T) {
-		x, mu, scheme := newOutOfRootWatchTest(t, nil)
-
-		file := outOfRootFile(t, t.TempDir(), "outside.txt")
-		require.NoError(t, os.WriteFile(file.Path(), []byte("a"), 0o666))
-		require.NoError(t, x.editFiles(bgctx, file.String()))
-		waitForWatches(t, scheme, 1)
 
 		mu.Lock()
 		require.NoError(t, x.Close())
 		mu.Unlock()
 
-		waitForStopWatches(t, scheme, 1)
+		waitForPollingStopped(t, x)
+	})
+
+	t.Run("does not poll on remote workspaces", func(t *testing.T) {
+		x, mu := newOutOfRootWatchTest(t)
+		w := newOutOfRootWatcher(x, remoteWorkspace{x.workspace}, x.workspaceURI, mu)
+
+		file := outOfRootFile(t, t.TempDir(), "outside.txt")
+		w.Handle(bgctx, textapi.Event{Type: textapi.EventTypeOpen, URI: file})
+
+		assert.Empty(t, w.tabs)
+		assert.Nil(t, w.cancel)
 	})
 }
 
-// newOutOfRootWatchTest builds an ex watching its out-of-root tabs through a
-// countingWatchScheme gated by gate. The watcher is closed under the UI lock
-// and drained before the ex is closed, as the production teardown serializes
-// both with event dispatch.
-func newOutOfRootWatchTest(
-	t *testing.T, gate chan struct{},
-) (*ex, sync.Locker, *countingWatchScheme) {
+func TestOutOfRootWatcherIsOutOfRoot(t *testing.T) {
+	var mu sync.Mutex
+	x := newExForEventTesting(t, &mu)
+
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "nested"), 0o755))
+	require.NoError(t, os.Mkdir(root+"-sibling", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), nil, 0o666))
+	rootLink := filepath.Join(base, "root-link")
+	require.NoError(t, os.Symlink(root, rootLink))
+	outside := t.TempDir()
+
+	suite := []struct {
+		name string
+		root string
+		file string
+		want bool
+	}{
+		{"file in root", root, filepath.Join(root, "a.txt"), false},
+		{"nested file in root", root, filepath.Join(root, "nested", "b.txt"), false},
+		{"root itself", root, root, false},
+		{"file outside root", root, filepath.Join(outside, "a.txt"), true},
+		{"sibling sharing the root prefix", root, filepath.Join(root+"-sibling", "a.txt"), true},
+		// A symlinked root (e.g. /tmp on macOS) with a tab at the real
+		// path is already covered by the workspace watcher.
+		{"real path under a symlinked root", rootLink, filepath.Join(root, "a.txt"), false},
+		{"symlinked path into the root", root, filepath.Join(rootLink, "a.txt"), false},
+		{"new file through a symlinked path", root, filepath.Join(rootLink, "new.txt"), false},
+	}
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			w := newOutOfRootWatcher(x, x.workspace, outOfRootFile(t, test.root, ""), &mu)
+			assert.Equal(t, test.want, w.isOutOfRoot(outOfRootFile(t, test.file, "")))
+		})
+	}
+
+	t.Run("non-file scheme", func(t *testing.T) {
+		w := newOutOfRootWatcher(x, x.workspace, outOfRootFile(t, root, ""), &mu)
+		uri, err := workspaceapi.ParseURI(fileExplorerURI)
+		require.NoError(t, err)
+		assert.False(t, w.isOutOfRoot(uri))
+	})
+}
+
+// newOutOfRootWatchTest builds an ex whose out-of-root watcher polls quickly
+// and reports under the returned lock. The watcher is closed under that lock
+// and drained before the ex closes, as production teardown serializes both
+// with event handling.
+func newOutOfRootWatchTest(t *testing.T) (*ex, sync.Locker) {
 	t.Helper()
 	mu := &sync.Mutex{}
 	x := newExForEventTesting(t, mu)
-	scheme := &countingWatchScheme{inner: x.workspace, gate: gate}
-	require.NoError(t, x.watchOutOfRootTabs(scheme, mu))
+	x.outOfRootTabs.uiMu = mu
+	x.outOfRootTabs.interval = 10 * time.Millisecond
 	t.Cleanup(func() {
 		mu.Lock()
 		x.outOfRootTabs.Close()
 		mu.Unlock()
 		x.outOfRootTabs.wait()
 	})
-	return x, mu, scheme
+	return x, mu
 }
 
-// countingWatchScheme records the watches taken through it. When gate is
-// non-nil, Watch blocks until it is closed.
-type countingWatchScheme struct {
-	inner   watchScheme
-	gate    chan struct{}
-	watches atomic.Int32
-	stops   atomic.Int32
+type flakyStatScheme struct {
+	inner    statScheme
+	failures atomic.Int32
 }
 
-func (s *countingWatchScheme) Watch(
-	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
-) (int, error) {
-	if s.gate != nil {
-		<-s.gate
+func (s *flakyStatScheme) Stat(path string) (os.FileInfo, error) {
+	if s.failures.Load() > 0 {
+		s.failures.Add(-1)
+		return nil, fmt.Errorf("stat %s: transport unavailable", path)
 	}
-	id, err := s.inner.Watch(path, c, events...)
-	if err == nil {
-		s.watches.Add(1)
-	}
-	return id, err
+	return s.inner.Stat(path)
 }
 
-func (s *countingWatchScheme) StopWatch(id int) error {
-	s.stops.Add(1)
-	return s.inner.StopWatch(id)
+type remoteWorkspace struct {
+	workspace.Workspace
+}
+
+func (remoteWorkspace) OnDisconnect() <-chan struct{} {
+	return make(chan struct{})
+}
+
+func (remoteWorkspace) WaitConnected(context.Context) error {
+	return nil
+}
+
+func trackedOutOfRootTabs(x *ex) []string {
+	w := x.outOfRootTabs
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	uris := make([]string, 0, len(w.tabs))
+	for key := range w.tabs {
+		uris = append(uris, key)
+	}
+	return uris
+}
+
+func waitForPollingStopped(t *testing.T, x *ex) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		x.outOfRootTabs.wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("out-of-root polling never stopped")
+	}
 }
 
 func outOfRootFile(t *testing.T, dir, name string) workspaceapi.URI {
@@ -877,8 +945,9 @@ func outOfRootFile(t *testing.T, dir, name string) workspaceapi.URI {
 }
 
 // writeFileWithNewerMtime writes content with an mtime strictly after the
-// current one, so handleFSChange cannot mistake the write for the echo of
-// the buffer's own load or flush on filesystems with coarse mtimes.
+// current one, so the change is observable and handleFSChange cannot mistake
+// it for the echo of the buffer's own load or flush on filesystems with
+// coarse mtimes.
 func writeFileWithNewerMtime(t *testing.T, path, content string) {
 	t.Helper()
 	info, err := os.Stat(path)
@@ -888,6 +957,8 @@ func writeFileWithNewerMtime(t *testing.T, path, content string) {
 	require.NoError(t, os.Chtimes(path, bumped, bumped))
 }
 
+// renameFileWithNewerMtime saves the way editors do, by renaming a swap
+// file over the original.
 func renameFileWithNewerMtime(t *testing.T, path, content string) {
 	t.Helper()
 	info, err := os.Stat(path)
@@ -897,18 +968,6 @@ func renameFileWithNewerMtime(t *testing.T, path, content string) {
 	bumped := info.ModTime().Add(time.Second)
 	require.NoError(t, os.Chtimes(swap, bumped, bumped))
 	require.NoError(t, os.Rename(swap, path))
-}
-
-func waitForWatches(t *testing.T, s *countingWatchScheme, n int32) {
-	t.Helper()
-	require.Eventually(t, func() bool { return s.watches.Load() == n },
-		5*time.Second, 5*time.Millisecond, "watches never reached %d", n)
-}
-
-func waitForStopWatches(t *testing.T, s *countingWatchScheme, n int32) {
-	t.Helper()
-	require.Eventually(t, func() bool { return s.stops.Load() == n },
-		5*time.Second, 5*time.Millisecond, "stopped watches never reached %d", n)
 }
 
 func waitForBufferContent(

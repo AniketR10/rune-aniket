@@ -696,6 +696,7 @@ func (h *workspaceManagerHandler) init(
 		cfg.editorMode(),
 		cfg.editorAutoSave(),
 		cfg.consoleCfg(),
+		h.mu,
 		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -1857,6 +1858,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		cfg.editorMode(),
 		cfg.editorAutoSave(),
 		cfg.consoleCfg(),
+		h.mu,
 		textOpts...)
 	if err != nil {
 		if symbolDBCloser != nil {
@@ -2014,11 +2016,6 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	ex := built.ex
 	wh := built.wh
 	ex.setDefaultAttr(h.defAttr)
-	if !ex.ed.IsExternal() {
-		if err := ex.watchOutOfRootTabs(cwd, h.mu); err != nil {
-			ex.log(log.WarnLevel, "watch tabs outside the workspace root: %v", err)
-		}
-	}
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
 		// to preserve the order of events we don't want to spawn
